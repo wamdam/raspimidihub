@@ -17,10 +17,10 @@ case "$1" in
         # Create config directory on boot partition
         mkdir -p /boot/firmware/raspimidihub 2>/dev/null || true
 
-        # Enable and start the service
+        # Enable and (re)start the service
         systemctl daemon-reload
         systemctl enable raspimidihub.service
-        systemctl start raspimidihub.service || true
+        systemctl restart raspimidihub.service || true
         ;;
 esac
 
