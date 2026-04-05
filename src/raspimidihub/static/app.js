@@ -94,6 +94,43 @@ function FilterPanel({ connId, filter, onClose, onApply }) {
     `;
 }
 
+// --- Long-press hook ---
+function useLongPress(onLongPress, onTap, delay = 500) {
+    const timer = { current: null };
+    const didLongPress = { current: false };
+
+    const start = (e) => {
+        didLongPress.current = false;
+        timer.current = setTimeout(() => {
+            didLongPress.current = true;
+            onLongPress(e);
+        }, delay);
+    };
+    const cancel = () => {
+        if (timer.current) clearTimeout(timer.current);
+    };
+    const end = (e) => {
+        cancel();
+        if (!didLongPress.current) onTap(e);
+    };
+
+    return {
+        onTouchStart: start,
+        onTouchEnd: end,
+        onTouchMove: cancel,
+        onMouseDown: start,
+        onMouseUp: end,
+        onMouseLeave: cancel,
+    };
+}
+
+function MatrixCell({ on, filtered, onTap, onLongPress }) {
+    const handlers = useLongPress(onLongPress, onTap);
+    return html`<td ...${handlers} oncontextmenu=${e => e.preventDefault()}>
+        <div class="cb ${on ? (filtered ? 'on filtered' : 'on') : ''}"></div>
+    </td>`;
+}
+
 // --- Connection Matrix ---
 function ConnectionMatrix({ devices, connections, onToggle, onFilterOpen }) {
     const inputs = [];
@@ -140,10 +177,9 @@ function ConnectionMatrix({ devices, connections, onToggle, onFilterOpen }) {
                                 const conn = getConn(inp, out);
                                 const on = !!conn;
                                 const filtered = conn && conn.filtered;
-                                return html`<td onclick=${() => onToggle(inp, out, !on)}
-                                    oncontextmenu=${(e) => { e.preventDefault(); if (on) onFilterOpen(conn); }}>
-                                    <div class="cb ${on ? (filtered ? 'on filtered' : 'on') : ''}"></div>
-                                </td>`;
+                                return html`<${MatrixCell} on=${on} filtered=${filtered}
+                                    onTap=${() => onToggle(inp, out, !on)}
+                                    onLongPress=${() => { if (on) onFilterOpen(conn); }} />`;
                             })}
                         </tr>
                     `)}
