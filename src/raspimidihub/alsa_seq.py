@@ -304,6 +304,15 @@ class AlsaSeq:
         )
         check(self._announce_port, "Failed to create announce port")
 
+        # Create an output port for sending test events
+        self._output_port = snd_seq_create_simple_port(
+            self._handle,
+            b"output",
+            SND_SEQ_PORT_CAP_READ | SND_SEQ_PORT_CAP_SUBS_READ,
+            SND_SEQ_PORT_TYPE_MIDI_GENERIC | SND_SEQ_PORT_TYPE_APPLICATION,
+        )
+        check(self._output_port, "Failed to create output port")
+
         # Subscribe to system announcements
         check(
             snd_seq_connect_from(
@@ -441,6 +450,7 @@ class AlsaSeq:
         ev.dest.client = dest_client
         ev.dest.port = dest_port
         ev.source.client = self._client_id
+        ev.source.port = self._output_port
         ev.flags = 0  # direct
         snd_seq_event_output_direct(self._handle, pointer(ev))
 

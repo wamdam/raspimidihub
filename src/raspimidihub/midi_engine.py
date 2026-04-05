@@ -41,6 +41,8 @@ class MidiEngine:
         self._connections: set[Connection] = set()
         self._filter_engine: FilterEngine | None = None
         self._device_registry: DeviceRegistry = DeviceRegistry()
+        self._monitor_port: int = -1
+        self._monitored_clients: set[int] = set()
         self._debounce_task: asyncio.Task | None = None
         self._running = False
         self._on_change_callbacks: list = []
@@ -81,6 +83,8 @@ class MidiEngine:
         """Open ALSA sequencer and perform initial scan + connect."""
         self._seq = AlsaSeq("RaspiMIDIHub")
         self._filter_engine = FilterEngine(self._seq)
+        # Create a monitor port to receive copies of MIDI events for the UI
+        self._monitor_port = self._seq.create_port("monitor", writable=True)
         log.info("ALSA sequencer opened, client ID %d", self._seq.client_id)
         self._scan_and_connect()
 
@@ -160,11 +164,34 @@ class MidiEngine:
 
         self._connections.clear()
 
+    def _update_monitor_subscriptions(self) -> None:
+        """Subscribe monitor port to all device output ports for MIDI activity UI."""
+        if self._monitor_port < 0 or not self._seq:
+            return
+
+        # Unsubscribe from devices that are gone
+        for client_id in list(self._monitored_clients):
+            if client_id not in {d.client_id for d in self._devices}:
+                self._monitored_clients.discard(client_id)
+
+        # Subscribe to new devices
+        for dev in self._devices:
+            if dev.client_id in self._monitored_clients:
+                continue
+            for port in dev.input_ports:  # input = produces MIDI data
+                try:
+                    self._seq.subscribe(dev.client_id, port.port_id,
+                                        self._seq.client_id, self._monitor_port)
+                    self._monitored_clients.add(dev.client_id)
+                except OSError:
+                    pass
+
     def _scan_and_connect(self) -> None:
         """Full state reconstruction: scan devices and connect all."""
         self.disconnect_all()
         self.scan_devices()
         connections = self.connect_all()
+        self._update_monitor_subscriptions()
 
         device_names = [d.name for d in self._devices]
         log.info("Devices: %s", device_names if device_names else "(none)")
