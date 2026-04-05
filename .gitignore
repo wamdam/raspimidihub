@@ -1,0 +1,49 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.egg
+.venv/
+venv/
+.eggs/
+
+# Debian packaging
+*.deb
+*.changes
+*.buildinfo
+debian/.debhelper/
+debian/raspimidihub/
+debian/raspimidihub-rosetup/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.settings/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Claude Code
+.claude/
+
+# Old scripts (kept locally for reference, not in repo)
+_old/
+
+# Temporary / runtime
+*.log
+*.pid
+*.sock
+
+# Node (for frontend dev if ever needed)
+node_modules/
+
+# Environment
+.env
+.env.*
