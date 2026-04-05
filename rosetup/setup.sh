@@ -412,6 +412,10 @@ SERVICES_TO_MASK=(
     apt-daily.timer
     apt-daily-upgrade.timer
     man-db.timer
+    cloud-init-main.service
+    cloud-init-hotplugd.service
+    cloud-init-hotplugd.socket
+    rpi-resize-swap-file.service
 )
 
 for svc in "${SERVICES_TO_MASK[@]}"; do

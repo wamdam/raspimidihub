@@ -93,6 +93,10 @@ SERVICES_TO_UNMASK=(
     apt-daily-upgrade.timer
     man-db.timer
     systemd-timesyncd
+    cloud-init-main.service
+    cloud-init-hotplugd.service
+    cloud-init-hotplugd.socket
+    rpi-resize-swap-file.service
 )
 
 for svc in "${SERVICES_TO_UNMASK[@]}"; do

@@ -391,11 +391,20 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
 
     @server.route("POST", "/api/config/save")
     async def api_save_config(req: Request) -> Response:
-        # Serialize current connections into config
-        conns = [{
-            "src_client": c.src_client, "src_port": c.src_port,
-            "dst_client": c.dst_client, "dst_port": c.dst_port,
-        } for c in engine.connections]
+        # Serialize current connections + filters into config
+        fe = engine.filter_engine
+        conns = []
+        for c in engine.connections:
+            conn_id = f"{c.src_client}:{c.src_port}-{c.dst_client}:{c.dst_port}"
+            entry = {
+                "src_client": c.src_client, "src_port": c.src_port,
+                "dst_client": c.dst_client, "dst_port": c.dst_port,
+            }
+            if fe:
+                f = fe.get_filter(conn_id)
+                if f:
+                    entry["filter"] = f.to_dict()
+            conns.append(entry)
         config.set_connections(conns)
 
         if config.save():
