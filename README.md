@@ -10,6 +10,15 @@ For custom routing, filtering, and MIDI mapping, open the web interface from you
 
 ![License](https://img.shields.io/badge/license-LGPL-blue.svg)
 
+<p align="center">
+  <img src="docs/screenshots/01-routing.png" width="200" alt="Routing Matrix" />
+  <img src="docs/screenshots/02-filter-panel.png" width="200" alt="Filter & Mapping Panel" />
+  <img src="docs/screenshots/05-status.png" width="200" alt="Status Page" />
+  <img src="docs/screenshots/06-device-detail.png" width="200" alt="Device Detail" />
+</p>
+
+See the full [UI Guide](docs/UI_GUIDE.md) for all screens.
+
 ---
 
 ## Features
