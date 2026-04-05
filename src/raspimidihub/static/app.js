@@ -1,5 +1,5 @@
 import { h, render } from './lib/preact.module.js';
-import { useState, useEffect, useCallback } from './lib/hooks.module.js';
+import { useState, useEffect, useCallback, useRef } from './lib/hooks.module.js';
 import htm from './lib/htm.module.js';
 
 const html = htm.bind(h);
@@ -96,27 +96,27 @@ function FilterPanel({ connId, filter, onClose, onApply }) {
 
 // --- Matrix cell with long-press + right-click for filters ---
 function MatrixCell({ on, filtered, onTap, onLongPress }) {
-    const timer = { current: null };
-    const didLongPress = { current: false };
-    const isTouch = { current: false };
+    const state = useRef({ timer: null, didLong: false });
 
-    const start = (e) => {
-        if (e.type === 'touchstart') isTouch.current = true;
-        if (e.type === 'mousedown' && isTouch.current) return; // skip mouse after touch
-        didLongPress.current = false;
-        timer.current = setTimeout(() => {
-            didLongPress.current = true;
+    const touchStart = (e) => {
+        e.preventDefault(); // suppress synthesized click/mouse events
+        state.current.didLong = false;
+        state.current.timer = setTimeout(() => {
+            state.current.didLong = true;
             onLongPress();
         }, 500);
     };
-    const cancel = () => {
-        if (timer.current) { clearTimeout(timer.current); timer.current = null; }
-    };
-    const end = (e) => {
-        if (e.type === 'mouseup' && isTouch.current) { isTouch.current = false; return; }
-        cancel();
-        if (!didLongPress.current) onTap();
+    const touchEnd = (e) => {
         e.preventDefault();
+        if (state.current.timer) { clearTimeout(state.current.timer); state.current.timer = null; }
+        if (!state.current.didLong) onTap();
+    };
+    const touchMove = () => {
+        if (state.current.timer) { clearTimeout(state.current.timer); state.current.timer = null; }
+    };
+    const click = (e) => {
+        // Desktop click (touch devices won't fire this due to preventDefault)
+        onTap();
     };
     const rightClick = (e) => {
         e.preventDefault();
@@ -124,9 +124,8 @@ function MatrixCell({ on, filtered, onTap, onLongPress }) {
     };
 
     return html`<td
-        onTouchStart=${start} onTouchEnd=${end} onTouchMove=${cancel}
-        onMouseDown=${start} onMouseUp=${end} onMouseLeave=${cancel}
-        onContextMenu=${rightClick}>
+        onTouchStart=${touchStart} onTouchEnd=${touchEnd} onTouchMove=${touchMove}
+        onClick=${click} onContextMenu=${rightClick}>
         <div class="cb ${on ? (filtered ? 'on filtered' : 'on') : ''}"></div>
     </td>`;
 }
