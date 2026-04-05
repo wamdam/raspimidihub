@@ -380,6 +380,27 @@ body {
     border-color: var(--accent2);
 }
 
+/* --- MIDI Monitor --- */
+.midi-monitor {
+    max-height: 400px;
+    overflow-y: auto;
+    font-family: "SF Mono", "Fira Code", monospace;
+    font-size: 12px;
+}
+.midi-event {
+    padding: 3px 0;
+    border-bottom: 1px solid var(--surface2);
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    animation: flashIn 0.3s;
+}
+@keyframes flashIn {
+    from { background: var(--accent2); }
+    to { background: transparent; }
+}
+
 @media (min-width: 768px) {
     .main { max-width: 900px; margin: 0 auto; }
     .stat-grid { grid-template-columns: repeat(4, 1fr); }

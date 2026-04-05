@@ -293,8 +293,88 @@ function PresetsPage({ refresh, showToast }) {
     `;
 }
 
+// --- Device Detail Page (MIDI Monitor) ---
+function DeviceDetailPage({ device, onClose, showToast }) {
+    const [editName, setEditName] = useState(device.name);
+    const [events, setEvents] = useState([]);
+    const maxEvents = 100;
+
+    useEffect(() => {
+        const es = new EventSource('/api/events');
+        const handler = (e) => {
+            try {
+                const data = JSON.parse(e.data);
+                if (data.src_client === device.client_id) {
+                    const line = formatMidiEvent(data);
+                    setEvents(prev => [{ ...data, line, ts: Date.now() }, ...prev].slice(0, maxEvents));
+                }
+            } catch {}
+        };
+        es.addEventListener('midi-activity', handler);
+        return () => es.close();
+    }, [device.client_id]);
+
+    const formatMidiEvent = (d) => {
+        let s = d.event;
+        if (d.channel != null) s += ` ch${d.channel}`;
+        if (d.note != null) s += ` note=${d.note} vel=${d.velocity}`;
+        if (d.cc != null) s += ` cc=${d.cc} val=${d.value}`;
+        return s;
+    };
+
+    const rename = async () => {
+        if (!editName.trim() || editName === device.name) return;
+        await api(`/devices/${device.client_id}/rename`, {
+            method: 'POST',
+            body: JSON.stringify({ name: editName.trim() }),
+        });
+        showToast('Device renamed');
+    };
+
+    return html`
+        <div>
+            <button class="btn btn-secondary" onclick=${onClose} style="margin-bottom:var(--gap)">\u2190 Back</button>
+            <div class="card">
+                <h3>Device Info</h3>
+                <div class="stat-grid">
+                    <div class="stat"><div class="label">Default Name</div><div class="value">${device.default_name || device.name}</div></div>
+                    <div class="stat"><div class="label">Client ID</div><div class="value">${device.client_id}</div></div>
+                    ${device.vid ? html`<div class="stat"><div class="label">USB ID</div><div class="value">${device.vid}:${device.pid}</div></div>` : ''}
+                    ${device.usb_path ? html`<div class="stat"><div class="label">USB Path</div><div class="value">${device.usb_path}</div></div>` : ''}
+                    ${device.stable_id ? html`<div class="stat"><div class="label">Stable ID</div><div class="value" style="font-size:11px">${device.stable_id}</div></div>` : ''}
+                </div>
+                <div style="display:flex;gap:8px;margin-top:12px">
+                    <input style="flex:1;padding:10px 12px;background:var(--bg);border:1px solid var(--surface2);border-radius:6px;color:var(--text);font-size:14px;min-height:48px"
+                        value=${editName} onInput=${e => setEditName(e.target.value)}
+                        onKeyDown=${e => e.key === 'Enter' && rename()} />
+                    <button class="btn btn-primary" onclick=${rename}>Rename</button>
+                </div>
+            </div>
+            <div class="card">
+                <h3>Ports</h3>
+                ${device.ports.map(p => html`
+                    <div class="device">
+                        <div class="dot" style="background:${p.is_input ? 'var(--success)' : 'var(--accent)'}"></div>
+                        <span class="name">${p.name}</span>
+                        <span class="ports">${p.is_input ? 'IN' : ''}${p.is_input && p.is_output ? '/' : ''}${p.is_output ? 'OUT' : ''}</span>
+                    </div>
+                `)}
+            </div>
+            <div class="card">
+                <h3>MIDI Monitor</h3>
+                <div class="midi-monitor">
+                    ${events.length === 0 ? html`<p style="color:var(--text-dim)">Waiting for MIDI events...</p>` : ''}
+                    ${events.map(e => html`
+                        <div class="midi-event">${e.line}</div>
+                    `)}
+                </div>
+            </div>
+        </div>
+    `;
+}
+
 // --- Status Page ---
-function StatusPage({ devices }) {
+function StatusPage({ devices, onDeviceSelect }) {
     const [sys, setSys] = useState(null);
     useEffect(() => { api('/system').then(setSys); }, []);
 
@@ -322,10 +402,10 @@ function StatusPage({ devices }) {
         <div class="card">
             <h3>Connected Devices (${devices.length})</h3>
             ${devices.map(d => html`
-                <div class="device">
+                <div class="device" style="cursor:pointer" onclick=${() => onDeviceSelect(d)}>
                     <div class="dot"></div>
                     <span class="name">${d.name}</span>
-                    <span class="ports">${d.ports.length} port${d.ports.length !== 1 ? 's' : ''}</span>
+                    <span class="ports">${d.ports.length} port${d.ports.length !== 1 ? 's' : ''} \u203a</span>
                 </div>
             `)}
             ${devices.length === 0 && html`<p style="color:var(--text-dim)">No devices connected</p>`}
@@ -411,6 +491,7 @@ function App() {
     const [connections, setConnections] = useState([]);
     const [toast, setToast] = useState('');
     const [configFallback, setConfigFallback] = useState(false);
+    const [selectedDevice, setSelectedDevice] = useState(null);
 
     const refresh = useCallback(async () => {
         const [devs, conns] = await Promise.all([api('/devices'), api('/connections')]);
@@ -434,6 +515,22 @@ function App() {
         setTimeout(() => setToast(''), 2500);
     };
 
+    // Device detail view overrides the current tab
+    if (selectedDevice) {
+        return html`
+            <div class="header">
+                <h1>RaspiMIDIHub</h1>
+                <span class="status ${devices.length > 0 ? 'ok' : ''}">${devices.length} device${devices.length !== 1 ? 's' : ''}</span>
+            </div>
+            <div class="main">
+                <${DeviceDetailPage} device=${selectedDevice}
+                    onClose=${() => { setSelectedDevice(null); refresh(); }}
+                    showToast=${showToast} />
+            </div>
+            <${Toast} message=${toast} />
+        `;
+    }
+
     let page;
     switch (tab) {
         case 'routing':
@@ -443,7 +540,7 @@ function App() {
             page = html`<${PresetsPage} refresh=${refresh} showToast=${showToast} />`;
             break;
         case 'status':
-            page = html`<${StatusPage} devices=${devices} />`;
+            page = html`<${StatusPage} devices=${devices} onDeviceSelect=${setSelectedDevice} />`;
             break;
         case 'settings':
             page = html`<${SettingsPage} showToast=${showToast} />`;

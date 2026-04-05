@@ -9,6 +9,7 @@ import logging
 from dataclasses import dataclass, field
 
 from .alsa_seq import AlsaSeq, MidiDevice, SeqEventType
+from .device_id import DeviceRegistry
 from .midi_filter import FilterEngine
 
 log = logging.getLogger(__name__)
@@ -39,9 +40,11 @@ class MidiEngine:
         self._devices: list[MidiDevice] = []
         self._connections: set[Connection] = set()
         self._filter_engine: FilterEngine | None = None
+        self._device_registry: DeviceRegistry = DeviceRegistry()
         self._debounce_task: asyncio.Task | None = None
         self._running = False
         self._on_change_callbacks: list = []
+        self._on_midi_event_callbacks: list = []
 
     @property
     def devices(self) -> list[MidiDevice]:
@@ -55,6 +58,10 @@ class MidiEngine:
         """Register a callback for device/connection changes."""
         self._on_change_callbacks.append(callback)
 
+    def on_midi_event(self, callback):
+        """Register a callback for MIDI events (for monitoring)."""
+        self._on_midi_event_callbacks.append(callback)
+
     def _notify_change(self):
         for cb in self._on_change_callbacks:
             try:
@@ -65,6 +72,10 @@ class MidiEngine:
     @property
     def filter_engine(self) -> FilterEngine | None:
         return self._filter_engine
+
+    @property
+    def device_registry(self) -> DeviceRegistry:
+        return self._device_registry
 
     def start(self) -> None:
         """Open ALSA sequencer and perform initial scan + connect."""
@@ -86,6 +97,9 @@ class MidiEngine:
         if not self._seq:
             return []
         self._devices = self._seq.scan_devices()
+        # Update device registry with stable IDs
+        client_ids = [d.client_id for d in self._devices]
+        self._device_registry.scan(client_ids)
         return self._devices
 
     def connect_all(self) -> set[Connection]:
@@ -213,6 +227,14 @@ class MidiEngine:
                         continue
                 except ValueError:
                     pass
+
+                # Notify MIDI event listeners (for monitoring)
+                if self._on_midi_event_callbacks:
+                    for cb in self._on_midi_event_callbacks:
+                        try:
+                            cb(ev)
+                        except Exception:
+                            pass
 
                 # Process filtered MIDI events
                 if self._filter_engine:

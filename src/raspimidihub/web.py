@@ -264,19 +264,14 @@ class WebServer:
                 client_addr=client_addr,
             )
 
-            # Captive portal handling
-            if self._captive_portal_ip:
+            # Captive portal handling — only for AP clients (192.168.4.x subnet)
+            if self._captive_portal_ip and client_addr.startswith("192.168.4."):
                 host = headers.get("host", "")
                 if host and self._captive_portal_ip not in host and not path.startswith("/api/"):
-                    if self._is_captive_portal_check(path):
-                        # Respond in a way that triggers the captive portal popup
-                        resp = Response.redirect(f"http://{self._captive_portal_ip}/")
-                        await self._write_response(writer, resp)
-                        return
-                    elif not path.startswith("/api/"):
-                        resp = Response.redirect(f"http://{self._captive_portal_ip}/")
-                        await self._write_response(writer, resp)
-                        return
+                    # Redirect to our IP to trigger OS captive portal popup
+                    resp = Response.redirect(f"http://{self._captive_portal_ip}/")
+                    await self._write_response(writer, resp)
+                    return
 
             # SSE endpoint (special handling — keeps connection open)
             if path == "/api/events" and method == "GET":

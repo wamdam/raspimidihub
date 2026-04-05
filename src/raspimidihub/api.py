@@ -102,6 +102,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
     @server.route("GET", "/api/devices")
     async def api_devices(req: Request) -> Response:
         devices = engine.scan_devices()
+        registry = engine.device_registry
         result = []
         for dev in devices:
             ports = []
@@ -112,12 +113,54 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
                     "is_input": port.is_input,
                     "is_output": port.is_output,
                 })
-            result.append({
+            info = registry.get_by_client(dev.client_id)
+            entry = {
                 "client_id": dev.client_id,
-                "name": dev.name,
+                "name": info.name if info else dev.name,
+                "default_name": dev.name,
                 "ports": ports,
-            })
+            }
+            if info:
+                entry["stable_id"] = info.stable_id
+                entry["vid"] = info.vid
+                entry["pid"] = info.pid
+                entry["usb_path"] = info.usb_path
+            result.append(entry)
         return Response.json(result)
+
+    # ================================================================
+    # POST /api/devices/{client_id}/rename — rename a device
+    # ================================================================
+
+    @server.route("POST", "/api/devices/", exact=False)
+    async def api_device_action(req: Request) -> Response:
+        path = req.path_param("/api/devices/")
+
+        # POST /api/devices/{client_id}/rename
+        if path.endswith("/rename"):
+            try:
+                client_id = int(path[:-len("/rename")])
+            except ValueError:
+                return Response.error("Invalid client ID")
+
+            data = req.json
+            name = data.get("name", "").strip()
+            if not name:
+                return Response.error("Name required")
+
+            registry = engine.device_registry
+            info = registry.get_by_client(client_id)
+            if info is None:
+                return Response.not_found()
+
+            registry.set_custom_name(info.stable_id, name)
+            # Persist custom names in config
+            config.data["device_names"] = registry.get_custom_names()
+            config.save()
+
+            return Response.json({"status": "renamed", "name": name})
+
+        return Response.not_found()
 
     # ================================================================
     # GET /api/connections — list active connections
