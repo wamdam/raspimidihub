@@ -1,5 +1,5 @@
 import { h, render } from './lib/preact.module.js';
-import { useState, useEffect, useCallback, useRef } from './lib/hooks.module.js';
+import { useState, useEffect, useCallback } from './lib/hooks.module.js';
 import htm from './lib/htm.module.js';
 
 const html = htm.bind(h);
@@ -95,37 +95,27 @@ function FilterPanel({ connId, filter, onClose, onApply }) {
 }
 
 // --- Matrix cell with long-press + right-click for filters ---
-function MatrixCell({ on, filtered, onTap, onLongPress }) {
-    const state = useRef({ timer: null, didLong: false });
+let _blockClick = false;
 
-    const touchStart = (e) => {
-        e.preventDefault(); // suppress synthesized click/mouse events
-        state.current.didLong = false;
-        state.current.timer = setTimeout(() => {
-            state.current.didLong = true;
-            onLongPress();
-        }, 500);
-    };
-    const touchEnd = (e) => {
-        e.preventDefault();
-        if (state.current.timer) { clearTimeout(state.current.timer); state.current.timer = null; }
-        if (!state.current.didLong) onTap();
-    };
-    const touchMove = () => {
-        if (state.current.timer) { clearTimeout(state.current.timer); state.current.timer = null; }
-    };
-    const click = (e) => {
-        // Desktop click (touch devices won't fire this due to preventDefault)
-        onTap();
-    };
-    const rightClick = (e) => {
-        e.preventDefault();
-        onLongPress();
-    };
+function MatrixCell({ on, filtered, onTap, onLongPress }) {
+    const [tid] = useState(() => ({ v: null }));
 
     return html`<td
-        onTouchStart=${touchStart} onTouchEnd=${touchEnd} onTouchMove=${touchMove}
-        onClick=${click} onContextMenu=${rightClick}>
+        onTouchStart=${() => {
+            _blockClick = false;
+            tid.v = setTimeout(() => { _blockClick = true; onLongPress(); }, 500);
+        }}
+        onTouchEnd=${() => {
+            if (tid.v) { clearTimeout(tid.v); tid.v = null; }
+        }}
+        onTouchMove=${() => {
+            if (tid.v) { clearTimeout(tid.v); tid.v = null; }
+        }}
+        onClick=${(e) => {
+            if (_blockClick) { _blockClick = false; e.preventDefault(); return; }
+            onTap();
+        }}
+        onContextMenu=${(e) => { e.preventDefault(); onLongPress(); }}>
         <div class="cb ${on ? (filtered ? 'on filtered' : 'on') : ''}"></div>
     </td>`;
 }

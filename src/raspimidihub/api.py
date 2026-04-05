@@ -25,6 +25,44 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
     """Register all API routes on the web server."""
 
     # ================================================================
+    # Captive portal detection endpoints
+    # These must return specific responses so mobile OS shows the
+    # captive portal popup and then stays connected to the AP.
+    # ================================================================
+
+    @server.route("GET", "/generate_204")
+    async def captive_android(req: Request) -> Response:
+        # Android/Chrome: expects 204 from real internet, non-204 triggers portal
+        return Response.redirect("http://192.168.4.1/")
+
+    @server.route("GET", "/hotspot-detect.html")
+    async def captive_apple(req: Request) -> Response:
+        # Apple CNA: expects "<HTML><HEAD><TITLE>Success</TITLE></HEAD><BODY>Success</BODY></HTML>"
+        # Returning anything else triggers the captive portal popup
+        return Response.redirect("http://192.168.4.1/")
+
+    @server.route("GET", "/library/test/success.html")
+    async def captive_apple2(req: Request) -> Response:
+        return Response.redirect("http://192.168.4.1/")
+
+    @server.route("GET", "/connecttest.txt")
+    async def captive_windows(req: Request) -> Response:
+        # Windows: expects "Microsoft Connect Test"
+        return Response.redirect("http://192.168.4.1/")
+
+    @server.route("GET", "/ncsi.txt")
+    async def captive_windows2(req: Request) -> Response:
+        return Response.redirect("http://192.168.4.1/")
+
+    @server.route("GET", "/redirect")
+    async def captive_firefox(req: Request) -> Response:
+        return Response.redirect("http://192.168.4.1/")
+
+    @server.route("GET", "/canonical.html")
+    async def captive_firefox2(req: Request) -> Response:
+        return Response.redirect("http://192.168.4.1/")
+
+    # ================================================================
     # GET /api/system — system info
     # ================================================================
 
