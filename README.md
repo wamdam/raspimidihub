@@ -270,6 +270,8 @@ This fully restores the Pi to a normal read-write Raspberry Pi OS installation.
 ## Documentation
 
 - [UI Guide](docs/UI_GUIDE.md) — Walkthrough of every screen with screenshots
+- [Building from Source](docs/BUILDING.md) — How to build the .deb packages
+- [Changelog](docs/CHANGELOG.md) — Release history
 - [Functional Specification](docs/FSD.md)
 - [Implementation Plan](docs/IMPLEMENTATION_PLAN.md)
 

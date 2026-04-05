@@ -1,5 +1,17 @@
 raspimidihub (1.0.0-1) unstable; urgency=medium
 
-  * Initial release.
+  * First stable release
+  * Automatic all-to-all MIDI routing with hotplug support
+  * Per-connection MIDI channel and message type filtering
+  * MIDI mapping engine (Note→CC, Note→CC toggle, CC→CC, Channel remap)
+  * MIDI Learn for auto-detecting source events
+  * Mobile-first web UI with connection matrix, presets, MIDI monitor
+  * Built-in WiFi access point with captive portal
+  * WiFi client mode with network scanner and auto-fallback to AP
+  * Configuration persistence with stable USB device identification
+  * Piano keyboard and CC slider for MIDI test sending
+  * LED status indication (green ACT blinks on MIDI, red PWR off = healthy)
+  * Reboot from web UI
+  * mDNS hostname: raspimidihub.local
 
- -- Daniel Kraft <wam@poplr.de>  Sat, 05 Apr 2026 12:00:00 +0200
+ -- Daniel Kraft <wam@poplr.de>  Sat, 05 Apr 2026 21:00:00 +0200
