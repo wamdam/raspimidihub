@@ -445,8 +445,19 @@ class AlsaSeq:
         check(port_id, f"Failed to create port {name}")
         return port_id
 
+    _send_subscriptions: set = set()  # track (dest_client, dest_port) we've subscribed to
+
     def send_event(self, ev: SndSeqEvent, dest_client: int, dest_port: int) -> None:
         """Send a MIDI event to a specific destination."""
+        # Ensure we have a subscription to the destination
+        key = (dest_client, dest_port)
+        if key not in self._send_subscriptions:
+            try:
+                self.subscribe(self._client_id, self._output_port, dest_client, dest_port)
+                self._send_subscriptions.add(key)
+            except OSError:
+                pass  # already connected or other issue
+
         ev.dest.client = dest_client
         ev.dest.port = dest_port
         ev.source.client = self._client_id
