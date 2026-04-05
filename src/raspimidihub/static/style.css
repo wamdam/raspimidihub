@@ -164,6 +164,25 @@ body {
     background: var(--surface);
     z-index: 1;
 }
+.matrix th.corner-header {
+    position: sticky;
+    left: 0;
+    top: 0;
+    z-index: 2;
+    text-align: left;
+    font-size: 10px;
+    font-weight: 400;
+    color: var(--text-dim);
+    line-height: 1.1;
+    padding: 4px 6px;
+}
+.matrix .from-label {
+    display: block;
+}
+.matrix .to-label {
+    display: block;
+    text-align: right;
+}
 .matrix td { cursor: pointer; }
 .matrix td.self {
     background: var(--bg);

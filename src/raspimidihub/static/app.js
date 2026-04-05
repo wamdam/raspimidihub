@@ -127,7 +127,7 @@ function ConnectionMatrix({ devices, connections, onToggle, onFilterOpen }) {
             <table>
                 <thead>
                     <tr>
-                        <th></th>
+                        <th class="corner-header"><span class="from-label">FROM \u2193</span><span class="to-label">TO \u2192</span></th>
                         ${outputs.map(o => html`<th title="${o.dev_name}: ${o.name}">${label(o)}</th>`)}
                     </tr>
                 </thead>
