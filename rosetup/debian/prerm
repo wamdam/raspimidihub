@@ -1,0 +1,12 @@
+#!/bin/sh
+set -e
+
+case "$1" in
+    remove|purge)
+        if [ -x /usr/sbin/raspimidihub-rosetup-undo ]; then
+            /usr/sbin/raspimidihub-rosetup-undo || true
+        fi
+        ;;
+esac
+
+exit 0

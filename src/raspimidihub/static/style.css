@@ -1,0 +1,310 @@
+/* RaspiMIDIHub — Mobile-first CSS */
+
+:root {
+    --bg: #1a1a2e;
+    --surface: #16213e;
+    --surface2: #0f3460;
+    --accent: #e94560;
+    --accent2: #533483;
+    --text: #eee;
+    --text-dim: #999;
+    --success: #4caf50;
+    --warn: #ff9800;
+    --error: #f44336;
+    --radius: 8px;
+    --gap: 12px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    -webkit-tap-highlight-color: transparent;
+}
+
+#app {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+
+/* --- Header --- */
+.header {
+    background: var(--surface);
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--surface2);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+.header h1 { font-size: 18px; font-weight: 600; }
+.header .status {
+    font-size: 12px;
+    color: var(--text-dim);
+}
+.header .status.ok { color: var(--success); }
+.header .status.warn { color: var(--warn); }
+
+/* --- Main content --- */
+.main {
+    flex: 1;
+    padding: var(--gap);
+    padding-bottom: 72px; /* space for bottom nav */
+    overflow-y: auto;
+}
+
+/* --- Bottom Nav --- */
+.bottom-nav {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: var(--surface);
+    display: flex;
+    border-top: 1px solid var(--surface2);
+    z-index: 10;
+}
+.bottom-nav button {
+    flex: 1;
+    padding: 10px 0;
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    font-size: 11px;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    min-height: 48px;
+    justify-content: center;
+}
+.bottom-nav button.active {
+    color: var(--accent);
+}
+.bottom-nav button svg {
+    width: 22px;
+    height: 22px;
+}
+
+/* --- Warning banner --- */
+.banner {
+    background: var(--warn);
+    color: #000;
+    padding: 8px 16px;
+    font-size: 13px;
+    text-align: center;
+    font-weight: 500;
+}
+
+/* --- Buttons --- */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 10px 20px;
+    border: none;
+    border-radius: var(--radius);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    min-height: 48px;
+    min-width: 48px;
+    transition: opacity 0.2s;
+}
+.btn:active { opacity: 0.7; }
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-secondary { background: var(--surface2); color: var(--text); }
+.btn-danger { background: var(--error); color: #fff; }
+.btn-success { background: var(--success); color: #fff; }
+.btn-block { width: 100%; }
+.btn-group {
+    display: flex;
+    gap: 8px;
+    margin: var(--gap) 0;
+}
+.btn-group .btn { flex: 1; }
+
+/* --- Connection Matrix --- */
+.matrix {
+    overflow-x: auto;
+    margin: var(--gap) 0;
+}
+.matrix table {
+    border-collapse: collapse;
+    width: 100%;
+    min-width: 300px;
+}
+.matrix th, .matrix td {
+    padding: 6px 4px;
+    text-align: center;
+    border: 1px solid var(--surface2);
+    font-size: 12px;
+}
+.matrix th {
+    background: var(--surface);
+    position: sticky;
+    top: 0;
+    font-weight: 500;
+    white-space: nowrap;
+    max-width: 100px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.matrix th.row-header {
+    text-align: left;
+    position: sticky;
+    left: 0;
+    background: var(--surface);
+    z-index: 1;
+}
+.matrix td { cursor: pointer; }
+.matrix td.self {
+    background: var(--bg);
+    cursor: default;
+}
+.matrix .cb {
+    width: 36px;
+    height: 36px;
+    border-radius: 6px;
+    border: 2px solid var(--surface2);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+}
+.matrix .cb.on {
+    background: var(--accent);
+    border-color: var(--accent);
+}
+.matrix .cb.on::after {
+    content: "\2713";
+    color: #fff;
+    font-size: 18px;
+    font-weight: bold;
+}
+
+/* --- Cards --- */
+.card {
+    background: var(--surface);
+    border-radius: var(--radius);
+    padding: 16px;
+    margin-bottom: var(--gap);
+}
+.card h3 {
+    font-size: 14px;
+    color: var(--text-dim);
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* --- Status panel --- */
+.stat-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+.stat {
+    background: var(--bg);
+    border-radius: 6px;
+    padding: 10px;
+}
+.stat .label { font-size: 11px; color: var(--text-dim); }
+.stat .value { font-size: 16px; font-weight: 600; margin-top: 2px; }
+
+/* --- Device list --- */
+.device {
+    display: flex;
+    align-items: center;
+    padding: 10px;
+    background: var(--bg);
+    border-radius: 6px;
+    margin-bottom: 6px;
+}
+.device .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--success);
+    margin-right: 10px;
+    flex-shrink: 0;
+}
+.device .name { font-size: 14px; flex: 1; }
+.device .ports { font-size: 12px; color: var(--text-dim); }
+
+/* --- Forms --- */
+.form-group {
+    margin-bottom: 12px;
+}
+.form-group label {
+    display: block;
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-bottom: 4px;
+}
+.form-group input, .form-group select {
+    width: 100%;
+    padding: 10px 12px;
+    background: var(--bg);
+    border: 1px solid var(--surface2);
+    border-radius: 6px;
+    color: var(--text);
+    font-size: 14px;
+    min-height: 48px;
+}
+.form-group input:focus, .form-group select:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+/* --- Preset list --- */
+.preset-item {
+    display: flex;
+    align-items: center;
+    padding: 12px;
+    background: var(--bg);
+    border-radius: 6px;
+    margin-bottom: 6px;
+    gap: 8px;
+}
+.preset-item .name { flex: 1; font-size: 14px; }
+.preset-item .btn { min-height: 36px; padding: 6px 12px; font-size: 12px; }
+
+/* --- Toast --- */
+.toast {
+    position: fixed;
+    bottom: 72px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--surface);
+    color: var(--text);
+    padding: 10px 20px;
+    border-radius: 20px;
+    font-size: 13px;
+    z-index: 100;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    animation: fadeInUp 0.3s;
+}
+@keyframes fadeInUp {
+    from { opacity: 0; transform: translateX(-50%) translateY(10px); }
+    to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+/* --- Loading --- */
+.loading {
+    text-align: center;
+    padding: 40px;
+    color: var(--text-dim);
+}
+
+@media (min-width: 768px) {
+    .main { max-width: 900px; margin: 0 auto; }
+    .stat-grid { grid-template-columns: repeat(4, 1fr); }
+}

@@ -1,0 +1,15 @@
+#!/bin/sh
+set -e
+
+case "$1" in
+    remove|purge)
+        # Stop and disable the service
+        systemctl stop raspimidihub.service 2>/dev/null || true
+        systemctl disable raspimidihub.service 2>/dev/null || true
+        systemctl daemon-reload
+        ;;
+esac
+
+#DEBHELPER#
+
+exit 0

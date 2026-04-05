@@ -200,7 +200,7 @@ For connections with filters, replace direct ALSA subscription with:
 ### Step 2.1.2: Filter Configuration
 - `PATCH /api/connections/{id}` — set channel mask (bitmask of 16 channels) and message type mask
 - Store in config JSON per-connection
-- Filter UI component: 4x4 channel grid + message type checkboxes (designed for quick access)
+- Filter UI component: 4x4 channel grid + message type checkboxes
 
 ### Step 2.1.3: MIDI Clock Filtering
 - Priority feature: ability to block MIDI Clock/Realtime per-connection

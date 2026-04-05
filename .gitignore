@@ -47,3 +47,9 @@ node_modules/
 # Environment
 .env
 .env.*
+
+# Playwright MCP
+.playwright-mcp/
+
+# Screenshots
+*.png

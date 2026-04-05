@@ -1,0 +1,11 @@
+#!/bin/sh
+set -e
+
+case "$1" in
+    purge)
+        # Clean up any remaining backup data
+        rm -rf /var/lib/raspimidihub-rosetup 2>/dev/null || true
+        ;;
+esac
+
+exit 0

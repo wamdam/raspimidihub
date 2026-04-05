@@ -3,7 +3,7 @@ When I install raspbian on a raspi, I want you to connect to it and modify the i
 https://www.dzombak.com/blog/2024/03/running-a-raspberry-pi-with-a-read-only-root-filesystem/ ) and that every midi-device connected to one of the  
 usb ports will automatically connect to all others (except itself to prevent a midi loop). You can find my old scripts for this (which are started  
 by systemd) in _old. The goal is to have an installer one can just download to the raspi and install (ideally a .deb) to reach all this. Phase 2    
-will be to have a web interface where you can connect midi ports visually. Analyze and write an fsd for all this. AFter that write a plan for the                    
+will be to have a web interface where you can connect midi ports visually. Analyze and write an fsd for all this. AFter that write a plan for the      
 implementation. If anything is unclear, ask me. Also when the first version of the fsd is finished, start an expert group of a senior developer, a  
 software architect and a security tester to discuss details in the fst, the web interface and so on.
 

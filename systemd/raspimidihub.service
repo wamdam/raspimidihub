@@ -1,0 +1,29 @@
+[Unit]
+Description=RaspiMIDIHub - Automatic USB MIDI Hub
+After=sound.target
+Wants=sound.target
+
+[Service]
+Type=notify
+ExecStart=/usr/bin/python3 -m raspimidihub
+Restart=always
+RestartSec=2
+WatchdogSec=30
+NotifyAccess=main
+
+# Run as root for ALSA sequencer access and LED control
+User=root
+
+# Hardening
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictRealtime=false
+# Allow access to /sys/class/leds for LED control
+ReadWritePaths=/sys/class/leds
+
+[Install]
+WantedBy=multi-user.target

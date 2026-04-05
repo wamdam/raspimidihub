@@ -1,0 +1,2 @@
+systemd/raspimidihub.service lib/systemd/system/
+udev/90-raspimidihub.rules lib/udev/rules.d/

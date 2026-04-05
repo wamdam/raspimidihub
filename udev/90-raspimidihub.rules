@@ -1,0 +1,4 @@
+# RaspiMIDIHub - trigger rescan on USB MIDI device connect/disconnect
+# This is a secondary fallback; primary detection is via ALSA sequencer events.
+# Only match USB Audio Class devices (class 01, subclass 03 = MIDI Streaming)
+ACTION=="add|remove", SUBSYSTEM=="sound", KERNEL=="midi*", TAG+="systemd", ENV{SYSTEMD_WANTS}="raspimidihub.service"

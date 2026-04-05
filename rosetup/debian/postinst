@@ -1,0 +1,10 @@
+#!/bin/sh
+set -e
+
+case "$1" in
+    configure)
+        /usr/sbin/raspimidihub-rosetup
+        ;;
+esac
+
+exit 0

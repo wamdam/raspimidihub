@@ -210,14 +210,16 @@ With the read-only filesystem enabled, the SD card receives zero writes during n
 # SSH into the Pi
 ssh pi@raspimidihub.local
 
-# Remount filesystem read-write
+# Remount filesystem read-write (alias provided by raspimidihub-rosetup)
 rw
+# Or manually: sudo mount -o remount,rw / && sudo mount -o remount,rw /boot/firmware
 
 # Install the new version
 sudo apt install ./raspimidihub_1.1_arm64.deb
 
 # Remount read-only and reboot
 ro
+# Or manually: sudo mount -o remount,ro /boot/firmware && sudo mount -o remount,ro /
 sudo reboot
 ```
 

@@ -121,7 +121,7 @@ On Pi models with an activity LED (`/sys/class/leds/ACT/`):
 
 ### 4.1 Overview
 
-A lightweight web application served from the Raspberry Pi that provides visual MIDI routing control The interface allows users to override the default "everything-to-everything" routing with custom configurations.
+A lightweight web application served from the Raspberry Pi that provides visual MIDI routing control. The interface allows users to override the default "everything-to-everything" routing with custom configurations.
 
 ### 4.2 Functional Requirements
 
