@@ -444,6 +444,36 @@ class AlsaSeq:
         ev.flags = 0  # direct
         snd_seq_event_output_direct(self._handle, pointer(ev))
 
+    def send_note_on(self, dest_client: int, dest_port: int,
+                     channel: int, note: int, velocity: int = 100) -> None:
+        """Send a MIDI Note On event."""
+        ev = SndSeqEvent()
+        ev.type = MidiEventType.NOTEON
+        ev.data.note.channel = channel
+        ev.data.note.note = note
+        ev.data.note.velocity = velocity
+        self.send_event(ev, dest_client, dest_port)
+
+    def send_note_off(self, dest_client: int, dest_port: int,
+                      channel: int, note: int) -> None:
+        """Send a MIDI Note Off event."""
+        ev = SndSeqEvent()
+        ev.type = MidiEventType.NOTEOFF
+        ev.data.note.channel = channel
+        ev.data.note.note = note
+        ev.data.note.velocity = 0
+        self.send_event(ev, dest_client, dest_port)
+
+    def send_cc(self, dest_client: int, dest_port: int,
+                channel: int, cc: int, value: int) -> None:
+        """Send a MIDI CC event."""
+        ev = SndSeqEvent()
+        ev.type = MidiEventType.CONTROLLER
+        ev.data.control.channel = channel
+        ev.data.control.param = cc
+        ev.data.control.value = value
+        self.send_event(ev, dest_client, dest_port)
+
     def read_event(self) -> SndSeqEvent | None:
         """Read one event (non-blocking). Returns None if no event available."""
         ev = SndSeqEventPtr()

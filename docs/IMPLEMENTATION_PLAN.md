@@ -208,6 +208,45 @@ For connections with filters, replace direct ALSA subscription with:
 
 ---
 
+## Phase 3: MIDI Mapping (Target: after Phase 2.1)
+
+### Step 3.1: Mapping Engine
+Per-connection mapping pipeline, extending the existing filter/passthrough engine:
+
+1. **Note → CC mapping:** A pressed note sends CC value A, released sends CC value B (momentary mode). Optional aftertouch → CC value modulation.
+2. **CC → CC mapping:** Remap CC numbers. Input range 0..127 maps to configurable output range (can be inverted/negative). 
+3. **CC → Multiple CCs:** One input CC fans out to several output CCs, each with independent output ranges.
+4. **Channel remapping:** Route events from one channel to another.
+
+### Step 3.2: MIDI Learn
+- "Learn" button in the mapping UI: click Learn, then move a knob/press a key on the MIDI device.
+- The next relevant MIDI event (CC or Note) is captured and auto-fills the mapping source field.
+- Works via SSE: the UI listens for the next `midi-activity` event from the selected device and populates the form.
+
+### Step 3.3: Mapping UI
+- Accessible per-connection from the routing matrix (separate from the filter panel).
+- List of active mappings per connection.
+- Add/edit/delete mappings with source (learned or manual) and destination configuration.
+- Visual feedback: input value → mapped output value shown in real-time.
+
+### Step 3.4: Device Renaming
+- Tap a device in the Status page to open the device detail page.
+- Rename field persists custom name to config, keyed by stable USB ID.
+
+### Step 3.5: MIDI Test Sender
+- In the device detail page, send MIDI events to a device for testing:
+  - **Note button:** Hold to send C3 Note On, release for Note Off. Configurable channel.
+  - **CC slider:** Configurable CC number, drag slider to send CC values in real-time.
+- Useful for verifying connections and mappings without physical MIDI input.
+
+### Step 3.6: MIDI Monitor
+- Device detail page shows live MIDI event log from the device.
+- Single-line "latest event" display with note names (e.g. "Note On ch1 C3 vel=100").
+- Scrollable history of recent events.
+- Activity indicator dots in the connection matrix (throttled to 10 updates/sec).
+
+---
+
 ## Build & Release
 
 ### Debian Package Build

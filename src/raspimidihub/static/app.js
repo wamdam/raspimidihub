@@ -322,11 +322,23 @@ function PresetsPage({ refresh, showToast }) {
     `;
 }
 
-// --- Device Detail Page (MIDI Monitor) ---
+// --- Note name helper ---
+const NOTE_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+const noteName = (n) => NOTE_NAMES[n % 12] + (Math.floor(n / 12) - 2);
+
+// --- Device Detail Page ---
 function DeviceDetailPage({ device, onClose, showToast }) {
     const [editName, setEditName] = useState(device.name);
+    const [lastEvent, setLastEvent] = useState(null);
     const [events, setEvents] = useState([]);
-    const maxEvents = 100;
+    const [sendChannel, setSendChannel] = useState(0);
+    const [sendPort, setSendPort] = useState(0);
+    const [ccNum, setCcNum] = useState(1);
+    const [ccVal, setCcVal] = useState(64);
+    const [noteHeld, setNoteHeld] = useState(false);
+    const maxEvents = 50;
+
+    const outPorts = device.ports.filter(p => p.is_output);
 
     useEffect(() => {
         const es = new EventSource('/api/events');
@@ -334,8 +346,9 @@ function DeviceDetailPage({ device, onClose, showToast }) {
             try {
                 const data = JSON.parse(e.data);
                 if (data.src_client === device.client_id) {
-                    const line = formatMidiEvent(data);
-                    setEvents(prev => [{ ...data, line, ts: Date.now() }, ...prev].slice(0, maxEvents));
+                    const line = formatEvent(data);
+                    setLastEvent(line);
+                    setEvents(prev => [{ line, ts: Date.now() }, ...prev].slice(0, maxEvents));
                 }
             } catch {}
         };
@@ -343,11 +356,11 @@ function DeviceDetailPage({ device, onClose, showToast }) {
         return () => es.close();
     }, [device.client_id]);
 
-    const formatMidiEvent = (d) => {
+    const formatEvent = (d) => {
         let s = d.event;
         if (d.channel != null) s += ` ch${d.channel}`;
-        if (d.note != null) s += ` note=${d.note} vel=${d.velocity}`;
-        if (d.cc != null) s += ` cc=${d.cc} val=${d.value}`;
+        if (d.note != null) s += ` ${noteName(d.note)} vel=${d.velocity}`;
+        if (d.cc != null) s += ` cc${d.cc}=${d.value}`;
         return s;
     };
 
@@ -360,17 +373,32 @@ function DeviceDetailPage({ device, onClose, showToast }) {
         showToast('Device renamed');
     };
 
+    const sendMidi = (type, extra = {}) => {
+        api(`/devices/${device.client_id}/send`, {
+            method: 'POST',
+            body: JSON.stringify({ type, channel: sendChannel, port: sendPort, ...extra }),
+        });
+    };
+
+    const noteDown = () => { if (!noteHeld) { setNoteHeld(true); sendMidi('note_on', { note: 60, velocity: 100 }); } };
+    const noteUp = () => { if (noteHeld) { setNoteHeld(false); sendMidi('note_off', { note: 60 }); } };
+
+    const sendCC = (val) => {
+        setCcVal(val);
+        sendMidi('cc', { cc: ccNum, value: val });
+    };
+
     return html`
         <div>
             <button class="btn btn-secondary" onclick=${onClose} style="margin-bottom:var(--gap)">\u2190 Back</button>
+
             <div class="card">
-                <h3>Device Info</h3>
+                <h3>Device</h3>
                 <div class="stat-grid">
-                    <div class="stat"><div class="label">Default Name</div><div class="value">${device.default_name || device.name}</div></div>
-                    <div class="stat"><div class="label">Client ID</div><div class="value">${device.client_id}</div></div>
-                    ${device.vid ? html`<div class="stat"><div class="label">USB ID</div><div class="value">${device.vid}:${device.pid}</div></div>` : ''}
-                    ${device.usb_path ? html`<div class="stat"><div class="label">USB Path</div><div class="value">${device.usb_path}</div></div>` : ''}
-                    ${device.stable_id ? html`<div class="stat"><div class="label">Stable ID</div><div class="value" style="font-size:11px">${device.stable_id}</div></div>` : ''}
+                    <div class="stat"><div class="label">Name</div><div class="value">${device.default_name || device.name}</div></div>
+                    <div class="stat"><div class="label">Client</div><div class="value">${device.client_id}</div></div>
+                    ${device.vid ? html`<div class="stat"><div class="label">USB</div><div class="value">${device.vid}:${device.pid}</div></div>` : ''}
+                    <div class="stat"><div class="label">Ports</div><div class="value">${device.ports.map(p => (p.is_input?'IN':'')+(p.is_input&&p.is_output?'/':'')+(p.is_output?'OUT':'')).join(', ')}</div></div>
                 </div>
                 <div style="display:flex;gap:8px;margin-top:12px">
                     <input style="flex:1;padding:10px 12px;background:var(--bg);border:1px solid var(--surface2);border-radius:6px;color:var(--text);font-size:14px;min-height:48px"
@@ -379,25 +407,62 @@ function DeviceDetailPage({ device, onClose, showToast }) {
                     <button class="btn btn-primary" onclick=${rename}>Rename</button>
                 </div>
             </div>
-            <div class="card">
-                <h3>Ports</h3>
-                ${device.ports.map(p => html`
-                    <div class="device">
-                        <div class="dot" style="background:${p.is_input ? 'var(--success)' : 'var(--accent)'}"></div>
-                        <span class="name">${p.name}</span>
-                        <span class="ports">${p.is_input ? 'IN' : ''}${p.is_input && p.is_output ? '/' : ''}${p.is_output ? 'OUT' : ''}</span>
-                    </div>
-                `)}
-            </div>
+
             <div class="card">
                 <h3>MIDI Monitor</h3>
+                <div class="midi-last">${lastEvent || 'Waiting for MIDI...'}</div>
                 <div class="midi-monitor">
-                    ${events.length === 0 ? html`<p style="color:var(--text-dim)">Waiting for MIDI events...</p>` : ''}
-                    ${events.map(e => html`
-                        <div class="midi-event">${e.line}</div>
-                    `)}
+                    ${events.map(e => html`<div class="midi-event">${e.line}</div>`)}
                 </div>
             </div>
+
+            ${outPorts.length > 0 && html`
+                <div class="card">
+                    <h3>MIDI Test Sender</h3>
+                    <div class="stat-grid" style="margin-bottom:12px">
+                        <div class="form-group">
+                            <label>Channel</label>
+                            <select value=${sendChannel} onChange=${e => setSendChannel(+e.target.value)}>
+                                ${Array.from({length:16},(_,i) => html`<option value=${i}>${i+1}</option>`)}
+                            </select>
+                        </div>
+                        ${outPorts.length > 1 ? html`
+                            <div class="form-group">
+                                <label>Port</label>
+                                <select value=${sendPort} onChange=${e => setSendPort(+e.target.value)}>
+                                    ${outPorts.map(p => html`<option value=${p.port_id}>${p.name}</option>`)}
+                                </select>
+                            </div>
+                        ` : ''}
+                    </div>
+
+                    <div style="margin-bottom:16px">
+                        <label style="font-size:12px;color:var(--text-dim);display:block;margin-bottom:4px">Note (C3 = middle C)</label>
+                        <button class="btn btn-primary btn-block ${noteHeld ? 'btn-held' : ''}"
+                            onMouseDown=${noteDown} onMouseUp=${noteUp} onMouseLeave=${noteUp}
+                            onTouchStart=${(e) => { e.preventDefault(); noteDown(); }}
+                            onTouchEnd=${(e) => { e.preventDefault(); noteUp(); }}>
+                            ${noteHeld ? '\u266B C3 playing...' : '\u266B Hold for C3'}
+                        </button>
+                    </div>
+
+                    <div>
+                        <div style="display:flex;gap:8px;margin-bottom:8px">
+                            <div class="form-group" style="flex:1">
+                                <label>CC Number</label>
+                                <input type="number" min="0" max="127" value=${ccNum}
+                                    onInput=${e => setCcNum(Math.max(0, Math.min(127, +e.target.value)))} />
+                            </div>
+                            <div class="form-group" style="flex:1">
+                                <label>Value: ${ccVal}</label>
+                                <input type="range" min="0" max="127" value=${ccVal}
+                                    onInput=${e => sendCC(+e.target.value)}
+                                    style="min-height:48px;width:100%" />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `}
         </div>
     `;
 }

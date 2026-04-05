@@ -198,6 +198,38 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
 
             return Response.json({"status": "renamed", "name": name})
 
+        # POST /api/devices/{client_id}/send
+        if path.endswith("/send"):
+            try:
+                client_id = int(path[:-len("/send")])
+            except ValueError:
+                return Response.error("Invalid client ID")
+
+            if not engine._seq:
+                return Response.error("MIDI not available", 500)
+
+            data = req.json
+            msg_type = data.get("type", "")
+            channel = data.get("channel", 0)
+            port = data.get("port", 0)
+
+            if msg_type == "note_on":
+                note = data.get("note", 60)
+                velocity = data.get("velocity", 100)
+                engine._seq.send_note_on(client_id, port, channel, note, velocity)
+                return Response.json({"status": "sent", "type": "note_on"})
+            elif msg_type == "note_off":
+                note = data.get("note", 60)
+                engine._seq.send_note_off(client_id, port, channel, note)
+                return Response.json({"status": "sent", "type": "note_off"})
+            elif msg_type == "cc":
+                cc = data.get("cc", 1)
+                value = data.get("value", 0)
+                engine._seq.send_cc(client_id, port, channel, cc, value)
+                return Response.json({"status": "sent", "type": "cc"})
+            else:
+                return Response.error("Unknown type. Use: note_on, note_off, cc")
+
         return Response.not_found()
 
     # ================================================================
