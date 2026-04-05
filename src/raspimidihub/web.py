@@ -189,7 +189,7 @@ class WebServer:
 
         body = file_path.read_bytes()
         return Response(body=body, content_type=content_type,
-                        headers={"Cache-Control": "public, max-age=3600"})
+                        headers={"Cache-Control": "no-cache, must-revalidate"})
 
     def _match_route(self, method: str, path: str) -> tuple[callable, bool] | None:
         """Find matching route handler. Returns (handler, exact_match)."""

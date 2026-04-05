@@ -94,39 +94,39 @@ function FilterPanel({ connId, filter, onClose, onApply }) {
     `;
 }
 
-// --- Long-press hook ---
-function useLongPress(onLongPress, onTap, delay = 500) {
+// --- Matrix cell with long-press + right-click for filters ---
+function MatrixCell({ on, filtered, onTap, onLongPress }) {
     const timer = { current: null };
     const didLongPress = { current: false };
+    const isTouch = { current: false };
 
     const start = (e) => {
+        if (e.type === 'touchstart') isTouch.current = true;
+        if (e.type === 'mousedown' && isTouch.current) return; // skip mouse after touch
         didLongPress.current = false;
         timer.current = setTimeout(() => {
             didLongPress.current = true;
-            onLongPress(e);
-        }, delay);
+            onLongPress();
+        }, 500);
     };
     const cancel = () => {
-        if (timer.current) clearTimeout(timer.current);
+        if (timer.current) { clearTimeout(timer.current); timer.current = null; }
     };
     const end = (e) => {
+        if (e.type === 'mouseup' && isTouch.current) { isTouch.current = false; return; }
         cancel();
-        if (!didLongPress.current) onTap(e);
+        if (!didLongPress.current) onTap();
+        e.preventDefault();
+    };
+    const rightClick = (e) => {
+        e.preventDefault();
+        onLongPress();
     };
 
-    return {
-        onTouchStart: start,
-        onTouchEnd: end,
-        onTouchMove: cancel,
-        onMouseDown: start,
-        onMouseUp: end,
-        onMouseLeave: cancel,
-    };
-}
-
-function MatrixCell({ on, filtered, onTap, onLongPress }) {
-    const handlers = useLongPress(onLongPress, onTap);
-    return html`<td ...${handlers} oncontextmenu=${e => e.preventDefault()}>
+    return html`<td
+        onTouchStart=${start} onTouchEnd=${end} onTouchMove=${cancel}
+        onMouseDown=${start} onMouseUp=${end} onMouseLeave=${cancel}
+        onContextMenu=${rightClick}>
         <div class="cb ${on ? (filtered ? 'on filtered' : 'on') : ''}"></div>
     </td>`;
 }
