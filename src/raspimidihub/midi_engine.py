@@ -9,6 +9,7 @@ import logging
 from dataclasses import dataclass, field
 
 from .alsa_seq import AlsaSeq, MidiDevice, SeqEventType
+from .midi_filter import FilterEngine
 
 log = logging.getLogger(__name__)
 
@@ -37,6 +38,7 @@ class MidiEngine:
         self._seq: AlsaSeq | None = None
         self._devices: list[MidiDevice] = []
         self._connections: set[Connection] = set()
+        self._filter_engine: FilterEngine | None = None
         self._debounce_task: asyncio.Task | None = None
         self._running = False
         self._on_change_callbacks: list = []
@@ -60,9 +62,14 @@ class MidiEngine:
             except Exception:
                 log.exception("Error in change callback")
 
+    @property
+    def filter_engine(self) -> FilterEngine | None:
+        return self._filter_engine
+
     def start(self) -> None:
         """Open ALSA sequencer and perform initial scan + connect."""
         self._seq = AlsaSeq("RaspiMIDIHub")
+        self._filter_engine = FilterEngine(self._seq)
         log.info("ALSA sequencer opened, client ID %d", self._seq.client_id)
         self._scan_and_connect()
 
@@ -122,9 +129,13 @@ class MidiEngine:
         return new_connections
 
     def disconnect_all(self) -> None:
-        """Remove all managed subscriptions."""
+        """Remove all managed subscriptions and filters."""
         if not self._seq:
             return
+
+        # Clear filtered connections first
+        if self._filter_engine:
+            self._filter_engine.clear_all()
 
         for conn in self._connections:
             try:
@@ -174,25 +185,38 @@ class MidiEngine:
             if not self._running:
                 break
 
-            # Drain all pending events
+            # Drain pending events (max batch to avoid starving asyncio)
             hotplug = False
-            while True:
+            max_events = 256
+            for _ in range(max_events):
                 ev = self._seq.read_event()
                 if ev is None:
                     break
-                try:
-                    ev_type = SeqEventType(ev.type)
-                except ValueError:
+
+                # Ignore events from our own client (filter port creation/events)
+                if ev.source.client == self._seq.client_id:
                     continue
 
-                if ev_type in (SeqEventType.PORT_START, SeqEventType.PORT_EXIT,
-                               SeqEventType.CLIENT_START, SeqEventType.CLIENT_EXIT):
-                    # For announce events, the affected client:port is in data.addr
-                    affected_client = ev.data[0]
-                    affected_port = ev.data[1]
-                    log.info("Hotplug event: %s (client %d, port %d)",
-                             ev_type.name, affected_client, affected_port)
-                    hotplug = True
+                # Check for hotplug announce events
+                try:
+                    ev_type = SeqEventType(ev.type)
+                    if ev_type in (SeqEventType.PORT_START, SeqEventType.PORT_EXIT,
+                                   SeqEventType.CLIENT_START, SeqEventType.CLIENT_EXIT):
+                        affected_client = ev.data.raw8[0]
+                        affected_port = ev.data.raw8[1]
+                        # Ignore events from our own client
+                        if affected_client == self._seq.client_id:
+                            continue
+                        log.info("Hotplug event: %s (client %d, port %d)",
+                                 ev_type.name, affected_client, affected_port)
+                        hotplug = True
+                        continue
+                except ValueError:
+                    pass
+
+                # Process filtered MIDI events
+                if self._filter_engine:
+                    self._filter_engine.process_event(ev)
 
             if hotplug:
                 self._schedule_rescan()

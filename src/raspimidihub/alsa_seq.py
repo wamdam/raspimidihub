@@ -97,7 +97,66 @@ class SndSeqQuerySubscribe(Structure):
 SndSeqQuerySubscribePtr = POINTER(SndSeqQuerySubscribe)
 
 
-# --- snd_seq_event_t (simplified, we only need type field) ---
+# --- MIDI event types for filtering ---
+
+class MidiEventType(IntEnum):
+    # Channel voice messages
+    NOTEON = 6
+    NOTEOFF = 7
+    KEYPRESS = 8        # Polyphonic aftertouch
+    CONTROLLER = 10     # CC
+    PGMCHANGE = 11      # Program Change
+    CHANPRESS = 12      # Channel aftertouch
+    PITCHBEND = 13
+    # System messages
+    SYSEX = 130
+    # Realtime / Clock
+    CLOCK = 36          # MIDI Clock (0xF8)
+    START = 37          # 0xFA
+    CONTINUE = 38       # 0xFB
+    STOP = 39           # 0xFC
+    SENSING = 42        # Active sensing 0xFE
+    TICK = 35           # MIDI Tick
+
+
+# Message type groups for filtering UI
+MSG_FILTER_GROUPS = {
+    "note": {MidiEventType.NOTEON, MidiEventType.NOTEOFF, MidiEventType.KEYPRESS},
+    "cc": {MidiEventType.CONTROLLER},
+    "pc": {MidiEventType.PGMCHANGE},
+    "pitchbend": {MidiEventType.PITCHBEND},
+    "aftertouch": {MidiEventType.CHANPRESS, MidiEventType.KEYPRESS},
+    "sysex": {MidiEventType.SYSEX},
+    "clock": {MidiEventType.CLOCK, MidiEventType.START, MidiEventType.CONTINUE,
+              MidiEventType.STOP, MidiEventType.TICK, MidiEventType.SENSING},
+}
+
+
+# --- snd_seq_event_t ---
+
+class SndSeqEventNote(Structure):
+    _fields_ = [
+        ("channel", c_uint8),
+        ("note", c_uint8),
+        ("velocity", c_uint8),
+        ("off_velocity", c_uint8),
+        ("duration", c_uint),
+    ]
+
+class SndSeqEventCtrl(Structure):
+    _fields_ = [
+        ("channel", c_uint8),
+        ("unused", c_uint8 * 3),
+        ("param", c_uint),
+        ("value", c_int),
+    ]
+
+class SndSeqEventData(ctypes.Union):
+    _fields_ = [
+        ("note", SndSeqEventNote),
+        ("control", SndSeqEventCtrl),
+        ("raw8", c_uint8 * 12),
+    ]
 
 class SndSeqEvent(Structure):
     _fields_ = [
@@ -108,8 +167,14 @@ class SndSeqEvent(Structure):
         ("time", c_uint8 * 8),
         ("source", SndSeqAddr),
         ("dest", SndSeqAddr),
-        ("data", c_uint8 * 48),  # union, we don't parse beyond type
+        ("data", SndSeqEventData),
+        ("_pad", c_uint8 * 36),  # rest of the union
     ]
+
+    @property
+    def channel(self) -> int:
+        """Extract MIDI channel (0-15) from the event."""
+        return self.data.note.channel
 
 SndSeqEventPtr = POINTER(SndSeqEvent)
 
@@ -130,6 +195,9 @@ snd_seq_client_id = _func("snd_seq_client_id", c_int, SndSeqPtr)
 snd_seq_poll_descriptors_count = _func("snd_seq_poll_descriptors_count", c_int, SndSeqPtr, c_int)
 snd_seq_poll_descriptors = _func("snd_seq_poll_descriptors", c_int, SndSeqPtr, c_void_p, c_uint, c_int)
 snd_seq_event_input = _func("snd_seq_event_input", c_int, SndSeqPtr, POINTER(SndSeqEventPtr))
+snd_seq_event_output = _func("snd_seq_event_output", c_int, SndSeqPtr, SndSeqEventPtr)
+snd_seq_event_output_direct = _func("snd_seq_event_output_direct", c_int, SndSeqPtr, SndSeqEventPtr)
+snd_seq_drain_output = _func("snd_seq_drain_output", c_int, SndSeqPtr)
 
 # Client info
 snd_seq_client_info_malloc = _func("snd_seq_client_info_malloc", c_int, POINTER(SndSeqClientInfoPtr))
@@ -353,6 +421,28 @@ class AlsaSeq:
                 check(ret, f"unsubscribe {src_client}:{src_port} -> {dst_client}:{dst_port}")
         finally:
             snd_seq_port_subscribe_free(sub)
+
+    def create_port(self, name: str, readable: bool = False, writable: bool = False) -> int:
+        """Create a new port on this client. Returns port ID."""
+        caps = 0
+        if readable:
+            caps |= SND_SEQ_PORT_CAP_READ | SND_SEQ_PORT_CAP_SUBS_READ
+        if writable:
+            caps |= SND_SEQ_PORT_CAP_WRITE | SND_SEQ_PORT_CAP_SUBS_WRITE
+        port_id = snd_seq_create_simple_port(
+            self._handle, name.encode(), caps,
+            SND_SEQ_PORT_TYPE_MIDI_GENERIC | SND_SEQ_PORT_TYPE_APPLICATION,
+        )
+        check(port_id, f"Failed to create port {name}")
+        return port_id
+
+    def send_event(self, ev: SndSeqEvent, dest_client: int, dest_port: int) -> None:
+        """Send a MIDI event to a specific destination."""
+        ev.dest.client = dest_client
+        ev.dest.port = dest_port
+        ev.source.client = self._client_id
+        ev.flags = 0  # direct
+        snd_seq_event_output_direct(self._handle, pointer(ev))
 
     def read_event(self) -> SndSeqEvent | None:
         """Read one event (non-blocking). Returns None if no event available."""

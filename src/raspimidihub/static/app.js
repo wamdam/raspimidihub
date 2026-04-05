@@ -40,8 +40,62 @@ function Toast({ message }) {
     return html`<div class="toast">${message}</div>`;
 }
 
+// --- Filter Panel ---
+const MSG_TYPES = ['note', 'cc', 'pc', 'pitchbend', 'aftertouch', 'sysex', 'clock'];
+const MSG_LABELS = { note: 'Notes', cc: 'CC', pc: 'Program', pitchbend: 'Pitch Bend', aftertouch: 'Aftertouch', sysex: 'SysEx', clock: 'Clock/RT' };
+
+function FilterPanel({ connId, filter, onClose, onApply }) {
+    const [channelMask, setChannelMask] = useState(filter ? filter.channel_mask : 0xFFFF);
+    const [msgTypes, setMsgTypes] = useState(new Set(filter ? filter.msg_types : MSG_TYPES));
+
+    const toggleChannel = (ch) => setChannelMask(m => m ^ (1 << ch));
+    const toggleAllChannels = () => setChannelMask(m => m === 0xFFFF ? 0 : 0xFFFF);
+    const toggleMsgType = (t) => setMsgTypes(s => { const n = new Set(s); n.has(t) ? n.delete(t) : n.add(t); return n; });
+
+    const apply = async () => {
+        await onApply(connId, channelMask, [...msgTypes]);
+        onClose();
+    };
+    const clear = async () => {
+        await onApply(connId, 0xFFFF, MSG_TYPES);
+        onClose();
+    };
+
+    return html`
+        <div class="filter-overlay" onclick=${(e) => e.target.className === 'filter-overlay' && onClose()}>
+            <div class="filter-panel">
+                <h3>Filter: ${connId}</h3>
+                <div class="card">
+                    <h3 style="cursor:pointer" onclick=${toggleAllChannels}>MIDI Channels</h3>
+                    <div class="channel-grid">
+                        ${Array.from({length: 16}, (_, i) => html`
+                            <button class="ch-btn ${channelMask & (1 << i) ? 'on' : ''}"
+                                onclick=${() => toggleChannel(i)}>${i + 1}</button>
+                        `)}
+                    </div>
+                </div>
+                <div class="card">
+                    <h3>Message Types</h3>
+                    <div class="msg-types">
+                        ${MSG_TYPES.map(t => html`
+                            <label class="msg-toggle">
+                                <input type="checkbox" checked=${msgTypes.has(t)} onchange=${() => toggleMsgType(t)} />
+                                <span>${MSG_LABELS[t]}</span>
+                            </label>
+                        `)}
+                    </div>
+                </div>
+                <div class="btn-group">
+                    <button class="btn btn-primary" onclick=${apply}>Apply Filter</button>
+                    <button class="btn btn-secondary" onclick=${clear}>Clear Filter</button>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
 // --- Connection Matrix ---
-function ConnectionMatrix({ devices, connections, onToggle }) {
+function ConnectionMatrix({ devices, connections, onToggle, onFilterOpen }) {
     const inputs = [];
     const outputs = [];
     for (const dev of devices) {
@@ -51,10 +105,12 @@ function ConnectionMatrix({ devices, connections, onToggle }) {
         }
     }
 
-    const connSet = new Set(connections.map(c => `${c.src_client}:${c.src_port}-${c.dst_client}:${c.dst_port}`));
+    const connMap = {};
+    for (const c of connections) {
+        connMap[`${c.src_client}:${c.src_port}-${c.dst_client}:${c.dst_port}`] = c;
+    }
 
-    const isConnected = (inp, out) =>
-        connSet.has(`${inp.client_id}:${inp.port_id}-${out.client_id}:${out.port_id}`);
+    const getConn = (inp, out) => connMap[`${inp.client_id}:${inp.port_id}-${out.client_id}:${out.port_id}`];
     const isSelf = (inp, out) => inp.client_id === out.client_id;
 
     const label = (item) => {
@@ -81,9 +137,12 @@ function ConnectionMatrix({ devices, connections, onToggle }) {
                             <th class="row-header" title="${inp.dev_name}: ${inp.name}">${label(inp)}</th>
                             ${outputs.map(out => {
                                 if (isSelf(inp, out)) return html`<td class="self"></td>`;
-                                const on = isConnected(inp, out);
-                                return html`<td onclick=${() => onToggle(inp, out, !on)}>
-                                    <div class="cb ${on ? 'on' : ''}"></div>
+                                const conn = getConn(inp, out);
+                                const on = !!conn;
+                                const filtered = conn && conn.filtered;
+                                return html`<td onclick=${() => onToggle(inp, out, !on)}
+                                    oncontextmenu=${(e) => { e.preventDefault(); if (on) onFilterOpen(conn); }}>
+                                    <div class="cb ${on ? (filtered ? 'on filtered' : 'on') : ''}"></div>
                                 </td>`;
                             })}
                         </tr>
@@ -91,11 +150,16 @@ function ConnectionMatrix({ devices, connections, onToggle }) {
                 </tbody>
             </table>
         </div>
+        <p style="font-size:11px;color:var(--text-dim);text-align:center;margin-top:4px">
+            Long-press a connection to set filters
+        </p>
     `;
 }
 
 // --- Routing Page ---
 function RoutingPage({ devices, connections, refresh, showToast }) {
+    const [filterConn, setFilterConn] = useState(null);
+
     const onToggle = async (inp, out, connect) => {
         if (connect) {
             await api('/connections', {
@@ -110,6 +174,15 @@ function RoutingPage({ devices, connections, refresh, showToast }) {
             await api(`/connections/${id}`, { method: 'DELETE' });
         }
         refresh();
+    };
+
+    const onFilterApply = async (connId, channelMask, msgTypes) => {
+        await api(`/connections/${connId}`, {
+            method: 'PATCH',
+            body: JSON.stringify({ channel_mask: channelMask, msg_types: msgTypes }),
+        });
+        refresh();
+        showToast('Filter applied');
     };
 
     const connectAll = async () => {
@@ -128,11 +201,16 @@ function RoutingPage({ devices, connections, refresh, showToast }) {
     };
 
     return html`
+        ${filterConn && html`<${FilterPanel}
+            connId=${filterConn.id}
+            filter=${filterConn.filter || null}
+            onClose=${() => setFilterConn(null)}
+            onApply=${onFilterApply} />`}
         <div class="btn-group">
             <button class="btn btn-success" onclick=${connectAll}>Connect All</button>
             <button class="btn btn-danger" onclick=${disconnectAll}>Disconnect All</button>
         </div>
-        <${ConnectionMatrix} devices=${devices} connections=${connections} onToggle=${onToggle} />
+        <${ConnectionMatrix} devices=${devices} connections=${connections} onToggle=${onToggle} onFilterOpen=${(conn) => setFilterConn(conn)} />
         <button class="btn btn-primary btn-block" onclick=${saveConfig}>Save Configuration</button>
     `;
 }

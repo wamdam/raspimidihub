@@ -304,6 +304,82 @@ body {
     color: var(--text-dim);
 }
 
+/* --- Filter Panel --- */
+.filter-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.6);
+    z-index: 50;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+}
+.filter-panel {
+    background: var(--bg);
+    width: 100%;
+    max-width: 500px;
+    max-height: 85vh;
+    overflow-y: auto;
+    border-radius: var(--radius) var(--radius) 0 0;
+    padding: 16px;
+    animation: slideUp 0.2s;
+}
+.filter-panel h3:first-child {
+    margin-bottom: 12px;
+    font-size: 16px;
+    color: var(--text);
+    text-transform: none;
+}
+@keyframes slideUp {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+}
+.channel-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+}
+.ch-btn {
+    min-height: 44px;
+    border: 2px solid var(--surface2);
+    border-radius: 6px;
+    background: var(--bg);
+    color: var(--text-dim);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+}
+.ch-btn.on {
+    background: var(--accent2);
+    border-color: var(--accent2);
+    color: #fff;
+}
+.msg-types {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+.msg-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    background: var(--bg);
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    min-height: 44px;
+}
+.msg-toggle input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--accent);
+}
+.matrix .cb.filtered {
+    background: var(--accent2);
+    border-color: var(--accent2);
+}
+
 @media (min-width: 768px) {
     .main { max-width: 900px; margin: 0 auto; }
     .stat-grid { grid-template-columns: repeat(4, 1fr); }

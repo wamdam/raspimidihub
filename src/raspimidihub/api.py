@@ -13,6 +13,7 @@ from pathlib import Path
 from . import __version__
 from .config import Config
 from .midi_engine import MidiEngine, Connection
+from .midi_filter import MidiFilter, ALL_CHANNELS, ALL_MSG_TYPES
 from .web import Request, Response, WebServer
 from .wifi import WifiManager
 
@@ -125,15 +126,24 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
     @server.route("GET", "/api/connections")
     async def api_connections(req: Request) -> Response:
         conns = []
+        fe = engine.filter_engine
         for c in sorted(engine.connections,
                         key=lambda c: (c.src_client, c.src_port, c.dst_client, c.dst_port)):
-            conns.append({
-                "id": f"{c.src_client}:{c.src_port}-{c.dst_client}:{c.dst_port}",
+            conn_id = f"{c.src_client}:{c.src_port}-{c.dst_client}:{c.dst_port}"
+            entry = {
+                "id": conn_id,
                 "src_client": c.src_client,
                 "src_port": c.src_port,
                 "dst_client": c.dst_client,
                 "dst_port": c.dst_port,
-            })
+                "filtered": False,
+            }
+            if fe:
+                f = fe.get_filter(conn_id)
+                if f:
+                    entry["filtered"] = True
+                    entry["filter"] = f.to_dict()
+            conns.append(entry)
         return Response.json(conns)
 
     # ================================================================
@@ -212,6 +222,65 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
             "id": conn_id,
         })
         return Response.json({"status": "deleted"})
+
+    # ================================================================
+    # PATCH /api/connections/{id} — update filter on a connection
+    # ================================================================
+
+    @server.route("PATCH", "/api/connections/", exact=False)
+    async def api_patch_connection(req: Request) -> Response:
+        conn_id = req.path_param("/api/connections/")
+        if not conn_id:
+            return Response.error("Missing connection ID")
+
+        # Parse connection ID
+        try:
+            src, dst = conn_id.split("-")
+            src_client, src_port = map(int, src.split(":"))
+            dst_client, dst_port = map(int, dst.split(":"))
+        except (ValueError, IndexError):
+            return Response.error("Invalid connection ID format")
+
+        # Check connection exists
+        conn = Connection(src_client, src_port, dst_client, dst_port)
+        if conn not in engine.connections:
+            return Response.not_found()
+
+        fe = engine.filter_engine
+        if not fe:
+            return Response.error("Filter engine not available", 500)
+
+        data = req.json
+        channel_mask = data.get("channel_mask", ALL_CHANNELS)
+        msg_types = set(data.get("msg_types", list(ALL_MSG_TYPES)))
+
+        midi_filter = MidiFilter(channel_mask=channel_mask, msg_types=msg_types)
+
+        if midi_filter.is_passthrough:
+            # Remove filter — switch back to direct ALSA subscription
+            if fe.has_filter(conn_id):
+                fe.remove_filter(conn_id)
+                # Re-establish direct subscription
+                engine._seq.subscribe(src_client, src_port, dst_client, dst_port)
+        else:
+            # Add/update filter — switch to userspace passthrough
+            if not fe.has_filter(conn_id):
+                # Remove direct ALSA subscription first
+                try:
+                    engine._seq.unsubscribe(src_client, src_port, dst_client, dst_port)
+                except OSError:
+                    pass
+                fe.add_filter(src_client, src_port, dst_client, dst_port, midi_filter)
+            else:
+                fe.update_filter(conn_id, midi_filter)
+
+        config.set_mode("custom")
+        await server.send_sse("connection-changed", {
+            "action": "filter-updated",
+            "id": conn_id,
+            "filter": midi_filter.to_dict(),
+        })
+        return Response.json({"status": "updated", "filter": midi_filter.to_dict()})
 
     # ================================================================
     # POST /api/connections/connect-all — restore all-to-all
