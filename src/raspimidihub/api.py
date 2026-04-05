@@ -13,7 +13,7 @@ from pathlib import Path
 from . import __version__
 from .config import Config
 from .midi_engine import MidiEngine, Connection
-from .midi_filter import MidiFilter, ALL_CHANNELS, ALL_MSG_TYPES
+from .midi_filter import MidiFilter, MidiMapping, MappingType, ALL_CHANNELS, ALL_MSG_TYPES
 from .web import Request, Response, WebServer
 from .wifi import WifiManager
 
@@ -256,6 +256,9 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
                 if f:
                     entry["filtered"] = True
                     entry["filter"] = f.to_dict()
+                mappings = fe.get_mappings(conn_id)
+                if mappings:
+                    entry["mappings"] = [m.to_dict() for m in mappings]
             conns.append(entry)
         return Response.json(conns)
 
@@ -370,10 +373,14 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         midi_filter = MidiFilter(channel_mask=channel_mask, msg_types=msg_types)
 
         if midi_filter.is_passthrough:
-            # Remove filter — switch back to direct ALSA subscription
-            if fe.has_filter(conn_id):
+            # Check if mappings still need userspace
+            fc = fe.filtered_connections.get(conn_id)
+            if fc and len(fc.mappings) > 0:
+                # Keep in userspace for mappings, just update filter
+                fe.update_filter(conn_id, midi_filter)
+            elif fe.has_filter(conn_id):
+                # No mappings — switch back to direct ALSA subscription
                 fe.remove_filter(conn_id)
-                # Re-establish direct subscription
                 engine._seq.subscribe(src_client, src_port, dst_client, dst_port)
         else:
             # Add/update filter — switch to userspace passthrough
@@ -394,6 +401,130 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
             "filter": midi_filter.to_dict(),
         })
         return Response.json({"status": "updated", "filter": midi_filter.to_dict()})
+
+    # ================================================================
+    # GET/POST/DELETE /api/connections/{id}/mappings — mapping CRUD
+    # ================================================================
+
+    @server.route("GET", "/api/mappings/", exact=False)
+    async def api_get_mappings(req: Request) -> Response:
+        conn_id = req.path_param("/api/mappings/")
+        if not conn_id:
+            return Response.error("Missing connection ID")
+
+        fe = engine.filter_engine
+        if not fe:
+            return Response.error("Filter engine not available", 500)
+
+        mappings = fe.get_mappings(conn_id)
+        return Response.json([m.to_dict() for m in mappings])
+
+    @server.route("POST", "/api/mappings/", exact=False)
+    async def api_add_mapping(req: Request) -> Response:
+        conn_id = req.path_param("/api/mappings/")
+        if not conn_id:
+            return Response.error("Missing connection ID")
+
+        # Parse connection ID
+        try:
+            src, dst = conn_id.split("-")
+            src_client, src_port = map(int, src.split(":"))
+            dst_client, dst_port = map(int, dst.split(":"))
+        except (ValueError, IndexError):
+            return Response.error("Invalid connection ID format")
+
+        conn = Connection(src_client, src_port, dst_client, dst_port)
+        if conn not in engine.connections:
+            return Response.not_found()
+
+        fe = engine.filter_engine
+        if not fe:
+            return Response.error("Filter engine not available", 500)
+
+        data = req.json
+        try:
+            mapping = MidiMapping.from_dict(data)
+        except (ValueError, KeyError) as e:
+            return Response.error(f"Invalid mapping: {e}")
+
+        # Validate: CC→CC with same channel and same CC number is pointless
+        if mapping.type == MappingType.CC_TO_CC:
+            dst_ch = mapping.dst_channel if mapping.dst_channel is not None else mapping.src_channel
+            dst_cc = mapping.dst_cc_num if mapping.dst_cc_num is not None else mapping.src_cc
+            if mapping.src_channel == dst_ch and mapping.src_cc == dst_cc:
+                return Response.error("Same channel and CC number — mapping has no effect")
+
+        # Check for conflicting mappings (same source match)
+        for existing in fe.get_mappings(conn_id):
+            if existing.type != mapping.type:
+                continue
+            if existing.src_channel != mapping.src_channel:
+                continue
+            if mapping.type in (MappingType.CC_TO_CC,) and existing.src_cc == mapping.src_cc:
+                return Response.error(f"A CC mapping for CC{mapping.src_cc} on this channel already exists")
+            if mapping.type in (MappingType.NOTE_TO_CC, MappingType.NOTE_TO_CC_TOGGLE) and \
+               existing.src_note == mapping.src_note:
+                return Response.error(f"A note mapping for this note on this channel already exists")
+            if mapping.type == MappingType.CHANNEL_MAP:
+                return Response.error("A channel remap for this channel already exists")
+
+        # Ensure connection is in userspace mode
+        if not fe.has_filter(conn_id):
+            # Remove direct ALSA subscription, create filtered connection
+            try:
+                engine._seq.unsubscribe(src_client, src_port, dst_client, dst_port)
+            except OSError:
+                pass
+            fe.add_filter(src_client, src_port, dst_client, dst_port, MidiFilter())
+
+        idx = fe.add_mapping(conn_id, mapping)
+        config.set_mode("custom")
+        await server.send_sse("connection-changed", {
+            "action": "mapping-added", "id": conn_id,
+        })
+        return Response.json({"status": "added", "index": idx}, 201)
+
+    @server.route("DELETE", "/api/mappings/", exact=False)
+    async def api_delete_mapping(req: Request) -> Response:
+        path = req.path_param("/api/mappings/")
+        if not path:
+            return Response.error("Missing connection ID")
+
+        # Path: conn_id/index  e.g. "24:0-28:0/0"
+        parts = path.rsplit("/", 1)
+        if len(parts) != 2:
+            return Response.error("Expected format: connection_id/mapping_index")
+
+        conn_id = parts[0]
+        try:
+            index = int(parts[1])
+        except ValueError:
+            return Response.error("Invalid mapping index")
+
+        fe = engine.filter_engine
+        if not fe:
+            return Response.error("Filter engine not available", 500)
+
+        if not fe.remove_mapping(conn_id, index):
+            return Response.not_found()
+
+        # If no more mappings and filter is passthrough, switch back to direct
+        fc = fe.filtered_connections.get(conn_id)
+        if fc and not fc.needs_userspace:
+            fe.remove_filter(conn_id)
+            try:
+                src, dst = conn_id.split("-")
+                sc, sp = map(int, src.split(":"))
+                dc, dp = map(int, dst.split(":"))
+                engine._seq.subscribe(sc, sp, dc, dp)
+            except (ValueError, OSError):
+                pass
+
+        config.set_mode("custom")
+        await server.send_sse("connection-changed", {
+            "action": "mapping-removed", "id": conn_id,
+        })
+        return Response.json({"status": "deleted"})
 
     # ================================================================
     # POST /api/connections/connect-all — restore all-to-all
@@ -506,6 +637,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
     async def api_save_config(req: Request) -> Response:
         # Serialize current connections + filters into config
         fe = engine.filter_engine
+        registry = engine.device_registry
         conns = []
         for c in engine.connections:
             conn_id = f"{c.src_client}:{c.src_port}-{c.dst_client}:{c.dst_port}"
@@ -513,16 +645,60 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
                 "src_client": c.src_client, "src_port": c.src_port,
                 "dst_client": c.dst_client, "dst_port": c.dst_port,
             }
+            # Add stable IDs for persistence across reboots
+            src_info = registry.get_by_client(c.src_client)
+            dst_info = registry.get_by_client(c.dst_client)
+            if src_info:
+                entry["src_stable_id"] = src_info.stable_id
+            if dst_info:
+                entry["dst_stable_id"] = dst_info.stable_id
             if fe:
                 f = fe.get_filter(conn_id)
                 if f:
                     entry["filter"] = f.to_dict()
+                mappings = fe.get_mappings(conn_id)
+                if mappings:
+                    entry["mappings"] = [m.to_dict() for m in mappings]
             conns.append(entry)
         config.set_connections(conns)
 
         if config.save():
             return Response.json({"status": "saved"})
         return Response.error("Failed to save config", 500)
+
+    # ================================================================
+    # POST /api/system/reboot — reboot the Pi
+    # ================================================================
+
+    @server.route("POST", "/api/system/reboot")
+    async def api_reboot(req: Request) -> Response:
+        import subprocess
+        asyncio.get_event_loop().call_later(1, lambda: subprocess.Popen(["sudo", "reboot"]))
+        return Response.json({"status": "rebooting"})
+
+    # ================================================================
+    # POST /api/config/load — reload saved config from disk
+    # ================================================================
+
+    @server.route("POST", "/api/config/load")
+    async def api_load_config(req: Request) -> Response:
+        from .__main__ import _apply_saved_config
+
+        config.load()
+        if config.mode != "custom" or not config.connections:
+            # No custom config — fall back to all-to-all
+            engine.disconnect_all()
+            engine.scan_devices()
+            engine.connect_all()
+            engine._update_monitor_subscriptions()
+            config.set_mode("all-to-all")
+        else:
+            engine.disconnect_all()
+            _apply_saved_config(engine, config)
+            engine._update_monitor_subscriptions()
+
+        await server.send_sse("connection-changed", {"action": "config-loaded"})
+        return Response.json({"status": "loaded"})
 
     # ================================================================
     # WiFi API

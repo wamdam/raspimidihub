@@ -50,6 +50,7 @@ body {
 }
 .header .status.ok { color: var(--success); }
 .header .status.warn { color: var(--warn); }
+.header .status.err { color: var(--error); }
 
 /* --- Main content --- */
 .main {
@@ -337,14 +338,53 @@ body {
     background: var(--bg);
     width: 100%;
     max-width: 500px;
-    max-height: 85vh;
+    max-height: 90vh;
     overflow-y: auto;
     border-radius: var(--radius) var(--radius) 0 0;
-    padding: 16px;
+    padding: 0 16px 16px;
     animation: slideUp 0.2s;
 }
+.panel-header {
+    position: sticky;
+    top: 0;
+    background: var(--bg);
+    padding: 8px 0 12px;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+}
+.panel-handle {
+    width: 36px;
+    height: 4px;
+    background: var(--text-dim);
+    border-radius: 2px;
+    margin: 0 auto 8px;
+    cursor: grab;
+}
+.panel-header h3 {
+    flex: 1;
+    margin: 0;
+    font-size: 16px;
+    color: var(--text);
+    text-transform: none;
+}
+.panel-close {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    font-size: 22px;
+    cursor: pointer;
+    padding: 4px 8px;
+    line-height: 1;
+    min-height: 36px;
+    min-width: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.panel-close:hover { color: var(--text); }
 .filter-panel h3:first-child {
-    margin-bottom: 12px;
+    margin-bottom: 0;
     font-size: 16px;
     color: var(--text);
     text-transform: none;
@@ -352,6 +392,32 @@ body {
 @keyframes slideUp {
     from { transform: translateY(100%); }
     to { transform: translateY(0); }
+}
+@keyframes slideDown {
+    from { transform: translateY(0); }
+    to { transform: translateY(100%); }
+}
+.filter-panel.closing, .mapping-panel.closing {
+    animation: slideDown 0.2s forwards;
+}
+.mapping-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 55;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+}
+.mapping-panel {
+    background: var(--bg);
+    width: 100%;
+    max-width: 500px;
+    max-height: 80vh;
+    overflow-y: auto;
+    border-radius: var(--radius) var(--radius) 0 0;
+    padding: 0 16px 16px;
+    animation: slideUp 0.2s;
 }
 .channel-grid {
     display: grid;
@@ -367,11 +433,25 @@ body {
     font-size: 14px;
     font-weight: 600;
     cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 4px 6px;
 }
-.ch-btn.on {
-    background: var(--accent2);
-    border-color: var(--accent2);
-    color: #fff;
+.ch-light {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.ch-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    opacity: 0.25;
+}
+.ch-dot.lit {
+    opacity: 1;
 }
 .msg-types {
     display: flex;
@@ -441,6 +521,75 @@ body {
 @keyframes holdPulse {
     from { opacity: 0.8; }
     to { opacity: 1; }
+}
+
+/* --- Piano keyboard --- */
+.piano {
+    position: relative;
+    display: flex;
+    height: 120px;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: none;
+}
+.piano-key.white {
+    flex: 1;
+    background: #f0f0f0;
+    border: 1px solid #999;
+    border-radius: 0 0 6px 6px;
+    cursor: pointer;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    padding-bottom: 6px;
+    z-index: 1;
+}
+.piano-key.white.active {
+    background: var(--accent);
+}
+.piano-key.black {
+    position: absolute;
+    top: 0;
+    width: calc(100% / 14 * 1.1);
+    height: 65%;
+    background: #222;
+    border: 1px solid #000;
+    border-radius: 0 0 4px 4px;
+    transform: translateX(-50%);
+    cursor: pointer;
+    z-index: 2;
+}
+.piano-key.black.active {
+    background: var(--accent2);
+}
+.piano-label {
+    font-size: 10px;
+    color: #666;
+    pointer-events: none;
+}
+
+/* --- MIDI Activity Bar --- */
+.midi-bar {
+    position: fixed;
+    bottom: 56px;
+    left: 0;
+    right: 0;
+    background: var(--surface);
+    border-top: 1px solid var(--surface2);
+    padding: 4px 12px;
+    font-family: "SF Mono", "Fira Code", monospace;
+    font-size: 12px;
+    color: var(--accent);
+    z-index: 9;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-height: 24px;
+    display: flex;
+    align-items: center;
+}
+.main.with-midi-bar {
+    padding-bottom: 96px;
 }
 
 @media (min-width: 768px) {

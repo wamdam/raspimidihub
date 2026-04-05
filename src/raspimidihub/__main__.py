@@ -87,6 +87,7 @@ async def async_main() -> None:
     }
 
     def on_midi_event(ev):
+        led.midi_blink()
         key = f"{ev.source.client}:{ev.source.port}"
         now = _time.monotonic()
         if now - _last_activity.get(key, 0) < _ACTIVITY_THROTTLE:
@@ -119,6 +120,10 @@ async def async_main() -> None:
         device_names = config.data.get("device_names", {})
         if device_names:
             engine.device_registry.load_custom_names(device_names)
+
+        # Store config ref so hotplug rescan can restore mappings
+        if config_ok:
+            engine._config = config
 
         # Apply saved config or fall back to all-to-all
         if config_ok and config.mode == "custom" and config.connections:
@@ -163,6 +168,9 @@ async def async_main() -> None:
             interval = int(watchdog_usec) / 1_000_000 / 2
             asyncio.ensure_future(_watchdog_ping(interval))
 
+        # WiFi client mode watchdog — fall back to AP if connection lost
+        asyncio.ensure_future(_wifi_watchdog(wifi, config, server))
+
         await engine.run_event_loop()
     except KeyboardInterrupt:
         log.info("Interrupted")
@@ -179,21 +187,38 @@ async def async_main() -> None:
 
 
 def _apply_saved_config(engine: MidiEngine, config: Config) -> None:
-    """Apply saved connections and filters from config on startup."""
-    from .midi_filter import MidiFilter
+    """Apply saved connections, filters, and mappings from config on startup."""
+    from .midi_filter import MidiFilter, MidiMapping
 
     engine.scan_devices()
+    registry = engine.device_registry
     saved_conns = config.connections
     applied = 0
     pending = 0
 
     for c in saved_conns:
         try:
-            src_client = c["src_client"]
             src_port = c["src_port"]
-            dst_client = c["dst_client"]
             dst_port = c["dst_port"]
         except KeyError:
+            continue
+
+        # Resolve client IDs: prefer stable IDs, fall back to raw client IDs
+        src_stable = c.get("src_stable_id")
+        dst_stable = c.get("dst_stable_id")
+
+        if src_stable:
+            src_client = registry.client_for_stable_id(src_stable)
+        else:
+            src_client = c.get("src_client")
+
+        if dst_stable:
+            dst_client = registry.client_for_stable_id(dst_stable)
+        else:
+            dst_client = c.get("dst_client")
+
+        if src_client is None or dst_client is None:
+            pending += 1
             continue
 
         # Check if both devices are currently present
@@ -203,18 +228,32 @@ def _apply_saved_config(engine: MidiEngine, config: Config) -> None:
             continue
 
         conn = Connection(src_client, src_port, dst_client, dst_port)
+        conn_id = f"{src_client}:{src_port}-{dst_client}:{dst_port}"
 
-        # Check for filter
         filter_data = c.get("filter")
+        mappings_data = c.get("mappings", [])
+        needs_userspace = bool(mappings_data)
+
         if filter_data:
             midi_filter = MidiFilter.from_dict(filter_data)
-            if not midi_filter.is_passthrough and engine.filter_engine:
-                engine.filter_engine.add_filter(
-                    src_client, src_port, dst_client, dst_port, midi_filter
-                )
-                engine._connections.add(conn)
-                applied += 1
-                continue
+            needs_userspace = needs_userspace or not midi_filter.is_passthrough
+        else:
+            midi_filter = MidiFilter()
+
+        if needs_userspace and engine.filter_engine:
+            engine.filter_engine.add_filter(
+                src_client, src_port, dst_client, dst_port, midi_filter
+            )
+            # Restore mappings
+            for md in mappings_data:
+                try:
+                    mapping = MidiMapping.from_dict(md)
+                    engine.filter_engine.add_mapping(conn_id, mapping)
+                except (ValueError, KeyError):
+                    log.warning("Skipping invalid mapping on %s", conn_id)
+            engine._connections.add(conn)
+            applied += 1
+            continue
 
         # Direct ALSA subscription
         try:
@@ -234,6 +273,37 @@ async def _watchdog_ping(interval: float) -> None:
     while True:
         notify_systemd("WATCHDOG=1")
         await asyncio.sleep(interval)
+
+
+WIFI_CHECK_INTERVAL = 30
+WIFI_FAIL_THRESHOLD = 3  # consecutive failures before fallback
+
+
+async def _wifi_watchdog(wifi, config, server) -> None:
+    """Monitor client WiFi connection, fall back to AP if lost."""
+    fail_count = 0
+    while True:
+        await asyncio.sleep(WIFI_CHECK_INTERVAL)
+        if wifi.mode != "client":
+            fail_count = 0
+            continue
+        if wifi.check_client_connected():
+            fail_count = 0
+        else:
+            fail_count += 1
+            log.warning("WiFi client connection check failed (%d/%d)",
+                        fail_count, WIFI_FAIL_THRESHOLD)
+            if fail_count >= WIFI_FAIL_THRESHOLD:
+                log.warning("WiFi connection lost, falling back to AP mode")
+                wifi_cfg = config.wifi
+                loop = asyncio.get_event_loop()
+                await loop.run_in_executor(
+                    None, wifi.start_ap,
+                    wifi_cfg.get("ap_ssid", ""),
+                    wifi_cfg.get("ap_password", "midihub1"),
+                )
+                server.enable_captive_portal("192.168.4.1")
+                fail_count = 0
 
 
 def main() -> None:

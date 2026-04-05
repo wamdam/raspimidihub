@@ -1,16 +1,18 @@
-"""Userspace MIDI passthrough with channel and message type filtering.
+"""Userspace MIDI passthrough with channel/message filtering and mapping.
 
-For connections that have filters applied, MIDI events are routed through
-userspace instead of direct ALSA kernel subscriptions. This adds ~1-3ms
-latency but enables per-channel and per-message-type filtering.
+For connections that have filters or mappings applied, MIDI events are routed
+through userspace instead of direct ALSA kernel subscriptions. This adds ~1-3ms
+latency but enables per-channel filtering and MIDI mapping.
 """
 
 import asyncio
 import logging
 from dataclasses import dataclass, field
+from enum import Enum
 
 from .alsa_seq import (
-    AlsaSeq, MidiEventType, MSG_FILTER_GROUPS, SndSeqEvent, SeqEventType,
+    AlsaSeq, MidiEventType, MSG_FILTER_GROUPS, SndSeqEvent, SndSeqEventData,
+    SeqEventType,
 )
 
 log = logging.getLogger(__name__)
@@ -18,6 +20,91 @@ log = logging.getLogger(__name__)
 # Default: all channels, all message types pass through
 ALL_CHANNELS = 0xFFFF  # bits 0-15 = channels 1-16
 ALL_MSG_TYPES = {"note", "cc", "pc", "pitchbend", "aftertouch", "sysex", "clock"}
+
+
+# --- Mapping types ---
+
+class MappingType(str, Enum):
+    NOTE_TO_CC = "note_to_cc"            # Note on/off → CC value A / B
+    NOTE_TO_CC_TOGGLE = "note_to_cc_toggle"  # Note on toggles CC between A / B
+    CC_TO_CC = "cc_to_cc"                # Remap CC number, optional range transform
+    CHANNEL_MAP = "channel_map"          # Route events from one channel to another
+
+
+@dataclass
+class MidiMapping:
+    """A single MIDI mapping rule applied to a connection."""
+    type: MappingType
+    # Source matching
+    src_channel: int | None = None   # None = any channel
+    # Note→CC fields
+    src_note: int | None = None      # Note number to match
+    dst_cc: int | None = None        # CC number to output
+    cc_on_value: int = 127           # CC value when note on
+    cc_off_value: int = 0            # CC value when note off
+    # CC→CC fields
+    src_cc: int | None = None        # CC number to match
+    dst_cc_num: int | None = None    # Output CC number (None = same as src)
+    in_range_min: int = 0            # Input range min
+    in_range_max: int = 127          # Input range max
+    out_range_min: int = 0           # Output range min
+    out_range_max: int = 127         # Output range max
+    # Channel remap fields
+    dst_channel: int | None = None   # Target channel (0-15)
+    # Behavior
+    pass_through: bool = False       # Also forward the original event
+
+    def to_dict(self) -> dict:
+        d = {"type": self.type.value}
+        if self.src_channel is not None:
+            d["src_channel"] = self.src_channel
+        if self.dst_channel is not None:
+            d["dst_channel"] = self.dst_channel
+        if self.pass_through:
+            d["pass_through"] = True
+        if self.type in (MappingType.NOTE_TO_CC, MappingType.NOTE_TO_CC_TOGGLE):
+            d["src_note"] = self.src_note
+            d["dst_cc"] = self.dst_cc
+            d["cc_on_value"] = self.cc_on_value
+            d["cc_off_value"] = self.cc_off_value
+        elif self.type == MappingType.CC_TO_CC:
+            d["src_cc"] = self.src_cc
+            d["dst_cc_num"] = self.dst_cc_num
+            d["in_range_min"] = self.in_range_min
+            d["in_range_max"] = self.in_range_max
+            d["out_range_min"] = self.out_range_min
+            d["out_range_max"] = self.out_range_max
+        return d
+
+    @staticmethod
+    def from_dict(data: dict) -> "MidiMapping":
+        mtype = MappingType(data["type"])
+        m = MidiMapping(type=mtype)
+        m.src_channel = data.get("src_channel")
+        m.dst_channel = data.get("dst_channel")
+        m.pass_through = data.get("pass_through", False)
+        if mtype in (MappingType.NOTE_TO_CC, MappingType.NOTE_TO_CC_TOGGLE):
+            m.src_note = data.get("src_note")
+            m.dst_cc = data.get("dst_cc")
+            m.cc_on_value = data.get("cc_on_value", 127)
+            m.cc_off_value = data.get("cc_off_value", 0)
+        elif mtype == MappingType.CC_TO_CC:
+            m.src_cc = data.get("src_cc")
+            m.dst_cc_num = data.get("dst_cc_num")
+            m.in_range_min = data.get("in_range_min", 0)
+            m.in_range_max = data.get("in_range_max", 127)
+            m.out_range_min = data.get("out_range_min", 0)
+            m.out_range_max = data.get("out_range_max", 127)
+        return m
+
+    def _scale_value(self, val: int) -> int:
+        """Scale input value from in_range to out_range."""
+        in_span = self.in_range_max - self.in_range_min
+        out_span = self.out_range_max - self.out_range_min
+        if in_span == 0:
+            return self.out_range_min
+        scaled = (val - self.in_range_min) / in_span * out_span + self.out_range_min
+        return max(0, min(127, int(round(scaled))))
 
 
 @dataclass
@@ -79,18 +166,25 @@ class MidiFilter:
 
 @dataclass
 class FilteredConnection:
-    """A connection that routes MIDI through userspace with filtering."""
+    """A connection that routes MIDI through userspace with filtering/mapping."""
     src_client: int
     src_port: int
     dst_client: int
     dst_port: int
     filter: MidiFilter
+    mappings: list[MidiMapping] = field(default_factory=list)
+    _toggle_state: dict = field(default_factory=dict)  # mapping index -> bool
     # Our internal port IDs for this connection
     _read_port: int = -1
 
     @property
     def conn_id(self) -> str:
         return f"{self.src_client}:{self.src_port}-{self.dst_client}:{self.dst_port}"
+
+    @property
+    def needs_userspace(self) -> bool:
+        """Whether this connection needs userspace passthrough."""
+        return not self.filter.is_passthrough or len(self.mappings) > 0
 
 
 class FilterEngine:
@@ -180,13 +274,44 @@ class FilterEngine:
                  conn_id, midi_filter.channel_mask, midi_filter.msg_types)
         return True
 
+    # --- Mapping management ---
+
+    def add_mapping(self, conn_id: str, mapping: MidiMapping) -> int:
+        """Add a mapping to a filtered connection. Returns mapping index."""
+        fc = self._filtered.get(conn_id)
+        if fc is None:
+            return -1
+        fc.mappings.append(mapping)
+        log.info("Added %s mapping on %s", mapping.type.value, conn_id)
+        return len(fc.mappings) - 1
+
+    def remove_mapping(self, conn_id: str, index: int) -> bool:
+        """Remove a mapping by index."""
+        fc = self._filtered.get(conn_id)
+        if fc is None or index < 0 or index >= len(fc.mappings):
+            return False
+        fc.mappings.pop(index)
+        log.info("Removed mapping %d on %s", index, conn_id)
+        return True
+
+    def get_mappings(self, conn_id: str) -> list[MidiMapping]:
+        fc = self._filtered.get(conn_id)
+        return fc.mappings if fc else []
+
+    def set_mappings(self, conn_id: str, mappings: list[MidiMapping]) -> bool:
+        fc = self._filtered.get(conn_id)
+        if fc is None:
+            return False
+        fc.mappings = mappings
+        return True
+
     def clear_all(self):
         """Remove all filtered connections."""
         for conn_id in list(self._filtered.keys()):
             self.remove_filter(conn_id)
 
     def process_event(self, ev: SndSeqEvent) -> None:
-        """Process a single event — check all filtered connections and forward if allowed."""
+        """Process a single event — check all filtered connections, apply filters + mappings."""
         src_client = ev.source.client
         src_port = ev.source.port
 
@@ -194,9 +319,78 @@ class FilterEngine:
             if fc.src_client != src_client or fc.src_port != src_port:
                 continue
 
-            # Check if our read port received this
-            if ev.dest.client != self._seq.client_id:
+            # Check if this event arrived on our specific read port
+            if ev.dest.client != self._seq.client_id or ev.dest.port != fc._read_port:
                 continue
 
-            if fc.filter.allows_event(ev):
-                self._seq.send_event(ev, fc.dst_client, fc.dst_port)
+            if not fc.filter.allows_event(ev):
+                continue
+
+            # Apply mappings — a mapping may consume the event and produce new ones
+            if fc.mappings:
+                consumed = self._apply_mappings(ev, fc)
+                if consumed:
+                    continue
+
+            # Forward original event (possibly channel-remapped)
+            self._seq.send_event(ev, fc.dst_client, fc.dst_port)
+
+    def _apply_mappings(self, ev: SndSeqEvent, fc: FilteredConnection) -> bool:
+        """Apply mappings to an event. Returns True if the event was consumed."""
+        try:
+            ev_type = MidiEventType(ev.type)
+        except ValueError:
+            return False
+
+        consumed = False
+        for idx, mapping in enumerate(fc.mappings):
+            # Check channel match
+            if mapping.src_channel is not None and ev.channel != mapping.src_channel:
+                continue
+
+            if mapping.type == MappingType.NOTE_TO_CC:
+                if ev_type in (MidiEventType.NOTEON, MidiEventType.NOTEOFF) and \
+                   mapping.src_note is not None and ev.data.note.note == mapping.src_note and \
+                   mapping.dst_cc is not None:
+                    is_on = (ev_type == MidiEventType.NOTEON and ev.data.note.velocity > 0)
+                    val = mapping.cc_on_value if is_on else mapping.cc_off_value
+                    ch = mapping.dst_channel if mapping.dst_channel is not None else ev.channel
+                    self._seq.send_cc(fc.dst_client, fc.dst_port, ch, mapping.dst_cc, val)
+                    if not mapping.pass_through:
+                        consumed = True
+
+            elif mapping.type == MappingType.NOTE_TO_CC_TOGGLE:
+                if mapping.src_note is not None and ev.data.note.note == mapping.src_note and \
+                   mapping.dst_cc is not None:
+                    is_note_on = (ev_type == MidiEventType.NOTEON and ev.data.note.velocity > 0)
+                    is_note_off = (ev_type == MidiEventType.NOTEOFF or
+                                   (ev_type == MidiEventType.NOTEON and ev.data.note.velocity == 0))
+                    if is_note_on:
+                        toggled = not fc._toggle_state.get(idx, False)
+                        fc._toggle_state[idx] = toggled
+                        val = mapping.cc_on_value if toggled else mapping.cc_off_value
+                        ch = mapping.dst_channel if mapping.dst_channel is not None else ev.channel
+                        self._seq.send_cc(fc.dst_client, fc.dst_port, ch, mapping.dst_cc, val)
+                        if not mapping.pass_through:
+                            consumed = True
+                    elif is_note_off:
+                        if not mapping.pass_through:
+                            consumed = True
+
+            elif mapping.type == MappingType.CC_TO_CC:
+                if ev_type == MidiEventType.CONTROLLER and \
+                   mapping.src_cc is not None and ev.data.control.param == mapping.src_cc:
+                    out_cc = mapping.dst_cc_num if mapping.dst_cc_num is not None else mapping.src_cc
+                    out_val = mapping._scale_value(ev.data.control.value)
+                    ch = mapping.dst_channel if mapping.dst_channel is not None else ev.channel
+                    self._seq.send_cc(fc.dst_client, fc.dst_port, ch, out_cc, out_val)
+                    if not mapping.pass_through:
+                        consumed = True
+
+            elif mapping.type == MappingType.CHANNEL_MAP:
+                if mapping.dst_channel is not None:
+                    # Modify the event's channel in-place before forwarding
+                    ev.data.note.channel = mapping.dst_channel
+                    # Don't consume — let the modified event be forwarded normally
+
+        return consumed

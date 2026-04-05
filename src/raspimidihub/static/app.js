@@ -14,7 +14,7 @@ async function api(path, opts = {}) {
 }
 
 // --- SSE ---
-function useSSE(onEvent) {
+function useSSE(onEvent, onConnChange) {
     useEffect(() => {
         const es = new EventSource('/api/events');
         const handler = (type) => (e) => {
@@ -24,6 +24,8 @@ function useSSE(onEvent) {
         for (const ev of ['device-connected','device-disconnected','connection-changed','midi-activity']) {
             es.addEventListener(ev, handler(ev));
         }
+        es.onopen = () => onConnChange(true);
+        es.onerror = () => onConnChange(false);
         return () => es.close();
     }, []);
 }
@@ -44,34 +46,271 @@ function Toast({ message }) {
 const MSG_TYPES = ['note', 'cc', 'pc', 'pitchbend', 'aftertouch', 'sysex', 'clock'];
 const MSG_LABELS = { note: 'Notes', cc: 'CC', pc: 'Program', pitchbend: 'Pitch Bend', aftertouch: 'Aftertouch', sysex: 'SysEx', clock: 'Clock/RT' };
 
-function FilterPanel({ connId, filter, onClose, onApply }) {
+const MAPPING_TYPES = [
+    { value: 'note_to_cc', label: 'Note \u2192 CC' },
+    { value: 'note_to_cc_toggle', label: 'Note \u2192 CC (toggle)' },
+    { value: 'cc_to_cc', label: 'CC \u2192 CC' },
+    { value: 'channel_map', label: 'Channel Remap' },
+];
+
+// --- Animated panel close ---
+function animateClose(panelEl, onDone) {
+    if (!panelEl) { onDone(); return; }
+    panelEl.classList.add('closing');
+    panelEl.addEventListener('animationend', onDone, { once: true });
+    setTimeout(onDone, 250); // fallback
+}
+
+// --- Swipe-down dismiss hook ---
+function useSwipeDismiss(onDismiss) {
+    const [s] = useState(() => ({ startY: 0, el: null }));
+    const onTouchStart = (e) => { s.startY = e.touches[0].clientY; s.el = e.currentTarget; };
+    const onTouchEnd = (e) => {
+        const dy = e.changedTouches[0].clientY - s.startY;
+        if (dy > 80 && s.el && s.el.scrollTop <= 0) onDismiss();
+    };
+    return { onTouchStart, onTouchEnd };
+}
+
+// --- Mapping description helper ---
+function mappingDesc(m) {
+    const sch = m.src_channel != null ? `CH${m.src_channel + 1} ` : '';
+    const dch = m.dst_channel != null ? `CH${m.dst_channel + 1} ` : sch;
+    const pt = m.pass_through ? ' +thru' : '';
+    if (m.type === 'note_to_cc') return `${sch}${noteName(m.src_note)} \u2192 ${dch}CC${m.dst_cc} (${m.cc_on_value}/${m.cc_off_value})${pt}`;
+    if (m.type === 'note_to_cc_toggle') return `${sch}${noteName(m.src_note)} \u2192 ${dch}CC${m.dst_cc} toggle (${m.cc_on_value}/${m.cc_off_value})${pt}`;
+    if (m.type === 'cc_to_cc') return `${sch}CC${m.src_cc} (${m.in_range_min}-${m.in_range_max}) \u2192 ${dch}CC${m.dst_cc_num} (${m.out_range_min}-${m.out_range_max})${pt}`;
+    if (m.type === 'channel_map') return `${sch || 'CH* '}\u2192 CH${m.dst_channel + 1}`;
+    return m.type;
+}
+
+// --- Mapping Form (sub-overlay) ---
+function MappingFormOverlay({ onSubmit, onClose, editing, srcClientId }) {
+    const panelRef = { current: null };
+    const close = () => animateClose(panelRef.current, onClose);
+    const [type, setType] = useState(editing ? editing.type : 'note_to_cc');
+    const [srcChannel, setSrcChannel] = useState(editing && editing.src_channel != null ? String(editing.src_channel) : '');
+    const [srcNote, setSrcNote] = useState(editing ? (editing.src_note || 60) : 60);
+    const [dstCc, setDstCc] = useState(editing ? (editing.dst_cc || 1) : 1);
+    const [ccOnVal, setCcOnVal] = useState(editing ? (editing.cc_on_value != null ? editing.cc_on_value : 127) : 127);
+    const [ccOffVal, setCcOffVal] = useState(editing ? (editing.cc_off_value != null ? editing.cc_off_value : 0) : 0);
+    const [srcCc, setSrcCc] = useState(editing ? (editing.src_cc || 1) : 1);
+    const [dstCcNum, setDstCcNum] = useState(editing ? (editing.dst_cc_num || 1) : 1);
+    const [inMin, setInMin] = useState(editing ? (editing.in_range_min || 0) : 0);
+    const [inMax, setInMax] = useState(editing ? (editing.in_range_max != null ? editing.in_range_max : 127) : 127);
+    const [outMin, setOutMin] = useState(editing ? (editing.out_range_min || 0) : 0);
+    const [outMax, setOutMax] = useState(editing ? (editing.out_range_max != null ? editing.out_range_max : 127) : 127);
+    const [dstChannel, setDstChannel] = useState(editing ? (editing.dst_channel != null ? editing.dst_channel : 0) : 0);
+    const [passThrough, setPassThrough] = useState(editing ? !!editing.pass_through : false);
+    const [learning, setLearning] = useState(false);
+
+    // MIDI Learn
+    useEffect(() => {
+        if (!learning) return;
+        const es = new EventSource('/api/events');
+        const handler = (e) => {
+            try {
+                const data = JSON.parse(e.data);
+                if (data.src_client === srcClientId && (data.note != null || data.cc != null)) {
+                    if (data.note != null) {
+                        setType('note_to_cc'); setSrcNote(data.note);
+                        if (data.channel != null) { setSrcChannel(String(data.channel - 1)); setDstChannel(data.channel - 1); }
+                    } else if (data.cc != null) {
+                        setType('cc_to_cc'); setSrcCc(data.cc);
+                        if (data.channel != null) { setSrcChannel(String(data.channel - 1)); setDstChannel(data.channel - 1); }
+                    }
+                    setLearning(false);
+                }
+            } catch {}
+        };
+        es.addEventListener('midi-activity', handler);
+        const timeout = setTimeout(() => setLearning(false), 10000);
+        return () => { es.close(); clearTimeout(timeout); };
+    }, [learning]);
+
+    // ESC to close
+    useEffect(() => {
+        const handler = (e) => { if (e.key === 'Escape') close(); };
+        window.addEventListener('keydown', handler);
+        return () => window.removeEventListener('keydown', handler);
+    }, []);
+
+    const swipe = useSwipeDismiss(close);
+
+    const onSrcChannelChange = (val) => {
+        setSrcChannel(val);
+        if (val !== '') setDstChannel(+val);
+    };
+
+    const submit = () => {
+        const m = { type, dst_channel: +dstChannel, pass_through: passThrough };
+        if (srcChannel !== '') m.src_channel = +srcChannel;
+        if (type === 'note_to_cc' || type === 'note_to_cc_toggle') {
+            m.src_note = +srcNote; m.dst_cc = +dstCc;
+            m.cc_on_value = +ccOnVal; m.cc_off_value = +ccOffVal;
+        } else if (type === 'cc_to_cc') {
+            m.src_cc = +srcCc; m.dst_cc_num = +dstCcNum;
+            m.in_range_min = +inMin; m.in_range_max = +inMax;
+            m.out_range_min = +outMin; m.out_range_max = +outMax;
+        }
+        onSubmit(m);
+    };
+
+    const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, +v || 0));
+    const numInput = (label, val, set, min=0, max=127) => html`
+        <div class="form-group" style="flex:1">
+            <label>${label}</label>
+            <input type="number" min=${min} max=${max} value=${val}
+                onInput=${e => set(clamp(e.target.value, min, max))} />
+        </div>`;
+
+    return html`
+        <div class="mapping-overlay" onclick=${(e) => e.target.className === 'mapping-overlay' && close()}>
+            <div class="mapping-panel" ref=${el => panelRef.current = el} ...${swipe}>
+                <div class="panel-header">
+                    <div class="panel-handle"></div>
+                </div>
+                <div class="panel-header">
+                    <h3>${editing ? 'Edit Mapping' : 'Add Mapping'}</h3>
+                    <button class="panel-close" onclick=${close}>\u2715</button>
+                </div>
+                <div style="display:flex;gap:8px;margin-bottom:8px">
+                    <div class="form-group" style="flex:2">
+                        <label>Type</label>
+                        <select value=${type} onChange=${e => setType(e.target.value)}>
+                            ${MAPPING_TYPES.map(t => html`<option value=${t.value}>${t.label}</option>`)}
+                        </select>
+                    </div>
+                    <div class="form-group" style="flex:1">
+                        <label>Src Ch</label>
+                        <select value=${srcChannel} onChange=${e => onSrcChannelChange(e.target.value)}>
+                            <option value="">Any</option>
+                            ${Array.from({length:16},(_,i) => html`<option value=${i}>${i+1}</option>`)}
+                        </select>
+                    </div>
+                    <div class="form-group" style="flex:1">
+                        <label>Dst Ch</label>
+                        <select value=${dstChannel} onChange=${e => setDstChannel(+e.target.value)}>
+                            ${Array.from({length:16},(_,i) => html`<option value=${i}>${i+1}</option>`)}
+                        </select>
+                    </div>
+                </div>
+                ${(type === 'note_to_cc' || type === 'note_to_cc_toggle') && html`
+                    <div style="display:flex;gap:8px;margin-bottom:8px">
+                        ${numInput('Source Note', srcNote, setSrcNote)}
+                        ${numInput('Dest CC', dstCc, setDstCc)}
+                    </div>
+                    <div style="display:flex;gap:8px;margin-bottom:8px">
+                        ${numInput('On Value', ccOnVal, setCcOnVal)}
+                        ${numInput('Off Value', ccOffVal, setCcOffVal)}
+                    </div>
+                `}
+                ${type === 'cc_to_cc' && html`
+                    <div style="display:flex;gap:8px;margin-bottom:8px">
+                        ${numInput('Source CC', srcCc, setSrcCc)}
+                        ${numInput('Dest CC', dstCcNum, setDstCcNum)}
+                    </div>
+                    <div style="display:flex;gap:8px;margin-bottom:8px">
+                        ${numInput('In Min', inMin, setInMin)}
+                        ${numInput('In Max', inMax, setInMax)}
+                    </div>
+                    <div style="display:flex;gap:8px;margin-bottom:8px">
+                        ${numInput('Out Min', outMin, setOutMin)}
+                        ${numInput('Out Max', outMax, setOutMax)}
+                    </div>
+                `}
+                ${type !== 'channel_map' && html`
+                    <label class="msg-toggle" style="margin-bottom:8px">
+                        <input type="checkbox" checked=${passThrough} onchange=${() => setPassThrough(p => !p)} />
+                        <span>Pass through original event</span>
+                    </label>
+                `}
+                <div class="btn-group">
+                    <button class="btn btn-primary" onclick=${submit}>${editing ? 'Save' : 'Add'}</button>
+                    ${!editing && html`<button class="btn btn-secondary ${learning ? 'btn-held' : ''}" onclick=${() => setLearning(true)}>
+                        ${learning ? 'Listening...' : 'MIDI Learn'}
+                    </button>`}
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function FilterPanel({ connId, filter, mappings, onClose, onApply, onMappingAdd, onMappingDelete, onMappingSave, srcClientId }) {
+    const panelRef = { current: null };
+    const close = () => animateClose(panelRef.current, onClose);
     const [channelMask, setChannelMask] = useState(filter ? filter.channel_mask : 0xFFFF);
     const [msgTypes, setMsgTypes] = useState(new Set(filter ? filter.msg_types : MSG_TYPES));
+    const [mappingForm, setMappingForm] = useState(null); // null | { editing: null|obj, index: null|int }
 
-    const toggleChannel = (ch) => setChannelMask(m => m ^ (1 << ch));
-    const toggleAllChannels = () => setChannelMask(m => m === 0xFFFF ? 0 : 0xFFFF);
-    const toggleMsgType = (t) => setMsgTypes(s => { const n = new Set(s); n.has(t) ? n.delete(t) : n.add(t); return n; });
+    // Sync state when filter prop changes from outside (other device updated via SSE)
+    const filterKey = filter ? `${filter.channel_mask}:${filter.msg_types.join(',')}` : 'none';
+    useEffect(() => {
+        setChannelMask(filter ? filter.channel_mask : 0xFFFF);
+        setMsgTypes(new Set(filter ? filter.msg_types : MSG_TYPES));
+    }, [filterKey]);
 
-    const apply = async () => {
-        await onApply(connId, channelMask, [...msgTypes]);
-        onClose();
+    // ESC to close
+    useEffect(() => {
+        const handler = (e) => { if (e.key === 'Escape') { if (mappingForm) setMappingForm(null); else close(); } };
+        window.addEventListener('keydown', handler);
+        return () => window.removeEventListener('keydown', handler);
+    }, [mappingForm]);
+
+    const swipe = useSwipeDismiss(close);
+
+    const applyFilter = (mask, types) => onApply(connId, mask, [...types]);
+
+    const toggleChannel = (ch) => {
+        const newMask = channelMask ^ (1 << ch);
+        setChannelMask(newMask);
+        applyFilter(newMask, msgTypes);
     };
-    const clear = async () => {
-        await onApply(connId, 0xFFFF, MSG_TYPES);
-        onClose();
+    const toggleAllChannels = () => {
+        const newMask = channelMask === 0xFFFF ? 0 : 0xFFFF;
+        setChannelMask(newMask);
+        applyFilter(newMask, msgTypes);
+    };
+    const toggleMsgType = (t) => {
+        const n = new Set(msgTypes);
+        n.has(t) ? n.delete(t) : n.add(t);
+        setMsgTypes(n);
+        applyFilter(channelMask, n);
+    };
+
+    const handleMappingSubmit = async (data) => {
+        if (mappingForm && mappingForm.editing) {
+            await onMappingSave(mappingForm.index, data);
+        } else {
+            await onMappingAdd(data);
+        }
+        setMappingForm(null);
     };
 
     return html`
-        <div class="filter-overlay" onclick=${(e) => e.target.className === 'filter-overlay' && onClose()}>
-            <div class="filter-panel">
-                <h3>Filter: ${connId}</h3>
+        <div class="filter-overlay" onclick=${(e) => e.target.className === 'filter-overlay' && close()}>
+            <div class="filter-panel" ref=${el => panelRef.current = el} ...${swipe}>
+                <div class="panel-header">
+                    <div class="panel-handle"></div>
+                </div>
+                <div class="panel-header">
+                    <h3>Connection: ${connId}</h3>
+                    <button class="panel-close" onclick=${close}>\u2715</button>
+                </div>
                 <div class="card">
                     <h3 style="cursor:pointer" onclick=${toggleAllChannels}>MIDI Channels</h3>
                     <div class="channel-grid">
-                        ${Array.from({length: 16}, (_, i) => html`
-                            <button class="ch-btn ${channelMask & (1 << i) ? 'on' : ''}"
-                                onclick=${() => toggleChannel(i)}>${i + 1}</button>
-                        `)}
+                        ${Array.from({length: 16}, (_, i) => {
+                            const on = !!(channelMask & (1 << i));
+                            return html`
+                                <button class="ch-btn" onclick=${() => toggleChannel(i)}>
+                                    <span class="ch-num">${i + 1}</span>
+                                    <span class="ch-light">
+                                        <span class="ch-dot ${on ? '' : 'lit'}" style="background:${on ? 'var(--surface2)' : 'var(--error)'}"></span>
+                                        <span class="ch-dot ${on ? 'lit' : ''}" style="background:${on ? 'var(--success)' : 'var(--surface2)'}"></span>
+                                    </span>
+                                </button>`;
+                        })}
                     </div>
                 </div>
                 <div class="card">
@@ -85,12 +324,26 @@ function FilterPanel({ connId, filter, onClose, onApply }) {
                         `)}
                     </div>
                 </div>
-                <div class="btn-group">
-                    <button class="btn btn-primary" onclick=${apply}>Apply Filter</button>
-                    <button class="btn btn-secondary" onclick=${clear}>Clear Filter</button>
+                <div class="card">
+                    <h3>Mappings</h3>
+                    ${(!mappings || mappings.length === 0)
+                        ? html`<p style="color:var(--text-dim);font-size:13px">No mappings configured</p>`
+                        : mappings.map((m, i) => html`
+                            <div class="preset-item">
+                                <span class="name" style="font-size:13px">${mappingDesc(m)}</span>
+                                <button class="btn btn-secondary" onclick=${() => setMappingForm({ editing: m, index: i })}>Edit</button>
+                                <button class="btn btn-danger" onclick=${() => onMappingDelete(i)}>Del</button>
+                            </div>
+                        `)}
+                    <button class="btn btn-primary btn-block" style="margin-top:8px" onclick=${() => setMappingForm({ editing: null, index: null })}>+ Add Mapping</button>
                 </div>
             </div>
         </div>
+        ${mappingForm && html`<${MappingFormOverlay}
+            editing=${mappingForm.editing}
+            srcClientId=${srcClientId}
+            onSubmit=${handleMappingSubmit}
+            onClose=${() => setMappingForm(null)} />`}
     `;
 }
 
@@ -169,7 +422,7 @@ function ConnectionMatrix({ devices, connections, onToggle, onFilterOpen }) {
                                 if (isSelf(inp, out)) return html`<td class="self"></td>`;
                                 const conn = getConn(inp, out);
                                 const on = !!conn;
-                                const filtered = conn && conn.filtered;
+                                const filtered = conn && (conn.filtered || (conn.mappings && conn.mappings.length > 0));
                                 return html`<${MatrixCell} on=${on} filtered=${filtered}
                                     onTap=${() => onToggle(inp, out, !on)}
                                     onLongPress=${() => { if (on) onFilterOpen(conn); }} />`;
@@ -180,14 +433,15 @@ function ConnectionMatrix({ devices, connections, onToggle, onFilterOpen }) {
             </table>
         </div>
         <p style="font-size:11px;color:var(--text-dim);text-align:center;margin-top:4px">
-            Long-press a connection to set filters
+            Long-press a connection for filters & mappings
         </p>
     `;
 }
 
 // --- Routing Page ---
 function RoutingPage({ devices, connections, refresh, showToast }) {
-    const [filterConn, setFilterConn] = useState(null);
+    const [filterConnId, setFilterConnId] = useState(null);
+    const filterConn = filterConnId ? connections.find(c => c.id === filterConnId) || null : null;
 
     const onToggle = async (inp, out, connect) => {
         if (connect) {
@@ -211,36 +465,63 @@ function RoutingPage({ devices, connections, refresh, showToast }) {
             body: JSON.stringify({ channel_mask: channelMask, msg_types: msgTypes }),
         });
         refresh();
-        showToast('Filter applied');
     };
 
-    const connectAll = async () => {
-        await api('/connections/connect-all', { method: 'POST' });
+    const onMappingAdd = async (mappingData) => {
+        if (!filterConn) return;
+        const res = await api(`/mappings/${filterConn.id}`, {
+            method: 'POST',
+            body: JSON.stringify(mappingData),
+        });
+        if (res.error) { showToast(res.error); return; }
         refresh();
-        showToast('All devices connected');
+        showToast('Mapping added');
     };
-    const disconnectAll = async () => {
-        await api('/connections/', { method: 'DELETE' });
+
+    const onMappingDelete = async (index) => {
+        if (!filterConn) return;
+        await api(`/mappings/${filterConn.id}/${index}`, { method: 'DELETE' });
         refresh();
-        showToast('All connections removed');
+        showToast('Mapping removed');
     };
+
+    const onMappingSave = async (index, mappingData) => {
+        if (!filterConn) return;
+        await api(`/mappings/${filterConn.id}/${index}`, { method: 'DELETE' });
+        await api(`/mappings/${filterConn.id}`, {
+            method: 'POST',
+            body: JSON.stringify(mappingData),
+        });
+        refresh();
+        showToast('Mapping updated');
+    };
+
     const saveConfig = async () => {
         await api('/config/save', { method: 'POST' });
         showToast('Configuration saved');
+    };
+    const loadConfig = async () => {
+        await api('/config/load', { method: 'POST' });
+        refresh();
+        showToast('Configuration loaded');
     };
 
     return html`
         ${filterConn && html`<${FilterPanel}
             connId=${filterConn.id}
             filter=${filterConn.filter || null}
-            onClose=${() => setFilterConn(null)}
-            onApply=${onFilterApply} />`}
+            mappings=${filterConn.mappings || []}
+            onClose=${() => setFilterConnId(null)}
+            onApply=${onFilterApply}
+            onMappingAdd=${onMappingAdd}
+            onMappingDelete=${onMappingDelete}
+            onMappingSave=${onMappingSave}
+            srcClientId=${filterConn.src_client} />`}
+        <${ConnectionMatrix} devices=${devices} connections=${connections} onToggle=${onToggle} onFilterOpen=${(conn) => setFilterConnId(conn.id)} />
         <div class="btn-group">
-            <button class="btn btn-success" onclick=${connectAll}>Connect All</button>
-            <button class="btn btn-danger" onclick=${disconnectAll}>Disconnect All</button>
+            <button class="btn btn-primary" onclick=${saveConfig}>Save Config</button>
+            <button class="btn btn-secondary" onclick=${loadConfig}>Load Config</button>
         </div>
-        <${ConnectionMatrix} devices=${devices} connections=${connections} onToggle=${onToggle} onFilterOpen=${(conn) => setFilterConn(conn)} />
-        <button class="btn btn-primary btn-block" onclick=${saveConfig}>Save Configuration</button>
     `;
 }
 
@@ -327,7 +608,11 @@ const NOTE_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
 const noteName = (n) => NOTE_NAMES[n % 12] + (Math.floor(n / 12) - 2);
 
 // --- Device Detail Page ---
-function DeviceDetailPage({ device, onClose, showToast }) {
+function DeviceDetailPanel({ device, onClose, showToast }) {
+    const panelRef = { current: null };
+    const close = () => animateClose(panelRef.current, onClose);
+    const swipe = useSwipeDismiss(close);
+
     const [editName, setEditName] = useState(device.name);
     const [lastEvent, setLastEvent] = useState(null);
     const [events, setEvents] = useState([]);
@@ -335,7 +620,8 @@ function DeviceDetailPage({ device, onClose, showToast }) {
     const [sendPort, setSendPort] = useState(0);
     const [ccNum, setCcNum] = useState(1);
     const [ccVal, setCcVal] = useState(64);
-    const [noteHeld, setNoteHeld] = useState(false);
+    const [heldNote, setHeldNote] = useState(null);
+    const [octave, setOctave] = useState(3);
     const maxEvents = 50;
 
     const outPorts = device.ports.filter(p => p.is_output);
@@ -355,6 +641,12 @@ function DeviceDetailPage({ device, onClose, showToast }) {
         es.addEventListener('midi-activity', handler);
         return () => es.close();
     }, [device.client_id]);
+
+    useEffect(() => {
+        const handler = (e) => { if (e.key === 'Escape') close(); };
+        window.addEventListener('keydown', handler);
+        return () => window.removeEventListener('keydown', handler);
+    }, []);
 
     const formatEvent = (d) => {
         let s = d.event;
@@ -380,8 +672,22 @@ function DeviceDetailPage({ device, onClose, showToast }) {
         });
     };
 
-    const noteDown = () => { if (!noteHeld) { setNoteHeld(true); sendMidi('note_on', { note: 60, velocity: 100 }); } };
-    const noteUp = () => { if (noteHeld) { setNoteHeld(false); sendMidi('note_off', { note: 60 }); } };
+    const pianoNoteDown = (n) => { if (heldNote !== n) { if (heldNote !== null) sendMidi('note_off', { note: heldNote }); setHeldNote(n); sendMidi('note_on', { note: n, velocity: 100 }); } };
+    const pianoNoteUp = () => { if (heldNote !== null) { sendMidi('note_off', { note: heldNote }); setHeldNote(null); } };
+    const pianoKeys = [
+        { n: 0, name: 'C', black: false },
+        { n: 1, name: 'C#', black: true },
+        { n: 2, name: 'D', black: false },
+        { n: 3, name: 'D#', black: true },
+        { n: 4, name: 'E', black: false },
+        { n: 5, name: 'F', black: false },
+        { n: 6, name: 'F#', black: true },
+        { n: 7, name: 'G', black: false },
+        { n: 8, name: 'G#', black: true },
+        { n: 9, name: 'A', black: false },
+        { n: 10, name: 'A#', black: true },
+        { n: 11, name: 'B', black: false },
+    ];
 
     const sendCC = (val) => {
         setCcVal(val);
@@ -389,80 +695,105 @@ function DeviceDetailPage({ device, onClose, showToast }) {
     };
 
     return html`
-        <div>
-            <button class="btn btn-secondary" onclick=${onClose} style="margin-bottom:var(--gap)">\u2190 Back</button>
-
-            <div class="card">
-                <h3>Device</h3>
-                <div class="stat-grid">
-                    <div class="stat"><div class="label">Name</div><div class="value">${device.default_name || device.name}</div></div>
-                    <div class="stat"><div class="label">Client</div><div class="value">${device.client_id}</div></div>
-                    ${device.vid ? html`<div class="stat"><div class="label">USB</div><div class="value">${device.vid}:${device.pid}</div></div>` : ''}
-                    <div class="stat"><div class="label">Ports</div><div class="value">${device.ports.map(p => (p.is_input?'IN':'')+(p.is_input&&p.is_output?'/':'')+(p.is_output?'OUT':'')).join(', ')}</div></div>
+        <div class="filter-overlay" onclick=${(e) => e.target.className === 'filter-overlay' && close()}>
+            <div class="filter-panel" ref=${el => panelRef.current = el} ...${swipe}>
+                <div class="panel-header">
+                    <div class="panel-handle"></div>
                 </div>
-                <div style="display:flex;gap:8px;margin-top:12px">
-                    <input style="flex:1;padding:10px 12px;background:var(--bg);border:1px solid var(--surface2);border-radius:6px;color:var(--text);font-size:14px;min-height:48px"
-                        value=${editName} onInput=${e => setEditName(e.target.value)}
-                        onKeyDown=${e => e.key === 'Enter' && rename()} />
-                    <button class="btn btn-primary" onclick=${rename}>Rename</button>
+                <div class="panel-header">
+                    <h3>${device.default_name || device.name}</h3>
+                    <button class="panel-close" onclick=${close}>\u2715</button>
                 </div>
-            </div>
 
-            <div class="card">
-                <h3>MIDI Monitor</h3>
-                <div class="midi-last">${lastEvent || 'Waiting for MIDI...'}</div>
-                <div class="midi-monitor">
-                    ${events.map(e => html`<div class="midi-event">${e.line}</div>`)}
-                </div>
-            </div>
-
-            ${outPorts.length > 0 && html`
                 <div class="card">
-                    <h3>MIDI Test Sender</h3>
-                    <div class="stat-grid" style="margin-bottom:12px">
-                        <div class="form-group">
-                            <label>Channel</label>
-                            <select value=${sendChannel} onChange=${e => setSendChannel(+e.target.value)}>
-                                ${Array.from({length:16},(_,i) => html`<option value=${i}>${i+1}</option>`)}
-                            </select>
-                        </div>
-                        ${outPorts.length > 1 ? html`
+                    <h3>Device</h3>
+                    <div class="stat-grid">
+                        <div class="stat"><div class="label">Client</div><div class="value">${device.client_id}</div></div>
+                        ${device.vid ? html`<div class="stat"><div class="label">USB</div><div class="value">${device.vid}:${device.pid}</div></div>` : ''}
+                        <div class="stat"><div class="label">Ports</div><div class="value">${device.ports.map(p => (p.is_input?'IN':'')+(p.is_input&&p.is_output?'/':'')+(p.is_output?'OUT':'')).join(', ')}</div></div>
+                    </div>
+                    <div style="display:flex;gap:8px;margin-top:12px">
+                        <input style="flex:1;padding:10px 12px;background:var(--bg);border:1px solid var(--surface2);border-radius:6px;color:var(--text);font-size:14px;min-height:48px"
+                            value=${editName} onInput=${e => setEditName(e.target.value)}
+                            onKeyDown=${e => e.key === 'Enter' && rename()} />
+                        <button class="btn btn-primary" onclick=${rename}>Rename</button>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3>MIDI Monitor</h3>
+                    <div class="midi-last">${lastEvent || 'Waiting for MIDI...'}</div>
+                    <div class="midi-monitor">
+                        ${events.map(e => html`<div class="midi-event">${e.line}</div>`)}
+                    </div>
+                </div>
+
+                ${outPorts.length > 0 && html`
+                    <div class="card">
+                        <h3>MIDI Test Sender</h3>
+                        <div class="stat-grid" style="margin-bottom:12px">
                             <div class="form-group">
-                                <label>Port</label>
-                                <select value=${sendPort} onChange=${e => setSendPort(+e.target.value)}>
-                                    ${outPorts.map(p => html`<option value=${p.port_id}>${p.name}</option>`)}
+                                <label>Channel</label>
+                                <select value=${sendChannel} onChange=${e => setSendChannel(+e.target.value)}>
+                                    ${Array.from({length:16},(_,i) => html`<option value=${i}>${i+1}</option>`)}
                                 </select>
                             </div>
-                        ` : ''}
-                    </div>
+                            ${outPorts.length > 1 ? html`
+                                <div class="form-group">
+                                    <label>Port</label>
+                                    <select value=${sendPort} onChange=${e => setSendPort(+e.target.value)}>
+                                        ${outPorts.map(p => html`<option value=${p.port_id}>${p.name}</option>`)}
+                                    </select>
+                                </div>
+                            ` : ''}
+                        </div>
 
-                    <div style="margin-bottom:16px">
-                        <label style="font-size:12px;color:var(--text-dim);display:block;margin-bottom:4px">Note (C3 = middle C)</label>
-                        <button class="btn btn-primary btn-block ${noteHeld ? 'btn-held' : ''}"
-                            onMouseDown=${noteDown} onMouseUp=${noteUp} onMouseLeave=${noteUp}
-                            onTouchStart=${(e) => { e.preventDefault(); noteDown(); }}
-                            onTouchEnd=${(e) => { e.preventDefault(); noteUp(); }}>
-                            ${noteHeld ? '\u266B C3 playing...' : '\u266B Hold for C3'}
-                        </button>
-                    </div>
-
-                    <div>
-                        <div style="display:flex;gap:8px;margin-bottom:8px">
-                            <div class="form-group" style="flex:1">
-                                <label>CC Number</label>
-                                <input type="number" min="0" max="127" value=${ccNum}
-                                    onInput=${e => setCcNum(Math.max(0, Math.min(127, +e.target.value)))} />
+                        <div style="margin-bottom:16px">
+                            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+                                <button class="btn btn-secondary" style="min-width:40px;min-height:36px;padding:4px 10px" onclick=${() => setOctave(o => Math.max(0, o - 1))}>-</button>
+                                <span style="font-size:13px;color:var(--text-dim);min-width:70px;text-align:center">Octave: ${octave}</span>
+                                <button class="btn btn-secondary" style="min-width:40px;min-height:36px;padding:4px 10px" onclick=${() => setOctave(o => Math.min(9, o + 1))}>+</button>
                             </div>
-                            <div class="form-group" style="flex:1">
-                                <label>Value: ${ccVal}</label>
-                                <input type="range" min="0" max="127" value=${ccVal}
-                                    onInput=${e => sendCC(+e.target.value)}
-                                    style="min-height:48px;width:100%" />
+                            <div class="piano" onMouseLeave=${pianoNoteUp} onTouchEnd=${(e) => { e.preventDefault(); pianoNoteUp(); }}>
+                                ${pianoKeys.filter(k => !k.black).map(k => {
+                                    const midi = (octave + 1) * 12 + k.n;
+                                    return html`<div class="piano-key white ${heldNote === midi ? 'active' : ''}"
+                                        onMouseDown=${() => pianoNoteDown(midi)} onMouseUp=${pianoNoteUp}
+                                        onTouchStart=${(e) => { e.preventDefault(); pianoNoteDown(midi); }}>
+                                        <span class="piano-label">${k.name}${octave}</span>
+                                    </div>`;
+                                })}
+                                ${pianoKeys.filter(k => k.black).map(k => {
+                                    const midi = (octave + 1) * 12 + k.n;
+                                    const whiteIdx = pianoKeys.filter(x => !x.black && x.n < k.n).length;
+                                    const leftPct = (whiteIdx * (100/7)) + '%';
+                                    return html`<div class="piano-key black ${heldNote === midi ? 'active' : ''}"
+                                        style="left:${leftPct}"
+                                        onMouseDown=${(e) => { e.stopPropagation(); pianoNoteDown(midi); }} onMouseUp=${pianoNoteUp}
+                                        onTouchStart=${(e) => { e.preventDefault(); e.stopPropagation(); pianoNoteDown(midi); }}>
+                                    </div>`;
+                                })}
+                            </div>
+                        </div>
+
+                        <div>
+                            <div style="display:flex;gap:8px;margin-bottom:8px">
+                                <div class="form-group" style="flex:1">
+                                    <label>CC Number</label>
+                                    <input type="number" min="0" max="127" value=${ccNum}
+                                        onInput=${e => setCcNum(Math.max(0, Math.min(127, +e.target.value)))} />
+                                </div>
+                                <div class="form-group" style="flex:1">
+                                    <label>Value: ${ccVal}</label>
+                                    <input type="range" min="0" max="127" value=${ccVal}
+                                        onInput=${e => sendCC(+e.target.value)}
+                                        style="min-height:48px;width:100%" />
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
-            `}
+                `}
+            </div>
         </div>
     `;
 }
@@ -508,13 +839,23 @@ function StatusPage({ devices, onDeviceSelect }) {
 }
 
 // --- Settings Page ---
-function SettingsPage({ showToast }) {
+function SettingsPage({ showToast, showMidiBar, toggleMidiBar }) {
     const [wifi, setWifi] = useState(null);
     const [apPassword, setApPassword] = useState('');
     const [clientSsid, setClientSsid] = useState('');
     const [clientPassword, setClientPassword] = useState('');
+    const [networks, setNetworks] = useState([]);
+    const [scanning, setScanning] = useState(false);
 
     useEffect(() => { api('/wifi').then(setWifi).catch(() => {}); }, []);
+
+    const scanNetworks = async () => {
+        setScanning(true);
+        const nets = await api('/wifi/scan');
+        setNetworks(nets || []);
+        setScanning(false);
+    };
+    useEffect(() => { scanNetworks(); }, []);
 
     const switchToAp = async () => {
         const body = {};
@@ -525,12 +866,13 @@ function SettingsPage({ showToast }) {
     };
     const switchToClient = async () => {
         if (!clientSsid) return;
+        showToast('Connecting... Find me at http://raspimidihub.local');
         const res = await api('/wifi/client', {
             method: 'POST',
             body: JSON.stringify({ ssid: clientSsid, password: clientPassword }),
         });
         if (res.error) showToast('Connection failed: ' + res.error);
-        else showToast('Connected to ' + clientSsid);
+        else showToast('Connected! Go to http://raspimidihub.local');
         api('/wifi').then(setWifi);
     };
     const rebootPi = async () => {
@@ -562,14 +904,30 @@ function SettingsPage({ showToast }) {
         <div class="card">
             <h3>Client Mode (Join WiFi)</h3>
             <div class="form-group">
-                <label>WiFi SSID</label>
-                <input value=${clientSsid} onInput=${e => setClientSsid(e.target.value)} placeholder="Network name" />
+                <label>WiFi Network</label>
+                <div style="display:flex;gap:8px">
+                    <select style="flex:1" value=${clientSsid} onChange=${e => setClientSsid(e.target.value)}>
+                        <option value="">Select network...</option>
+                        ${networks.map(n => html`<option value=${n.ssid}>${n.ssid} (${n.signal}%${n.security ? ' ' + n.security : ''})</option>`)}
+                    </select>
+                    <button class="btn btn-secondary" style="min-width:48px;padding:8px" onclick=${scanNetworks}>
+                        ${scanning ? '...' : '\u21bb'}
+                    </button>
+                </div>
             </div>
             <div class="form-group">
                 <label>Password</label>
                 <input type="password" value=${clientPassword} onInput=${e => setClientPassword(e.target.value)} />
             </div>
             <button class="btn btn-primary btn-block" onclick=${switchToClient}>Connect</button>
+            <p style="font-size:11px;color:var(--text-dim);margin-top:6px;text-align:center">After connecting, find this device at <b>http://raspimidihub.local</b></p>
+        </div>
+        <div class="card">
+            <h3>Display</h3>
+            <label class="msg-toggle">
+                <input type="checkbox" checked=${showMidiBar} onchange=${toggleMidiBar} />
+                <span>MIDI activity bar</span>
+            </label>
         </div>
         <div class="card">
             <h3>System</h3>
@@ -586,6 +944,9 @@ function App() {
     const [toast, setToast] = useState('');
     const [configFallback, setConfigFallback] = useState(false);
     const [selectedDevice, setSelectedDevice] = useState(null);
+    const [showMidiBar, setShowMidiBar] = useState(() => localStorage.getItem('midiBar') !== 'off');
+    const [lastMidi, setLastMidi] = useState('');
+    const [sseConnected, setSseConnected] = useState(true);
 
     const refresh = useCallback(async () => {
         const [devs, conns] = await Promise.all([api('/devices'), api('/connections')]);
@@ -602,28 +963,28 @@ function App() {
         if (type === 'device-connected' || type === 'device-disconnected' || type === 'connection-changed') {
             refresh();
         }
+        if (type === 'midi-activity' && showMidiBar) {
+            let s = data.event;
+            if (data.channel != null) s += ` ch${data.channel}`;
+            if (data.note != null) s += ` ${noteName(data.note)} vel=${data.velocity}`;
+            if (data.cc != null) s += ` cc${data.cc}=${data.value}`;
+            setLastMidi(s);
+        }
+    }, (connected) => {
+        setSseConnected(connected);
+        if (connected) refresh();
     });
+
+    const toggleMidiBar = () => {
+        const next = !showMidiBar;
+        setShowMidiBar(next);
+        localStorage.setItem('midiBar', next ? 'on' : 'off');
+    };
 
     const showToast = (msg) => {
         setToast(msg);
         setTimeout(() => setToast(''), 2500);
     };
-
-    // Device detail view overrides the current tab
-    if (selectedDevice) {
-        return html`
-            <div class="header">
-                <h1>RaspiMIDIHub</h1>
-                <span class="status ${devices.length > 0 ? 'ok' : ''}">${devices.length} device${devices.length !== 1 ? 's' : ''}</span>
-            </div>
-            <div class="main">
-                <${DeviceDetailPage} device=${selectedDevice}
-                    onClose=${() => { setSelectedDevice(null); refresh(); }}
-                    showToast=${showToast} />
-            </div>
-            <${Toast} message=${toast} />
-        `;
-    }
 
     let page;
     switch (tab) {
@@ -637,23 +998,27 @@ function App() {
             page = html`<${StatusPage} devices=${devices} onDeviceSelect=${setSelectedDevice} />`;
             break;
         case 'settings':
-            page = html`<${SettingsPage} showToast=${showToast} />`;
+            page = html`<${SettingsPage} showToast=${showToast} showMidiBar=${showMidiBar} toggleMidiBar=${toggleMidiBar} />`;
             break;
     }
 
     return html`
         <div class="header">
             <h1>RaspiMIDIHub</h1>
-            <span class="status ${devices.length > 0 ? 'ok' : ''}">${devices.length} device${devices.length !== 1 ? 's' : ''}</span>
+            <span class="status ${sseConnected ? (devices.length > 0 ? 'ok' : '') : 'err'}">${sseConnected ? `${devices.length} device${devices.length !== 1 ? 's' : ''}` : 'Connection lost'}</span>
         </div>
         ${configFallback && html`<div class="banner">Config unreadable — using default all-to-all routing. Save to fix.</div>`}
-        <div class="main">${page}</div>
+        <div class="main ${showMidiBar ? 'with-midi-bar' : ''}">${page}</div>
+        ${showMidiBar && html`<div class="midi-bar">${lastMidi || '\u00b7\u00b7\u00b7'}</div>`}
         <nav class="bottom-nav">
             <button class=${tab === 'routing' ? 'active' : ''} onclick=${() => setTab('routing')}>${IconRouting}<span>Routing</span></button>
             <button class=${tab === 'presets' ? 'active' : ''} onclick=${() => setTab('presets')}>${IconPreset}<span>Presets</span></button>
             <button class=${tab === 'status' ? 'active' : ''} onclick=${() => setTab('status')}>${IconStatus}<span>Status</span></button>
             <button class=${tab === 'settings' ? 'active' : ''} onclick=${() => setTab('settings')}>${IconSettings}<span>Settings</span></button>
         </nav>
+        ${selectedDevice && html`<${DeviceDetailPanel} device=${selectedDevice}
+            onClose=${() => { setSelectedDevice(null); refresh(); }}
+            showToast=${showToast} />`}
         <${Toast} message=${toast} />
     `;
 }

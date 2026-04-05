@@ -192,25 +192,48 @@ no-hosts
             _run(["systemctl", "reload", "hostapd"], check=False)
             log.info("AP password updated")
 
+    def check_client_connected(self) -> bool:
+        """Check if wlan0 has an IP address in client mode."""
+        if self._mode != "client":
+            return True
+        try:
+            result = _run(["ip", "-4", "addr", "show", WLAN_IFACE],
+                          check=False, timeout=5)
+            return "inet " in result.stdout
+        except Exception:
+            return False
+
     def scan_networks(self) -> list[dict]:
-        """Scan for available WiFi networks."""
+        """Scan for available WiFi networks using iw (works in AP mode)."""
         try:
             result = _run(
-                ["nmcli", "-t", "-f", "SSID,SIGNAL,SECURITY", "device", "wifi", "list",
-                 "--rescan", "yes"],
+                ["iw", "dev", "wlan0", "scan"],
                 check=False, timeout=15,
             )
             networks = []
             seen = set()
-            for line in result.stdout.strip().splitlines():
-                parts = line.split(":")
-                if len(parts) >= 3 and parts[0] and parts[0] not in seen:
-                    seen.add(parts[0])
-                    networks.append({
-                        "ssid": parts[0],
-                        "signal": int(parts[1]) if parts[1].isdigit() else 0,
-                        "security": parts[2],
-                    })
+            current = {}
+            for line in result.stdout.splitlines():
+                line = line.strip()
+                if line.startswith("BSS "):
+                    if current.get("ssid") and current["ssid"] not in seen:
+                        seen.add(current["ssid"])
+                        networks.append(current)
+                    current = {"ssid": "", "signal": 0, "security": ""}
+                elif line.startswith("SSID: "):
+                    current["ssid"] = line[6:]
+                elif line.startswith("signal: "):
+                    # e.g. "signal: -67.00 dBm" → convert to 0-100 quality
+                    try:
+                        dbm = float(line.split()[1])
+                        current["signal"] = max(0, min(100, int(2 * (dbm + 100))))
+                    except (ValueError, IndexError):
+                        pass
+                elif "WPA" in line or "RSN" in line:
+                    current["security"] = "WPA"
+            # Last entry
+            if current.get("ssid") and current["ssid"] not in seen:
+                networks.append(current)
             return sorted(networks, key=lambda n: n["signal"], reverse=True)
         except Exception:
             log.exception("WiFi scan failed")

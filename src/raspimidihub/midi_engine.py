@@ -45,6 +45,7 @@ class MidiEngine:
         self._monitored_clients: set[int] = set()
         self._debounce_task: asyncio.Task | None = None
         self._running = False
+        self._config = None  # set externally for config-aware rescan
         self._on_change_callbacks: list = []
         self._on_midi_event_callbacks: list = []
 
@@ -163,6 +164,8 @@ class MidiEngine:
                 pass  # device may already be gone
 
         self._connections.clear()
+        # Clear send subscription cache so they're re-established on next send
+        self._seq._send_subscriptions.clear()
 
     def _update_monitor_subscriptions(self) -> None:
         """Subscribe monitor port to all device output ports for MIDI activity UI."""
@@ -187,15 +190,24 @@ class MidiEngine:
                     pass
 
     def _scan_and_connect(self) -> None:
-        """Full state reconstruction: scan devices and connect all."""
+        """Full state reconstruction: scan devices, apply saved config or connect all."""
         self.disconnect_all()
         self.scan_devices()
-        connections = self.connect_all()
+
+        restored = False
+        if self._config and self._config.mode == "custom" and self._config.connections:
+            from .__main__ import _apply_saved_config
+            _apply_saved_config(self, self._config)
+            restored = len(self._connections) > 0
+
+        if not restored:
+            self.connect_all()
+
         self._update_monitor_subscriptions()
 
         device_names = [d.name for d in self._devices]
         log.info("Devices: %s", device_names if device_names else "(none)")
-        log.info("Connections: %d active", len(connections))
+        log.info("Connections: %d active", len(self._connections))
         self._notify_change()
 
     async def run_event_loop(self) -> None:

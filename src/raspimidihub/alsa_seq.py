@@ -44,6 +44,9 @@ SND_SEQ_PORT_SYSTEM_ANNOUNCE = 1
 
 MIDI_THROUGH_CLIENT_ID = 14
 
+SND_SEQ_QUEUE_DIRECT = 253
+SND_SEQ_ADDRESS_SUBSCRIBERS = 254
+
 
 class SeqEventType(IntEnum):
     PORT_START = 63
@@ -313,6 +316,9 @@ class AlsaSeq:
         )
         check(self._output_port, "Failed to create output port")
 
+        # Track send subscriptions per instance
+        self._send_subscriptions: set = set()
+
         # Subscribe to system announcements
         check(
             snd_seq_connect_from(
@@ -445,8 +451,6 @@ class AlsaSeq:
         check(port_id, f"Failed to create port {name}")
         return port_id
 
-    _send_subscriptions: set = set()  # track (dest_client, dest_port) we've subscribed to
-
     def send_event(self, ev: SndSeqEvent, dest_client: int, dest_port: int) -> None:
         """Send a MIDI event to a specific destination."""
         # Ensure we have a subscription to the destination
@@ -458,12 +462,19 @@ class AlsaSeq:
             except OSError:
                 pass  # already connected or other issue
 
-        ev.dest.client = dest_client
-        ev.dest.port = dest_port
         ev.source.client = self._client_id
         ev.source.port = self._output_port
-        ev.flags = 0  # direct
-        snd_seq_event_output_direct(self._handle, pointer(ev))
+        ev.dest.client = SND_SEQ_ADDRESS_SUBSCRIBERS
+        ev.dest.port = 0
+        ev.queue = SND_SEQ_QUEUE_DIRECT
+        ev.flags = 0
+        ret = snd_seq_event_output_direct(self._handle, pointer(ev))
+        if ret < 0:
+            err = snd_strerror(ret)
+            import logging
+            logging.getLogger(__name__).warning(
+                "send_event failed: %s", err.decode() if err else f"error {ret}"
+            )
 
     def send_note_on(self, dest_client: int, dest_port: int,
                      channel: int, note: int, velocity: int = 100) -> None:

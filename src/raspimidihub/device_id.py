@@ -123,38 +123,67 @@ def get_card_stable_id(card_num: int) -> StableDeviceInfo | None:
 def alsa_client_to_card(client_id: int) -> int | None:
     """Map an ALSA sequencer client ID to a sound card number.
 
-    For kernel clients, the card number is embedded in /proc/asound/seq/clients.
-    We parse it from there.
+    Tries multiple strategies:
+    1. Parse card= from /proc/asound/seq/clients (works on some kernels)
+    2. Match seq client name to card long name in /proc/asound/cards
+    3. Scan /proc/asound/cardN/midiN for matching content
     """
+    # Strategy 1: direct card number from seq/clients
+    client_name = None
     try:
         with open("/proc/asound/seq/clients") as f:
             current_client = None
+            current_name = None
             for line in f:
-                m = re.match(r'^Client\s+(\d+)\s*:', line)
+                m = re.match(r'^Client\s+(\d+)\s*:\s*"(.+?)"', line)
                 if m:
                     current_client = int(m.group(1))
+                    current_name = m.group(2)
                     continue
                 if current_client == client_id:
-                    # Look for card number in the client's info
                     cm = re.search(r'\[.*card\s*=\s*(\d+)', line)
                     if cm:
                         return int(cm.group(1))
+            # Remember the client name for strategy 2
+            # Re-scan to get the name for our client_id
+        with open("/proc/asound/seq/clients") as f:
+            for line in f:
+                m = re.match(r'^Client\s+(\d+)\s*:\s*"(.+?)"', line)
+                if m and int(m.group(1)) == client_id:
+                    client_name = m.group(2)
+                    break
     except OSError:
         pass
 
-    # Fallback: scan /proc/asound/cardN/midiN for matching client
-    for card_dir in sorted(Path("/proc/asound").glob("card*")):
+    # Strategy 2: match client name to /proc/asound/cards long name
+    if client_name:
         try:
-            card_num = int(card_dir.name.replace("card", ""))
-        except ValueError:
-            continue
-        for midi_file in card_dir.glob("midi*"):
+            with open("/proc/asound/cards") as f:
+                for line in f:
+                    cm = re.match(r'^\s*(\d+)\s+\[', line)
+                    if cm:
+                        card_num = int(cm.group(1))
+                        # Next line has the long name
+                        next_line = next(f, "").strip()
+                        if client_name in next_line:
+                            return card_num
+        except OSError:
+            pass
+
+    # Strategy 3: scan /proc/asound/cardN/midiN for matching name
+    if client_name:
+        for card_dir in sorted(Path("/proc/asound").glob("card*")):
             try:
-                content = midi_file.read_text()
-                if f"Client {client_id}" in content or f"client {client_id}" in content:
-                    return card_num
-            except OSError:
-                pass
+                card_num = int(card_dir.name.replace("card", ""))
+            except ValueError:
+                continue
+            for midi_file in card_dir.glob("midi*"):
+                try:
+                    content = midi_file.read_text()
+                    if client_name in content:
+                        return card_num
+                except OSError:
+                    pass
 
     return None
 
