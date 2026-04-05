@@ -85,8 +85,8 @@ The Pi needs internet access during installation to download dependencies (hosta
 
 ```bash
 # Download the latest release
-wget https://github.com/YOURUSERNAME/raspimidihub/releases/latest/download/raspimidihub_1.0.0-1_all.deb
-wget https://github.com/YOURUSERNAME/raspimidihub/releases/latest/download/raspimidihub-rosetup_1.0.0-1_all.deb
+wget https://github.com/wamdam/raspimidihub/releases/latest/download/raspimidihub_1.0.0-1_all.deb
+wget https://github.com/wamdam/raspimidihub/releases/latest/download/raspimidihub-rosetup_1.0.0-1_all.deb
 
 # Install the main package first (requires internet for hostapd + dnsmasq)
 sudo apt install ./raspimidihub_1.0.0-1_all.deb
