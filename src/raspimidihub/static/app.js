@@ -98,19 +98,23 @@ function FilterPanel({ connId, filter, onClose, onApply }) {
 let _blockClick = false;
 
 function MatrixCell({ on, filtered, onTap, onLongPress }) {
-    const [tid] = useState(() => ({ v: null }));
+    const [s] = useState(() => ({ timer: null }));
+
+    const startTimer = () => {
+        _blockClick = false;
+        s.timer = setTimeout(() => { _blockClick = true; s.timer = null; onLongPress(); }, 500);
+    };
+    const cancelTimer = () => {
+        if (s.timer) { clearTimeout(s.timer); s.timer = null; }
+    };
 
     return html`<td
-        onTouchStart=${() => {
-            _blockClick = false;
-            tid.v = setTimeout(() => { _blockClick = true; onLongPress(); }, 500);
-        }}
-        onTouchEnd=${() => {
-            if (tid.v) { clearTimeout(tid.v); tid.v = null; }
-        }}
-        onTouchMove=${() => {
-            if (tid.v) { clearTimeout(tid.v); tid.v = null; }
-        }}
+        onTouchStart=${startTimer}
+        onTouchEnd=${cancelTimer}
+        onTouchMove=${cancelTimer}
+        onMouseDown=${startTimer}
+        onMouseUp=${cancelTimer}
+        onMouseLeave=${cancelTimer}
         onClick=${(e) => {
             if (_blockClick) { _blockClick = false; e.preventDefault(); return; }
             onTap();
