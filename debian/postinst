@@ -6,6 +6,17 @@ case "$1" in
         # Reload udev rules
         udevadm control --reload-rules 2>/dev/null || true
 
+        # Unmask hostapd (Debian masks it by default) and stop default dnsmasq
+        # Our service manages these itself
+        systemctl unmask hostapd 2>/dev/null || true
+        systemctl disable hostapd 2>/dev/null || true
+        systemctl stop hostapd 2>/dev/null || true
+        systemctl stop dnsmasq 2>/dev/null || true
+        systemctl disable dnsmasq 2>/dev/null || true
+
+        # Create config directory on boot partition
+        mkdir -p /boot/firmware/raspimidihub 2>/dev/null || true
+
         # Enable and start the service
         systemctl daemon-reload
         systemctl enable raspimidihub.service

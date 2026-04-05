@@ -1,6 +1,6 @@
 [Unit]
 Description=RaspiMIDIHub - Automatic USB MIDI Hub
-After=sound.target
+After=sound.target network.target
 Wants=sound.target
 
 [Service]
@@ -11,19 +11,15 @@ RestartSec=2
 WatchdogSec=30
 NotifyAccess=main
 
-# Run as root for ALSA sequencer access and LED control
+# Run as root for ALSA sequencer, LED, hostapd, dnsmasq
 User=root
 
-# Hardening
-ProtectSystem=strict
+# Hardening (relaxed for hostapd/dnsmasq child processes)
 ProtectHome=true
-PrivateTmp=true
-NoNewPrivileges=true
+PrivateTmp=false
 ProtectKernelTunables=true
 ProtectControlGroups=true
 RestrictRealtime=false
-# Allow access to /sys/class/leds for LED control
-ReadWritePaths=/sys/class/leds
 
 [Install]
 WantedBy=multi-user.target

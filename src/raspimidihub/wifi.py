@@ -10,8 +10,8 @@ from pathlib import Path
 
 log = logging.getLogger(__name__)
 
-HOSTAPD_CONF = Path("/etc/hostapd/hostapd.conf")
-DNSMASQ_AP_CONF = Path("/etc/dnsmasq.d/raspimidihub-ap.conf")
+HOSTAPD_CONF = Path("/run/raspimidihub/hostapd.conf")
+DNSMASQ_AP_CONF = Path("/run/raspimidihub/dnsmasq-ap.conf")
 AP_IP = "192.168.4.1"
 AP_SUBNET = "192.168.4.0/24"
 DHCP_RANGE = "192.168.4.10,192.168.4.100,12h"
@@ -63,7 +63,8 @@ class WifiManager:
         return ""
 
     def write_hostapd_conf(self, ssid: str, password: str, channel: int = 7):
-        """Write hostapd configuration."""
+        """Write hostapd configuration to tmpfs."""
+        HOSTAPD_CONF.parent.mkdir(parents=True, exist_ok=True)
         conf = f"""interface={WLAN_IFACE}
 driver=nl80211
 ssid={ssid}
@@ -78,7 +79,6 @@ wpa_passphrase={password}
 wpa_key_mgmt=WPA-PSK
 rsn_pairwise=CCMP
 """
-        HOSTAPD_CONF.parent.mkdir(parents=True, exist_ok=True)
         HOSTAPD_CONF.write_text(conf)
         log.info("Wrote hostapd config: SSID=%s", ssid)
 
@@ -88,8 +88,12 @@ rsn_pairwise=CCMP
 interface={WLAN_IFACE}
 bind-interfaces
 dhcp-range={DHCP_RANGE}
+dhcp-leasefile=/run/raspimidihub/dnsmasq.leases
 # Captive portal: resolve ALL DNS queries to our IP
 address=/#/{AP_IP}
+# Don't read /etc/resolv.conf or /etc/hosts
+no-resolv
+no-hosts
 """
         DNSMASQ_AP_CONF.parent.mkdir(parents=True, exist_ok=True)
         DNSMASQ_AP_CONF.write_text(conf)
@@ -114,18 +118,26 @@ address=/#/{AP_IP}
         self.write_hostapd_conf(ssid, password)
         self.write_dnsmasq_conf()
 
-        # Start services
-        _run(["systemctl", "unmask", "hostapd"], check=False)
-        _run(["systemctl", "restart", "hostapd"], check=False)
-        _run(["systemctl", "restart", "dnsmasq"], check=False)
+        # Stop system services (we run our own instances)
+        _run(["systemctl", "stop", "hostapd"], check=False)
+        _run(["systemctl", "stop", "dnsmasq"], check=False)
+
+        # Kill any previous instances we started
+        _run(["pkill", "-f", "hostapd.*raspimidihub"], check=False)
+        _run(["pkill", "-f", "dnsmasq.*raspimidihub"], check=False)
+        import time; time.sleep(0.5)
+
+        # Start hostapd and dnsmasq directly with our config files
+        _run(["hostapd", "-B", str(HOSTAPD_CONF)], check=False)
+        _run(["dnsmasq", "--conf-file=" + str(DNSMASQ_AP_CONF), "--pid-file=/run/raspimidihub/dnsmasq.pid"], check=False)
 
         self._mode = "ap"
         log.info("WiFi AP started: SSID=%s, IP=%s", ssid, AP_IP)
 
     def stop_ap(self):
         """Stop WiFi access point."""
-        _run(["systemctl", "stop", "hostapd"], check=False)
-        _run(["systemctl", "stop", "dnsmasq"], check=False)
+        _run(["pkill", "-f", "hostapd.*raspimidihub"], check=False)
+        _run(["pkill", "-f", "dnsmasq.*raspimidihub"], check=False)
         _run(["ip", "addr", "flush", "dev", WLAN_IFACE], check=False)
         log.info("WiFi AP stopped")
 
