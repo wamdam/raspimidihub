@@ -246,13 +246,9 @@ This removes saved WiFi connections and switches back to AP mode. You can then r
 
 ### Updating
 
-```bash
-ssh user@raspimidihub.local
-rw
-sudo apt install ./raspimidihub_1.2.0-1_all.deb
-ro
-sudo reboot
-```
+The easiest way to update is to connect the Pi to your router via **Ethernet cable** — the access point keeps running, so you connect to it via WiFi as usual. Then go to **Settings → Software Update** and click **Install**. The Pi downloads and installs the update automatically.
+
+No need to switch to WiFi client mode or use SSH.
 
 ### Uninstalling
 
