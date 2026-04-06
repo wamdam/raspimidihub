@@ -23,8 +23,8 @@ cd raspimidihub
 make all
 
 # Or build individually:
-make deb           # builds dist/raspimidihub_1.1.3-1_all.deb
-make deb-rosetup   # builds dist/raspimidihub-rosetup_1.1.3-1_all.deb
+make deb           # builds dist/raspimidihub_1.1.4-1_all.deb
+make deb-rosetup   # builds dist/raspimidihub-rosetup_1.1.4-1_all.deb
 ```
 
 Output files land in `dist/`.
@@ -56,7 +56,7 @@ Output files land in `dist/`.
 
 ## Deploying to a Pi for development
 
-The Makefile includes shortcuts for iterating on a Pi connected at `10.1.1.3`:
+The Makefile includes shortcuts for iterating on a Pi connected at `10.1.1.4`:
 
 ```bash
 # Deploy source files only (fast, no .deb rebuild)
@@ -85,8 +85,8 @@ make deploy-src PI_HOST=user@192.168.4.1
 
 Version numbers are defined in two places:
 
-1. `Makefile` — `VERSION = 1.1.3` (used for .deb filename and control file)
-2. `src/raspimidihub/__init__.py` — `__version__ = "1.1.3"` (reported in web UI)
+1. `Makefile` — `VERSION = 1.1.4` (used for .deb filename and control file)
+2. `src/raspimidihub/__init__.py` — `__version__ = "1.1.4"` (reported in web UI)
 
 When releasing a new version:
 

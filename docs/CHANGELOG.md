@@ -4,6 +4,12 @@ All notable changes to RaspiMIDIHub will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.1.4] - 2026-04-06
+
+### Fixed
+- Update progress now visible: SSE events sent before dpkg install
+  (postinst restarts the service, killing the process before events could be sent).
+
 ## [1.1.3] - 2026-04-06
 
 ### Improved

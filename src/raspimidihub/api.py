@@ -736,25 +736,25 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
                 await server.send_sse("update-progress", {"step": "error", "message": f"Download failed: {e}"})
                 return
 
+            # Send "restarting" BEFORE dpkg — postinst will restart the service,
+            # killing this process, so we won't get a chance to send it after.
             await server.send_sse("update-progress", {"step": "installing"})
+            await asyncio.sleep(0.5)  # let SSE flush to clients
+            await server.send_sse("update-progress", {"step": "restarting"})
+            await asyncio.sleep(0.5)
+
+            def _install():
+                subprocess.run(["mount", "-o", "remount,rw", "/"],
+                               check=True, timeout=5)
+                # dpkg postinst will restart the service — this process will die here
+                subprocess.run(["dpkg", "-i", deb_path],
+                               check=True, timeout=60, capture_output=True, text=True)
+                subprocess.run(["mount", "-o", "remount,ro", "/"],
+                               check=False, timeout=5)
             try:
-                def _install():
-                    subprocess.run(["mount", "-o", "remount,rw", "/"],
-                                   check=True, timeout=5)
-                    try:
-                        subprocess.run(["dpkg", "-i", deb_path],
-                                       check=True, timeout=30, capture_output=True, text=True)
-                    finally:
-                        subprocess.run(["mount", "-o", "remount,ro", "/"],
-                                       check=False, timeout=5)
                 await loop.run_in_executor(None, _install)
             except Exception as e:
-                await server.send_sse("update-progress", {"step": "error", "message": f"Install failed: {e}"})
-                return
-
-            await server.send_sse("update-progress", {"step": "restarting"})
-            await asyncio.sleep(1)
-            subprocess.Popen(["systemctl", "restart", "raspimidihub"])
+                log.exception("Update install failed")
 
         # Fire and forget — progress via SSE
         asyncio.ensure_future(_do_update())
