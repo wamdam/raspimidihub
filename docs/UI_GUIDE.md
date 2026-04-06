@@ -6,9 +6,9 @@ This guide walks through every screen of the RaspiMIDIHub web interface.
 
 ## Routing Page
 
-The main screen shows the **connection matrix** — a grid where rows are MIDI sources (FROM) and columns are destinations (TO). Tap a cell to connect or disconnect two devices. Purple cells indicate connections with active filters or mappings.
+The main screen shows the **connection matrix** — a grid where rows are MIDI sources (FROM) and columns are destinations (TO). Tap a cell to connect or disconnect two devices. Purple cells indicate connections with active filters or mappings. Offline devices (saved but unplugged) appear grayed out.
 
-At the bottom: **Save Config** persists the current routing to disk (survives reboots), **Load Config** reloads the last saved state.
+At the bottom: **Save Config** persists the current routing to disk (survives reboots), **Load Config** reloads the last saved state. Disconnected connections are also saved and restored.
 
 ![Routing Page](screenshots/01-routing.png)
 
@@ -22,9 +22,9 @@ Long-press (or right-click) a connected cell to open the connection panel. Here 
 - **Message Types:** Enable/disable notes, CCs, program changes, pitch bend, aftertouch, SysEx, and clock/realtime. Changes apply instantly.
 - **Mappings:** View active mappings with Edit/Delete buttons. Tap **+ Add Mapping** to create a new one.
 
-Dismiss the panel by swiping down, tapping X, pressing ESC, or tapping the dark overlay.
+Dismiss the panel by swiping down, tapping X, pressing ESC, or tapping the dark overlay. Toggling a connection off in the matrix preserves its filters and mappings — they are restored when you re-enable it.
 
-![Filter & Mapping Panel](screenshots/02-filter-panel.png)
+![Filter & Mapping Panel](screenshots/05-filter-panel.png)
 
 ---
 
@@ -43,8 +43,6 @@ The mapping form opens as a sub-overlay. Mapping types:
 - **MIDI Learn:** Press the button, then play a note or move a knob — the source is auto-filled
 - **Pass through original event:** When checked, the original note/CC is forwarded alongside the mapped output
 
-![Add Mapping](screenshots/03-add-mapping.png)
-
 ---
 
 ## Presets Page
@@ -58,7 +56,7 @@ Save the current routing as a named preset and recall it later. Useful for switc
 
 Note: After loading a preset, tap **Save Config** on the Routing page to make it the boot default.
 
-![Presets Page](screenshots/04-presets.png)
+![Presets Page](screenshots/02-presets.png)
 
 ---
 
@@ -69,7 +67,7 @@ System overview and device list.
 - **System info:** Hostname, version, CPU temperature, uptime, RAM, IP addresses
 - **Connected Devices:** Tap a device to open its detail panel
 
-![Status Page](screenshots/05-status.png)
+![Status Page](screenshots/03-status.png)
 
 ---
 
@@ -88,23 +86,24 @@ Tap a device on the Status page to open the detail panel (slides up). Features:
 
 ## Settings Page
 
-WiFi configuration and system controls.
+Configuration and system controls.
 
-- **WiFi Status:** Current mode (AP or client), SSID, IP address
-- **Access Point Mode:** Change the AP password, switch back to AP mode
-- **Client Mode:** Select a WiFi network from the scanned dropdown, enter password, connect. The Pi is reachable at `http://raspimidihub.local` via mDNS
-- **Display:** Toggle the persistent MIDI activity bar at the bottom of the screen
-- **System:** Reboot the Pi remotely
+- **WiFi:** Current mode (AP or client) with clear status badge. Join WiFi or change AP settings.
+- **Network:** Configure eth0 as DHCP or static IP.
+- **MIDI Routing:** Default routing for new devices — "all-to-all" or "none (manual)".
+- **Display:** Toggle the persistent MIDI activity bar.
+- **Software Update:** Check for updates, view changelog, one-click install (requires internet via Ethernet).
+- **System:** Reboot the Pi remotely.
 
-**Safety net:** If the WiFi connection is lost in client mode, the Pi automatically falls back to AP mode within ~90 seconds.
+**Safety net:** If the WiFi connection is lost in client mode, the Pi automatically falls back to AP mode within ~90 seconds. Run `sudo reset-wifi` from a console to force AP mode.
 
-![Settings Page](screenshots/07-settings.png)
+![Settings Page](screenshots/04-settings.png)
 
 ---
 
 ## MIDI Activity Bar
 
-A persistent bar above the bottom navigation showing the last MIDI event received (e.g., "Note On ch1 C3 vel=100"). Toggleable in Settings > Display. Useful for quick visual feedback during live performance.
+A persistent bar above the bottom navigation showing the latest MIDI events from two sources — left and right. Device names are truncated to fit. Toggleable in Settings > Display.
 
 ---
 
