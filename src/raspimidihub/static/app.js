@@ -913,7 +913,7 @@ function NetworkCard({ iface, showToast }) {
 // --- Upgrade Card ---
 const UPDATE_STEPS = { starting: 'Starting update...', downloading: 'Downloading...', installing: 'Installing...', restarting: 'Restarting service...' };
 
-function UpgradeCard({ showToast, updateStep }) {
+function UpgradeCard({ showToast, updateStep, setUpdateStep }) {
     const [info, setInfo] = useState(null);
     const [checking, setChecking] = useState(false);
     const [showLog, setShowLog] = useState(false);
@@ -961,6 +961,7 @@ function UpgradeCard({ showToast, updateStep }) {
                         ${busy ? stepLabel : 'Install v' + info.latest}</button>`
                     : html`<button class="btn btn-secondary btn-block" onclick=${check} disabled=${checking}>
                         ${checking ? 'Checking...' : 'Check for updates'}</button>`}
+                ${busy && html`<p style="font-size:13px;color:var(--warn);margin-top:8px;text-align:center;font-weight:500">${stepLabel}</p>`}
                 ${info.offline && html`<p style="font-size:11px;color:var(--text-dim);margin-top:4px">No internet connection — connect to a network to check for updates.</p>`}
             `}
         </div>
@@ -1089,7 +1090,7 @@ function WiFiCard({ showToast }) {
 }
 
 // --- Settings Page ---
-function SettingsPage({ showToast, showMidiBar, toggleMidiBar, updateStep }) {
+function SettingsPage({ showToast, showMidiBar, toggleMidiBar, updateStep, setUpdateStep }) {
     const [ifaces, setIfaces] = useState([]);
     useEffect(() => { api('/network').then(setIfaces).catch(() => {}); }, []);
 
@@ -1112,7 +1113,7 @@ function SettingsPage({ showToast, showMidiBar, toggleMidiBar, updateStep }) {
                 <span>MIDI activity bar</span>
             </label>
         </div>
-        <${UpgradeCard} showToast=${showToast} updateStep=${updateStep} />
+        <${UpgradeCard} showToast=${showToast} updateStep=${updateStep} setUpdateStep=${setUpdateStep} />
         <div class="card">
             <h3>System</h3>
             <button class="btn btn-danger btn-block" onclick=${rebootPi}>Reboot Pi</button>
@@ -1190,7 +1191,7 @@ function App() {
             page = html`<${StatusPage} devices=${devices} onDeviceSelect=${setSelectedDevice} />`;
             break;
         case 'settings':
-            page = html`<${SettingsPage} showToast=${showToast} showMidiBar=${showMidiBar} toggleMidiBar=${toggleMidiBar} updateStep=${updateStep} />`;
+            page = html`<${SettingsPage} showToast=${showToast} showMidiBar=${showMidiBar} toggleMidiBar=${toggleMidiBar} updateStep=${updateStep} setUpdateStep=${setUpdateStep} />`;
             break;
     }
 
