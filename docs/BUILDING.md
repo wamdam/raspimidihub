@@ -56,7 +56,7 @@ Output files land in `dist/`.
 
 ## Deploying to a Pi for development
 
-The Makefile includes shortcuts for iterating on a Pi connected at `10.1.1.5`:
+The Makefile includes shortcuts for iterating on a Pi connected at `10.1.1.2`:
 
 ```bash
 # Deploy source files only (fast, no .deb rebuild)
