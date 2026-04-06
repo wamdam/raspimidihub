@@ -911,13 +911,14 @@ function NetworkCard({ iface, showToast }) {
 }
 
 // --- Upgrade Card ---
-const UPDATE_STEPS = { starting: 'Starting update...', downloading: 'Downloading...', installing: 'Installing...', restarting: 'Restarting service...' };
+const UPDATE_LABELS = { downloading: 'Downloading...', installing: 'Installing...', done: 'Updated! Restarting...' };
 
-function UpgradeCard({ showToast, updateStep, setUpdateStep }) {
+function UpgradeCard({ showToast }) {
     const [info, setInfo] = useState(null);
     const [checking, setChecking] = useState(false);
+    const [updating, setUpdating] = useState(false);
+    const [status, setStatus] = useState('');
     const [showLog, setShowLog] = useState(false);
-    const busy = !!updateStep;
 
     const check = async () => {
         setChecking(true);
@@ -930,12 +931,43 @@ function UpgradeCard({ showToast, updateStep, setUpdateStep }) {
     const install = async () => {
         if (!info || !info.deb_url) return;
         if (!confirm(`Update to v${info.latest}? The service will restart.`)) return;
-        setUpdateStep('starting');
+        setUpdating(true);
+        setStatus('starting');
         const res = await api('/system/update', { method: 'POST', body: JSON.stringify({ deb_url: info.deb_url }) });
-        if (res.error) { showToast('Update failed: ' + res.error); setUpdateStep(null); }
+        if (res.error) { showToast('Update failed: ' + res.error); setUpdating(false); setStatus(''); return; }
+
+        // Poll update status until done or version changes
+        const startVersion = info.current;
+        const poll = setInterval(async () => {
+            try {
+                const s = await fetch('/api/system/update-status').then(r => r.json()).catch(() => null);
+                if (s && s.status) setStatus(s.status);
+                if (s && s.status === 'done') {
+                    // Service was restarted by dpkg — wait for new version
+                    setStatus('restarting');
+                }
+                if (s && s.status && s.status.startsWith('error')) {
+                    showToast(s.status);
+                    setUpdating(false);
+                    clearInterval(poll);
+                    return;
+                }
+                // Check if version changed (service restarted with new code)
+                if (s && s.version && s.version !== startVersion) {
+                    clearInterval(poll);
+                    setUpdating(false);
+                    setStatus('');
+                    showToast('Updated to v' + s.version);
+                    setInfo({ ...info, current: s.version, update_available: false });
+                    return;
+                }
+            } catch (e) {
+                // Service down during restart — keep polling
+            }
+        }, 1500);
     };
 
-    const stepLabel = UPDATE_STEPS[updateStep] || updateStep;
+    const statusLabel = UPDATE_LABELS[status] || (status.startsWith('error') ? status : status);
 
     return html`
         <div class="card">
@@ -957,11 +989,11 @@ function UpgradeCard({ showToast, updateStep, setUpdateStep }) {
                     </div>
                 `}
                 ${info.update_available
-                    ? html`<button class="btn btn-success btn-block" onclick=${install} disabled=${busy}>
+                    ? html`<button class="btn btn-success btn-block" onclick=${install} disabled=${updating}>
                         ${'Install v' + info.latest}</button>`
                     : html`<button class="btn btn-secondary btn-block" onclick=${check} disabled=${checking}>
                         ${checking ? 'Checking...' : 'Check for updates'}</button>`}
-                ${busy && html`<p style="font-size:13px;color:var(--warn);margin-top:8px;text-align:center;font-weight:500">${stepLabel}</p>`}
+                ${updating && html`<p style="font-size:13px;color:var(--warn);margin-top:8px;text-align:center;font-weight:500">${statusLabel || 'Starting...'}</p>`}
                 ${info.offline && html`<p style="font-size:11px;color:var(--text-dim);margin-top:4px">No internet connection — connect to a network to check for updates.</p>`}
             `}
         </div>
@@ -1090,7 +1122,7 @@ function WiFiCard({ showToast }) {
 }
 
 // --- Settings Page ---
-function SettingsPage({ showToast, showMidiBar, toggleMidiBar, updateStep, setUpdateStep }) {
+function SettingsPage({ showToast, showMidiBar, toggleMidiBar }) {
     const [ifaces, setIfaces] = useState([]);
     useEffect(() => { api('/network').then(setIfaces).catch(() => {}); }, []);
 
@@ -1113,7 +1145,7 @@ function SettingsPage({ showToast, showMidiBar, toggleMidiBar, updateStep, setUp
                 <span>MIDI activity bar</span>
             </label>
         </div>
-        <${UpgradeCard} showToast=${showToast} updateStep=${updateStep} setUpdateStep=${setUpdateStep} />
+        <${UpgradeCard} showToast=${showToast} />
         <div class="card">
             <h3>System</h3>
             <button class="btn btn-danger btn-block" onclick=${rebootPi}>Reboot Pi</button>
@@ -1132,7 +1164,6 @@ function App() {
     const [showMidiBar, setShowMidiBar] = useState(() => localStorage.getItem('midiBar') !== 'off');
     const [midiEvents, setMidiEvents] = useState({});  // src_client -> {name, text}
     const [sseConnected, setSseConnected] = useState(true);
-    const [updateStep, setUpdateStep] = useState(null);
 
     const refresh = useCallback(async () => {
         const [devs, conns] = await Promise.all([api('/devices'), api('/connections')]);
@@ -1149,10 +1180,6 @@ function App() {
         if (type === 'device-connected' || type === 'device-disconnected' || type === 'connection-changed') {
             refresh();
         }
-        if (type === 'update-progress') {
-            setUpdateStep(data.step);
-            if (data.step === 'error') showToast(data.message || 'Update failed');
-        }
         if (type === 'midi-activity' && showMidiBar) {
             const dev = devices.find(d => d.client_id === data.src_client);
             const name = dev ? dev.name : `${data.src_client}`;
@@ -1165,7 +1192,7 @@ function App() {
         }
     }, (connected) => {
         setSseConnected(connected);
-        if (connected) { refresh(); setUpdateStep(null); }
+        if (connected) refresh();
     });
 
     const toggleMidiBar = () => {
@@ -1191,7 +1218,7 @@ function App() {
             page = html`<${StatusPage} devices=${devices} onDeviceSelect=${setSelectedDevice} />`;
             break;
         case 'settings':
-            page = html`<${SettingsPage} showToast=${showToast} showMidiBar=${showMidiBar} toggleMidiBar=${toggleMidiBar} updateStep=${updateStep} setUpdateStep=${setUpdateStep} />`;
+            page = html`<${SettingsPage} showToast=${showToast} showMidiBar=${showMidiBar} toggleMidiBar=${toggleMidiBar} />`;
             break;
     }
 

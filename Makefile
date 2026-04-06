@@ -1,5 +1,5 @@
 PACKAGE = raspimidihub
-VERSION = 1.1.6
+VERSION = 1.1.7
 DEB_NAME = $(PACKAGE)_$(VERSION)-1_all
 BUILD_DIR = build/$(DEB_NAME)
 DEB_FILE = dist/$(DEB_NAME).deb
@@ -28,10 +28,13 @@ $(DEB_FILE): src/raspimidihub/*.py src/raspimidihub/static/* systemd/raspimidihu
 	@mkdir -p $(BUILD_DIR)/usr/lib/python3/dist-packages/raspimidihub/static/components
 	@mkdir -p $(BUILD_DIR)/lib/systemd/system
 	@mkdir -p $(BUILD_DIR)/lib/udev/rules.d
+	@mkdir -p $(BUILD_DIR)/usr/lib/raspimidihub
 	cp src/raspimidihub/*.py $(BUILD_DIR)/usr/lib/python3/dist-packages/raspimidihub/
 	cp -r src/raspimidihub/static/* $(BUILD_DIR)/usr/lib/python3/dist-packages/raspimidihub/static/
 	cp systemd/raspimidihub.service $(BUILD_DIR)/lib/systemd/system/
 	cp udev/90-raspimidihub.rules $(BUILD_DIR)/lib/udev/rules.d/
+	cp scripts/raspimidihub-update.sh $(BUILD_DIR)/usr/lib/raspimidihub/update.sh
+	chmod 755 $(BUILD_DIR)/usr/lib/raspimidihub/update.sh
 	@echo "Package: $(PACKAGE)" > $(BUILD_DIR)/DEBIAN/control
 	@echo "Version: $(VERSION)-1" >> $(BUILD_DIR)/DEBIAN/control
 	@echo "Architecture: all" >> $(BUILD_DIR)/DEBIAN/control

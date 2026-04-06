@@ -1,3 +1,10 @@
+raspimidihub (1.1.7-1) unstable; urgency=medium
+
+  * Rewrite update mechanism: external script survives service restart
+  * UI polls update status and detects version change after restart
+
+ -- Daniel Kraft <wam@poplr.de>  Sun, 06 Apr 2026 16:00:00 +0200
+
 raspimidihub (1.1.6-1) unstable; urgency=medium
 
   * Fix update button: no more duplicate text, status shown below only

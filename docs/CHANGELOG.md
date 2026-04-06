@@ -4,6 +4,12 @@ All notable changes to RaspiMIDIHub will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.1.7] - 2026-04-06
+
+### Changed
+- Update mechanism uses external script that survives service restart.
+- UI polls status file and detects new version after restart.
+
 ## [1.1.6] - 2026-04-06
 
 ### Fixed

@@ -714,51 +714,36 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
     # POST /api/system/update — download and install latest .deb
     # ================================================================
 
+    UPDATE_STATUS_FILE = Path("/run/raspimidihub/update-status")
+    UPDATE_SCRIPT = Path("/usr/lib/raspimidihub/update.sh")
+
     @server.route("POST", "/api/system/update")
     async def api_update(req: Request) -> Response:
         import subprocess
-        import urllib.request
 
         data = req.json
         deb_url = data.get("deb_url", "")
         if not deb_url or "github.com" not in deb_url:
             return Response.error("Invalid download URL")
 
-        loop = asyncio.get_event_loop()
+        if not UPDATE_SCRIPT.is_file():
+            return Response.error("Update script not found", 500)
 
-        async def _do_update():
-            deb_path = "/tmp/raspimidihub-update.deb"
-
-            await server.send_sse("update-progress", {"step": "downloading"})
-            try:
-                await loop.run_in_executor(None, urllib.request.urlretrieve, deb_url, deb_path)
-            except Exception as e:
-                await server.send_sse("update-progress", {"step": "error", "message": f"Download failed: {e}"})
-                return
-
-            # Send "restarting" BEFORE dpkg — postinst will restart the service,
-            # killing this process, so we won't get a chance to send it after.
-            await server.send_sse("update-progress", {"step": "installing"})
-            await asyncio.sleep(0.5)  # let SSE flush to clients
-            await server.send_sse("update-progress", {"step": "restarting"})
-            await asyncio.sleep(0.5)
-
-            def _install():
-                subprocess.run(["mount", "-o", "remount,rw", "/"],
-                               check=True, timeout=5)
-                # dpkg postinst will restart the service — this process will die here
-                subprocess.run(["dpkg", "-i", deb_path],
-                               check=True, timeout=60, capture_output=True, text=True)
-                subprocess.run(["mount", "-o", "remount,ro", "/"],
-                               check=False, timeout=5)
-            try:
-                await loop.run_in_executor(None, _install)
-            except Exception as e:
-                log.exception("Update install failed")
-
-        # Fire and forget — progress via SSE
-        asyncio.ensure_future(_do_update())
+        # Launch external updater script (survives service restart)
+        subprocess.Popen(
+            [str(UPDATE_SCRIPT), deb_url],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
         return Response.json({"status": "started"})
+
+    @server.route("GET", "/api/system/update-status")
+    async def api_update_status(req: Request) -> Response:
+        try:
+            status = UPDATE_STATUS_FILE.read_text().strip()
+        except FileNotFoundError:
+            status = ""
+        return Response.json({"status": status, "version": __version__})
 
     # ================================================================
     # POST /api/config/load — reload saved config from disk
