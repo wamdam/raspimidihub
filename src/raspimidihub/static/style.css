@@ -190,6 +190,13 @@ body {
     background: var(--bg);
     cursor: default;
 }
+.matrix .offline {
+    opacity: 0.35;
+    cursor: default;
+}
+.matrix th.offline {
+    font-style: italic;
+}
 .matrix .cb {
     width: 36px;
     height: 36px;

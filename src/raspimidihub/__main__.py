@@ -264,6 +264,59 @@ def _apply_saved_config(engine: MidiEngine, config: Config) -> None:
             log.warning("Failed to restore connection %d:%d -> %d:%d: %s",
                         src_client, src_port, dst_client, dst_port, e)
 
+    # Restore disconnected dict with saved filter/mapping data
+    for c in config.disconnected:
+        src_stable = c.get("src_stable_id")
+        dst_stable = c.get("dst_stable_id")
+        src_client = registry.client_for_stable_id(src_stable) if src_stable else None
+        dst_client = registry.client_for_stable_id(dst_stable) if dst_stable else None
+        if src_client is not None and dst_client is not None:
+            sp = c.get("src_port", 0)
+            dp = c.get("dst_port", 0)
+            conn_id = f"{src_client}:{sp}-{dst_client}:{dp}"
+            saved_data = {}
+            if "filter" in c:
+                saved_data["filter"] = c["filter"]
+            if "mappings" in c:
+                saved_data["mappings"] = c["mappings"]
+            engine._disconnected[conn_id] = saved_data
+
+    # Handle device pairs not in saved config: apply default_routing
+    known_pairs = set()
+    for c in saved_conns:
+        src_stable = c.get("src_stable_id")
+        dst_stable = c.get("dst_stable_id")
+        if src_stable and dst_stable:
+            known_pairs.add((src_stable, c.get("src_port", 0), dst_stable, c.get("dst_port", 0)))
+    for c in config.disconnected:
+        src_stable = c.get("src_stable_id")
+        dst_stable = c.get("dst_stable_id")
+        if src_stable and dst_stable:
+            known_pairs.add((src_stable, c.get("src_port", 0), dst_stable, c.get("dst_port", 0)))
+
+    if config.default_routing == "all":
+        # Connect any new device pairs not covered by saved config
+        for src_dev in engine.devices:
+            for dst_dev in engine.devices:
+                if src_dev.client_id == dst_dev.client_id:
+                    continue
+                for src_port in src_dev.input_ports:
+                    for dst_port in dst_dev.output_ports:
+                        src_info = registry.get_by_client(src_dev.client_id)
+                        dst_info = registry.get_by_client(dst_dev.client_id)
+                        if src_info and dst_info:
+                            key = (src_info.stable_id, src_port.port_id, dst_info.stable_id, dst_port.port_id)
+                            if key in known_pairs:
+                                continue
+                        conn = Connection(src_dev.client_id, src_port.port_id, dst_dev.client_id, dst_port.port_id)
+                        if conn not in engine._connections:
+                            try:
+                                engine._seq.subscribe(src_dev.client_id, src_port.port_id,
+                                                      dst_dev.client_id, dst_port.port_id)
+                                engine._connections.add(conn)
+                            except OSError:
+                                pass
+
     log.info("Config restored: %d connections applied, %d pending (devices not present)",
              applied, pending)
 

@@ -101,9 +101,9 @@ sudo reboot
 <summary>Manual installation</summary>
 
 ```bash
-wget https://github.com/wamdam/raspimidihub/releases/latest/download/raspimidihub_1.2.0-1_all.deb
+wget https://github.com/wamdam/raspimidihub/releases/latest/download/raspimidihub_1.3.0-1_all.deb
 wget https://github.com/wamdam/raspimidihub/releases/latest/download/raspimidihub-rosetup_1.0.0-1_all.deb
-sudo apt install ./raspimidihub_1.2.0-1_all.deb ./raspimidihub-rosetup_1.0.0-1_all.deb
+sudo apt install ./raspimidihub_1.3.0-1_all.deb ./raspimidihub-rosetup_1.0.0-1_all.deb
 sudo reboot
 ```
 </details>

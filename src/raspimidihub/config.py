@@ -25,7 +25,9 @@ MAX_PRESET_SIZE = 64 * 1024  # 64 KB
 DEFAULT_CONFIG = {
     "version": 1,
     "mode": "all-to-all",
+    "default_routing": "all",
     "connections": [],
+    "disconnected": [],
     "presets": {},
     "wifi": {
         "mode": "ap",
@@ -68,8 +70,16 @@ class Config:
         return self._data.get("mode", "all-to-all")
 
     @property
+    def default_routing(self) -> str:
+        return self._data.get("default_routing", "all")
+
+    @property
     def connections(self) -> list:
         return self._data.get("connections", [])
+
+    @property
+    def disconnected(self) -> list:
+        return self._data.get("disconnected", [])
 
     @property
     def presets(self) -> dict:

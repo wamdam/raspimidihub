@@ -1,3 +1,13 @@
+raspimidihub (1.3.0-1) unstable; urgency=medium
+
+  * Persistent connection states: disconnected connections survive hotplug/reboot
+  * Re-enabling a connection restores its previous filters and mappings
+  * Default routing setting: all-to-all or manual (none) for new devices
+  * Offline devices shown grayed out in connection matrix
+  * Fix: clean up filter engine when disconnecting a filtered connection
+
+ -- Daniel Kraft <wam@poplr.de>  Sun, 06 Apr 2026 20:00:00 +0200
+
 raspimidihub (1.2.1-1) unstable; urgency=medium
 
   * Add reset-wifi command for AP recovery

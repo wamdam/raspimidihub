@@ -396,8 +396,8 @@ function ConnectionMatrix({ devices, connections, onToggle, onFilterOpen }) {
     const outputs = [];
     for (const dev of devices) {
         for (const p of dev.ports) {
-            if (p.is_input) inputs.push({ ...p, client_id: dev.client_id, dev_name: dev.name });
-            if (p.is_output) outputs.push({ ...p, client_id: dev.client_id, dev_name: dev.name });
+            if (p.is_input) inputs.push({ ...p, client_id: dev.client_id, dev_name: dev.name, online: dev.online !== false });
+            if (p.is_output) outputs.push({ ...p, client_id: dev.client_id, dev_name: dev.name, online: dev.online !== false });
         }
     }
     const byName = (a, b) => a.dev_name.localeCompare(b.dev_name);
@@ -411,6 +411,7 @@ function ConnectionMatrix({ devices, connections, onToggle, onFilterOpen }) {
 
     const getConn = (inp, out) => connMap[`${inp.client_id}:${inp.port_id}-${out.client_id}:${out.port_id}`];
     const isSelf = (inp, out) => inp.client_id === out.client_id;
+    const isOffline = (inp, out) => !inp.online || !out.online;
 
     const label = (item) => {
         const parts = item.dev_name.split(' ');
@@ -427,15 +428,17 @@ function ConnectionMatrix({ devices, connections, onToggle, onFilterOpen }) {
                 <thead>
                     <tr>
                         <th class="corner-header"><span class="from-label">FROM \u2193</span><span class="to-label">TO \u2192</span></th>
-                        ${outputs.map(o => html`<th title="${o.dev_name}: ${o.name}">${label(o)}</th>`)}
+                        ${outputs.map(o => html`<th title="${o.dev_name}: ${o.name}" class=${o.online ? '' : 'offline'}>${label(o)}</th>`)}
                     </tr>
                 </thead>
                 <tbody>
                     ${inputs.map(inp => html`
                         <tr>
-                            <th class="row-header" title="${inp.dev_name}: ${inp.name}">${label(inp)}</th>
+                            <th class="row-header ${inp.online ? '' : 'offline'}" title="${inp.dev_name}: ${inp.name}">${label(inp)}</th>
                             ${outputs.map(out => {
                                 if (isSelf(inp, out)) return html`<td class="self"></td>`;
+                                const offline = isOffline(inp, out);
+                                if (offline) return html`<td class="cell offline"></td>`;
                                 const conn = getConn(inp, out);
                                 const on = !!conn;
                                 const filtered = conn && (conn.filtered || (conn.mappings && conn.mappings.length > 0));
@@ -1122,7 +1125,15 @@ function WiFiCard({ showToast }) {
 // --- Settings Page ---
 function SettingsPage({ showToast, showMidiBar, toggleMidiBar }) {
     const [ifaces, setIfaces] = useState([]);
+    const [defaultRouting, setDefaultRouting] = useState('all');
     useEffect(() => { api('/network').then(setIfaces).catch(() => {}); }, []);
+    useEffect(() => { api('/system').then(s => setDefaultRouting(s.default_routing || 'all')).catch(() => {}); }, []);
+
+    const changeDefaultRouting = async (val) => {
+        setDefaultRouting(val);
+        await api('/system', { method: 'PATCH', body: JSON.stringify({ default_routing: val }) });
+        showToast('Default routing: ' + (val === 'all' ? 'all-to-all' : 'none'));
+    };
 
     const rebootPi = async () => {
         if (confirm('Reboot the Raspberry Pi?')) {
@@ -1136,6 +1147,17 @@ function SettingsPage({ showToast, showMidiBar, toggleMidiBar }) {
         ${ifaces.filter(i => i.interface !== 'wlan0').map(i => html`
             <${NetworkCard} iface=${i} showToast=${showToast} />
         `)}
+        <div class="card">
+            <h3>MIDI Routing</h3>
+            <div class="form-group">
+                <label>New devices</label>
+                <select value=${defaultRouting} onChange=${e => changeDefaultRouting(e.target.value)}>
+                    <option value="all">Connect all (default)</option>
+                    <option value="none">Disconnected (manual)</option>
+                </select>
+            </div>
+            <p style="font-size:11px;color:var(--text-dim)">When a new device is plugged in, should it be connected to all other devices automatically?</p>
+        </div>
         <div class="card">
             <h3>Display</h3>
             <label class="msg-toggle">

@@ -4,6 +4,21 @@ All notable changes to RaspiMIDIHub will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.3.0] - 2026-04-06
+
+### Added
+- **Persistent connection states**: deliberately disconnected connections are saved
+  and survive device reconnect/reboot. No more reset to all-to-all on hotplug.
+- **Config restore on reconnect**: toggling a connection back on restores its
+  previous filters and mappings automatically.
+- **Default routing setting**: choose "all-to-all" or "none (manual)" for new
+  devices in Settings → MIDI Routing.
+- **Offline devices**: unplugged devices with saved config shown grayed out in
+  the connection matrix.
+
+### Fixed
+- Filter engine cleanup when disconnecting a filtered connection.
+
 ## [1.2.1] - 2026-04-06
 
 ### Added

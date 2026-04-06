@@ -39,6 +39,7 @@ class MidiEngine:
         self._seq: AlsaSeq | None = None
         self._devices: list[MidiDevice] = []
         self._connections: set[Connection] = set()
+        self._disconnected: dict[str, dict] = {}  # conn_id -> {filter, mappings}
         self._filter_engine: FilterEngine | None = None
         self._device_registry: DeviceRegistry = DeviceRegistry()
         self._monitor_port: int = -1
@@ -195,13 +196,17 @@ class MidiEngine:
         self.scan_devices()
 
         restored = False
-        if self._config and self._config.mode == "custom" and self._config.connections:
+        if self._config and self._config.mode == "custom":
             from .__main__ import _apply_saved_config
             _apply_saved_config(self, self._config)
-            restored = len(self._connections) > 0
+            restored = True
 
         if not restored:
-            self.connect_all()
+            default_routing = "all"
+            if self._config:
+                default_routing = self._config.default_routing
+            if default_routing == "all":
+                self.connect_all()
 
         self._update_monitor_subscriptions()
 
