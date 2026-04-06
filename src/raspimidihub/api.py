@@ -726,28 +726,39 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
 
         loop = asyncio.get_event_loop()
 
-        def _download_and_install():
+        async def _do_update():
             deb_path = "/tmp/raspimidihub-update.deb"
-            urllib.request.urlretrieve(deb_url, deb_path)
-            subprocess.run(["sudo", "mount", "-o", "remount,rw", "/"],
-                           check=True, timeout=5)
-            try:
-                subprocess.run(["sudo", "dpkg", "-i", deb_path],
-                               check=True, timeout=30, capture_output=True, text=True)
-            finally:
-                subprocess.run(["sudo", "mount", "-o", "remount,ro", "/"],
-                               check=False, timeout=5)
-            return True
 
-        try:
-            await loop.run_in_executor(None, _download_and_install)
-            # Restart service after short delay
-            asyncio.get_event_loop().call_later(
-                2, lambda: subprocess.Popen(["sudo", "systemctl", "restart", "raspimidihub"]))
-            return Response.json({"status": "updated", "message": "Restarting service..."})
-        except Exception as e:
-            log.exception("Update failed")
-            return Response.error(f"Update failed: {e}", 500)
+            await server.send_sse("update-progress", {"step": "downloading"})
+            try:
+                await loop.run_in_executor(None, urllib.request.urlretrieve, deb_url, deb_path)
+            except Exception as e:
+                await server.send_sse("update-progress", {"step": "error", "message": f"Download failed: {e}"})
+                return
+
+            await server.send_sse("update-progress", {"step": "installing"})
+            try:
+                def _install():
+                    subprocess.run(["mount", "-o", "remount,rw", "/"],
+                                   check=True, timeout=5)
+                    try:
+                        subprocess.run(["dpkg", "-i", deb_path],
+                                       check=True, timeout=30, capture_output=True, text=True)
+                    finally:
+                        subprocess.run(["mount", "-o", "remount,ro", "/"],
+                                       check=False, timeout=5)
+                await loop.run_in_executor(None, _install)
+            except Exception as e:
+                await server.send_sse("update-progress", {"step": "error", "message": f"Install failed: {e}"})
+                return
+
+            await server.send_sse("update-progress", {"step": "restarting"})
+            await asyncio.sleep(1)
+            subprocess.Popen(["systemctl", "restart", "raspimidihub"])
+
+        # Fire and forget — progress via SSE
+        asyncio.ensure_future(_do_update())
+        return Response.json({"status": "started"})
 
     # ================================================================
     # POST /api/config/load — reload saved config from disk

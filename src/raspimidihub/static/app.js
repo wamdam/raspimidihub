@@ -911,11 +911,13 @@ function NetworkCard({ iface, showToast }) {
 }
 
 // --- Upgrade Card ---
-function UpgradeCard({ showToast }) {
+const UPDATE_STEPS = { downloading: 'Downloading...', installing: 'Installing...', restarting: 'Restarting service...' };
+
+function UpgradeCard({ showToast, updateStep }) {
     const [info, setInfo] = useState(null);
     const [checking, setChecking] = useState(false);
-    const [installing, setInstalling] = useState(false);
     const [showLog, setShowLog] = useState(false);
+    const busy = !!updateStep;
 
     const check = async () => {
         setChecking(true);
@@ -928,12 +930,10 @@ function UpgradeCard({ showToast }) {
     const install = async () => {
         if (!info || !info.deb_url) return;
         if (!confirm(`Update to v${info.latest}? The service will restart.`)) return;
-        setInstalling(true);
-        showToast('Downloading update...');
-        const res = await api('/system/update', { method: 'POST', body: JSON.stringify({ deb_url: info.deb_url }) });
-        if (res.error) { showToast('Update failed: ' + res.error); setInstalling(false); }
-        else showToast('Updated! Restarting...');
+        await api('/system/update', { method: 'POST', body: JSON.stringify({ deb_url: info.deb_url }) });
     };
+
+    const stepLabel = UPDATE_STEPS[updateStep] || updateStep;
 
     return html`
         <div class="card">
@@ -955,8 +955,8 @@ function UpgradeCard({ showToast }) {
                     </div>
                 `}
                 ${info.update_available
-                    ? html`<button class="btn btn-success btn-block" onclick=${install} disabled=${installing}>
-                        ${installing ? 'Installing...' : 'Install v' + info.latest}</button>`
+                    ? html`<button class="btn btn-success btn-block" onclick=${install} disabled=${busy}>
+                        ${busy ? stepLabel : 'Install v' + info.latest}</button>`
                     : html`<button class="btn btn-secondary btn-block" onclick=${check} disabled=${checking}>
                         ${checking ? 'Checking...' : 'Check for updates'}</button>`}
                 ${info.offline && html`<p style="font-size:11px;color:var(--text-dim);margin-top:4px">No internet connection — connect to a network to check for updates.</p>`}
@@ -1087,7 +1087,7 @@ function WiFiCard({ showToast }) {
 }
 
 // --- Settings Page ---
-function SettingsPage({ showToast, showMidiBar, toggleMidiBar }) {
+function SettingsPage({ showToast, showMidiBar, toggleMidiBar, updateStep }) {
     const [ifaces, setIfaces] = useState([]);
     useEffect(() => { api('/network').then(setIfaces).catch(() => {}); }, []);
 
@@ -1110,7 +1110,7 @@ function SettingsPage({ showToast, showMidiBar, toggleMidiBar }) {
                 <span>MIDI activity bar</span>
             </label>
         </div>
-        <${UpgradeCard} showToast=${showToast} />
+        <${UpgradeCard} showToast=${showToast} updateStep=${updateStep} />
         <div class="card">
             <h3>System</h3>
             <button class="btn btn-danger btn-block" onclick=${rebootPi}>Reboot Pi</button>
@@ -1129,6 +1129,7 @@ function App() {
     const [showMidiBar, setShowMidiBar] = useState(() => localStorage.getItem('midiBar') !== 'off');
     const [midiEvents, setMidiEvents] = useState({});  // src_client -> {name, text}
     const [sseConnected, setSseConnected] = useState(true);
+    const [updateStep, setUpdateStep] = useState(null);
 
     const refresh = useCallback(async () => {
         const [devs, conns] = await Promise.all([api('/devices'), api('/connections')]);
@@ -1144,6 +1145,10 @@ function App() {
     useSSE((type, data) => {
         if (type === 'device-connected' || type === 'device-disconnected' || type === 'connection-changed') {
             refresh();
+        }
+        if (type === 'update-progress') {
+            setUpdateStep(data.step);
+            if (data.step === 'error') showToast(data.message || 'Update failed');
         }
         if (type === 'midi-activity' && showMidiBar) {
             const dev = devices.find(d => d.client_id === data.src_client);
@@ -1183,7 +1188,7 @@ function App() {
             page = html`<${StatusPage} devices=${devices} onDeviceSelect=${setSelectedDevice} />`;
             break;
         case 'settings':
-            page = html`<${SettingsPage} showToast=${showToast} showMidiBar=${showMidiBar} toggleMidiBar=${toggleMidiBar} />`;
+            page = html`<${SettingsPage} showToast=${showToast} showMidiBar=${showMidiBar} toggleMidiBar=${toggleMidiBar} updateStep=${updateStep} />`;
             break;
     }
 
