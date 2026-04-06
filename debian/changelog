@@ -1,8 +1,9 @@
-raspimidihub (1.1.2-1) unstable; urgency=medium
+raspimidihub (1.1.3-1) unstable; urgency=medium
 
   * Update progress: show Downloading/Installing/Restarting via SSE
   * Disabled button styling (dimmed + not-allowed cursor)
   * Save/Load Config buttons show progress and disable during operation
+  * Fix update button showing no feedback after confirm
 
  -- Daniel Kraft <wam@poplr.de>  Sun, 06 Apr 2026 13:00:00 +0200
 

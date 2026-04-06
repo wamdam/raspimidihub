@@ -4,11 +4,12 @@ All notable changes to RaspiMIDIHub will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
-## [1.1.2] - 2026-04-06
+## [1.1.3] - 2026-04-06
 
 ### Improved
 - Update button shows live progress: Downloading / Installing / Restarting.
 - All action buttons disable during operations with dimmed styling.
+- Immediate feedback after confirming update.
 
 ## [1.1.1] - 2026-04-06
 
