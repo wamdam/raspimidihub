@@ -4,6 +4,26 @@ All notable changes to RaspiMIDIHub will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.2.0] - 2026-04-06
+
+### Added
+- **In-app software updates**: check for new releases, view changelog, one-click
+  install with live progress (Downloading → Installing → Restarting).
+  Uses an external update script that survives the service restart.
+- Version number displayed in header bar.
+- Page auto-reloads after upgrade to pick up new JS/CSS.
+
+### Changed
+- Redesigned WiFi settings: single card with clear AP/client mode indicator.
+- WiFi client mode: writes .nmconnection file directly (works on read-only fs).
+- Sorted devices alphabetically in connection matrix and device list.
+
+### Fixed
+- Channel filtering: direct ALSA subscription now properly removed when
+  switching to userspace filter engine.
+- Captive portal: returns success responses so mobile OS stays connected.
+- MIDI activity bar: no longer shows ALSA system events.
+
 ## [1.1.7] - 2026-04-06
 
 ### Changed

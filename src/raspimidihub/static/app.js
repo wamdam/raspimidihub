@@ -955,10 +955,8 @@ function UpgradeCard({ showToast }) {
                 // Check if version changed (service restarted with new code)
                 if (s && s.version && s.version !== startVersion) {
                     clearInterval(poll);
-                    setUpdating(false);
-                    setStatus('');
-                    showToast('Updated to v' + s.version);
-                    setInfo({ ...info, current: s.version, update_available: false });
+                    // Reload page to pick up new JS/CSS
+                    location.reload();
                     return;
                 }
             } catch (e) {
@@ -1160,6 +1158,7 @@ function App() {
     const [connections, setConnections] = useState([]);
     const [toast, setToast] = useState('');
     const [configFallback, setConfigFallback] = useState(false);
+    const [version, setVersion] = useState('');
     const [selectedDevice, setSelectedDevice] = useState(null);
     const [showMidiBar, setShowMidiBar] = useState(() => localStorage.getItem('midiBar') !== 'off');
     const [midiEvents, setMidiEvents] = useState({});  // src_client -> {name, text}
@@ -1173,7 +1172,7 @@ function App() {
 
     useEffect(() => {
         refresh();
-        api('/system').then(s => setConfigFallback(s.config_fallback));
+        api('/system').then(s => { setConfigFallback(s.config_fallback); setVersion(s.version || ''); });
     }, []);
 
     useSSE((type, data) => {
@@ -1224,7 +1223,7 @@ function App() {
 
     return html`
         <div class="header">
-            <h1>RaspiMIDIHub</h1>
+            <h1>RaspiMIDIHub${version ? html` <span style="font-size:11px;font-weight:400;color:var(--text-dim)">v${version}</span>` : ''}</h1>
             <span class="status ${sseConnected ? (devices.length > 0 ? 'ok' : '') : 'err'}">${sseConnected ? `${devices.length} device${devices.length !== 1 ? 's' : ''}` : 'Connection lost'}</span>
         </div>
         ${configFallback && html`<div class="banner">Config unreadable — using default all-to-all routing. Save to fix.</div>`}

@@ -1,3 +1,16 @@
+raspimidihub (1.2.0-1) unstable; urgency=medium
+
+  * In-app software updates with live progress and auto-reload
+  * Version number in header bar
+  * Redesigned WiFi settings with clear mode indicator
+  * WiFi client mode works on read-only filesystem
+  * Fix channel filtering (direct ALSA subscription removal)
+  * Fix captive portal (success responses instead of redirects)
+  * Sorted devices in matrix and device list
+  * Disabled button styling during operations
+
+ -- Daniel Kraft <wam@poplr.de>  Sun, 06 Apr 2026 17:00:00 +0200
+
 raspimidihub (1.1.7-1) unstable; urgency=medium
 
   * Rewrite update mechanism: external script survives service restart
