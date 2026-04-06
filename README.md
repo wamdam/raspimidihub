@@ -93,16 +93,20 @@ See the full [UI Guide](docs/UI_GUIDE.md) for all screens.
 The Pi needs internet access during installation to download dependencies (hostapd, dnsmasq, ntpsec). Connect via Ethernet or configure WiFi first.
 
 ```bash
-# Download both packages
-wget https://github.com/wamdam/raspimidihub/releases/latest/download/raspimidihub_1.2.0-1_all.deb
-wget https://github.com/wamdam/raspimidihub/releases/latest/download/raspimidihub-rosetup_1.0.0-1_all.deb
-
-# Install both at once (all dependencies are downloaded before anything starts)
-sudo apt install ./raspimidihub_1.2.0-1_all.deb ./raspimidihub-rosetup_1.0.0-1_all.deb
-
-# Reboot to activate read-only filesystem
+curl -sL https://github.com/wamdam/raspimidihub/releases/latest/download/install.sh | bash
 sudo reboot
 ```
+
+<details>
+<summary>Manual installation</summary>
+
+```bash
+wget https://github.com/wamdam/raspimidihub/releases/latest/download/raspimidihub_1.2.0-1_all.deb
+wget https://github.com/wamdam/raspimidihub/releases/latest/download/raspimidihub-rosetup_1.0.0-1_all.deb
+sudo apt install ./raspimidihub_1.2.0-1_all.deb ./raspimidihub-rosetup_1.0.0-1_all.deb
+sudo reboot
+```
+</details>
 
 After reboot, the Pi runs with a read-only filesystem and all connected MIDI devices are automatically routed to each other. The WiFi AP starts automatically — no internet needed after installation.
 
