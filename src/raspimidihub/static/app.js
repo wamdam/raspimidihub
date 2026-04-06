@@ -904,18 +904,74 @@ function NetworkCard({ iface, showToast }) {
     `;
 }
 
-// --- Settings Page ---
-function SettingsPage({ showToast, showMidiBar, toggleMidiBar }) {
+// --- Upgrade Card ---
+function UpgradeCard({ showToast }) {
+    const [info, setInfo] = useState(null);
+    const [checking, setChecking] = useState(false);
+    const [installing, setInstalling] = useState(false);
+    const [showLog, setShowLog] = useState(false);
+
+    const check = async () => {
+        setChecking(true);
+        const res = await api('/system/update-check');
+        setInfo(res);
+        setChecking(false);
+    };
+    useEffect(() => { check(); }, []);
+
+    const install = async () => {
+        if (!info || !info.deb_url) return;
+        if (!confirm(`Update to v${info.latest}? The service will restart.`)) return;
+        setInstalling(true);
+        showToast('Downloading update...');
+        const res = await api('/system/update', { method: 'POST', body: JSON.stringify({ deb_url: info.deb_url }) });
+        if (res.error) { showToast('Update failed: ' + res.error); setInstalling(false); }
+        else showToast('Updated! Restarting...');
+    };
+
+    return html`
+        <div class="card">
+            <h3>Software Update</h3>
+            ${!info ? html`
+                <p style="color:var(--text-dim)">${checking ? 'Checking for updates...' : ''}</p>
+            ` : html`
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                    <span style="font-size:13px">Current: <b>v${info.current}</b></span>
+                    ${info.update_available
+                        ? html`<span style="font-size:13px;color:var(--success)">Available: <b>v${info.latest}</b></span>`
+                        : html`<span style="font-size:13px;color:var(--text-dim)">Up to date</span>`}
+                </div>
+                ${info.update_available && info.changelog && html`
+                    <div style="margin-bottom:8px">
+                        <button style="background:none;border:none;color:var(--accent);font-size:12px;cursor:pointer;padding:0"
+                            onclick=${() => setShowLog(!showLog)}>${showLog ? '\u25bc' : '\u25b6'} Changelog</button>
+                        ${showLog && html`<pre style="font-size:11px;color:var(--text-dim);white-space:pre-wrap;margin-top:4px;max-height:200px;overflow-y:auto;background:var(--bg);padding:8px;border-radius:6px">${info.changelog}</pre>`}
+                    </div>
+                `}
+                ${info.update_available
+                    ? html`<button class="btn btn-success btn-block" onclick=${install} disabled=${installing}>
+                        ${installing ? 'Installing...' : 'Install v' + info.latest}</button>`
+                    : html`<button class="btn btn-secondary btn-block" onclick=${check} disabled=${checking}>
+                        ${checking ? 'Checking...' : 'Check for updates'}</button>`}
+                ${info.offline && html`<p style="font-size:11px;color:var(--text-dim);margin-top:4px">No internet connection — connect to a network to check for updates.</p>`}
+            `}
+        </div>
+    `;
+}
+
+// --- WiFi Card ---
+function WiFiCard({ showToast }) {
     const [wifi, setWifi] = useState(null);
+    const [wantMode, setWantMode] = useState(null); // null = show current, 'ap' or 'client' = show switch form
     const [apPassword, setApPassword] = useState('');
     const [clientSsid, setClientSsid] = useState('');
     const [clientPassword, setClientPassword] = useState('');
     const [networks, setNetworks] = useState([]);
     const [scanning, setScanning] = useState(false);
-    const [ifaces, setIfaces] = useState([]);
+    const [switching, setSwitching] = useState(false);
 
-    useEffect(() => { api('/wifi').then(setWifi).catch(() => {}); }, []);
-    useEffect(() => { api('/network').then(setIfaces).catch(() => {}); }, []);
+    const refresh = () => api('/wifi').then(w => { setWifi(w); setWantMode(null); }).catch(() => {});
+    useEffect(() => { refresh(); }, []);
 
     const scanNetworks = async () => {
         setScanning(true);
@@ -923,26 +979,112 @@ function SettingsPage({ showToast, showMidiBar, toggleMidiBar }) {
         setNetworks(nets || []);
         setScanning(false);
     };
-    useEffect(() => { scanNetworks(); }, []);
 
     const switchToAp = async () => {
+        setSwitching(true);
         const body = {};
         if (apPassword) body.password = apPassword;
         await api('/wifi/ap', { method: 'POST', body: JSON.stringify(body) });
-        api('/wifi').then(setWifi);
+        setSwitching(false);
         showToast('Switched to AP mode');
+        refresh();
     };
     const switchToClient = async () => {
         if (!clientSsid) return;
-        showToast('Connecting... Find me at http://raspimidihub.local');
+        setSwitching(true);
+        showToast('Connecting...');
         const res = await api('/wifi/client', {
             method: 'POST',
             body: JSON.stringify({ ssid: clientSsid, password: clientPassword }),
         });
+        setSwitching(false);
         if (res.error) showToast('Connection failed: ' + res.error);
-        else showToast('Connected! Go to http://raspimidihub.local');
-        api('/wifi').then(setWifi);
+        else showToast('Connected to ' + clientSsid);
+        refresh();
     };
+
+    const isAp = wifi && wifi.mode === 'ap';
+    const isClient = wifi && wifi.mode === 'client';
+
+    return html`
+        <div class="card">
+            <h3>WiFi</h3>
+            ${!wifi ? html`<p style="color:var(--text-dim)">Loading...</p>` : html`
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;padding:10px;background:var(--bg);border-radius:6px">
+                    <span style="font-size:20px">${isAp ? '\uD83D\uDCE1' : '\uD83D\uDD17'}</span>
+                    <div style="flex:1">
+                        <div style="font-size:15px;font-weight:600">${isAp ? 'Access Point' : 'Client'}: ${wifi.ssid || '-'}</div>
+                        <div style="font-size:12px;color:var(--text-dim)">${wifi.ip || 'No IP'}</div>
+                    </div>
+                    <span style="font-size:11px;padding:3px 8px;border-radius:4px;font-weight:600;${isAp
+                        ? 'background:var(--accent2);color:#fff'
+                        : 'background:var(--success);color:#fff'}">${isAp ? 'AP' : 'WiFi'}</span>
+                </div>
+
+                ${wantMode === null && html`
+                    <div class="btn-group">
+                        ${isClient && html`<button class="btn btn-secondary" onclick=${() => setWantMode('ap')}>Switch to AP</button>`}
+                        ${isAp && html`<button class="btn btn-secondary" onclick=${() => { setWantMode('client'); scanNetworks(); }}>Join WiFi</button>`}
+                        ${isAp && html`<button class="btn btn-secondary" onclick=${() => setWantMode('ap-settings')}>AP Settings</button>`}
+                    </div>
+                `}
+
+                ${wantMode === 'ap-settings' && html`
+                    <div class="form-group">
+                        <label>AP Password (min 8 chars)</label>
+                        <input type="password" value=${apPassword} onInput=${e => setApPassword(e.target.value)} placeholder="Leave empty to keep current" />
+                    </div>
+                    <div class="btn-group">
+                        <button class="btn btn-secondary" onclick=${() => setWantMode(null)}>Cancel</button>
+                        <button class="btn btn-primary" onclick=${switchToAp} disabled=${switching}>${switching ? 'Applying...' : 'Apply'}</button>
+                    </div>
+                `}
+
+                ${wantMode === 'ap' && html`
+                    <p style="font-size:13px;color:var(--text-dim);margin-bottom:8px">Switch back to access point mode?</p>
+                    <div class="form-group">
+                        <label>AP Password (min 8 chars)</label>
+                        <input type="password" value=${apPassword} onInput=${e => setApPassword(e.target.value)} placeholder="Leave empty to keep current" />
+                    </div>
+                    <div class="btn-group">
+                        <button class="btn btn-secondary" onclick=${() => setWantMode(null)}>Cancel</button>
+                        <button class="btn btn-primary" onclick=${switchToAp} disabled=${switching}>${switching ? 'Switching...' : 'Switch to AP'}</button>
+                    </div>
+                `}
+
+                ${wantMode === 'client' && html`
+                    <div class="form-group">
+                        <label>WiFi Network</label>
+                        <div style="display:flex;gap:8px">
+                            <select style="flex:1" value=${clientSsid} onChange=${e => setClientSsid(e.target.value)}>
+                                <option value="">Select network...</option>
+                                ${networks.map(n => html`<option value=${n.ssid}>${n.ssid} (${n.signal}%${n.security ? ' ' + n.security : ''})</option>`)}
+                            </select>
+                            <button class="btn btn-secondary" style="min-width:48px;padding:8px" onclick=${scanNetworks}>
+                                ${scanning ? '...' : '\u21bb'}
+                            </button>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Password</label>
+                        <input type="password" value=${clientPassword} onInput=${e => setClientPassword(e.target.value)} />
+                    </div>
+                    <div class="btn-group">
+                        <button class="btn btn-secondary" onclick=${() => setWantMode(null)}>Cancel</button>
+                        <button class="btn btn-primary" onclick=${switchToClient} disabled=${switching || !clientSsid}>${switching ? 'Connecting...' : 'Connect'}</button>
+                    </div>
+                    <p style="font-size:11px;color:var(--text-dim);margin-top:6px;text-align:center">After connecting, find this device at <b>http://raspimidihub.local</b></p>
+                `}
+            `}
+        </div>
+    `;
+}
+
+// --- Settings Page ---
+function SettingsPage({ showToast, showMidiBar, toggleMidiBar }) {
+    const [ifaces, setIfaces] = useState([]);
+    useEffect(() => { api('/network').then(setIfaces).catch(() => {}); }, []);
+
     const rebootPi = async () => {
         if (confirm('Reboot the Raspberry Pi?')) {
             showToast('Rebooting...');
@@ -951,45 +1093,7 @@ function SettingsPage({ showToast, showMidiBar, toggleMidiBar }) {
     };
 
     return html`
-        <div class="card">
-            <h3>WiFi Status</h3>
-            ${wifi ? html`
-                <div class="stat-grid">
-                    <div class="stat"><div class="label">Mode</div><div class="value">${wifi.mode}</div></div>
-                    <div class="stat"><div class="label">SSID</div><div class="value">${wifi.ssid || '-'}</div></div>
-                    <div class="stat"><div class="label">IP</div><div class="value">${wifi.ip || '-'}</div></div>
-                </div>
-            ` : html`<p style="color:var(--text-dim)">WiFi info unavailable</p>`}
-        </div>
-        <div class="card">
-            <h3>Access Point Mode</h3>
-            <div class="form-group">
-                <label>AP Password (min 8 chars)</label>
-                <input type="password" value=${apPassword} onInput=${e => setApPassword(e.target.value)} placeholder="Leave empty to keep current" />
-            </div>
-            <button class="btn btn-primary btn-block" onclick=${switchToAp}>Switch to AP Mode</button>
-        </div>
-        <div class="card">
-            <h3>Client Mode (Join WiFi)</h3>
-            <div class="form-group">
-                <label>WiFi Network</label>
-                <div style="display:flex;gap:8px">
-                    <select style="flex:1" value=${clientSsid} onChange=${e => setClientSsid(e.target.value)}>
-                        <option value="">Select network...</option>
-                        ${networks.map(n => html`<option value=${n.ssid}>${n.ssid} (${n.signal}%${n.security ? ' ' + n.security : ''})</option>`)}
-                    </select>
-                    <button class="btn btn-secondary" style="min-width:48px;padding:8px" onclick=${scanNetworks}>
-                        ${scanning ? '...' : '\u21bb'}
-                    </button>
-                </div>
-            </div>
-            <div class="form-group">
-                <label>Password</label>
-                <input type="password" value=${clientPassword} onInput=${e => setClientPassword(e.target.value)} />
-            </div>
-            <button class="btn btn-primary btn-block" onclick=${switchToClient}>Connect</button>
-            <p style="font-size:11px;color:var(--text-dim);margin-top:6px;text-align:center">After connecting, find this device at <b>http://raspimidihub.local</b></p>
-        </div>
+        <${WiFiCard} showToast=${showToast} />
         ${ifaces.filter(i => i.interface !== 'wlan0').map(i => html`
             <${NetworkCard} iface=${i} showToast=${showToast} />
         `)}
@@ -1000,6 +1104,7 @@ function SettingsPage({ showToast, showMidiBar, toggleMidiBar }) {
                 <span>MIDI activity bar</span>
             </label>
         </div>
+        <${UpgradeCard} showToast=${showToast} />
         <div class="card">
             <h3>System</h3>
             <button class="btn btn-danger btn-block" onclick=${rebootPi}>Reboot Pi</button>

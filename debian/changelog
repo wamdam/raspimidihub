@@ -1,3 +1,13 @@
+raspimidihub (1.1.1-1) unstable; urgency=medium
+
+  * Fix channel filtering: remove direct ALSA subscription on filtered connections
+  * Fix WiFi client mode on read-only filesystem (write .nmconnection directly)
+  * Fix MIDI bar showing ALSA system events
+  * Add software update UI with changelog viewer
+  * Redesign WiFi settings page with clear mode indicator
+
+ -- Daniel Kraft <wam@poplr.de>  Sun, 06 Apr 2026 12:00:00 +0200
+
 raspimidihub (1.1.0-1) unstable; urgency=medium
 
   * Fix captive portal: return success responses instead of redirects

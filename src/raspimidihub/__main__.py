@@ -87,6 +87,9 @@ async def async_main() -> None:
     }
 
     def on_midi_event(ev):
+        # Only process known MIDI events, not system/subscription events
+        if ev.type not in _EVENT_NAMES:
+            return
         led.midi_blink()
         key = f"{ev.source.client}:{ev.source.port}"
         now = _time.monotonic()
@@ -94,7 +97,7 @@ async def async_main() -> None:
             return
         _last_activity[key] = now
 
-        ev_name = _EVENT_NAMES.get(ev.type, f"type:{ev.type}")
+        ev_name = _EVENT_NAMES[ev.type]
         data = {
             "src_client": ev.source.client,
             "src_port": ev.source.port,
@@ -114,23 +117,16 @@ async def async_main() -> None:
     engine.on_midi_event(on_midi_event)
 
     try:
+        # Store config ref before start() so _scan_and_connect uses saved config
+        if config_ok:
+            engine._config = config
+
         engine.start()
 
         # Load custom device names from config
         device_names = config.data.get("device_names", {})
         if device_names:
             engine.device_registry.load_custom_names(device_names)
-
-        # Store config ref so hotplug rescan can restore mappings
-        if config_ok:
-            engine._config = config
-
-        # Apply saved config or fall back to all-to-all
-        if config_ok and config.mode == "custom" and config.connections:
-            log.info("Restoring saved routing configuration...")
-            _apply_saved_config(engine, config)
-        else:
-            engine._scan_and_connect()
 
         if not config_ok:
             led.set_fast_blink()
@@ -240,6 +236,11 @@ def _apply_saved_config(engine: MidiEngine, config: Config) -> None:
             midi_filter = MidiFilter()
 
         if needs_userspace and engine.filter_engine:
+            # Remove any direct ALSA subscription that might exist
+            try:
+                engine._seq.unsubscribe(src_client, src_port, dst_client, dst_port)
+            except OSError:
+                pass
             engine.filter_engine.add_filter(
                 src_client, src_port, dst_client, dst_port, midi_filter
             )

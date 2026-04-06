@@ -146,16 +146,56 @@ no-hosts
         """Switch to client mode — connect to an existing WiFi network.
         Returns True on success.
         """
+        import time
+        import uuid
+
         self.stop_ap()
+
+        # Write .nmconnection file directly (bypasses NM keyfile plugin writability check)
+        _run(["mount", "-o", "remount,rw", "/"], check=False, timeout=5)
+        try:
+            conn_file = NM_CONN_DIR / f"{ssid}.nmconnection"
+            conn_uuid = str(uuid.uuid4())
+            conf = (
+                f"[connection]\n"
+                f"id={ssid}\n"
+                f"uuid={conn_uuid}\n"
+                f"type=wifi\n"
+                f"interface-name={WLAN_IFACE}\n"
+                f"\n"
+                f"[wifi]\n"
+                f"mode=infrastructure\n"
+                f"ssid={ssid}\n"
+                f"\n"
+                f"[wifi-security]\n"
+                f"key-mgmt=wpa-psk\n"
+                f"psk={password}\n"
+                f"\n"
+                f"[ipv4]\n"
+                f"method=auto\n"
+                f"\n"
+                f"[ipv6]\n"
+                f"method=disabled\n"
+            )
+            conn_file.write_text(conf)
+            conn_file.chmod(0o600)
+            log.info("Wrote WiFi connection file for %s", ssid)
+        except Exception:
+            log.exception("Failed to write WiFi connection file")
+            return False
+        finally:
+            _run(["mount", "-o", "remount,ro", "/"], check=False, timeout=5)
 
         # Give wlan0 back to NetworkManager
         _run(["nmcli", "device", "set", WLAN_IFACE, "managed", "yes"], check=False)
+        # Reload NM to pick up the new connection file
+        _run(["nmcli", "connection", "reload"], check=False, timeout=5)
+        time.sleep(2)
 
-        # Try to connect
+        # Activate the connection
         try:
             result = _run(
-                ["nmcli", "device", "wifi", "connect", ssid,
-                 "password", password, "ifname", WLAN_IFACE],
+                ["nmcli", "connection", "up", ssid, "ifname", WLAN_IFACE],
                 check=True, timeout=CLIENT_TIMEOUT,
             )
             self._mode = "client"
@@ -163,7 +203,7 @@ no-hosts
             log.info("Connected to WiFi: %s", ssid)
             return True
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
-            log.warning("Failed to connect to %s: %s", ssid, e)
+            log.warning("Failed to activate %s: %s", ssid, e)
             return False
 
     async def start_client_with_fallback(self, ssid: str, password: str,

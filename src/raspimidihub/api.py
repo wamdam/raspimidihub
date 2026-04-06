@@ -673,6 +673,83 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         return Response.json({"status": "rebooting"})
 
     # ================================================================
+    # GET /api/system/update-check — check for newer release on GitHub
+    # ================================================================
+
+    @server.route("GET", "/api/system/update-check")
+    async def api_update_check(req: Request) -> Response:
+        import urllib.request
+        import json as _json
+
+        loop = asyncio.get_event_loop()
+
+        def _check():
+            url = "https://api.github.com/repos/wamdam/raspimidihub/releases/latest"
+            rq = urllib.request.Request(url, headers={"Accept": "application/vnd.github+json"})
+            with urllib.request.urlopen(rq, timeout=10) as resp:
+                data = _json.loads(resp.read())
+            tag = data.get("tag_name", "")
+            latest = tag.lstrip("v")
+            body = data.get("body", "")
+            # Find the .deb asset URL
+            deb_url = ""
+            for asset in data.get("assets", []):
+                name = asset.get("name", "")
+                if name.startswith("raspimidihub_") and name.endswith("_all.deb"):
+                    deb_url = asset.get("browser_download_url", "")
+                    break
+            return {"current": __version__, "latest": latest, "changelog": body,
+                    "deb_url": deb_url, "update_available": latest != __version__}
+
+        try:
+            result = await loop.run_in_executor(None, _check)
+            return Response.json(result)
+        except Exception as e:
+            log.warning("Update check failed: %s", e)
+            return Response.json({"current": __version__, "latest": __version__,
+                                  "changelog": "", "deb_url": "",
+                                  "update_available": False, "offline": True})
+
+    # ================================================================
+    # POST /api/system/update — download and install latest .deb
+    # ================================================================
+
+    @server.route("POST", "/api/system/update")
+    async def api_update(req: Request) -> Response:
+        import subprocess
+        import urllib.request
+
+        data = req.json
+        deb_url = data.get("deb_url", "")
+        if not deb_url or "github.com" not in deb_url:
+            return Response.error("Invalid download URL")
+
+        loop = asyncio.get_event_loop()
+
+        def _download_and_install():
+            deb_path = "/tmp/raspimidihub-update.deb"
+            urllib.request.urlretrieve(deb_url, deb_path)
+            subprocess.run(["sudo", "mount", "-o", "remount,rw", "/"],
+                           check=True, timeout=5)
+            try:
+                subprocess.run(["sudo", "dpkg", "-i", deb_path],
+                               check=True, timeout=30, capture_output=True, text=True)
+            finally:
+                subprocess.run(["sudo", "mount", "-o", "remount,ro", "/"],
+                               check=False, timeout=5)
+            return True
+
+        try:
+            await loop.run_in_executor(None, _download_and_install)
+            # Restart service after short delay
+            asyncio.get_event_loop().call_later(
+                2, lambda: subprocess.Popen(["sudo", "systemctl", "restart", "raspimidihub"]))
+            return Response.json({"status": "updated", "message": "Restarting service..."})
+        except Exception as e:
+            log.exception("Update failed")
+            return Response.error(f"Update failed: {e}", 500)
+
+    # ================================================================
     # POST /api/config/load — reload saved config from disk
     # ================================================================
 

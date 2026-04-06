@@ -4,6 +4,20 @@ All notable changes to RaspiMIDIHub will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.1.1] - 2026-04-06
+
+### Fixed
+- Channel filtering now actually blocks MIDI: direct ALSA subscription was not
+  removed when switching to userspace filter on startup.
+- WiFi client mode: write .nmconnection file directly instead of relying on
+  nmcli (which fails on read-only filesystem).
+- MIDI activity bar no longer shows ALSA system events (e.g. "0 type 66").
+
+### Added
+- Software update UI: check for new releases, view changelog, one-click install.
+- Redesigned WiFi settings: single card with clear mode indicator and contextual actions.
+- Offline-friendly update check (shows "no internet" instead of raw error).
+
 ## [1.1.0] - 2026-04-06
 
 ### Fixed
