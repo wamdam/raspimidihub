@@ -4,6 +4,12 @@ All notable changes to RaspiMIDIHub will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.3.1] - 2026-04-06
+
+### Fixed
+- Network settings: nmcli reload/activate timeout no longer fails the operation.
+- Static IP now includes DNS servers (8.8.8.8, 8.8.4.4) automatically.
+
 ## [1.3.0] - 2026-04-06
 
 ### Added

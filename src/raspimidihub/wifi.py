@@ -392,6 +392,7 @@ def configure_interface(iface: str, method: str, address: str = "",
                     new_lines.append(f"address1={address}/{prefix}")
                     if gateway:
                         new_lines[-1] += f",{gateway}"
+                    new_lines.append("dns=8.8.8.8;8.8.4.4;")
                 new_lines.append(f"method={method}")
                 ipv4_written = True
                 continue
@@ -400,7 +401,7 @@ def configure_interface(iface: str, method: str, address: str = "",
                     # New section, end of ipv4
                     in_ipv4 = False
                     new_lines.append(line)
-                elif line.startswith("address") or line.startswith("method"):
+                elif line.startswith(("address", "method", "dns")):
                     continue  # Skip old ipv4 settings
                 else:
                     new_lines.append(line)
@@ -409,12 +410,18 @@ def configure_interface(iface: str, method: str, address: str = "",
 
         conn_file.write_text("\n".join(new_lines) + "\n")
 
-        # Reload NM and apply
-        _run(["nmcli", "connection", "reload"], check=False, timeout=5)
+        # Reload NM and apply — timeouts are non-fatal (file is already written)
+        try:
+            _run(["nmcli", "connection", "reload"], check=False, timeout=10)
+        except subprocess.TimeoutExpired:
+            log.warning("nmcli reload timed out, continuing")
         if conn_name:
-            _run(["nmcli", "connection", "up", conn_name], check=False, timeout=10)
+            try:
+                _run(["nmcli", "connection", "up", conn_name], check=False, timeout=15)
+            except subprocess.TimeoutExpired:
+                log.warning("nmcli connection up timed out, continuing")
 
-        log.info("Configured %s: method=%s address=%s", iface, method, address)
+        log.info("Configured %s: method=%s address=%s gateway=%s", iface, method, address, gateway)
         return True
 
     except Exception:
