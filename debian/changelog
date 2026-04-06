@@ -1,3 +1,11 @@
+raspimidihub (1.2.1-1) unstable; urgency=medium
+
+  * Add reset-wifi command for AP recovery
+  * One-line installer script (curl | bash)
+  * Fix install instructions: install both debs in one command
+
+ -- Daniel Kraft <wam@poplr.de>  Sun, 06 Apr 2026 18:00:00 +0200
+
 raspimidihub (1.2.0-1) unstable; urgency=medium
 
   * In-app software updates with live progress and auto-reload

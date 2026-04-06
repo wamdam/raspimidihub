@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "raspimidihub"
-version = "1.2.0"
+version = "1.2.1"
 description = "Automatic USB MIDI hub for Raspberry Pi"
 readme = "README.md"
 license = {text = "MIT"}

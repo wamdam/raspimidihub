@@ -4,6 +4,12 @@ All notable changes to RaspiMIDIHub will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.2.1] - 2026-04-06
+
+### Added
+- `sudo reset-wifi` command to recover AP mode when Pi is unreachable.
+- One-line installer: `curl -sL .../install.sh | bash`.
+
 ## [1.2.0] - 2026-04-06
 
 ### Added
