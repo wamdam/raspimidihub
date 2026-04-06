@@ -93,15 +93,12 @@ See the full [UI Guide](docs/UI_GUIDE.md) for all screens.
 The Pi needs internet access during installation to download dependencies (hostapd, dnsmasq, ntpsec). Connect via Ethernet or configure WiFi first.
 
 ```bash
-# Download the latest release
+# Download both packages
 wget https://github.com/wamdam/raspimidihub/releases/latest/download/raspimidihub_1.2.0-1_all.deb
 wget https://github.com/wamdam/raspimidihub/releases/latest/download/raspimidihub-rosetup_1.0.0-1_all.deb
 
-# Install the main package first (requires internet for hostapd + dnsmasq)
-sudo apt install ./raspimidihub_1.2.0-1_all.deb
-
-# Install the read-only filesystem package (requires internet for ntpsec)
-sudo apt install ./raspimidihub-rosetup_1.0.0-1_all.deb
+# Install both at once (all dependencies are downloaded before anything starts)
+sudo apt install ./raspimidihub_1.2.0-1_all.deb ./raspimidihub-rosetup_1.0.0-1_all.deb
 
 # Reboot to activate read-only filesystem
 sudo reboot
