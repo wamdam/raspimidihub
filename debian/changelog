@@ -1,3 +1,9 @@
+raspimidihub (1.1.6-1) unstable; urgency=medium
+
+  * Fix update button: no more duplicate text, status shown below only
+
+ -- Daniel Kraft <wam@poplr.de>  Sun, 06 Apr 2026 15:30:00 +0200
+
 raspimidihub (1.1.5-1) unstable; urgency=medium
 
   * Fix update button: pass setUpdateStep prop so progress is visible

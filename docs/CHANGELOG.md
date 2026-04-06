@@ -4,6 +4,11 @@ All notable changes to RaspiMIDIHub will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.1.6] - 2026-04-06
+
+### Fixed
+- Update button text no longer duplicated; progress shown below button only.
+
 ## [1.1.5] - 2026-04-06
 
 ### Fixed

@@ -958,7 +958,7 @@ function UpgradeCard({ showToast, updateStep, setUpdateStep }) {
                 `}
                 ${info.update_available
                     ? html`<button class="btn btn-success btn-block" onclick=${install} disabled=${busy}>
-                        ${busy ? stepLabel : 'Install v' + info.latest}</button>`
+                        ${'Install v' + info.latest}</button>`
                     : html`<button class="btn btn-secondary btn-block" onclick=${check} disabled=${checking}>
                         ${checking ? 'Checking...' : 'Check for updates'}</button>`}
                 ${busy && html`<p style="font-size:13px;color:var(--warn);margin-top:8px;text-align:center;font-weight:500">${stepLabel}</p>`}
@@ -1165,7 +1165,7 @@ function App() {
         }
     }, (connected) => {
         setSseConnected(connected);
-        if (connected) refresh();
+        if (connected) { refresh(); setUpdateStep(null); }
     });
 
     const toggleMidiBar = () => {
