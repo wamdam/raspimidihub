@@ -234,6 +234,16 @@ sudo mount -o remount,ro /
 
 The `rw` and `ro` shell aliases are provided by `raspimidihub-rosetup`.
 
+### Resetting WiFi to Access Point
+
+If the Pi joined a WiFi network and you can't find it, connect a keyboard+monitor (or serial console) and run:
+
+```bash
+sudo reset-wifi
+```
+
+This removes saved WiFi connections and switches back to AP mode. You can then reconnect via the `RaspiMIDIHub-XXXX` WiFi network.
+
 ### Updating
 
 ```bash

@@ -29,12 +29,15 @@ $(DEB_FILE): src/raspimidihub/*.py src/raspimidihub/static/* systemd/raspimidihu
 	@mkdir -p $(BUILD_DIR)/lib/systemd/system
 	@mkdir -p $(BUILD_DIR)/lib/udev/rules.d
 	@mkdir -p $(BUILD_DIR)/usr/lib/raspimidihub
+	@mkdir -p $(BUILD_DIR)/usr/local/bin
 	cp src/raspimidihub/*.py $(BUILD_DIR)/usr/lib/python3/dist-packages/raspimidihub/
 	cp -r src/raspimidihub/static/* $(BUILD_DIR)/usr/lib/python3/dist-packages/raspimidihub/static/
 	cp systemd/raspimidihub.service $(BUILD_DIR)/lib/systemd/system/
 	cp udev/90-raspimidihub.rules $(BUILD_DIR)/lib/udev/rules.d/
 	cp scripts/raspimidihub-update.sh $(BUILD_DIR)/usr/lib/raspimidihub/update.sh
 	chmod 755 $(BUILD_DIR)/usr/lib/raspimidihub/update.sh
+	cp scripts/reset-wifi.sh $(BUILD_DIR)/usr/local/bin/reset-wifi
+	chmod 755 $(BUILD_DIR)/usr/local/bin/reset-wifi
 	@echo "Package: $(PACKAGE)" > $(BUILD_DIR)/DEBIAN/control
 	@echo "Version: $(VERSION)-1" >> $(BUILD_DIR)/DEBIAN/control
 	@echo "Architecture: all" >> $(BUILD_DIR)/DEBIAN/control
