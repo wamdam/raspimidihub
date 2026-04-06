@@ -155,7 +155,6 @@ async def async_main() -> None:
                     ssid=wifi_cfg.get("ap_ssid", ""),
                     password=wifi_cfg.get("ap_password", "midihub1"),
                 )
-                server.enable_captive_portal("192.168.4.1")
             except Exception:
                 log.warning("WiFi AP setup failed (no wlan0?), continuing without AP")
 
@@ -302,7 +301,6 @@ async def _wifi_watchdog(wifi, config, server) -> None:
                     wifi_cfg.get("ap_ssid", ""),
                     wifi_cfg.get("ap_password", "midihub1"),
                 )
-                server.enable_captive_portal("192.168.4.1")
                 fail_count = 0
 
 

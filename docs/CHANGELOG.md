@@ -4,6 +4,21 @@ All notable changes to RaspiMIDIHub will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.1.0] - 2026-04-06
+
+### Fixed
+- Captive portal: mobile devices no longer disconnect from AP WiFi. Probe
+  endpoints now return proper success responses instead of redirects.
+
+### Added
+- Devices sorted alphabetically in connection matrix and device list —
+  rename with `1_...`, `2_...` prefixes for consistent ordering.
+- Network settings page for configuring eth0 (DHCP or static IP).
+- Enhanced MIDI activity bar with split left/right showing device names.
+
+### Removed
+- Unused captive portal redirect/catch-all code from web server.
+
 ## [1.0.0] - 2026-04-05
 
 First stable release.

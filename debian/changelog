@@ -1,3 +1,14 @@
+raspimidihub (1.1.0-1) unstable; urgency=medium
+
+  * Fix captive portal: return success responses instead of redirects
+    so mobile OS stays connected to the AP WiFi
+  * Sort devices alphabetically in connection matrix and device list
+  * Add network settings UI for configuring eth0 (DHCP/static IP)
+  * Enhanced MIDI activity bar with split left/right device display
+  * Remove unused captive portal redirect code from web server
+
+ -- Daniel Kraft <wam@poplr.de>  Sun, 06 Apr 2026 00:00:00 +0200
+
 raspimidihub (1.0.0-1) unstable; urgency=medium
 
   * First stable release

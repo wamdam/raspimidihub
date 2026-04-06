@@ -42,6 +42,19 @@ function Toast({ message }) {
     return html`<div class="toast">${message}</div>`;
 }
 
+// --- MIDI Activity Bar ---
+function MidiBar({ events }) {
+    const entries = Object.values(events).sort((a, b) => b.ts - a.ts);
+    const truncName = (n) => n.length > 8 ? n.slice(0, 7) + '\u2026' : n;
+    if (entries.length === 0) return html`<div class="midi-bar"><span class="midi-bar-empty">\u00b7\u00b7\u00b7</span></div>`;
+    const left = entries[0];
+    const right = entries.length > 1 ? entries[1] : null;
+    return html`<div class="midi-bar">
+        <span class="midi-bar-l">${truncName(left.name)} ${left.detail}</span>
+        ${right && html`<span class="midi-bar-r">${truncName(right.name)} ${right.detail}</span>`}
+    </div>`;
+}
+
 // --- Filter Panel ---
 const MSG_TYPES = ['note', 'cc', 'pc', 'pitchbend', 'aftertouch', 'sysex', 'clock'];
 const MSG_LABELS = { note: 'Notes', cc: 'CC', pc: 'Program', pitchbend: 'Pitch Bend', aftertouch: 'Aftertouch', sysex: 'SysEx', clock: 'Clock/RT' };
@@ -387,6 +400,9 @@ function ConnectionMatrix({ devices, connections, onToggle, onFilterOpen }) {
             if (p.is_output) outputs.push({ ...p, client_id: dev.client_id, dev_name: dev.name });
         }
     }
+    const byName = (a, b) => a.dev_name.localeCompare(b.dev_name);
+    inputs.sort(byName);
+    outputs.sort(byName);
 
     const connMap = {};
     for (const c of connections) {
@@ -826,7 +842,7 @@ function StatusPage({ devices, onDeviceSelect }) {
         </div>
         <div class="card">
             <h3>Connected Devices (${devices.length})</h3>
-            ${devices.map(d => html`
+            ${[...devices].sort((a, b) => a.name.localeCompare(b.name)).map(d => html`
                 <div class="device" style="cursor:pointer" onclick=${() => onDeviceSelect(d)}>
                     <div class="dot"></div>
                     <span class="name">${d.name}</span>
@@ -834,6 +850,56 @@ function StatusPage({ devices, onDeviceSelect }) {
                 </div>
             `)}
             ${devices.length === 0 && html`<p style="color:var(--text-dim)">No devices connected</p>`}
+        </div>
+    `;
+}
+
+// --- Network Interface Config ---
+function NetworkCard({ iface, showToast }) {
+    const [method, setMethod] = useState(iface.method || 'auto');
+    const [address, setAddress] = useState(iface.address || '');
+    const [netmask, setNetmask] = useState(iface.netmask || '255.255.255.0');
+    const [gateway, setGateway] = useState(iface.gateway || '');
+    const [saving, setSaving] = useState(false);
+
+    const save = async () => {
+        setSaving(true);
+        const body = { method };
+        if (method === 'manual') { body.address = address; body.netmask = netmask; body.gateway = gateway; }
+        const res = await api(`/network/${iface.interface}`, { method: 'POST', body: JSON.stringify(body) });
+        setSaving(false);
+        if (res.error) showToast(res.error);
+        else showToast(`${iface.interface} configured`);
+    };
+
+    return html`
+        <div class="card">
+            <h3>${iface.interface} ${iface.up ? html`<span style="color:var(--success);font-size:12px">\u25cf</span>` : html`<span style="color:var(--text-dim);font-size:12px">\u25cb</span>`}</h3>
+            ${iface.address && html`<p style="font-size:13px;color:var(--text-dim);margin-bottom:8px">${iface.address}/${iface.netmask}${iface.gateway ? ` gw ${iface.gateway}` : ''}</p>`}
+            <div class="form-group">
+                <label>Mode</label>
+                <select value=${method} onChange=${e => setMethod(e.target.value)}>
+                    <option value="auto">DHCP</option>
+                    <option value="manual">Static IP</option>
+                </select>
+            </div>
+            ${method === 'manual' && html`
+                <div class="form-group">
+                    <label>IP Address</label>
+                    <input value=${address} onInput=${e => setAddress(e.target.value)} placeholder="10.1.1.2" />
+                </div>
+                <div style="display:flex;gap:8px">
+                    <div class="form-group" style="flex:1">
+                        <label>Netmask</label>
+                        <input value=${netmask} onInput=${e => setNetmask(e.target.value)} placeholder="255.255.255.0" />
+                    </div>
+                    <div class="form-group" style="flex:1">
+                        <label>Gateway</label>
+                        <input value=${gateway} onInput=${e => setGateway(e.target.value)} placeholder="optional" />
+                    </div>
+                </div>
+            `}
+            <button class="btn btn-primary btn-block" onclick=${save}>${saving ? 'Applying...' : 'Apply'}</button>
         </div>
     `;
 }
@@ -846,8 +912,10 @@ function SettingsPage({ showToast, showMidiBar, toggleMidiBar }) {
     const [clientPassword, setClientPassword] = useState('');
     const [networks, setNetworks] = useState([]);
     const [scanning, setScanning] = useState(false);
+    const [ifaces, setIfaces] = useState([]);
 
     useEffect(() => { api('/wifi').then(setWifi).catch(() => {}); }, []);
+    useEffect(() => { api('/network').then(setIfaces).catch(() => {}); }, []);
 
     const scanNetworks = async () => {
         setScanning(true);
@@ -922,6 +990,9 @@ function SettingsPage({ showToast, showMidiBar, toggleMidiBar }) {
             <button class="btn btn-primary btn-block" onclick=${switchToClient}>Connect</button>
             <p style="font-size:11px;color:var(--text-dim);margin-top:6px;text-align:center">After connecting, find this device at <b>http://raspimidihub.local</b></p>
         </div>
+        ${ifaces.filter(i => i.interface !== 'wlan0').map(i => html`
+            <${NetworkCard} iface=${i} showToast=${showToast} />
+        `)}
         <div class="card">
             <h3>Display</h3>
             <label class="msg-toggle">
@@ -945,7 +1016,7 @@ function App() {
     const [configFallback, setConfigFallback] = useState(false);
     const [selectedDevice, setSelectedDevice] = useState(null);
     const [showMidiBar, setShowMidiBar] = useState(() => localStorage.getItem('midiBar') !== 'off');
-    const [lastMidi, setLastMidi] = useState('');
+    const [midiEvents, setMidiEvents] = useState({});  // src_client -> {name, text}
     const [sseConnected, setSseConnected] = useState(true);
 
     const refresh = useCallback(async () => {
@@ -964,11 +1035,14 @@ function App() {
             refresh();
         }
         if (type === 'midi-activity' && showMidiBar) {
-            let s = data.event;
-            if (data.channel != null) s += ` ch${data.channel}`;
-            if (data.note != null) s += ` ${noteName(data.note)} vel=${data.velocity}`;
-            if (data.cc != null) s += ` cc${data.cc}=${data.value}`;
-            setLastMidi(s);
+            const dev = devices.find(d => d.client_id === data.src_client);
+            const name = dev ? dev.name : `${data.src_client}`;
+            let detail = '';
+            if (data.channel != null) detail += `[CH${data.channel}] `;
+            if (data.note != null) detail += `${noteName(data.note)} vel=${data.velocity}`;
+            else if (data.cc != null) detail += `CC${data.cc}=${data.value}`;
+            else detail += data.event;
+            setMidiEvents(prev => ({...prev, [data.src_client]: { name, detail, ts: Date.now() }}));
         }
     }, (connected) => {
         setSseConnected(connected);
@@ -1009,7 +1083,7 @@ function App() {
         </div>
         ${configFallback && html`<div class="banner">Config unreadable — using default all-to-all routing. Save to fix.</div>`}
         <div class="main ${showMidiBar ? 'with-midi-bar' : ''}">${page}</div>
-        ${showMidiBar && html`<div class="midi-bar">${lastMidi || '\u00b7\u00b7\u00b7'}</div>`}
+        ${showMidiBar && html`<${MidiBar} events=${midiEvents} />`}
         <nav class="bottom-nav">
             <button class=${tab === 'routing' ? 'active' : ''} onclick=${() => setTab('routing')}>${IconRouting}<span>Routing</span></button>
             <button class=${tab === 'presets' ? 'active' : ''} onclick=${() => setTab('presets')}>${IconPreset}<span>Presets</span></button>

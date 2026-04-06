@@ -25,42 +25,38 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
     """Register all API routes on the web server."""
 
     # ================================================================
-    # Captive portal detection endpoints
-    # These must return specific responses so mobile OS shows the
-    # captive portal popup and then stays connected to the AP.
+    # Captive portal probe responses
+    # Return "success" responses so the OS thinks we have internet
+    # and stays connected. No portal popup, user opens 192.168.4.1.
     # ================================================================
 
     @server.route("GET", "/generate_204")
     async def captive_android(req: Request) -> Response:
-        # Android/Chrome: expects 204 from real internet, non-204 triggers portal
-        return Response.redirect("http://192.168.4.1/")
+        return Response(status=204)
 
     @server.route("GET", "/hotspot-detect.html")
     async def captive_apple(req: Request) -> Response:
-        # Apple CNA: expects "<HTML><HEAD><TITLE>Success</TITLE></HEAD><BODY>Success</BODY></HTML>"
-        # Returning anything else triggers the captive portal popup
-        return Response.redirect("http://192.168.4.1/")
+        return Response.html("<HTML><HEAD><TITLE>Success</TITLE></HEAD><BODY>Success</BODY></HTML>")
 
     @server.route("GET", "/library/test/success.html")
     async def captive_apple2(req: Request) -> Response:
-        return Response.redirect("http://192.168.4.1/")
+        return Response.html("<HTML><HEAD><TITLE>Success</TITLE></HEAD><BODY>Success</BODY></HTML>")
 
     @server.route("GET", "/connecttest.txt")
     async def captive_windows(req: Request) -> Response:
-        # Windows: expects "Microsoft Connect Test"
-        return Response.redirect("http://192.168.4.1/")
+        return Response.text("Microsoft Connect Test")
 
     @server.route("GET", "/ncsi.txt")
     async def captive_windows2(req: Request) -> Response:
-        return Response.redirect("http://192.168.4.1/")
+        return Response.text("Microsoft NCSI")
 
     @server.route("GET", "/redirect")
     async def captive_firefox(req: Request) -> Response:
-        return Response.redirect("http://192.168.4.1/")
+        return Response.text("success\n")
 
     @server.route("GET", "/canonical.html")
     async def captive_firefox2(req: Request) -> Response:
-        return Response.redirect("http://192.168.4.1/")
+        return Response.text("success\n")
 
     # ================================================================
     # GET /api/system — system info
@@ -701,6 +697,43 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         return Response.json({"status": "loaded"})
 
     # ================================================================
+    # Network API
+    # ================================================================
+
+    from .wifi import get_all_interfaces, configure_interface
+
+    @server.route("GET", "/api/network")
+    async def api_network(req: Request) -> Response:
+        loop = asyncio.get_event_loop()
+        interfaces = await loop.run_in_executor(None, get_all_interfaces)
+        return Response.json(interfaces)
+
+    @server.route("POST", "/api/network/", exact=False)
+    async def api_configure_network(req: Request) -> Response:
+        iface = req.path_param("/api/network/")
+        if not iface:
+            return Response.error("Missing interface name")
+
+        data = req.json
+        method = data.get("method", "auto")
+        if method not in ("auto", "manual"):
+            return Response.error("method must be 'auto' or 'manual'")
+
+        address = data.get("address", "")
+        netmask = data.get("netmask", "255.255.255.0")
+        gateway = data.get("gateway", "")
+
+        if method == "manual" and not address:
+            return Response.error("address required for static IP")
+
+        loop = asyncio.get_event_loop()
+        ok = await loop.run_in_executor(None, configure_interface,
+                                         iface, method, address, netmask, gateway)
+        if ok:
+            return Response.json({"status": "configured", "interface": iface})
+        return Response.error("Failed to configure interface", 500)
+
+    # ================================================================
     # WiFi API
     # ================================================================
 
@@ -735,7 +768,6 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         cfg_wifi["mode"] = "ap"
         config.save()
 
-        server.enable_captive_portal(AP_IP)
         return Response.json({"status": "ap started", "ssid": wifi.ssid, "ip": wifi.ip})
 
     @server.route("POST", "/api/wifi/client")
@@ -745,8 +777,6 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         password = data.get("password", "")
         if not ssid:
             return Response.error("SSID required")
-
-        server.disable_captive_portal()
 
         cfg_wifi = config.wifi
         ap_ssid = cfg_wifi.get("ap_ssid", "")
@@ -762,7 +792,6 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
             config.save()
             return Response.json({"status": "connected", "ssid": ssid, "ip": wifi.ip})
         else:
-            server.enable_captive_portal(AP_IP)
             return Response.error("Connection failed, fell back to AP mode", 502)
 
     @server.route("GET", "/api/wifi/scan")
@@ -770,5 +799,3 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         loop = asyncio.get_event_loop()
         networks = await loop.run_in_executor(None, wifi.scan_networks)
         return Response.json(networks)
-
-    from .wifi import AP_IP

@@ -97,21 +97,12 @@ class WebServer:
         self._sse_queues: list[asyncio.Queue] = []
         self._rate_counts: dict[str, list[float]] = defaultdict(list)
         self._server: asyncio.AbstractServer | None = None
-        self._captive_portal_ip: str | None = None
-
     def route(self, method: str, path: str, exact: bool = True):
         """Decorator to register a route handler."""
         def decorator(func):
             self.routes.append((method.upper(), path, exact, func))
             return func
         return decorator
-
-    def enable_captive_portal(self, ip: str):
-        """Enable captive portal redirects to the given IP."""
-        self._captive_portal_ip = ip
-
-    def disable_captive_portal(self):
-        self._captive_portal_ip = None
 
     async def send_sse(self, event: str, data: dict):
         """Broadcast an SSE event to all connected clients."""
@@ -202,20 +193,6 @@ class WebServer:
                 return handler, False
         return None
 
-    def _is_captive_portal_check(self, path: str) -> bool:
-        """Detect OS captive portal check URLs."""
-        captive_paths = {
-            "/hotspot-detect.html",       # Apple
-            "/library/test/success.html", # Apple
-            "/generate_204",              # Android/Chrome
-            "/connecttest.txt",           # Windows
-            "/ncsi.txt",                  # Windows
-            "/redirect",                  # Firefox
-            "/canonical.html",            # Firefox
-            "/success.txt",               # Firefox
-        }
-        return path in captive_paths
-
     async def _handle_request(self, reader: asyncio.StreamReader,
                                writer: asyncio.StreamWriter):
         """Handle a single HTTP request."""
@@ -263,15 +240,6 @@ class WebServer:
                 body=body,
                 client_addr=client_addr,
             )
-
-            # Captive portal handling — only for AP clients (192.168.4.x subnet)
-            if self._captive_portal_ip and client_addr.startswith("192.168.4."):
-                host = headers.get("host", "")
-                if host and self._captive_portal_ip not in host and not path.startswith("/api/"):
-                    # Redirect to our IP to trigger OS captive portal popup
-                    resp = Response.redirect(f"http://{self._captive_portal_ip}/")
-                    await self._write_response(writer, resp)
-                    return
 
             # SSE endpoint (special handling — keeps connection open)
             if path == "/api/events" and method == "GET":

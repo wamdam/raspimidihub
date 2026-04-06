@@ -1,10 +1,11 @@
-"""WiFi Access Point and client mode management.
+"""WiFi Access Point, client mode, and network interface management.
 
-Manages hostapd + dnsmasq for AP mode, NetworkManager for client mode.
+Manages hostapd + dnsmasq for AP mode, NetworkManager for client/ethernet.
 """
 
 import asyncio
 import logging
+import re
 import subprocess
 from pathlib import Path
 
@@ -238,3 +239,146 @@ no-hosts
         except Exception:
             log.exception("WiFi scan failed")
             return []
+
+
+NM_CONN_DIR = Path("/etc/NetworkManager/system-connections")
+
+
+def get_interface_info(iface: str) -> dict:
+    """Get current IP configuration for a network interface."""
+    info = {"interface": iface, "method": "disabled", "address": "", "netmask": "", "gateway": ""}
+    try:
+        result = _run(["ip", "-4", "addr", "show", iface], check=False, timeout=5)
+        for line in result.stdout.splitlines():
+            line = line.strip()
+            if line.startswith("inet "):
+                parts = line.split()
+                addr_cidr = parts[1]
+                addr, prefix = addr_cidr.split("/")
+                info["address"] = addr
+                # Convert CIDR prefix to netmask
+                bits = int(prefix)
+                mask = (0xFFFFFFFF << (32 - bits)) & 0xFFFFFFFF
+                info["netmask"] = f"{(mask >> 24) & 0xFF}.{(mask >> 16) & 0xFF}.{(mask >> 8) & 0xFF}.{mask & 0xFF}"
+    except Exception:
+        pass
+
+    # Get gateway
+    try:
+        result = _run(["ip", "route", "show", "dev", iface], check=False, timeout=5)
+        for line in result.stdout.splitlines():
+            if line.startswith("default via "):
+                info["gateway"] = line.split()[2]
+    except Exception:
+        pass
+
+    # Get method from NM connection file
+    for nm_file in NM_CONN_DIR.glob("*.nmconnection"):
+        try:
+            content = nm_file.read_text()
+            if f"interface-name={iface}" in content:
+                if "method=manual" in content:
+                    info["method"] = "manual"
+                elif "method=auto" in content:
+                    info["method"] = "auto"
+                break
+        except OSError:
+            pass
+
+    if info["address"]:
+        info["up"] = True
+    else:
+        info["up"] = False
+
+    return info
+
+
+def get_all_interfaces() -> list[dict]:
+    """Get info for all physical network interfaces."""
+    interfaces = []
+    for iface in sorted(Path("/sys/class/net").iterdir()):
+        name = iface.name
+        if name == "lo" or name.startswith("vir"):
+            continue
+        interfaces.append(get_interface_info(name))
+    return interfaces
+
+
+def configure_interface(iface: str, method: str, address: str = "",
+                        netmask: str = "255.255.255.0", gateway: str = "") -> bool:
+    """Configure a network interface. Remounts rw/ro for persistence.
+
+    method: "auto" (DHCP) or "manual" (static IP)
+    """
+    # Find the NM connection file for this interface
+    conn_file = None
+    conn_name = None
+    for nm_file in NM_CONN_DIR.glob("*.nmconnection"):
+        try:
+            content = nm_file.read_text()
+            if f"interface-name={iface}" in content:
+                conn_file = nm_file
+                for line in content.splitlines():
+                    if line.startswith("id="):
+                        conn_name = line[3:]
+                break
+        except OSError:
+            pass
+
+    if conn_file is None:
+        log.warning("No NM connection found for %s", iface)
+        return False
+
+    try:
+        # Remount rw
+        _run(["mount", "-o", "remount,rw", "/"], check=True, timeout=5)
+
+        # Read current file
+        content = conn_file.read_text()
+        lines = content.splitlines()
+        new_lines = []
+        in_ipv4 = False
+        ipv4_written = False
+
+        for line in lines:
+            if line.strip() == "[ipv4]":
+                in_ipv4 = True
+                new_lines.append(line)
+                # Write our config
+                if method == "manual" and address:
+                    # Convert netmask to CIDR prefix
+                    octets = [int(o) for o in netmask.split(".")]
+                    prefix = sum(bin(o).count("1") for o in octets)
+                    new_lines.append(f"address1={address}/{prefix}")
+                    if gateway:
+                        new_lines[-1] += f",{gateway}"
+                new_lines.append(f"method={method}")
+                ipv4_written = True
+                continue
+            elif in_ipv4:
+                if line.startswith("["):
+                    # New section, end of ipv4
+                    in_ipv4 = False
+                    new_lines.append(line)
+                elif line.startswith("address") or line.startswith("method"):
+                    continue  # Skip old ipv4 settings
+                else:
+                    new_lines.append(line)
+            else:
+                new_lines.append(line)
+
+        conn_file.write_text("\n".join(new_lines) + "\n")
+
+        # Reload NM and apply
+        _run(["nmcli", "connection", "reload"], check=False, timeout=5)
+        if conn_name:
+            _run(["nmcli", "connection", "up", conn_name], check=False, timeout=10)
+
+        log.info("Configured %s: method=%s address=%s", iface, method, address)
+        return True
+
+    except Exception:
+        log.exception("Failed to configure %s", iface)
+        return False
+    finally:
+        _run(["mount", "-o", "remount,ro", "/"], check=False, timeout=5)

@@ -576,17 +576,31 @@ body {
     right: 0;
     background: var(--surface);
     border-top: 1px solid var(--surface2);
-    padding: 4px 12px;
+    padding: 4px 10px;
     font-family: "SF Mono", "Fira Code", monospace;
-    font-size: 12px;
+    font-size: 11px;
     color: var(--accent);
     z-index: 9;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
     min-height: 24px;
     display: flex;
     align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+.midi-bar-l, .midi-bar-r {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 50%;
+}
+.midi-bar-r {
+    text-align: right;
+    color: var(--accent2);
+}
+.midi-bar-empty {
+    width: 100%;
+    text-align: center;
+    color: var(--text-dim);
 }
 .main.with-midi-bar {
     padding-bottom: 96px;
