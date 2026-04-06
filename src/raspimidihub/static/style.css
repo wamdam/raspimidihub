@@ -120,6 +120,7 @@ body {
     transition: opacity 0.2s;
 }
 .btn:active { opacity: 0.7; }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .btn-primary { background: var(--accent); color: #fff; }
 .btn-secondary { background: var(--surface2); color: var(--text); }
 .btn-danger { background: var(--error); color: #fff; }

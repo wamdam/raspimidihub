@@ -512,12 +512,18 @@ function RoutingPage({ devices, connections, refresh, showToast }) {
         showToast('Mapping updated');
     };
 
+    const [saving, setSaving] = useState(false);
     const saveConfig = async () => {
+        setSaving(true);
         await api('/config/save', { method: 'POST' });
+        setSaving(false);
         showToast('Configuration saved');
     };
+    const [loading, setLoading] = useState(false);
     const loadConfig = async () => {
+        setLoading(true);
         await api('/config/load', { method: 'POST' });
+        setLoading(false);
         refresh();
         showToast('Configuration loaded');
     };
@@ -535,8 +541,8 @@ function RoutingPage({ devices, connections, refresh, showToast }) {
             srcClientId=${filterConn.src_client} />`}
         <${ConnectionMatrix} devices=${devices} connections=${connections} onToggle=${onToggle} onFilterOpen=${(conn) => setFilterConnId(conn.id)} />
         <div class="btn-group">
-            <button class="btn btn-primary" onclick=${saveConfig}>Save Config</button>
-            <button class="btn btn-secondary" onclick=${loadConfig}>Load Config</button>
+            <button class="btn btn-primary" onclick=${saveConfig} disabled=${saving || loading}>${saving ? 'Saving...' : 'Save Config'}</button>
+            <button class="btn btn-secondary" onclick=${loadConfig} disabled=${saving || loading}>${loading ? 'Loading...' : 'Load Config'}</button>
         </div>
     `;
 }
