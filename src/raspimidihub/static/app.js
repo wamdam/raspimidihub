@@ -911,7 +911,7 @@ function NetworkCard({ iface, showToast }) {
 }
 
 // --- Upgrade Card ---
-const UPDATE_STEPS = { downloading: 'Downloading...', installing: 'Installing...', restarting: 'Restarting service...' };
+const UPDATE_STEPS = { starting: 'Starting update...', downloading: 'Downloading...', installing: 'Installing...', restarting: 'Restarting service...' };
 
 function UpgradeCard({ showToast, updateStep }) {
     const [info, setInfo] = useState(null);
@@ -930,7 +930,9 @@ function UpgradeCard({ showToast, updateStep }) {
     const install = async () => {
         if (!info || !info.deb_url) return;
         if (!confirm(`Update to v${info.latest}? The service will restart.`)) return;
-        await api('/system/update', { method: 'POST', body: JSON.stringify({ deb_url: info.deb_url }) });
+        setUpdateStep('starting');
+        const res = await api('/system/update', { method: 'POST', body: JSON.stringify({ deb_url: info.deb_url }) });
+        if (res.error) { showToast('Update failed: ' + res.error); setUpdateStep(null); }
     };
 
     const stepLabel = UPDATE_STEPS[updateStep] || updateStep;
