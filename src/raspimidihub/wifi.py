@@ -399,7 +399,7 @@ def configure_interface(iface: str, method: str, address: str = "",
                     prefix = sum(bin(o).count("1") for o in octets)
                     new_lines.append(f"address1={address}/{prefix}")
                     if gateway:
-                        new_lines[-1] += f",{gateway}"
+                        new_lines.append(f"gateway={gateway}")
                     new_lines.append("dns=8.8.8.8;8.8.4.4;")
                 new_lines.append(f"method={method}")
                 ipv4_written = True
@@ -409,7 +409,7 @@ def configure_interface(iface: str, method: str, address: str = "",
                     # New section, end of ipv4
                     in_ipv4 = False
                     new_lines.append(line)
-                elif line.startswith(("address", "method", "dns")):
+                elif line.startswith(("address", "method", "dns", "gateway")):
                     continue  # Skip old ipv4 settings
                 else:
                     new_lines.append(line)
@@ -418,7 +418,12 @@ def configure_interface(iface: str, method: str, address: str = "",
 
         conn_file.write_text("\n".join(new_lines) + "\n")
 
-        # Reload NM and apply — timeouts are non-fatal (file is already written)
+        # Reload NM and apply — down+up needed to reapply gateway changes
+        if conn_name:
+            try:
+                _run(["nmcli", "connection", "down", conn_name], check=False, timeout=10)
+            except subprocess.TimeoutExpired:
+                pass
         try:
             _run(["nmcli", "connection", "reload"], check=False, timeout=10)
         except subprocess.TimeoutExpired:
