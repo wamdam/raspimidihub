@@ -40,9 +40,11 @@ See the full [UI Guide](docs/UI_GUIDE.md) for all screens.
 - **Built-in WiFi access point:** The Pi creates its own WiFi network (`RaspiMIDIHub-XXXX`)
 - **Captive portal:** Connect from your phone and the config page opens automatically
 - **Mobile-first design:** Touch-friendly interface designed for phones on stage
-- **Connection matrix:** Tap to connect/disconnect, long-press for filters and mappings
+- **Connection matrix:** Tap to connect/disconnect, long-press (or right-click) for filters and mappings
+- **Clock indicator:** Pulsing play icon on devices sending MIDI clock — turns orange when multiple sources detected
+- **Offline connections:** Configure routing for unplugged devices — connections shown grayed out in matrix
 - **Presets:** Save and recall routing configurations for different songs or shows
-- **MIDI activity bar:** Persistent live MIDI event display (toggleable)
+- **MIDI activity bar:** Persistent live MIDI event display with auto-expire (toggleable)
 - **MIDI monitor:** Per-device real-time event log with note names
 - **MIDI test sender:** Piano keyboard and CC slider for testing connections
 - **Client mode:** Join an existing WiFi network. Reachable at `http://raspimidihub.local`
@@ -67,8 +69,10 @@ See the full [UI Guide](docs/UI_GUIDE.md) for all screens.
 
 ### Device Management
 - **Device renaming:** Assign custom names that persist across reboots
+- **Port renaming:** Rename individual ports on multi-port devices (e.g., name a DIN output after the synth connected to it)
 - **Stable identification:** Devices are tracked by USB topology path + VID:PID, not volatile ALSA client IDs
 - **Device detail panel:** View device info, monitor MIDI, send test events
+- **Config export/import:** Export full configuration as JSON, import on another Pi
 
 ### Easy Installation
 - **Single package install:** Download one `.deb` file, install, reboot — done
@@ -101,9 +105,9 @@ sudo reboot
 <summary>Manual installation</summary>
 
 ```bash
-wget https://github.com/wamdam/raspimidihub/releases/latest/download/raspimidihub_1.3.0-1_all.deb
+wget https://github.com/wamdam/raspimidihub/releases/latest/download/raspimidihub_1.3.3-1_all.deb
 wget https://github.com/wamdam/raspimidihub/releases/latest/download/raspimidihub-rosetup_1.0.0-1_all.deb
-sudo apt install ./raspimidihub_1.3.0-1_all.deb ./raspimidihub-rosetup_1.0.0-1_all.deb
+sudo apt install ./raspimidihub_1.3.3-1_all.deb ./raspimidihub-rosetup_1.0.0-1_all.deb
 sudo reboot
 ```
 </details>
@@ -115,7 +119,7 @@ After reboot, the Pi runs with a read-only filesystem and all connected MIDI dev
 1. On your phone, go to WiFi settings
 2. Connect to `RaspiMIDIHub-XXXX` (default password: `midihub1`)
 3. The configuration page opens automatically (captive portal)
-4. Tap the connection matrix to route devices, long-press for filters and mappings
+4. Tap the connection matrix to route devices, long-press (or right-click) for filters and mappings
 5. Hit **Save Config** to persist across reboots
 
 ### Client WiFi Mode
@@ -156,7 +160,7 @@ All devices talk to each other. Pull the power after the gig — next time it wo
 
 1. Connect your phone to the Pi's WiFi
 2. Tap connections in the matrix to enable/disable routes
-3. Long-press a connection for channel filters or MIDI mappings
+3. Long-press (or right-click) a connection for channel filters or MIDI mappings
 4. Save Config to persist
 
 ### MIDI Mapping Example

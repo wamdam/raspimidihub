@@ -6,9 +6,15 @@ This guide walks through every screen of the RaspiMIDIHub web interface.
 
 ## Routing Page
 
-The main screen shows the **connection matrix** — a grid where rows are MIDI sources (FROM) and columns are destinations (TO). Tap a cell to connect or disconnect two devices. Purple cells indicate connections with active filters or mappings. Offline devices (saved but unplugged) appear grayed out.
+The main screen shows the **connection matrix** — a grid where rows are MIDI sources (FROM) and columns are destinations (TO). Tap a cell to connect or disconnect two devices. Purple cells indicate connections with active filters or mappings.
 
-At the bottom: **Save Config** persists the current routing to disk (survives reboots), **Load Config** reloads the last saved state. Disconnected connections are also saved and restored.
+**Offline devices** (saved but unplugged) appear grayed out with their saved connections shown as dimmed checkboxes. You can toggle offline connections on/off — the settings are stored and applied when the device is plugged back in.
+
+A pulsing **▶ play icon** appears next to devices sending MIDI clock. If multiple devices send clock simultaneously (a common misconfiguration), the icon turns orange as a warning.
+
+Tap a device label to see its full name in a toast. Renamed devices also show the original ALSA name in gray.
+
+At the bottom: **Save Config** persists the current routing to disk (survives reboots), **Load Config** reloads the last saved state. **Export Config** / **Import Config** let you back up or transfer the full configuration as JSON. Disconnected connections are also saved and restored.
 
 ![Routing Page](screenshots/01-routing.png)
 
@@ -22,7 +28,9 @@ Long-press (or right-click) a connected cell to open the connection panel. Here 
 - **Message Types:** Enable/disable notes, CCs, program changes, pitch bend, aftertouch, SysEx, and clock/realtime. Changes apply instantly.
 - **Mappings:** View active mappings with Edit/Delete buttons. Tap **+ Add Mapping** to create a new one.
 
-Dismiss the panel by swiping down, tapping X, pressing ESC, or tapping the dark overlay. Toggling a connection off in the matrix preserves its filters and mappings — they are restored when you re-enable it.
+Dismiss the panel by swiping down, tapping X, pressing ESC, or tapping the dark overlay.
+
+Toggling a connection off in the matrix preserves its filters and mappings — they are restored when you re-enable it.
 
 ![Filter & Mapping Panel](screenshots/05-filter-panel.png)
 
@@ -76,9 +84,10 @@ System overview and device list.
 Tap a device on the Status page to open the detail panel (slides up). Features:
 
 - **Device info:** ALSA client ID, USB VID:PID, port types
-- **Rename:** Assign a custom name that persists across reboots (stored by USB topology)
-- **MIDI Monitor:** Live display of incoming MIDI events with note names (e.g., "Note On ch1 C3 vel=100")
-- **MIDI Test Sender:** Piano keyboard (one octave, adjustable with +/- octave buttons) and CC slider for testing connections without physical MIDI input
+- **Rename:** Assign a custom device name that persists across reboots (stored by USB topology)
+- **Port rename:** For multi-port devices, rename individual ports (e.g., name a DIN output "Octatrack")
+- **MIDI Monitor:** Live display of incoming MIDI events with note names (e.g., "Note On ch1 C3 vel=100"). Uses direct DOM updates so it won't interfere with other controls.
+- **MIDI Test Sender:** Select channel and port, then use the piano keyboard (one octave, adjustable with +/- octave buttons) and CC slider for testing connections without physical MIDI input
 
 ![Device Detail Panel](screenshots/06-device-detail.png)
 
@@ -103,7 +112,7 @@ Configuration and system controls.
 
 ## MIDI Activity Bar
 
-A persistent bar above the bottom navigation showing the latest MIDI events from two sources — left and right. Device names are truncated to fit. Toggleable in Settings > Display.
+A persistent bar above the bottom navigation showing the latest MIDI events from two sources — left and right. Device names are truncated to fit. Clock events are not shown here (they appear as the ▶ indicator in the matrix instead). Entries auto-expire after 2 seconds of inactivity. Toggleable in Settings > Display.
 
 ---
 

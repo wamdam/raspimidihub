@@ -4,6 +4,30 @@ All notable changes to RaspiMIDIHub will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.3.3] - 2026-04-07
+
+### Fixed
+- Gateway not applied for static IP: uses separate `gateway=` key in NetworkManager
+  config and brings connection down/up to force reapplication.
+
+## [1.3.2] - 2026-04-07
+
+### Added
+- **Offline connections**: saved connections for offline devices shown as grayed-out
+  checkboxes in the matrix — can be toggled on/off even while the device is unplugged.
+- **Clock indicator**: pulsing play icon (▶) on FROM devices sending MIDI clock.
+  Turns orange when multiple devices send clock simultaneously (common mistake).
+- **MIDI bar auto-expire**: bottom bar entries vanish after 2 seconds of inactivity.
+- **Toast shows original name**: tapping a renamed device in the matrix shows the
+  custom name plus the original ALSA name in gray.
+
+### Changed
+- Clock events filtered from bottom MIDI bar (shown only as matrix indicator).
+- Device detail panel: MIDI monitor uses direct DOM updates to prevent
+  channel/port dropdown flickering from rapid MIDI events.
+- Rename save button: small inline style, hidden after saving (device and port).
+- Custom port names no longer truncated in matrix labels.
+
 ## [1.3.1] - 2026-04-06
 
 ### Fixed
