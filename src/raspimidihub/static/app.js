@@ -4,6 +4,11 @@ import htm from './lib/htm.module.js';
 
 const html = htm.bind(h);
 
+// --- Reusable hooks ---
+function useEscapeClose(close) {
+    useEscapeClose(close);
+}
+
 // --- API helpers ---
 async function api(path, opts = {}) {
     const res = await fetch(`/api${path}`, {
@@ -143,12 +148,7 @@ function MappingFormOverlay({ onSubmit, onClose, editing, srcClientId }) {
         return () => { es.close(); clearTimeout(timeout); };
     }, [learning]);
 
-    // ESC to close
-    useEffect(() => {
-        const handler = (e) => { if (e.key === 'Escape') close(); };
-        window.addEventListener('keydown', handler);
-        return () => window.removeEventListener('keydown', handler);
-    }, []);
+    useEscapeClose(close);
 
     const swipe = useSwipeDismiss(close);
 
@@ -768,11 +768,7 @@ function DeviceDetailPanel({ device, onClose, showToast }) {
         return () => es.close();
     }, [device.client_id]);
 
-    useEffect(() => {
-        const handler = (e) => { if (e.key === 'Escape') close(); };
-        window.addEventListener('keydown', handler);
-        return () => window.removeEventListener('keydown', handler);
-    }, []);
+    useEscapeClose(close);
 
     const formatEvent = (d) => {
         let s = d.event;

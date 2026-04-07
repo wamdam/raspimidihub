@@ -4,6 +4,7 @@ Manages hostapd + dnsmasq for AP mode, NetworkManager for client/ethernet.
 """
 
 import asyncio
+import contextlib
 import logging
 import re
 import subprocess
@@ -31,6 +32,16 @@ def _get_mac_suffix() -> str:
 
 def _run(cmd: list[str], check: bool = True, timeout: int = 10) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, capture_output=True, text=True, check=check, timeout=timeout)
+
+
+@contextlib.contextmanager
+def _rw_rootfs():
+    """Context manager: remount / read-write, then read-only on exit."""
+    _run(["mount", "-o", "remount,rw", "/"], check=False, timeout=5)
+    try:
+        yield
+    finally:
+        _run(["mount", "-o", "remount,ro", "/"], check=False, timeout=5)
 
 
 class WifiManager:
@@ -152,39 +163,20 @@ no-hosts
         self.stop_ap()
 
         # Write .nmconnection file directly (bypasses NM keyfile plugin writability check)
-        _run(["mount", "-o", "remount,rw", "/"], check=False, timeout=5)
         try:
-            conn_file = NM_CONN_DIR / f"{ssid}.nmconnection"
-            conn_uuid = str(uuid.uuid4())
-            conf = (
-                f"[connection]\n"
-                f"id={ssid}\n"
-                f"uuid={conn_uuid}\n"
-                f"type=wifi\n"
-                f"interface-name={WLAN_IFACE}\n"
-                f"\n"
-                f"[wifi]\n"
-                f"mode=infrastructure\n"
-                f"ssid={ssid}\n"
-                f"\n"
-                f"[wifi-security]\n"
-                f"key-mgmt=wpa-psk\n"
-                f"psk={password}\n"
-                f"\n"
-                f"[ipv4]\n"
-                f"method=auto\n"
-                f"\n"
-                f"[ipv6]\n"
-                f"method=disabled\n"
-            )
-            conn_file.write_text(conf)
-            conn_file.chmod(0o600)
+            with _rw_rootfs():
+                conn_file = NM_CONN_DIR / f"{ssid}.nmconnection"
+                conn_file.write_text(
+                    f"[connection]\nid={ssid}\nuuid={uuid.uuid4()}\ntype=wifi\n"
+                    f"interface-name={WLAN_IFACE}\n\n[wifi]\nmode=infrastructure\nssid={ssid}\n\n"
+                    f"[wifi-security]\nkey-mgmt=wpa-psk\npsk={password}\n\n"
+                    f"[ipv4]\nmethod=auto\n\n[ipv6]\nmethod=disabled\n"
+                )
+                conn_file.chmod(0o600)
             log.info("Wrote WiFi connection file for %s", ssid)
         except Exception:
             log.exception("Failed to write WiFi connection file")
             return False
-        finally:
-            _run(["mount", "-o", "remount,ro", "/"], check=False, timeout=5)
 
         # Give wlan0 back to NetworkManager
         _run(["nmcli", "device", "set", WLAN_IFACE, "managed", "yes"], check=False)
@@ -366,57 +358,47 @@ def configure_interface(iface: str, method: str, address: str = "",
             pass
 
     try:
-        # Remount rw
-        _run(["mount", "-o", "remount,rw", "/"], check=True, timeout=5)
+        with _rw_rootfs():
+            if conn_file is None:
+                # Create a new .nmconnection file for this interface
+                import uuid
+                conn_name = f"{iface}"
+                conn_file = NM_CONN_DIR / f"{conn_name}.nmconnection"
+                conn_file.write_text(
+                    f"[connection]\nid={conn_name}\nuuid={uuid.uuid4()}\ntype=ethernet\n"
+                    f"interface-name={iface}\n\n[ipv4]\nmethod=auto\n\n[ipv6]\nmethod=disabled\n"
+                )
+                conn_file.chmod(0o600)
+                log.info("Created NM connection file for %s", iface)
 
-        if conn_file is None:
-            # Create a new .nmconnection file for this interface
-            import uuid
-            conn_name = f"{iface}"
-            conn_file = NM_CONN_DIR / f"{conn_name}.nmconnection"
-            conn_file.write_text(
-                f"[connection]\nid={conn_name}\nuuid={uuid.uuid4()}\ntype=ethernet\n"
-                f"interface-name={iface}\n\n[ipv4]\nmethod=auto\n\n[ipv6]\nmethod=disabled\n"
-            )
-            conn_file.chmod(0o600)
-            log.info("Created NM connection file for %s", iface)
-
-        # Read current file
-        content = conn_file.read_text()
-        lines = content.splitlines()
-        new_lines = []
-        in_ipv4 = False
-        ipv4_written = False
-
-        for line in lines:
-            if line.strip() == "[ipv4]":
-                in_ipv4 = True
-                new_lines.append(line)
-                # Write our config
-                if method == "manual" and address:
-                    # Convert netmask to CIDR prefix
-                    octets = [int(o) for o in netmask.split(".")]
-                    prefix = sum(bin(o).count("1") for o in octets)
-                    new_lines.append(f"address1={address}/{prefix}")
-                    if gateway:
-                        new_lines.append(f"gateway={gateway}")
-                    new_lines.append("dns=8.8.8.8;8.8.4.4;")
-                new_lines.append(f"method={method}")
-                ipv4_written = True
-                continue
-            elif in_ipv4:
-                if line.startswith("["):
-                    # New section, end of ipv4
-                    in_ipv4 = False
+            # Rewrite [ipv4] section
+            lines = conn_file.read_text().splitlines()
+            new_lines = []
+            in_ipv4 = False
+            for line in lines:
+                if line.strip() == "[ipv4]":
+                    in_ipv4 = True
                     new_lines.append(line)
-                elif line.startswith(("address", "method", "dns", "gateway")):
-                    continue  # Skip old ipv4 settings
+                    if method == "manual" and address:
+                        octets = [int(o) for o in netmask.split(".")]
+                        prefix = sum(bin(o).count("1") for o in octets)
+                        new_lines.append(f"address1={address}/{prefix}")
+                        if gateway:
+                            new_lines.append(f"gateway={gateway}")
+                        new_lines.append("dns=8.8.8.8;8.8.4.4;")
+                    new_lines.append(f"method={method}")
+                    continue
+                elif in_ipv4:
+                    if line.startswith("["):
+                        in_ipv4 = False
+                        new_lines.append(line)
+                    elif line.startswith(("address", "method", "dns", "gateway")):
+                        continue
+                    else:
+                        new_lines.append(line)
                 else:
                     new_lines.append(line)
-            else:
-                new_lines.append(line)
-
-        conn_file.write_text("\n".join(new_lines) + "\n")
+            conn_file.write_text("\n".join(new_lines) + "\n")
 
         # Reload NM and apply — down+up needed to reapply gateway changes
         if conn_name:
@@ -440,5 +422,3 @@ def configure_interface(iface: str, method: str, address: str = "",
     except Exception:
         log.exception("Failed to configure %s", iface)
         return False
-    finally:
-        _run(["mount", "-o", "remount,ro", "/"], check=False, timeout=5)
