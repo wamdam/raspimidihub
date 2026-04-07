@@ -7,7 +7,6 @@ import asyncio
 import logging
 import os
 import socket
-import time
 from pathlib import Path
 
 from . import __version__
@@ -20,43 +19,109 @@ from .wifi import WifiManager
 log = logging.getLogger(__name__)
 
 
+# --- Helpers ---
+
+def _parse_conn_id(conn_id: str) -> tuple[int, int, int, int]:
+    """Parse 'src_client:src_port-dst_client:dst_port' → (sc, sp, dc, dp). Raises ValueError."""
+    src, dst = conn_id.split("-")
+    sc, sp = map(int, src.split(":"))
+    dc, dp = map(int, dst.split(":"))
+    return sc, sp, dc, dp
+
+
+def _get_filter_data(fe, conn_id: str) -> dict:
+    """Serialize filter + mappings for a connection. Returns dict with 'filter'/'mappings' keys."""
+    data = {}
+    if not fe:
+        return data
+    f = fe.get_filter(conn_id)
+    if f:
+        data["filter"] = f.to_dict()
+    mappings = fe.get_mappings(conn_id)
+    if mappings:
+        data["mappings"] = [m.to_dict() for m in mappings]
+    return data
+
+
+def _serialize_connection(conn, registry, fe) -> dict:
+    """Serialize a Connection with stable IDs and filter/mapping data."""
+    conn_id = f"{conn.src_client}:{conn.src_port}-{conn.dst_client}:{conn.dst_port}"
+    entry = {
+        "src_client": conn.src_client, "src_port": conn.src_port,
+        "dst_client": conn.dst_client, "dst_port": conn.dst_port,
+    }
+    src_info = registry.get_by_client(conn.src_client)
+    dst_info = registry.get_by_client(conn.dst_client)
+    if src_info:
+        entry["src_stable_id"] = src_info.stable_id
+    if dst_info:
+        entry["dst_stable_id"] = dst_info.stable_id
+    entry.update(_get_filter_data(fe, conn_id))
+    return entry
+
+
+def _restore_userspace(engine, fe, conn, saved_data: dict):
+    """Restore a connection with saved filter/mapping data. Returns True if userspace, False if ALSA."""
+    conn_id = f"{conn.src_client}:{conn.src_port}-{conn.dst_client}:{conn.dst_port}"
+    saved_filter = saved_data.get("filter")
+    saved_mappings = saved_data.get("mappings", [])
+    needs_userspace = bool(saved_mappings)
+    midi_filter = None
+    if saved_filter:
+        midi_filter = MidiFilter.from_dict(saved_filter)
+        needs_userspace = needs_userspace or not midi_filter.is_passthrough
+
+    if needs_userspace and fe:
+        if midi_filter is None:
+            midi_filter = MidiFilter()
+        fe.add_filter(conn.src_client, conn.src_port,
+                      conn.dst_client, conn.dst_port, midi_filter)
+        for md in saved_mappings:
+            try:
+                fe.add_mapping(conn_id, MidiMapping.from_dict(md))
+            except (ValueError, KeyError):
+                pass
+        engine._connections.add(conn)
+        return True
+    else:
+        engine._seq.subscribe(conn.src_client, conn.src_port,
+                              conn.dst_client, conn.dst_port)
+        engine._connections.add(conn)
+        return False
+
+
+def _matches_saved(c: dict, src_sid: str, dst_sid: str, src_port: int, dst_port: int) -> bool:
+    """Check if a saved config entry matches the given stable IDs and ports."""
+    return (c.get("src_stable_id") == src_sid and c.get("dst_stable_id") == dst_sid
+            and c.get("src_port") == src_port and c.get("dst_port") == dst_port)
+
+
+# --- Captive portal probe responses ---
+# OS-specific endpoints that return "success" so the device stays connected.
+
+_CAPTIVE_ROUTES = {
+    "/generate_204": ("", 204, None),
+    "/hotspot-detect.html": ("<HTML><HEAD><TITLE>Success</TITLE></HEAD><BODY>Success</BODY></HTML>", 200, "html"),
+    "/library/test/success.html": ("<HTML><HEAD><TITLE>Success</TITLE></HEAD><BODY>Success</BODY></HTML>", 200, "html"),
+    "/connecttest.txt": ("Microsoft Connect Test", 200, "text"),
+    "/ncsi.txt": ("Microsoft NCSI", 200, "text"),
+    "/redirect": ("success\n", 200, "text"),
+    "/canonical.html": ("success\n", 200, "text"),
+}
+
+
 def register_api(server: WebServer, engine: MidiEngine, config: Config,
                   wifi: WifiManager | None = None):
     """Register all API routes on the web server."""
 
-    # ================================================================
-    # Captive portal probe responses
-    # Return "success" responses so the OS thinks we have internet
-    # and stays connected. No portal popup, user opens 192.168.4.1.
-    # ================================================================
-
-    @server.route("GET", "/generate_204")
-    async def captive_android(req: Request) -> Response:
-        return Response(status=204)
-
-    @server.route("GET", "/hotspot-detect.html")
-    async def captive_apple(req: Request) -> Response:
-        return Response.html("<HTML><HEAD><TITLE>Success</TITLE></HEAD><BODY>Success</BODY></HTML>")
-
-    @server.route("GET", "/library/test/success.html")
-    async def captive_apple2(req: Request) -> Response:
-        return Response.html("<HTML><HEAD><TITLE>Success</TITLE></HEAD><BODY>Success</BODY></HTML>")
-
-    @server.route("GET", "/connecttest.txt")
-    async def captive_windows(req: Request) -> Response:
-        return Response.text("Microsoft Connect Test")
-
-    @server.route("GET", "/ncsi.txt")
-    async def captive_windows2(req: Request) -> Response:
-        return Response.text("Microsoft NCSI")
-
-    @server.route("GET", "/redirect")
-    async def captive_firefox(req: Request) -> Response:
-        return Response.text("success\n")
-
-    @server.route("GET", "/canonical.html")
-    async def captive_firefox2(req: Request) -> Response:
-        return Response.text("success\n")
+    for path, (body, status, fmt) in _CAPTIVE_ROUTES.items():
+        def _make_handler(b, s, f):
+            async def handler(req: Request) -> Response:
+                if s == 204:
+                    return Response(status=204)
+                return Response.html(b) if f == "html" else Response.text(b)
+            return handler
+        server.route("GET", path)(_make_handler(body, status, fmt))
 
     # ================================================================
     # GET /api/system — system info
@@ -64,21 +129,15 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
 
     @server.route("GET", "/api/system")
     async def api_system(req: Request) -> Response:
+        import subprocess
         hostname = socket.gethostname()
 
         # IP addresses
+        ips = []
         try:
-            ips = []
             for iface in os.listdir("/sys/class/net"):
                 if iface == "lo":
                     continue
-                addr_path = f"/sys/class/net/{iface}/address"
-                try:
-                    with open(f"/proc/net/if_inet6") as f:
-                        pass
-                except FileNotFoundError:
-                    pass
-                import subprocess
                 result = subprocess.run(
                     ["ip", "-4", "addr", "show", iface],
                     capture_output=True, text=True, timeout=2
@@ -86,47 +145,34 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
                 for line in result.stdout.splitlines():
                     line = line.strip()
                     if line.startswith("inet "):
-                        ip = line.split()[1].split("/")[0]
-                        ips.append({"interface": iface, "address": ip})
-        except Exception:
-            ips = []
-
-        # CPU temperature
-        temp = None
-        try:
-            raw = Path("/sys/class/thermal/thermal_zone0/temp").read_text().strip()
-            temp = round(int(raw) / 1000, 1)
+                        ips.append({"interface": iface, "address": line.split()[1].split("/")[0]})
         except Exception:
             pass
 
-        # RAM
-        ram = {}
+        # CPU temp, RAM, uptime — read from /proc and /sys
+        temp = ram = uptime = None
         try:
-            with open("/proc/meminfo") as f:
-                for line in f:
-                    if line.startswith("MemTotal:"):
-                        ram["total_mb"] = int(line.split()[1]) // 1024
-                    elif line.startswith("MemAvailable:"):
-                        ram["available_mb"] = int(line.split()[1]) // 1024
+            temp = round(int(Path("/sys/class/thermal/thermal_zone0/temp").read_text().strip()) / 1000, 1)
         except Exception:
             pass
-
-        # Uptime
-        uptime = None
         try:
-            raw = Path("/proc/uptime").read_text().strip()
-            uptime = int(float(raw.split()[0]))
+            ram = {}
+            for line in Path("/proc/meminfo").read_text().splitlines():
+                if line.startswith("MemTotal:"):
+                    ram["total_mb"] = int(line.split()[1]) // 1024
+                elif line.startswith("MemAvailable:"):
+                    ram["available_mb"] = int(line.split()[1]) // 1024
+        except Exception:
+            ram = {}
+        try:
+            uptime = int(float(Path("/proc/uptime").read_text().split()[0]))
         except Exception:
             pass
 
         return Response.json({
-            "hostname": hostname,
-            "version": __version__,
-            "ip_addresses": ips,
-            "cpu_temp_c": temp,
-            "ram": ram,
-            "uptime_seconds": uptime,
-            "config_fallback": config.fallback_active,
+            "hostname": hostname, "version": __version__,
+            "ip_addresses": ips, "cpu_temp_c": temp, "ram": ram,
+            "uptime_seconds": uptime, "config_fallback": config.fallback_active,
             "default_routing": config.default_routing,
         })
 
@@ -355,20 +401,14 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
             conn_id = f"{c.src_client}:{c.src_port}-{c.dst_client}:{c.dst_port}"
             entry = {
                 "id": conn_id,
-                "src_client": c.src_client,
-                "src_port": c.src_port,
-                "dst_client": c.dst_client,
-                "dst_port": c.dst_port,
+                "src_client": c.src_client, "src_port": c.src_port,
+                "dst_client": c.dst_client, "dst_port": c.dst_port,
                 "filtered": False,
             }
-            if fe:
-                f = fe.get_filter(conn_id)
-                if f:
-                    entry["filtered"] = True
-                    entry["filter"] = f.to_dict()
-                mappings = fe.get_mappings(conn_id)
-                if mappings:
-                    entry["mappings"] = [m.to_dict() for m in mappings]
+            fd = _get_filter_data(fe, conn_id)
+            entry.update(fd)
+            if "filter" in fd or "mappings" in fd:
+                entry["filtered"] = True
             conns.append(entry)
 
         # Add saved connections involving offline devices
@@ -426,12 +466,10 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
                 "dst_stable_id": dst_sid, "dst_port": dst_port,
             }
             # Check not already saved
-            existing = config.connections
-            if not any(c.get("src_stable_id") == src_sid and c.get("dst_stable_id") == dst_sid
-                       and c.get("src_port") == src_port and c.get("dst_port") == dst_port
-                       for c in existing):
-                existing.append(entry)
-                config.set_connections(existing)
+            if not any(_matches_saved(c, src_sid, dst_sid, src_port, dst_port)
+                       for c in config.connections):
+                config.connections.append(entry)
+                config.set_connections(config.connections)
                 config.save()
             await server.send_sse("connection-changed", {"action": "created"})
             config.set_mode("custom")
@@ -450,43 +488,15 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
             dst_client=data["dst_client"],
             dst_port=data["dst_port"],
         )
-        conn_id = f"{conn.src_client}:{conn.src_port}-{conn.dst_client}:{conn.dst_port}"
 
         # Check for saved filter/mapping data from previous disconnect
-        saved = engine._disconnected.pop(conn_id, {})
-        fe = engine.filter_engine
+        saved = engine._disconnected.pop(
+            f"{conn.src_client}:{conn.src_port}-{conn.dst_client}:{conn.dst_port}", {})
 
-        saved_filter = saved.get("filter")
-        saved_mappings = saved.get("mappings", [])
-        needs_userspace = bool(saved_mappings)
-        if saved_filter:
-            midi_filter = MidiFilter.from_dict(saved_filter)
-            needs_userspace = needs_userspace or not midi_filter.is_passthrough
-        else:
-            midi_filter = None
-
-        if needs_userspace and fe:
-            if midi_filter is None:
-                midi_filter = MidiFilter()
-        if needs_userspace and fe and midi_filter:
-            # Restore via filter engine (userspace passthrough)
-            fe.add_filter(conn.src_client, conn.src_port,
-                          conn.dst_client, conn.dst_port, midi_filter)
-            for md in saved_mappings:
-                try:
-                    mapping = MidiMapping.from_dict(md)
-                    fe.add_mapping(conn_id, mapping)
-                except (ValueError, KeyError):
-                    pass
-            engine._connections.add(conn)
-        else:
-            # Direct ALSA subscription
-            try:
-                engine._seq.subscribe(conn.src_client, conn.src_port,
-                                      conn.dst_client, conn.dst_port)
-                engine._connections.add(conn)
-            except OSError as e:
-                return Response.error(str(e))
+        try:
+            _restore_userspace(engine, engine.filter_engine, conn, saved)
+        except OSError as e:
+            return Response.error(str(e))
 
         await server.send_sse("connection-changed", {
             "action": "created",
@@ -526,42 +536,28 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
             except (ValueError, IndexError):
                 return Response.error("Invalid offline connection ID")
             # Find saved filter/mapping data before removing
-            saved_conn = None
-            for c in config.connections + config.disconnected:
-                if (c.get("src_stable_id") == src_sid and c.get("dst_stable_id") == dst_sid
-                        and c.get("src_port") == src_port and c.get("dst_port") == dst_port):
-                    saved_conn = c
-                    break
+            match = lambda c: _matches_saved(c, src_sid, dst_sid, src_port, dst_port)
+            saved_conn = next((c for c in config.connections + config.disconnected if match(c)), None)
             # Remove from saved connections
-            config.data["connections"] = [
-                c for c in config.connections
-                if not (c.get("src_stable_id") == src_sid and c.get("dst_stable_id") == dst_sid
-                        and c.get("src_port") == src_port and c.get("dst_port") == dst_port)
-            ]
+            config.data["connections"] = [c for c in config.connections if not match(c)]
             disconn_entry = {
                 "src_stable_id": src_sid, "src_port": src_port,
                 "dst_stable_id": dst_sid, "dst_port": dst_port,
             }
             if saved_conn:
-                if saved_conn.get("filter"):
-                    disconn_entry["filter"] = saved_conn["filter"]
-                if saved_conn.get("mappings"):
-                    disconn_entry["mappings"] = saved_conn["mappings"]
+                for k in ("filter", "mappings"):
+                    if saved_conn.get(k):
+                        disconn_entry[k] = saved_conn[k]
             # Add to disconnected if not already there
-            if not any(c.get("src_stable_id") == src_sid and c.get("dst_stable_id") == dst_sid
-                       and c.get("src_port") == src_port and c.get("dst_port") == dst_port
-                       for c in config.disconnected):
+            if not any(match(c) for c in config.disconnected):
                 config.data.setdefault("disconnected", []).append(disconn_entry)
             config.save()
             config.set_mode("custom")
             await server.send_sse("connection-changed", {"action": "deleted", "id": conn_id})
             return Response.json({"status": "deleted"})
 
-        # Parse id: "src_client:src_port-dst_client:dst_port"
         try:
-            src, dst = conn_id.split("-")
-            src_client, src_port = map(int, src.split(":"))
-            dst_client, dst_port = map(int, dst.split(":"))
+            src_client, src_port, dst_client, dst_port = _parse_conn_id(conn_id)
         except (ValueError, IndexError):
             return Response.error("Invalid connection ID format")
 
@@ -569,16 +565,9 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
 
         # Save filter/mapping data before removing
         fe = engine.filter_engine
-        saved_data = {}
-        if fe:
-            f = fe.get_filter(conn_id)
-            if f:
-                saved_data["filter"] = f.to_dict()
-            mappings = fe.get_mappings(conn_id)
-            if mappings:
-                saved_data["mappings"] = [m.to_dict() for m in mappings]
-            if fe.has_filter(conn_id):
-                fe.remove_filter(conn_id)
+        saved_data = _get_filter_data(fe, conn_id)
+        if fe and fe.has_filter(conn_id):
+            fe.remove_filter(conn_id)
 
         try:
             engine._seq.unsubscribe(conn.src_client, conn.src_port,
@@ -607,11 +596,8 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         if not conn_id:
             return Response.error("Missing connection ID")
 
-        # Parse connection ID
         try:
-            src, dst = conn_id.split("-")
-            src_client, src_port = map(int, src.split(":"))
-            dst_client, dst_port = map(int, dst.split(":"))
+            src_client, src_port, dst_client, dst_port = _parse_conn_id(conn_id)
         except (ValueError, IndexError):
             return Response.error("Invalid connection ID format")
 
@@ -683,11 +669,8 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         if not conn_id:
             return Response.error("Missing connection ID")
 
-        # Parse connection ID
         try:
-            src, dst = conn_id.split("-")
-            src_client, src_port = map(int, src.split(":"))
-            dst_client, dst_port = map(int, dst.split(":"))
+            src_client, src_port, dst_client, dst_port = _parse_conn_id(conn_id)
         except (ValueError, IndexError):
             return Response.error("Invalid connection ID format")
 
@@ -771,9 +754,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         if fc and not fc.needs_userspace:
             fe.remove_filter(conn_id)
             try:
-                src, dst = conn_id.split("-")
-                sc, sp = map(int, src.split(":"))
-                dc, dp = map(int, dst.split(":"))
+                sc, sp, dc, dp = _parse_conn_id(conn_id)
                 engine._seq.subscribe(sc, sp, dc, dp)
             except (ValueError, OSError):
                 pass
@@ -816,27 +797,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         # Serialize current connections with stable IDs, filters, mappings
         registry = engine.device_registry
         fe = engine.filter_engine
-        conns = []
-        for c in engine.connections:
-            conn_id = f"{c.src_client}:{c.src_port}-{c.dst_client}:{c.dst_port}"
-            entry = {
-                "src_client": c.src_client, "src_port": c.src_port,
-                "dst_client": c.dst_client, "dst_port": c.dst_port,
-            }
-            src_info = registry.get_by_client(c.src_client)
-            dst_info = registry.get_by_client(c.dst_client)
-            if src_info:
-                entry["src_stable_id"] = src_info.stable_id
-            if dst_info:
-                entry["dst_stable_id"] = dst_info.stable_id
-            if fe:
-                f = fe.get_filter(conn_id)
-                if f:
-                    entry["filter"] = f.to_dict()
-                mappings = fe.get_mappings(conn_id)
-                if mappings:
-                    entry["mappings"] = [m.to_dict() for m in mappings]
-            conns.append(entry)
+        conns = [_serialize_connection(c, registry, fe) for c in engine.connections]
 
         if not config.save_preset(name, conns):
             return Response.error("Too many presets (max 100)")
@@ -866,14 +827,11 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
                 return Response.not_found()
 
             # Apply preset connections using stable IDs
-            from .midi_filter import MidiFilter as _MF, MidiMapping as _MM
             engine.disconnect_all()
             engine._disconnected.clear()
             registry = engine.device_registry
-            fe = engine.filter_engine
             for c in preset.get("connections", []):
                 try:
-                    # Resolve stable IDs to current client IDs
                     src_stable = c.get("src_stable_id")
                     dst_stable = c.get("dst_stable_id")
                     if src_stable and dst_stable:
@@ -884,32 +842,8 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
                         dst_client = c.get("dst_client")
                     if src_client is None or dst_client is None:
                         continue
-                    sp, dp = c["src_port"], c["dst_port"]
-                    conn = Connection(src_client, sp, dst_client, dp)
-                    conn_id = f"{src_client}:{sp}-{dst_client}:{dp}"
-
-                    # Check if needs userspace (filter/mappings)
-                    filter_data = c.get("filter")
-                    mappings_data = c.get("mappings", [])
-                    needs_userspace = bool(mappings_data)
-                    midi_filter = None
-                    if filter_data:
-                        midi_filter = _MF.from_dict(filter_data)
-                        needs_userspace = needs_userspace or not midi_filter.is_passthrough
-
-                    if needs_userspace and fe:
-                        if midi_filter is None:
-                            midi_filter = _MF()  # passthrough filter for mappings-only
-                    if needs_userspace and fe and midi_filter:
-                        fe.add_filter(src_client, sp, dst_client, dp, midi_filter)
-                        for md in mappings_data:
-                            try:
-                                fe.add_mapping(conn_id, _MM.from_dict(md))
-                            except (ValueError, KeyError):
-                                pass
-                    else:
-                        engine._seq.subscribe(src_client, sp, dst_client, dp)
-                    engine._connections.add(conn)
+                    conn = Connection(src_client, c["src_port"], dst_client, c["dst_port"])
+                    _restore_userspace(engine, engine.filter_engine, conn, c)
                 except (OSError, KeyError):
                     pass
 
@@ -954,37 +888,13 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         # Serialize current connections + filters into config
         fe = engine.filter_engine
         registry = engine.device_registry
-        conns = []
-        for c in engine.connections:
-            conn_id = f"{c.src_client}:{c.src_port}-{c.dst_client}:{c.dst_port}"
-            entry = {
-                "src_client": c.src_client, "src_port": c.src_port,
-                "dst_client": c.dst_client, "dst_port": c.dst_port,
-            }
-            # Add stable IDs for persistence across reboots
-            src_info = registry.get_by_client(c.src_client)
-            dst_info = registry.get_by_client(c.dst_client)
-            if src_info:
-                entry["src_stable_id"] = src_info.stable_id
-            if dst_info:
-                entry["dst_stable_id"] = dst_info.stable_id
-            if fe:
-                f = fe.get_filter(conn_id)
-                if f:
-                    entry["filter"] = f.to_dict()
-                mappings = fe.get_mappings(conn_id)
-                if mappings:
-                    entry["mappings"] = [m.to_dict() for m in mappings]
-            conns.append(entry)
-        config.set_connections(conns)
+        config.set_connections([_serialize_connection(c, registry, fe) for c in engine.connections])
 
         # Save deliberately disconnected pairs with their filter/mapping config
         disconn = []
         for conn_id, saved_data in engine._disconnected.items():
             try:
-                src, dst = conn_id.split("-")
-                sc, sp = map(int, src.split(":"))
-                dc, dp = map(int, dst.split(":"))
+                sc, sp, dc, dp = _parse_conn_id(conn_id)
             except (ValueError, IndexError):
                 continue
             entry = {"src_port": sp, "dst_port": dp}
