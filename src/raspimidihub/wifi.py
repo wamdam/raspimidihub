@@ -365,13 +365,21 @@ def configure_interface(iface: str, method: str, address: str = "",
         except OSError:
             pass
 
-    if conn_file is None:
-        log.warning("No NM connection found for %s", iface)
-        return False
-
     try:
         # Remount rw
         _run(["mount", "-o", "remount,rw", "/"], check=True, timeout=5)
+
+        if conn_file is None:
+            # Create a new .nmconnection file for this interface
+            import uuid
+            conn_name = f"{iface}"
+            conn_file = NM_CONN_DIR / f"{conn_name}.nmconnection"
+            conn_file.write_text(
+                f"[connection]\nid={conn_name}\nuuid={uuid.uuid4()}\ntype=ethernet\n"
+                f"interface-name={iface}\n\n[ipv4]\nmethod=auto\n\n[ipv6]\nmethod=disabled\n"
+            )
+            conn_file.chmod(0o600)
+            log.info("Created NM connection file for %s", iface)
 
         # Read current file
         content = conn_file.read_text()

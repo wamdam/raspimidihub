@@ -154,16 +154,20 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         devices = engine.scan_devices()
         registry = engine.device_registry
         result = []
+        port_names = config.data.get("port_names", {})
         for dev in devices:
+            info = registry.get_by_client(dev.client_id)
             ports = []
             for port in dev.ports:
+                sid = info.stable_id if info else None
+                port_key = f"{sid}:{port.port_id}" if sid else None
                 ports.append({
                     "port_id": port.port_id,
-                    "name": port.name,
+                    "name": port_names.get(port_key, port.name) if port_key else port.name,
+                    "default_name": port.name,
                     "is_input": port.is_input,
                     "is_output": port.is_output,
                 })
-            info = registry.get_by_client(dev.client_id)
             entry = {
                 "client_id": dev.client_id,
                 "name": info.name if info else dev.name,
@@ -181,24 +185,67 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         # Add offline devices from saved config
         online_stable_ids = {e.get("stable_id") for e in result if "stable_id" in e}
         device_names = config.data.get("device_names", {})
-        seen_offline = set()
+        offline_ports = {}  # sid -> set of port_ids
         for c in config.connections + config.disconnected:
             for prefix in ("src", "dst"):
                 sid = c.get(f"{prefix}_stable_id")
-                if sid and sid not in online_stable_ids and sid not in seen_offline:
-                    seen_offline.add(sid)
-                    name = device_names.get(sid, sid)
-                    port = c.get(f"{prefix}_port", 0)
-                    result.append({
-                        "client_id": None,
-                        "stable_id": sid,
-                        "name": name,
-                        "default_name": name,
-                        "ports": [{"port_id": port, "name": "MIDI 1", "is_input": True, "is_output": True}],
-                        "online": False,
-                    })
+                if sid and sid not in online_stable_ids:
+                    offline_ports.setdefault(sid, set()).add(c.get(f"{prefix}_port", 0))
+        for sid, port_ids in offline_ports.items():
+            name = device_names.get(sid, sid)
+            ports = []
+            for pid in sorted(port_ids):
+                port_key = f"{sid}:{pid}"
+                pname = port_names.get(port_key, f"MIDI {pid + 1}")
+                ports.append({"port_id": pid, "name": pname, "default_name": f"MIDI {pid + 1}",
+                              "is_input": True, "is_output": True})
+            result.append({
+                "client_id": None,
+                "stable_id": sid,
+                "name": name,
+                "default_name": name,
+                "ports": ports,
+                "online": False,
+            })
 
         return Response.json(result)
+
+    # ================================================================
+    # DELETE /api/devices/{stable_id} — remove an offline device from saved config
+    # ================================================================
+
+    @server.route("DELETE", "/api/devices/", exact=False)
+    async def api_delete_device(req: Request) -> Response:
+        stable_id = req.path_param("/api/devices/")
+        if not stable_id:
+            return Response.error("Missing stable ID")
+
+        # Remove from saved connections
+        config.data["connections"] = [
+            c for c in config.connections
+            if c.get("src_stable_id") != stable_id and c.get("dst_stable_id") != stable_id
+        ]
+        # Remove from disconnected
+        config.data["disconnected"] = [
+            c for c in config.disconnected
+            if c.get("src_stable_id") != stable_id and c.get("dst_stable_id") != stable_id
+        ]
+        # Remove from runtime disconnected — filter out entries involving this device
+        registry = engine.device_registry
+        engine._disconnected = {
+            k: v for k, v in engine._disconnected.items()
+            if not any(
+                (info := registry.get_by_client(int(part.split(":")[0]))) and info.stable_id == stable_id
+                for part in k.split("-")
+            )
+        }
+        # Remove from device names
+        names = config.data.get("device_names", {})
+        names.pop(stable_id, None)
+
+        config.save()
+        await server.send_sse("connection-changed", {"action": "device-removed"})
+        return Response.json({"status": "removed"})
 
     # ================================================================
     # POST /api/devices/{client_id}/rename — rename a device
@@ -231,6 +278,35 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
             config.save()
 
             return Response.json({"status": "renamed", "name": name})
+
+        # POST /api/devices/{client_id}/rename-port
+        if path.endswith("/rename-port"):
+            try:
+                client_id = int(path[:-len("/rename-port")])
+            except ValueError:
+                return Response.error("Invalid client ID")
+
+            data = req.json
+            port_id = data.get("port_id")
+            name = data.get("name", "").strip()
+            if port_id is None:
+                return Response.error("port_id required")
+
+            registry = engine.device_registry
+            info = registry.get_by_client(client_id)
+            if info is None:
+                return Response.not_found()
+
+            port_names = config.data.get("port_names", {})
+            port_key = f"{info.stable_id}:{port_id}"
+            if name:
+                port_names[port_key] = name
+            else:
+                port_names.pop(port_key, None)
+            config.data["port_names"] = port_names
+            config.save()
+
+            return Response.json({"status": "renamed", "port_key": port_key, "name": name})
 
         # POST /api/devices/{client_id}/send
         if path.endswith("/send"):
@@ -267,7 +343,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         return Response.not_found()
 
     # ================================================================
-    # GET /api/connections — list active connections
+    # GET /api/connections — list active + offline connections
     # ================================================================
 
     @server.route("GET", "/api/connections")
@@ -294,6 +370,38 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
                 if mappings:
                     entry["mappings"] = [m.to_dict() for m in mappings]
             conns.append(entry)
+
+        # Add saved connections involving offline devices
+        registry = engine.device_registry
+        online_sids = set()
+        for dev in engine.devices:
+            info = registry.get_by_client(dev.client_id)
+            if info:
+                online_sids.add(info.stable_id)
+
+        for c in config.connections:
+            src_sid = c.get("src_stable_id")
+            dst_sid = c.get("dst_stable_id")
+            if not src_sid or not dst_sid:
+                continue
+            # Only include if at least one side is offline
+            if src_sid in online_sids and dst_sid in online_sids:
+                continue
+            entry = {
+                "id": f"offline:{src_sid}:{c.get('src_port', 0)}|{dst_sid}:{c.get('dst_port', 0)}",
+                "src_stable_id": src_sid,
+                "src_port": c.get("src_port", 0),
+                "dst_stable_id": dst_sid,
+                "dst_port": c.get("dst_port", 0),
+                "offline": True,
+                "filtered": bool(c.get("filter") or c.get("mappings")),
+            }
+            if c.get("filter"):
+                entry["filter"] = c["filter"]
+            if c.get("mappings"):
+                entry["mappings"] = c["mappings"]
+            conns.append(entry)
+
         return Response.json(conns)
 
     # ================================================================
@@ -303,6 +411,32 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
     @server.route("POST", "/api/connections", exact=True)
     async def api_create_connection(req: Request) -> Response:
         data = req.json
+
+        # Handle offline connection (stable IDs, no ALSA client)
+        if data.get("src_stable_id") or data.get("dst_stable_id"):
+            src_sid = data.get("src_stable_id", "")
+            dst_sid = data.get("dst_stable_id", "")
+            src_port = data.get("src_port", 0)
+            dst_port = data.get("dst_port", 0)
+            if not src_sid or not dst_sid:
+                return Response.error("Missing stable IDs for offline connection")
+            # Add to config connections
+            entry = {
+                "src_stable_id": src_sid, "src_port": src_port,
+                "dst_stable_id": dst_sid, "dst_port": dst_port,
+            }
+            # Check not already saved
+            existing = config.connections
+            if not any(c.get("src_stable_id") == src_sid and c.get("dst_stable_id") == dst_sid
+                       and c.get("src_port") == src_port and c.get("dst_port") == dst_port
+                       for c in existing):
+                existing.append(entry)
+                config.set_connections(existing)
+                config.save()
+            await server.send_sse("connection-changed", {"action": "created"})
+            config.set_mode("custom")
+            return Response.json({"status": "created"}, 201)
+
         for key in ("src_client", "src_port", "dst_client", "dst_port"):
             if key not in data or not isinstance(data[key], int):
                 return Response.error(f"Missing or invalid field: {key}")
@@ -331,6 +465,9 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         else:
             midi_filter = None
 
+        if needs_userspace and fe:
+            if midi_filter is None:
+                midi_filter = MidiFilter()
         if needs_userspace and fe and midi_filter:
             # Restore via filter engine (userspace passthrough)
             fe.add_filter(conn.src_client, conn.src_port,
@@ -375,6 +512,50 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
             config.set_mode("custom")
             await server.send_sse("connection-changed", {"action": "disconnected-all"})
             return Response.json({"status": "disconnected all"})
+
+        # Handle offline connection IDs: "offline:src_sid:port|dst_sid:port"
+        if conn_id.startswith("offline:"):
+            parts = conn_id[len("offline:"):]
+            try:
+                src_part, dst_part = parts.split("|", 1)
+                # src_part = "stable_id:port", dst_part = "stable_id:port"
+                src_sid, src_port_s = src_part.rsplit(":", 1)
+                dst_sid, dst_port_s = dst_part.rsplit(":", 1)
+                src_port = int(src_port_s)
+                dst_port = int(dst_port_s)
+            except (ValueError, IndexError):
+                return Response.error("Invalid offline connection ID")
+            # Find saved filter/mapping data before removing
+            saved_conn = None
+            for c in config.connections + config.disconnected:
+                if (c.get("src_stable_id") == src_sid and c.get("dst_stable_id") == dst_sid
+                        and c.get("src_port") == src_port and c.get("dst_port") == dst_port):
+                    saved_conn = c
+                    break
+            # Remove from saved connections
+            config.data["connections"] = [
+                c for c in config.connections
+                if not (c.get("src_stable_id") == src_sid and c.get("dst_stable_id") == dst_sid
+                        and c.get("src_port") == src_port and c.get("dst_port") == dst_port)
+            ]
+            disconn_entry = {
+                "src_stable_id": src_sid, "src_port": src_port,
+                "dst_stable_id": dst_sid, "dst_port": dst_port,
+            }
+            if saved_conn:
+                if saved_conn.get("filter"):
+                    disconn_entry["filter"] = saved_conn["filter"]
+                if saved_conn.get("mappings"):
+                    disconn_entry["mappings"] = saved_conn["mappings"]
+            # Add to disconnected if not already there
+            if not any(c.get("src_stable_id") == src_sid and c.get("dst_stable_id") == dst_sid
+                       and c.get("src_port") == src_port and c.get("dst_port") == dst_port
+                       for c in config.disconnected):
+                config.data.setdefault("disconnected", []).append(disconn_entry)
+            config.save()
+            config.set_mode("custom")
+            await server.send_sse("connection-changed", {"action": "deleted", "id": conn_id})
+            return Response.json({"status": "deleted"})
 
         # Parse id: "src_client:src_port-dst_client:dst_port"
         try:
@@ -632,15 +813,36 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         if not name or not isinstance(name, str):
             return Response.error("Missing preset name")
 
-        # Serialize current connections
-        conns = [{
-            "src_client": c.src_client, "src_port": c.src_port,
-            "dst_client": c.dst_client, "dst_port": c.dst_port,
-        } for c in engine.connections]
+        # Serialize current connections with stable IDs, filters, mappings
+        registry = engine.device_registry
+        fe = engine.filter_engine
+        conns = []
+        for c in engine.connections:
+            conn_id = f"{c.src_client}:{c.src_port}-{c.dst_client}:{c.dst_port}"
+            entry = {
+                "src_client": c.src_client, "src_port": c.src_port,
+                "dst_client": c.dst_client, "dst_port": c.dst_port,
+            }
+            src_info = registry.get_by_client(c.src_client)
+            dst_info = registry.get_by_client(c.dst_client)
+            if src_info:
+                entry["src_stable_id"] = src_info.stable_id
+            if dst_info:
+                entry["dst_stable_id"] = dst_info.stable_id
+            if fe:
+                f = fe.get_filter(conn_id)
+                if f:
+                    entry["filter"] = f.to_dict()
+                mappings = fe.get_mappings(conn_id)
+                if mappings:
+                    entry["mappings"] = [m.to_dict() for m in mappings]
+            conns.append(entry)
 
         if not config.save_preset(name, conns):
             return Response.error("Too many presets (max 100)")
 
+        # Also persist current device names
+        config.data["device_names"] = registry.get_custom_names()
         config.save()
         return Response.json({"status": "saved", "name": name}, 201)
 
@@ -663,14 +865,50 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
             if preset is None:
                 return Response.not_found()
 
-            # Apply preset connections
+            # Apply preset connections using stable IDs
+            from .midi_filter import MidiFilter as _MF, MidiMapping as _MM
             engine.disconnect_all()
+            engine._disconnected.clear()
+            registry = engine.device_registry
+            fe = engine.filter_engine
             for c in preset.get("connections", []):
                 try:
-                    conn = Connection(c["src_client"], c["src_port"],
-                                      c["dst_client"], c["dst_port"])
-                    engine._seq.subscribe(conn.src_client, conn.src_port,
-                                          conn.dst_client, conn.dst_port)
+                    # Resolve stable IDs to current client IDs
+                    src_stable = c.get("src_stable_id")
+                    dst_stable = c.get("dst_stable_id")
+                    if src_stable and dst_stable:
+                        src_client = registry.client_for_stable_id(src_stable)
+                        dst_client = registry.client_for_stable_id(dst_stable)
+                    else:
+                        src_client = c.get("src_client")
+                        dst_client = c.get("dst_client")
+                    if src_client is None or dst_client is None:
+                        continue
+                    sp, dp = c["src_port"], c["dst_port"]
+                    conn = Connection(src_client, sp, dst_client, dp)
+                    conn_id = f"{src_client}:{sp}-{dst_client}:{dp}"
+
+                    # Check if needs userspace (filter/mappings)
+                    filter_data = c.get("filter")
+                    mappings_data = c.get("mappings", [])
+                    needs_userspace = bool(mappings_data)
+                    midi_filter = None
+                    if filter_data:
+                        midi_filter = _MF.from_dict(filter_data)
+                        needs_userspace = needs_userspace or not midi_filter.is_passthrough
+
+                    if needs_userspace and fe:
+                        if midi_filter is None:
+                            midi_filter = _MF()  # passthrough filter for mappings-only
+                    if needs_userspace and fe and midi_filter:
+                        fe.add_filter(src_client, sp, dst_client, dp, midi_filter)
+                        for md in mappings_data:
+                            try:
+                                fe.add_mapping(conn_id, _MM.from_dict(md))
+                            except (ValueError, KeyError):
+                                pass
+                    else:
+                        engine._seq.subscribe(src_client, sp, dst_client, dp)
                     engine._connections.add(conn)
                 except (OSError, KeyError):
                     pass
@@ -760,6 +998,14 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
                 entry.update(saved_data)
             disconn.append(entry)
         config.data["disconnected"] = disconn
+
+        # Persist all device names (custom + ALSA defaults) by stable ID
+        names = dict(registry.get_custom_names())
+        for dev in engine.devices:
+            info = registry.get_by_client(dev.client_id)
+            if info and info.stable_id not in names:
+                names[info.stable_id] = info.name
+        config.data["device_names"] = names
 
         if config.save():
             return Response.json({"status": "saved"})
@@ -871,6 +1117,56 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
 
         await server.send_sse("connection-changed", {"action": "config-loaded"})
         return Response.json({"status": "loaded"})
+
+    # ================================================================
+    # GET /api/config/export — download full config as JSON
+    # ================================================================
+
+    @server.route("GET", "/api/config/export")
+    async def api_export_config(req: Request) -> Response:
+        import json as _json
+        return Response(
+            status=200,
+            body=_json.dumps(config.data, indent=2).encode(),
+            content_type="application/json",
+            headers={
+                "Content-Disposition": 'attachment; filename="raspimidihub-config.json"',
+            },
+        )
+
+    # ================================================================
+    # POST /api/config/import — upload and apply a full config JSON
+    # ================================================================
+
+    @server.route("POST", "/api/config/import")
+    async def api_import_config(req: Request) -> Response:
+        from .__main__ import _apply_saved_config
+
+        data = req.json
+        if not isinstance(data, dict) or "version" not in data:
+            return Response.error("Invalid config format")
+
+        config._data = data
+        config.save()
+
+        # Apply the imported config
+        if config.mode == "custom":
+            engine.disconnect_all()
+            _apply_saved_config(engine, config)
+            engine._update_monitor_subscriptions()
+        else:
+            engine.disconnect_all()
+            engine.scan_devices()
+            engine.connect_all()
+            engine._update_monitor_subscriptions()
+
+        # Reload device names
+        device_names = config.data.get("device_names", {})
+        if device_names:
+            engine.device_registry.load_custom_names(device_names)
+
+        await server.send_sse("connection-changed", {"action": "config-loaded"})
+        return Response.json({"status": "imported"})
 
     # ================================================================
     # Network API

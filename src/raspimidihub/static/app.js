@@ -1,5 +1,5 @@
 import { h, render } from './lib/preact.module.js';
-import { useState, useEffect, useCallback } from './lib/hooks.module.js';
+import { useState, useEffect, useCallback, useRef } from './lib/hooks.module.js';
 import htm from './lib/htm.module.js';
 
 const html = htm.bind(h);
@@ -44,14 +44,16 @@ function Toast({ message }) {
 
 // --- MIDI Activity Bar ---
 function MidiBar({ events }) {
-    const entries = Object.values(events).sort((a, b) => b.ts - a.ts);
+    const now = Date.now();
+    const entries = Object.values(events).filter(e => now - e.ts < 2000).sort((a, b) => b.ts - a.ts);
     const truncName = (n) => n.length > 8 ? n.slice(0, 7) + '\u2026' : n;
+    const countStr = (e) => e.count > 1 ? ' x' + e.count : '';
     if (entries.length === 0) return html`<div class="midi-bar"><span class="midi-bar-empty">\u00b7\u00b7\u00b7</span></div>`;
     const left = entries[0];
     const right = entries.length > 1 ? entries[1] : null;
     return html`<div class="midi-bar">
-        <span class="midi-bar-l">${truncName(left.name)} ${left.detail}</span>
-        ${right && html`<span class="midi-bar-r">${truncName(right.name)} ${right.detail}</span>`}
+        <span class="midi-bar-l"><b>In:</b> <span class="midi-bar-name">${truncName(left.name)}</span> ${left.detail}${countStr(left)}</span>
+        ${right && html`<span class="midi-bar-r"><b>In:</b> <span class="midi-bar-name">${truncName(right.name)}</span>\u2002${right.detail}${countStr(right)}</span>`}
     </div>`;
 }
 
@@ -363,7 +365,7 @@ function FilterPanel({ connId, filter, mappings, onClose, onApply, onMappingAdd,
 // --- Matrix cell with long-press + right-click for filters ---
 let _blockClick = false;
 
-function MatrixCell({ on, filtered, onTap, onLongPress }) {
+function MatrixCell({ on, filtered, onTap, onLongPress, offline }) {
     const [s] = useState(() => ({ timer: null }));
 
     const startTimer = () => {
@@ -373,6 +375,9 @@ function MatrixCell({ on, filtered, onTap, onLongPress }) {
     const cancelTimer = () => {
         if (s.timer) { clearTimeout(s.timer); s.timer = null; }
     };
+
+    let cls = on ? (filtered ? 'on filtered' : 'on') : '';
+    if (offline) cls += ' offline-cell';
 
     return html`<td
         onTouchStart=${startTimer}
@@ -386,18 +391,21 @@ function MatrixCell({ on, filtered, onTap, onLongPress }) {
             onTap();
         }}
         onContextMenu=${(e) => { e.preventDefault(); onLongPress(); }}>
-        <div class="cb ${on ? (filtered ? 'on filtered' : 'on') : ''}"></div>
+        <div class="cb ${cls}"></div>
     </td>`;
 }
 
 // --- Connection Matrix ---
-function ConnectionMatrix({ devices, connections, onToggle, onFilterOpen }) {
+function ConnectionMatrix({ devices, connections, onToggle, onFilterOpen, onRemoveDevice, showToast, clockSources }) {
     const inputs = [];
     const outputs = [];
     for (const dev of devices) {
+        const inCount = dev.ports.filter(p => p.is_input).length;
+        const outCount = dev.ports.filter(p => p.is_output).length;
         for (const p of dev.ports) {
-            if (p.is_input) inputs.push({ ...p, client_id: dev.client_id, dev_name: dev.name, online: dev.online !== false });
-            if (p.is_output) outputs.push({ ...p, client_id: dev.client_id, dev_name: dev.name, online: dev.online !== false });
+            const extra = { client_id: dev.client_id, dev_name: dev.name, dev_default_name: dev.default_name || dev.name, port_name: p.name, port_default_name: p.default_name || p.name, online: dev.online !== false, stable_id: dev.stable_id };
+            if (p.is_input) inputs.push({ ...p, ...extra, multi: inCount > 1 });
+            if (p.is_output) outputs.push({ ...p, ...extra, multi: outCount > 1 });
         }
     }
     const byName = (a, b) => a.dev_name.localeCompare(b.dev_name);
@@ -406,17 +414,57 @@ function ConnectionMatrix({ devices, connections, onToggle, onFilterOpen }) {
 
     const connMap = {};
     for (const c of connections) {
-        connMap[`${c.src_client}:${c.src_port}-${c.dst_client}:${c.dst_port}`] = c;
+        if (c.offline) {
+            connMap[`offline:${c.src_stable_id}:${c.src_port}|${c.dst_stable_id}:${c.dst_port}`] = c;
+        } else {
+            connMap[`${c.src_client}:${c.src_port}-${c.dst_client}:${c.dst_port}`] = c;
+        }
     }
 
-    const getConn = (inp, out) => connMap[`${inp.client_id}:${inp.port_id}-${out.client_id}:${out.port_id}`];
-    const isSelf = (inp, out) => inp.client_id === out.client_id;
+    const getConn = (inp, out) => {
+        // Try active connection first
+        const active = connMap[`${inp.client_id}:${inp.port_id}-${out.client_id}:${out.port_id}`];
+        if (active) return active;
+        // Try offline connection by stable ID
+        if (inp.stable_id && out.stable_id) {
+            return connMap[`offline:${inp.stable_id}:${inp.port_id}|${out.stable_id}:${out.port_id}`];
+        }
+        return null;
+    };
+    const isSelf = (inp, out) => inp.client_id && inp.client_id === out.client_id;
     const isOffline = (inp, out) => !inp.online || !out.online;
 
+    // label(): short text shown in matrix row/column headers
+    // item.dev_name = current device name (renamed or ALSA default)
+    // item.dev_default_name = original ALSA device name
+    // item.port_name = current port name (renamed or ALSA default)
+    // item.port_default_name = original ALSA port name
+    // item.multi = device has multiple input or output ports
     const label = (item) => {
+        // Multi-port device with renamed port: show full custom port name (user chose it)
+        if (item.multi && item.port_name !== item.port_default_name) {
+            return item.port_name;
+        }
+        // Otherwise: show (possibly renamed) device name, truncated to 2 words
         const parts = item.dev_name.split(' ');
-        return parts.length > 2 ? parts.slice(0,2).join(' ') : item.dev_name;
+        let short = parts.length > 2 ? parts.slice(0,2).join(' ') : item.dev_name;
+        if (item.multi) short += ` p${item.port_id + 1}`;
+        return short;
     };
+    const showName = (item) => {
+        const name = item.multi ? `${item.dev_name}: ${item.port_name}` : item.dev_name;
+        const origDev = item.dev_default_name && item.dev_default_name !== item.dev_name;
+        const origPort = item.multi && item.port_default_name && item.port_default_name !== item.port_name;
+        const orig = origDev || origPort
+            ? origPort ? `${item.dev_default_name}: ${item.port_default_name}` : item.dev_default_name
+            : null;
+        const clock = clockSources && clockSources[item.client_id];
+        showToast(html`<span>${name}</span>${orig ? html` <span style="color:var(--text-dim);font-weight:normal;font-size:12px">(${orig})</span>` : ''}${clock ? html` <span style="font-size:12px">${multiClock ? '\u26a0 Clock (multiple!)' : '\u23f1 Clock'}</span>` : ''}`);
+    };
+
+    // Clock indicator: count how many input ports are sending clock
+    const clockClientIds = clockSources ? Object.keys(clockSources).map(Number) : [];
+    const multiClock = clockClientIds.length > 1;
 
     if (inputs.length === 0 || outputs.length === 0) {
         return html`<div class="card"><p style="color:var(--text-dim)">No MIDI devices connected</p></div>`;
@@ -428,26 +476,31 @@ function ConnectionMatrix({ devices, connections, onToggle, onFilterOpen }) {
                 <thead>
                     <tr>
                         <th class="corner-header"><span class="from-label">FROM \u2193</span><span class="to-label">TO \u2192</span></th>
-                        ${outputs.map(o => html`<th title="${o.dev_name}: ${o.name}" class=${o.online ? '' : 'offline'}>${label(o)}</th>`)}
+                        ${outputs.map(o => html`<th class=${o.online ? '' : 'offline'} style="cursor:pointer"
+                            title="${o.multi ? o.dev_name + ': ' + o.port_name : o.dev_name}"
+                            onclick=${() => o.online ? showName(o) : (o.stable_id && onRemoveDevice && confirm('Remove ' + o.dev_name + '?') && onRemoveDevice(o.stable_id))}><span>${label(o)}</span></th>`)}
                     </tr>
                 </thead>
                 <tbody>
-                    ${inputs.map(inp => html`
+                    ${inputs.map(inp => {
+                        const sendsClock = clockClientIds.includes(inp.client_id);
+                        return html`
                         <tr>
-                            <th class="row-header ${inp.online ? '' : 'offline'}" title="${inp.dev_name}: ${inp.name}">${label(inp)}</th>
+                            <th class="row-header ${inp.online ? '' : 'offline'}" style="cursor:pointer"
+                                title="${inp.multi ? inp.dev_name + ': ' + inp.port_name : inp.dev_name}"
+                                onclick=${() => inp.online ? showName(inp) : (inp.stable_id && onRemoveDevice && confirm('Remove ' + inp.dev_name + '?') && onRemoveDevice(inp.stable_id))}>${label(inp)}${sendsClock ? html`<span class="clock-icon ${multiClock ? 'clock-warn' : ''}" title="${multiClock ? 'Multiple clock sources!' : 'Sending clock'}"></span>` : ''}</th>
                             ${outputs.map(out => {
                                 if (isSelf(inp, out)) return html`<td class="self"></td>`;
                                 const offline = isOffline(inp, out);
-                                if (offline) return html`<td class="cell offline"></td>`;
                                 const conn = getConn(inp, out);
                                 const on = !!conn;
                                 const filtered = conn && (conn.filtered || (conn.mappings && conn.mappings.length > 0));
-                                return html`<${MatrixCell} on=${on} filtered=${filtered}
+                                return html`<${MatrixCell} on=${on} filtered=${filtered} offline=${offline}
                                     onTap=${() => onToggle(inp, out, !on)}
                                     onLongPress=${() => { if (on) onFilterOpen(conn); }} />`;
                             })}
                         </tr>
-                    `)}
+                    `;})}
                 </tbody>
             </table>
         </div>
@@ -458,22 +511,28 @@ function ConnectionMatrix({ devices, connections, onToggle, onFilterOpen }) {
 }
 
 // --- Routing Page ---
-function RoutingPage({ devices, connections, refresh, showToast }) {
+function RoutingPage({ devices, connections, refresh, showToast, clockSources }) {
     const [filterConnId, setFilterConnId] = useState(null);
     const filterConn = filterConnId ? connections.find(c => c.id === filterConnId) || null : null;
 
     const onToggle = async (inp, out, connect) => {
+        const offline = !inp.online || !out.online;
         if (connect) {
+            const body = offline
+                ? { src_stable_id: inp.stable_id, src_port: inp.port_id, dst_stable_id: out.stable_id, dst_port: out.port_id }
+                : { src_client: inp.client_id, src_port: inp.port_id, dst_client: out.client_id, dst_port: out.port_id };
             await api('/connections', {
                 method: 'POST',
-                body: JSON.stringify({
-                    src_client: inp.client_id, src_port: inp.port_id,
-                    dst_client: out.client_id, dst_port: out.port_id,
-                }),
+                body: JSON.stringify(body),
             });
         } else {
-            const id = `${inp.client_id}:${inp.port_id}-${out.client_id}:${out.port_id}`;
-            await api(`/connections/${id}`, { method: 'DELETE' });
+            const conn = connections.find(c =>
+                (c.offline && c.src_stable_id === inp.stable_id && c.dst_stable_id === out.stable_id
+                    && c.src_port === inp.port_id && c.dst_port === out.port_id)
+                || (!c.offline && c.src_client === inp.client_id && c.src_port === inp.port_id
+                    && c.dst_client === out.client_id && c.dst_port === out.port_id));
+            const id = conn ? conn.id : `${inp.client_id}:${inp.port_id}-${out.client_id}:${out.port_id}`;
+            await api(`/connections/${encodeURIComponent(id)}`, { method: 'DELETE' });
         }
         refresh();
     };
@@ -542,10 +601,21 @@ function RoutingPage({ devices, connections, refresh, showToast }) {
             onMappingDelete=${onMappingDelete}
             onMappingSave=${onMappingSave}
             srcClientId=${filterConn.src_client} />`}
-        <${ConnectionMatrix} devices=${devices} connections=${connections} onToggle=${onToggle} onFilterOpen=${(conn) => setFilterConnId(conn.id)} />
+        <${ConnectionMatrix} devices=${devices} connections=${connections} onToggle=${onToggle} onFilterOpen=${(conn) => setFilterConnId(conn.id)}
+            onRemoveDevice=${async (sid) => { await api('/devices/' + encodeURIComponent(sid), { method: 'DELETE' }); refresh(); }}
+            showToast=${showToast} clockSources=${clockSources} />
         <div class="btn-group">
             <button class="btn btn-primary" onclick=${saveConfig} disabled=${saving || loading}>${saving ? 'Saving...' : 'Save Config'}</button>
             <button class="btn btn-secondary" onclick=${loadConfig} disabled=${saving || loading}>${loading ? 'Loading...' : 'Load Config'}</button>
+        </div>
+        <div class="btn-group" style="margin-top:4px">
+            <button class="btn btn-secondary" onclick=${() => { const a = document.createElement('a'); a.href = '/api/config/export'; a.download = 'raspimidihub-config.json'; a.click(); }}>Export Config</button>
+            <button class="btn btn-secondary" onclick=${() => {
+                const inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.json';
+                inp.onchange = async () => { const text = await inp.files[0].text(); const data = JSON.parse(text);
+                    await api('/config/import', { method: 'POST', body: JSON.stringify(data) }); refresh(); showToast('Config imported'); };
+                inp.click();
+            }}>Import Config</button>
         </div>
     `;
 }
@@ -633,14 +703,36 @@ const NOTE_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
 const noteName = (n) => NOTE_NAMES[n % 12] + (Math.floor(n / 12) - 2);
 
 // --- Device Detail Page ---
+function PortRenameRow({ device, port, showToast }) {
+    const [name, setName] = useState(port.name);
+    const [dirty, setDirty] = useState(false);
+    const save = async () => {
+        await api(`/devices/${device.client_id}/rename-port`, {
+            method: 'POST',
+            body: JSON.stringify({ port_id: port.port_id, name: name.trim() }),
+        });
+        showToast('Port renamed');
+        setDirty(false);
+    };
+    const dir = (port.is_input ? 'IN' : '') + (port.is_input && port.is_output ? '/' : '') + (port.is_output ? 'OUT' : '');
+    return html`
+        <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px">
+            <span style="font-size:11px;color:var(--text-dim);min-width:30px">${dir}</span>
+            <input style="flex:1;padding:6px 8px;background:var(--bg);border:1px solid var(--surface2);border-radius:4px;color:var(--text);font-size:12px"
+                value=${name} onInput=${e => { setName(e.target.value); setDirty(true); }} onKeyDown=${e => e.key === 'Enter' && save()} />
+            ${dirty && name.trim() !== port.name && html`
+                <button style="padding:4px 10px;background:var(--accent);color:#fff;border:none;border-radius:4px;font-size:11px;cursor:pointer;white-space:nowrap" onclick=${save}>Save</button>
+            `}
+        </div>
+    `;
+}
+
 function DeviceDetailPanel({ device, onClose, showToast }) {
     const panelRef = { current: null };
     const close = () => animateClose(panelRef.current, onClose);
     const swipe = useSwipeDismiss(close);
 
     const [editName, setEditName] = useState(device.name);
-    const [lastEvent, setLastEvent] = useState(null);
-    const [events, setEvents] = useState([]);
     const [sendChannel, setSendChannel] = useState(0);
     const [sendPort, setSendPort] = useState(0);
     const [ccNum, setCcNum] = useState(1);
@@ -651,15 +743,24 @@ function DeviceDetailPanel({ device, onClose, showToast }) {
 
     const outPorts = device.ports.filter(p => p.is_output);
 
+    // Use refs for MIDI monitor to avoid re-rendering the whole panel
+    const monitorRef = useRef(null);
+    const lastEventRef = useRef(null);
+    const eventsRef = useRef([]);
+
     useEffect(() => {
         const es = new EventSource('/api/events');
         const handler = (e) => {
             try {
                 const data = JSON.parse(e.data);
-                if (data.src_client === device.client_id) {
+                if (data.src_client === device.client_id && data.event !== 'Clock') {
                     const line = formatEvent(data);
-                    setLastEvent(line);
-                    setEvents(prev => [{ line, ts: Date.now() }, ...prev].slice(0, maxEvents));
+                    eventsRef.current = [{ line, ts: Date.now() }, ...eventsRef.current].slice(0, maxEvents);
+                    if (lastEventRef.current) lastEventRef.current.textContent = line;
+                    if (monitorRef.current) {
+                        monitorRef.current.innerHTML = eventsRef.current.map(ev =>
+                            `<div class="midi-event">${ev.line}</div>`).join('');
+                    }
                 }
             } catch {}
         };
@@ -681,6 +782,7 @@ function DeviceDetailPanel({ device, onClose, showToast }) {
         return s;
     };
 
+    const [nameDirty, setNameDirty] = useState(false);
     const rename = async () => {
         if (!editName.trim() || editName === device.name) return;
         await api(`/devices/${device.client_id}/rename`, {
@@ -688,6 +790,7 @@ function DeviceDetailPanel({ device, onClose, showToast }) {
             body: JSON.stringify({ name: editName.trim() }),
         });
         showToast('Device renamed');
+        setNameDirty(false);
     };
 
     const sendMidi = (type, extra = {}) => {
@@ -737,20 +840,27 @@ function DeviceDetailPanel({ device, onClose, showToast }) {
                         ${device.vid ? html`<div class="stat"><div class="label">USB</div><div class="value">${device.vid}:${device.pid}</div></div>` : ''}
                         <div class="stat"><div class="label">Ports</div><div class="value">${device.ports.map(p => (p.is_input?'IN':'')+(p.is_input&&p.is_output?'/':'')+(p.is_output?'OUT':'')).join(', ')}</div></div>
                     </div>
-                    <div style="display:flex;gap:8px;margin-top:12px">
-                        <input style="flex:1;padding:10px 12px;background:var(--bg);border:1px solid var(--surface2);border-radius:6px;color:var(--text);font-size:14px;min-height:48px"
-                            value=${editName} onInput=${e => setEditName(e.target.value)}
+                    <div style="display:flex;gap:8px;margin-top:12px;align-items:center">
+                        <input style="flex:1;padding:8px 10px;background:var(--bg);border:1px solid var(--surface2);border-radius:6px;color:var(--text);font-size:14px"
+                            value=${editName} onInput=${e => { setEditName(e.target.value); setNameDirty(true); }}
                             onKeyDown=${e => e.key === 'Enter' && rename()} />
-                        <button class="btn btn-primary" onclick=${rename}>Rename</button>
+                        ${nameDirty && editName.trim() !== device.name && html`<button style="padding:6px 14px;background:var(--accent);color:#fff;border:none;border-radius:6px;font-size:13px;cursor:pointer;white-space:nowrap" onclick=${rename}>Save</button>`}
                     </div>
                 </div>
 
+                ${device.ports.length > 1 && html`
+                    <div class="card">
+                        <h3>Ports</h3>
+                        ${device.ports.map(p => html`
+                            <${PortRenameRow} device=${device} port=${p} showToast=${showToast} />
+                        `)}
+                    </div>
+                `}
+
                 <div class="card">
                     <h3>MIDI Monitor</h3>
-                    <div class="midi-last">${lastEvent || 'Waiting for MIDI...'}</div>
-                    <div class="midi-monitor">
-                        ${events.map(e => html`<div class="midi-event">${e.line}</div>`)}
-                    </div>
+                    <div class="midi-last" ref=${lastEventRef}>Waiting for MIDI...</div>
+                    <div class="midi-monitor" ref=${monitorRef}></div>
                 </div>
 
                 ${outPorts.length > 0 && html`
@@ -1177,39 +1287,85 @@ function SettingsPage({ showToast, showMidiBar, toggleMidiBar }) {
 function App() {
     const [tab, setTab] = useState('routing');
     const [devices, setDevices] = useState([]);
+    const devicesRef = useRef([]);
+    const connectionsRef = useRef([]);
     const [connections, setConnections] = useState([]);
     const [toast, setToast] = useState('');
     const [configFallback, setConfigFallback] = useState(false);
     const [version, setVersion] = useState('');
-    const [selectedDevice, setSelectedDevice] = useState(null);
+    const [selectedDeviceId, setSelectedDeviceId] = useState(null);
+    const selectedDevice = selectedDeviceId != null ? devices.find(d => d.client_id === selectedDeviceId) || null : null;
     const [showMidiBar, setShowMidiBar] = useState(() => localStorage.getItem('midiBar') !== 'off');
     const [midiEvents, setMidiEvents] = useState({});  // src_client -> {name, text}
+    const [clockSources, setClockSources] = useState({});  // src_client -> timestamp
     const [sseConnected, setSseConnected] = useState(true);
 
     const refresh = useCallback(async () => {
         const [devs, conns] = await Promise.all([api('/devices'), api('/connections')]);
-        setDevices(devs);
-        setConnections(conns);
+        const d = Array.isArray(devs) ? devs : [];
+        const c = Array.isArray(conns) ? conns : [];
+        setDevices(d);
+        devicesRef.current = d;
+        setConnections(c);
+        connectionsRef.current = c;
     }, []);
 
     useEffect(() => {
         refresh();
         api('/system').then(s => { setConfigFallback(s.config_fallback); setVersion(s.version || ''); });
+        // Expire stale clock sources and midi events
+        const expireTimer = setInterval(() => {
+            const now = Date.now();
+            setClockSources(prev => {
+                const next = {};
+                let changed = false;
+                for (const [k, ts] of Object.entries(prev)) {
+                    if (now - ts < 3000) next[k] = ts;
+                    else changed = true;
+                }
+                return changed ? next : prev;
+            });
+            setMidiEvents(prev => {
+                const next = {};
+                let changed = false;
+                for (const [k, v] of Object.entries(prev)) {
+                    if (now - v.ts < 2000) next[k] = v;
+                    else changed = true;
+                }
+                return changed ? next : prev;
+            });
+        }, 1000);
+        return () => clearInterval(expireTimer);
     }, []);
 
     useSSE((type, data) => {
         if (type === 'device-connected' || type === 'device-disconnected' || type === 'connection-changed') {
             refresh();
         }
-        if (type === 'midi-activity' && showMidiBar) {
-            const dev = devices.find(d => d.client_id === data.src_client);
+        if (type === 'midi-activity') {
+            // Track clock sources regardless of connections
+            if (data.event === 'Clock') {
+                setClockSources(prev => ({...prev, [data.src_client]: Date.now()}));
+                return;
+            }
+
+            // Only show non-clock events from devices that have active connections
+            const hasConn = connectionsRef.current.some(c => c.src_client === data.src_client);
+            if (!hasConn) return;
+
+            if (!showMidiBar) return;
+            const dev = devicesRef.current.find(d => d.client_id === data.src_client);
             const name = dev ? dev.name : `${data.src_client}`;
             let detail = '';
             if (data.channel != null) detail += `[CH${data.channel}] `;
             if (data.note != null) detail += `${noteName(data.note)} vel=${data.velocity}`;
             else if (data.cc != null) detail += `CC${data.cc}=${data.value}`;
             else detail += data.event;
-            setMidiEvents(prev => ({...prev, [data.src_client]: { name, detail, ts: Date.now() }}));
+            setMidiEvents(prev => {
+                const old = prev[data.src_client];
+                const count = (old && old.detail === detail) ? (old.count || 1) + 1 : 1;
+                return {...prev, [data.src_client]: { name, detail, ts: Date.now(), count }};
+            });
         }
     }, (connected) => {
         setSseConnected(connected);
@@ -1230,13 +1386,13 @@ function App() {
     let page;
     switch (tab) {
         case 'routing':
-            page = html`<${RoutingPage} devices=${devices} connections=${connections} refresh=${refresh} showToast=${showToast} />`;
+            page = html`<${RoutingPage} devices=${devices} connections=${connections} refresh=${refresh} showToast=${showToast} clockSources=${clockSources} />`;
             break;
         case 'presets':
             page = html`<${PresetsPage} refresh=${refresh} showToast=${showToast} />`;
             break;
         case 'status':
-            page = html`<${StatusPage} devices=${devices} onDeviceSelect=${setSelectedDevice} />`;
+            page = html`<${StatusPage} devices=${devices} onDeviceSelect=${d => setSelectedDeviceId(d.client_id)} />`;
             break;
         case 'settings':
             page = html`<${SettingsPage} showToast=${showToast} showMidiBar=${showMidiBar} toggleMidiBar=${toggleMidiBar} />`;
@@ -1257,8 +1413,8 @@ function App() {
             <button class=${tab === 'status' ? 'active' : ''} onclick=${() => setTab('status')}>${IconStatus}<span>Status</span></button>
             <button class=${tab === 'settings' ? 'active' : ''} onclick=${() => setTab('settings')}>${IconSettings}<span>Settings</span></button>
         </nav>
-        ${selectedDevice && html`<${DeviceDetailPanel} device=${selectedDevice}
-            onClose=${() => { setSelectedDevice(null); refresh(); }}
+        ${selectedDevice && html`<${DeviceDetailPanel} key=${selectedDeviceId} device=${selectedDevice}
+            onClose=${() => { setSelectedDeviceId(null); refresh(); }}
             showToast=${showToast} />`}
         <${Toast} message=${toast} />
     `;

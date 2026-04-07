@@ -155,7 +155,20 @@ body {
     top: 0;
     font-weight: 500;
     white-space: nowrap;
-    max-width: 100px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.matrix thead th:not(.corner-header) {
+    height: 100px;
+    vertical-align: bottom;
+    padding: 0 2px 4px;
+}
+.matrix thead th:not(.corner-header) > span {
+    writing-mode: vertical-rl;
+    transform: rotate(180deg);
+    white-space: nowrap;
+    display: inline-block;
+    max-height: 90px;
     overflow: hidden;
     text-overflow: ellipsis;
 }
@@ -202,10 +215,12 @@ body {
     height: 36px;
     border-radius: 6px;
     border: 2px solid var(--surface2);
-    display: inline-flex;
+    display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.15s;
+    box-sizing: border-box;
+    transition: background 0.15s, border-color 0.15s;
+    margin: auto;
 }
 .matrix .cb.on {
     background: var(--accent);
@@ -216,6 +231,7 @@ body {
     color: #fff;
     font-size: 18px;
     font-weight: bold;
+    line-height: 1;
 }
 
 /* --- Cards --- */
@@ -486,6 +502,27 @@ body {
     background: var(--accent2);
     border-color: var(--accent2);
 }
+.matrix .cb.offline-cell {
+    opacity: 0.2;
+}
+.clock-icon {
+    display: inline-block;
+    width: 0;
+    height: 0;
+    border-style: solid;
+    border-width: 5px 0 5px 9px;
+    border-color: transparent transparent transparent var(--success);
+    vertical-align: middle;
+    margin-left: 5px;
+    animation: clock-pulse 0.6s ease-in-out infinite;
+}
+.clock-icon.clock-warn {
+    border-left-color: var(--warn);
+}
+@keyframes clock-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+}
 
 /* --- MIDI Monitor --- */
 .midi-last {
@@ -600,10 +637,19 @@ body {
     overflow: hidden;
     text-overflow: ellipsis;
     max-width: 50%;
+    display: inline-flex;
+}
+.midi-bar-name {
+    display: inline-block;
+    width: 65px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex-shrink: 0;
 }
 .midi-bar-r {
     text-align: right;
-    color: var(--accent2);
+    color: #b0b0b0;
+    justify-content: flex-end;
 }
 .midi-bar-empty {
     width: 100%;
