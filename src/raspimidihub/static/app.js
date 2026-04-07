@@ -505,7 +505,7 @@ function ConnectionMatrix({ devices, connections, onToggle, onFilterOpen, onRemo
             </table>
         </div>
         <p style="font-size:11px;color:var(--text-dim);text-align:center;margin-top:4px">
-            Long-press a connection for filters & mappings
+            Long-press or right-click a connection for filters & mappings
         </p>
     `;
 }

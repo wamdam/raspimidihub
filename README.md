@@ -47,9 +47,11 @@ See the full [UI Guide](docs/UI_GUIDE.md) for all screens.
 - **MIDI activity bar:** Persistent live MIDI event display with auto-expire (toggleable)
 - **MIDI monitor:** Per-device real-time event log with note names
 - **MIDI test sender:** Piano keyboard and CC slider for testing connections
+- **Ethernet network config:** Configure eth0 as DHCP or static IP with gateway and DNS
 - **Client mode:** Join an existing WiFi network. Reachable at `http://raspimidihub.local`
 - **WiFi network scanner:** Browse available networks from the settings page
 - **Auto-fallback:** If WiFi connection is lost, the Pi automatically reverts to AP mode within ~90 seconds
+- **Remove offline devices:** Tap an offline device label in the matrix to remove it from saved config
 
 ### MIDI Filtering
 - **Per-connection channel filtering:** Enable/disable any of the 16 MIDI channels per connection

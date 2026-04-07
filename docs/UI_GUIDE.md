@@ -97,11 +97,11 @@ Tap a device on the Status page to open the detail panel (slides up). Features:
 
 Configuration and system controls.
 
-- **WiFi:** Current mode (AP or client) with clear status badge. Join WiFi or change AP settings.
-- **Network:** Configure eth0 as DHCP or static IP.
-- **MIDI Routing:** Default routing for new devices — "all-to-all" or "none (manual)".
+- **WiFi:** Current mode (AP or client) with clear status badge. Join WiFi or change AP password.
+- **Ethernet (eth0):** Configure as DHCP or static IP with address, netmask, gateway, and DNS (8.8.8.8 added automatically for static).
+- **MIDI Routing:** Default routing for new devices — "Connect all" (every new device connects to all others) or "None" (new devices start disconnected).
 - **Display:** Toggle the persistent MIDI activity bar.
-- **Software Update:** Check for updates, view changelog, one-click install (requires internet via Ethernet).
+- **Software Update:** Check for updates, view changelog, one-click install (requires internet — easiest via Ethernet cable, which works alongside the WiFi AP).
 - **System:** Reboot the Pi remotely.
 
 **Safety net:** If the WiFi connection is lost in client mode, the Pi automatically falls back to AP mode within ~90 seconds. Run `sudo reset-wifi` from a console to force AP mode.
