@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Control Prototypes</title>
+<style>
+:root {
+    --bg: #1a1a2e;
+    --surface: #16213e;
+    --surface2: #0f3460;
+    --accent: #e94560;
+    --text: #eee;
+    --text-dim: #999;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--text); font-family: -apple-system, system-ui, sans-serif; padding: 20px; }
+h2 { font-size: 14px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; margin: 24px 0 12px; }
+h1 { font-size: 18px; margin-bottom: 8px; }
+p.sub { font-size: 12px; color: var(--text-dim); margin-bottom: 20px; }
+
+/* === WHEEL CONTROL === */
+.wheel-group {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 20px;
+}
+.wheel-label {
+    font-size: 13px;
+    color: var(--text-dim);
+    min-width: 70px;
+}
+.wheel-value {
+    font-size: 15px;
+    font-weight: 600;
+    min-width: 40px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+.wheel-container {
+    flex: 1;
+    max-width: 200px;
+    height: 54px;
+    overflow: hidden;
+    border-radius: 12px;
+    background: linear-gradient(180deg, #0a0a1a 0%, #1a1a3e 15%, #22224a 50%, #1a1a3e 85%, #0a0a1a 100%);
+    box-shadow: inset 0 2px 8px rgba(0,0,0,0.6), inset 0 -2px 8px rgba(0,0,0,0.6), 0 1px 3px rgba(255,255,255,0.05);
+    position: relative;
+    touch-action: none;
+    cursor: grab;
+    border: 1px solid rgba(255,255,255,0.06);
+}
+.wheel-container:active { cursor: grabbing; }
+.wheel-inner {
+    position: absolute;
+    width: 100%;
+    left: 0;
+    will-change: transform;
+}
+.wheel-tick {
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    color: rgba(255,255,255,0.2);
+    position: relative;
+    font-variant-numeric: tabular-nums;
+}
+.wheel-tick::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    height: 1px;
+    background: rgba(255,255,255,0.06);
+}
+.wheel-tick.major {
+    color: rgba(255,255,255,0.5);
+    font-weight: 500;
+}
+.wheel-tick.active {
+    color: #fff;
+    font-weight: 700;
+    text-shadow: 0 0 8px rgba(233,69,96,0.5);
+}
+/* Highlight center line */
+.wheel-container::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 8px;
+    right: 8px;
+    height: 2px;
+    margin-top: -1px;
+    background: var(--accent);
+    opacity: 0.6;
+    border-radius: 1px;
+    pointer-events: none;
+    z-index: 2;
+}
+/* Curved shadow overlay for 3D drum effect */
+.wheel-container::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse 120% 50% at 50% 50%, transparent 40%, rgba(0,0,0,0.7) 100%);
+    pointer-events: none;
+    z-index: 1;
+}
+
+/* === METAL TOGGLE === */
+.toggle-group {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 20px;
+}
+.toggle-label {
+    font-size: 13px;
+    color: var(--text-dim);
+    min-width: 70px;
+}
+.metal-toggle {
+    width: 56px;
+    height: 30px;
+    border-radius: 4px;
+    background: linear-gradient(180deg, #2a2a2a 0%, #1a1a1a 40%, #0f0f0f 100%);
+    box-shadow: inset 0 1px 3px rgba(0,0,0,0.8), 0 1px 2px rgba(255,255,255,0.05);
+    position: relative;
+    cursor: pointer;
+    border: 1px solid #333;
+    overflow: hidden;
+    touch-action: none;
+}
+.metal-toggle::before {
+    content: '';
+    position: absolute;
+    top: 2px;
+    width: 22px;
+    height: 24px;
+    border-radius: 3px;
+    background: linear-gradient(180deg, #888 0%, #aaa 20%, #999 40%, #777 60%, #888 80%, #666 100%);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.6), inset 0 1px 1px rgba(255,255,255,0.4);
+    transition: left 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+    left: 3px;
+}
+.metal-toggle.on::before {
+    left: 29px;
+}
+.metal-toggle .slot {
+    position: absolute;
+    top: 3px;
+    bottom: 3px;
+    left: 6px;
+    right: 6px;
+    border-radius: 2px;
+    background: linear-gradient(180deg, #0a0a0a 0%, #1a1a1a 100%);
+    box-shadow: inset 0 1px 3px rgba(0,0,0,0.9);
+}
+.metal-toggle .indicator {
+    position: absolute;
+    top: 11px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    transition: opacity 0.15s, background 0.15s;
+}
+.metal-toggle .indicator.off-dot {
+    left: 10px;
+    background: #333;
+}
+.metal-toggle .indicator.on-dot {
+    right: 10px;
+    background: #333;
+}
+.metal-toggle.on .indicator.on-dot {
+    background: var(--accent);
+    box-shadow: 0 0 6px var(--accent);
+}
+.toggle-state {
+    font-size: 13px;
+    font-weight: 500;
+    min-width: 30px;
+}
+.toggle-state.on { color: var(--accent); }
+.toggle-state.off { color: var(--text-dim); }
+
+/* === SELECT (already exists, styled for consistency) === */
+.styled-select {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 20px;
+}
+.styled-select label {
+    font-size: 13px;
+    color: var(--text-dim);
+    min-width: 70px;
+}
+.styled-select select {
+    flex: 1;
+    max-width: 200px;
+    padding: 10px 12px;
+    background: var(--surface);
+    border: 1px solid var(--surface2);
+    border-radius: 8px;
+    color: var(--text);
+    font-size: 14px;
+    -webkit-appearance: none;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23999' fill='none' stroke-width='1.5'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+}
+
+/* === DEMO LAYOUT === */
+.card {
+    background: var(--surface);
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 16px;
+}
+</style>
+</head>
+<body>
+
+<h1>Plugin Control Prototypes</h1>
+<p class="sub">Touch the wheels, flip the switches</p>
+
+<div class="card">
+    <h2>Wheel Controls</h2>
+    <div class="wheel-group">
+        <span class="wheel-label">Gate %</span>
+        <div class="wheel-container" id="wheel1" data-min="10" data-max="100" data-value="80" data-step="1"></div>
+        <span class="wheel-value" id="wheel1-val">80%</span>
+    </div>
+    <div class="wheel-group">
+        <span class="wheel-label">Octaves</span>
+        <div class="wheel-container" id="wheel2" data-min="1" data-max="4" data-value="1" data-step="1"></div>
+        <span class="wheel-value" id="wheel2-val">1</span>
+    </div>
+    <div class="wheel-group">
+        <span class="wheel-label">BPM</span>
+        <div class="wheel-container" id="wheel3" data-min="40" data-max="300" data-value="120" data-step="1"></div>
+        <span class="wheel-value" id="wheel3-val">120</span>
+    </div>
+    <div class="wheel-group">
+        <span class="wheel-label">Depth</span>
+        <div class="wheel-container" id="wheel4" data-min="0" data-max="127" data-value="64" data-step="1"></div>
+        <span class="wheel-value" id="wheel4-val">64</span>
+    </div>
+</div>
+
+<div class="card">
+    <h2>Metal Toggles</h2>
+    <div class="toggle-group">
+        <span class="toggle-label">Sync</span>
+        <div class="metal-toggle on" id="toggle1">
+            <div class="slot"></div>
+            <div class="indicator off-dot"></div>
+            <div class="indicator on-dot"></div>
+        </div>
+        <span class="toggle-state on" id="toggle1-val">ON</span>
+    </div>
+    <div class="toggle-group">
+        <span class="toggle-label">Pass-thru</span>
+        <div class="metal-toggle" id="toggle2">
+            <div class="slot"></div>
+            <div class="indicator off-dot"></div>
+            <div class="indicator on-dot"></div>
+        </div>
+        <span class="toggle-state off" id="toggle2-val">OFF</span>
+    </div>
+</div>
+
+<div class="card">
+    <h2>Combined Example — Arpeggiator</h2>
+    <div class="styled-select">
+        <label>Pattern</label>
+        <select>
+            <option>Up</option>
+            <option>Down</option>
+            <option>Up-Down</option>
+            <option>Random</option>
+            <option>As Played</option>
+        </select>
+    </div>
+    <div class="styled-select">
+        <label>Rate</label>
+        <select>
+            <option>1/4</option>
+            <option selected>1/8</option>
+            <option>1/16</option>
+            <option>1/32</option>
+            <option>1/8 Triplet</option>
+            <option>1/16 Triplet</option>
+        </select>
+    </div>
+    <div class="wheel-group">
+        <span class="wheel-label">Gate %</span>
+        <div class="wheel-container" id="wheel5" data-min="10" data-max="100" data-value="75" data-step="5"></div>
+        <span class="wheel-value" id="wheel5-val">75%</span>
+    </div>
+    <div class="wheel-group">
+        <span class="wheel-label">Octaves</span>
+        <div class="wheel-container" id="wheel6" data-min="1" data-max="4" data-value="2" data-step="1"></div>
+        <span class="wheel-value" id="wheel6-val">2</span>
+    </div>
+    <div class="toggle-group">
+        <span class="toggle-label">Clock Sync</span>
+        <div class="metal-toggle on" id="toggle3">
+            <div class="slot"></div>
+            <div class="indicator off-dot"></div>
+            <div class="indicator on-dot"></div>
+        </div>
+        <span class="toggle-state on" id="toggle3-val">ON</span>
+    </div>
+</div>
+
+<script>
+// === WHEEL CONTROL ===
+function initWheel(el) {
+    const min = +el.dataset.min;
+    const max = +el.dataset.max;
+    const step = +el.dataset.step || 1;
+    let value = +el.dataset.value;
+    const range = max - min;
+    const tickH = 18;
+    const steps = Math.round(range / step);
+
+    // Build ticks
+    const inner = document.createElement('div');
+    inner.className = 'wheel-inner';
+    // Padding ticks above and below
+    const pad = 3;
+    for (let i = -pad; i <= steps + pad; i++) {
+        const tick = document.createElement('div');
+        tick.className = 'wheel-tick';
+        const v = min + i * step;
+        if (v >= min && v <= max) {
+            if (i % 10 === 0 || steps <= 10) {
+                tick.classList.add('major');
+                tick.textContent = v;
+            }
+        }
+        tick.dataset.index = i;
+        inner.appendChild(tick);
+    }
+    el.appendChild(inner);
+
+    const valEl = document.getElementById(el.id + '-val');
+    const containerH = el.offsetHeight;
+    const centerOffset = containerH / 2 - tickH / 2;
+
+    function valueToOffset(v) {
+        const idx = Math.round((v - min) / step);
+        return -(idx + pad) * tickH + centerOffset;
+    }
+
+    function offsetToValue(off) {
+        const idx = Math.round((centerOffset - off) / tickH) - pad;
+        return Math.max(min, Math.min(max, min + idx * step));
+    }
+
+    let offset = valueToOffset(value);
+    inner.style.transform = `translateY(${offset}px)`;
+    updateTicks();
+
+    function updateTicks() {
+        const activeIdx = Math.round((value - min) / step);
+        inner.querySelectorAll('.wheel-tick').forEach(t => {
+            const i = +t.dataset.index;
+            t.classList.toggle('active', i === activeIdx);
+        });
+        if (valEl) {
+            const suffix = el.id.includes('wheel1') || el.id.includes('wheel5') ? '%' : '';
+            valEl.textContent = value + suffix;
+        }
+    }
+
+    // Touch / mouse handling
+    let startY, startOffset, lastY, lastT, velocity, animId;
+
+    function onStart(e) {
+        if (animId) cancelAnimationFrame(animId);
+        const pt = e.touches ? e.touches[0] : e;
+        startY = pt.clientY;
+        startOffset = offset;
+        lastY = startY;
+        lastT = Date.now();
+        velocity = 0;
+        el.addEventListener('touchmove', onMove, { passive: false });
+        el.addEventListener('mousemove', onMove);
+        window.addEventListener('touchend', onEnd);
+        window.addEventListener('mouseup', onEnd);
+    }
+
+    function onMove(e) {
+        e.preventDefault();
+        const pt = e.touches ? e.touches[0] : e;
+        const dy = pt.clientY - startY;
+        const now = Date.now();
+        const dt = now - lastT;
+        if (dt > 0) velocity = (pt.clientY - lastY) / dt;
+        lastY = pt.clientY;
+        lastT = now;
+
+        offset = startOffset + dy;
+        const newVal = offsetToValue(offset);
+        if (newVal !== value) {
+            // Haptic tick
+            if (navigator.vibrate) navigator.vibrate(1);
+            value = newVal;
+            updateTicks();
+        }
+        inner.style.transform = `translateY(${offset}px)`;
+    }
+
+    function onEnd() {
+        el.removeEventListener('touchmove', onMove);
+        el.removeEventListener('mousemove', onMove);
+        window.removeEventListener('touchend', onEnd);
+        window.removeEventListener('mouseup', onEnd);
+
+        // Momentum
+        if (Math.abs(velocity) > 0.2) {
+            animateMomentum();
+        } else {
+            snapToValue();
+        }
+    }
+
+    function animateMomentum() {
+        const friction = 0.95;
+        function frame() {
+            velocity *= friction;
+            offset += velocity * 16;
+            const newVal = offsetToValue(offset);
+            if (newVal !== value) {
+                if (navigator.vibrate) navigator.vibrate(1);
+                value = newVal;
+                updateTicks();
+            }
+            inner.style.transform = `translateY(${offset}px)`;
+
+            if (Math.abs(velocity) > 0.05) {
+                animId = requestAnimationFrame(frame);
+            } else {
+                snapToValue();
+            }
+        }
+        animId = requestAnimationFrame(frame);
+    }
+
+    function snapToValue() {
+        const target = valueToOffset(value);
+        const diff = target - offset;
+        if (Math.abs(diff) < 0.5) {
+            offset = target;
+            inner.style.transform = `translateY(${offset}px)`;
+            return;
+        }
+        function snap() {
+            offset += (target - offset) * 0.3;
+            inner.style.transform = `translateY(${offset}px)`;
+            if (Math.abs(target - offset) > 0.5) {
+                animId = requestAnimationFrame(snap);
+            } else {
+                offset = target;
+                inner.style.transform = `translateY(${offset}px)`;
+            }
+        }
+        animId = requestAnimationFrame(snap);
+    }
+
+    el.addEventListener('touchstart', onStart, { passive: true });
+    el.addEventListener('mousedown', onStart);
+}
+
+// === METAL TOGGLE ===
+function initToggle(el) {
+    const valEl = document.getElementById(el.id + '-val');
+    el.addEventListener('click', () => {
+        const isOn = el.classList.toggle('on');
+        if (navigator.vibrate) navigator.vibrate(isOn ? [5, 30, 5] : [5]);
+        if (valEl) {
+            valEl.textContent = isOn ? 'ON' : 'OFF';
+            valEl.className = 'toggle-state ' + (isOn ? 'on' : 'off');
+        }
+    });
+}
+
+// Init all controls
+document.querySelectorAll('.wheel-container').forEach(initWheel);
+document.querySelectorAll('.metal-toggle').forEach(initToggle);
+</script>
+</body>
+</html>
