@@ -28,6 +28,18 @@ case "$1" in
         # Create config directory on boot partition
         mkdir -p /boot/firmware/raspimidihub 2>/dev/null || true
 
+        # Enable BLE-MIDI profile in bluealsa (if installed)
+        if [ -x /usr/bin/bluealsa ]; then
+            mkdir -p /etc/systemd/system/bluealsa.service.d
+            cat > /etc/systemd/system/bluealsa.service.d/midi.conf << 'CONF'
+[Service]
+ExecStart=
+ExecStart=/usr/bin/bluealsa -S -p a2dp-source -p a2dp-sink -p midi
+CONF
+            systemctl daemon-reload
+            systemctl restart bluealsa 2>/dev/null || true
+        fi
+
         # Enable and (re)start the service
         systemctl daemon-reload
         systemctl enable raspimidihub.service
