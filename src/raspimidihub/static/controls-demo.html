@@ -348,9 +348,12 @@ p.sub { font-size: 12px; color: var(--text-dim); margin-bottom: 20px; }
 </div>
 
 <script>
-// === CLICK SOUND via Web Audio API ===
+// === HAPTIC FEEDBACK: sound + vibration ===
 let audioCtx;
-function clickSound() {
+function vibrate(ms) { try { navigator.vibrate(ms); } catch(e) {} }
+
+function tickFeedback() {
+    // Short click sound
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     const osc = audioCtx.createOscillator();
     const gain = audioCtx.createGain();
@@ -362,6 +365,25 @@ function clickSound() {
     gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.02);
     osc.start();
     osc.stop(audioCtx.currentTime + 0.02);
+    // Short vibration tick
+    vibrate(2);
+}
+
+function thudFeedback() {
+    // Low thud sound — hit the end stop
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.frequency.value = 150;
+    osc.type = 'sine';
+    gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.08);
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.08);
+    // Heavier vibration
+    vibrate(30);
 }
 
 // === WHEEL CONTROL ===
@@ -394,6 +416,9 @@ function initWheel(el) {
     const containerH = el.offsetHeight;
     const centerOffset = containerH / 2 - tickH / 2;
 
+    const minOffset = -(steps + pad) * tickH + centerOffset;  // value = max
+    const maxOffset = -pad * tickH + centerOffset;            // value = min
+
     function valueToOffset(v) {
         const idx = Math.round((v - min) / step);
         return -(idx + pad) * tickH + centerOffset;
@@ -402,8 +427,12 @@ function initWheel(el) {
         const idx = Math.round((centerOffset - off) / tickH) - pad;
         return Math.max(min, Math.min(max, min + idx * step));
     }
+    function clampOffset(off) {
+        return Math.max(minOffset, Math.min(maxOffset, off));
+    }
 
     let offset = valueToOffset(value);
+    let atBoundary = false;
     inner.style.transform = `translateY(${offset}px)`;
     updateTicks();
 
@@ -422,8 +451,11 @@ function initWheel(el) {
 
     function onStart(e) {
         if (animId) cancelAnimationFrame(animId);
+        atBoundary = false;
         // Resume audio context on first touch (browser autoplay policy)
         if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+        // Prime vibration API with a zero-length pulse (needs user gesture)
+        vibrate(0);
         const pt = e.touches ? e.touches[0] : e;
         startY = pt.clientY;
         startOffset = offset;
@@ -445,10 +477,20 @@ function initWheel(el) {
         if (dt > 0) velocity = (pt.clientY - lastY) / dt;
         lastY = pt.clientY;
         lastT = now;
-        offset = startOffset + dy;
+        let raw = startOffset + dy;
+        const clamped = clampOffset(raw);
+        const hitBound = raw !== clamped;
+        offset = clamped;
+        if (hitBound && !atBoundary) {
+            thudFeedback();
+            velocity = 0;
+            atBoundary = true;
+        } else if (!hitBound) {
+            atBoundary = false;
+        }
         const newVal = offsetToValue(offset);
         if (newVal !== value) {
-            clickSound();
+            tickFeedback();
             value = newVal;
             updateTicks();
         }
@@ -468,10 +510,21 @@ function initWheel(el) {
         const friction = 0.95;
         function frame() {
             velocity *= friction;
-            offset += velocity * 16;
+            let raw = offset + velocity * 16;
+            const clamped = clampOffset(raw);
+            if (raw !== clamped) {
+                // Hit boundary — stop momentum, thud
+                offset = clamped;
+                velocity = 0;
+                thudFeedback();
+                inner.style.transform = `translateY(${offset}px)`;
+                snapToValue();
+                return;
+            }
+            offset = clamped;
             const newVal = offsetToValue(offset);
             if (newVal !== value) {
-                clickSound();
+                tickFeedback();
                 value = newVal;
                 updateTicks();
             }
@@ -503,7 +556,7 @@ function initToggle(el) {
     const valEl = document.getElementById(el.id + '-val');
     el.addEventListener('click', () => {
         const isOn = el.classList.toggle('on');
-        clickSound();
+        tickFeedback();
         if (valEl) {
             valEl.textContent = isOn ? 'ON' : 'OFF';
             valEl.className = 'toggle-state ' + (isOn ? 'on' : 'off');
@@ -517,7 +570,7 @@ document.querySelectorAll('.radio-options').forEach(group => {
         opt.addEventListener('click', () => {
             group.querySelectorAll('.radio-opt').forEach(o => o.classList.remove('active'));
             opt.classList.add('active');
-            clickSound();
+            tickFeedback();
         });
     });
 });
