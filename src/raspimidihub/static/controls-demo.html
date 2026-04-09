@@ -125,6 +125,175 @@ p.sub { font-size: 12px; color: var(--text-dim); margin-bottom: 20px; }
     z-index: 1;
 }
 
+/* === FADER (mixer strip) === */
+.fader-group {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+.fader-group.vertical {
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    width: 50px;
+    display: inline-flex;
+    margin-right: 16px;
+}
+.fader-label {
+    font-size: 13px;
+    color: var(--text-dim);
+    min-width: 70px;
+}
+.fader-group.vertical .fader-label {
+    min-width: unset;
+    font-size: 11px;
+    text-align: center;
+}
+.fader-value {
+    font-size: 14px;
+    font-weight: 600;
+    min-width: 36px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+.fader-group.vertical .fader-value {
+    min-width: unset;
+    text-align: center;
+    font-size: 13px;
+}
+
+/* Horizontal fader */
+.fader-track {
+    position: relative;
+    height: 36px;
+    flex: 1;
+    max-width: 200px;
+    border-radius: 4px;
+    background: linear-gradient(180deg, #0a0a12 0%, #12121e 40%, #181828 60%, #0e0e18 100%);
+    box-shadow: inset 0 1px 4px rgba(0,0,0,0.7), 0 1px 1px rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.05);
+    touch-action: none;
+    cursor: pointer;
+    overflow: hidden;
+}
+/* Center groove line */
+.fader-track::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 8px;
+    right: 8px;
+    height: 2px;
+    margin-top: -1px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 1px;
+}
+/* Tick marks along the groove */
+.fader-track::after {
+    content: '';
+    position: absolute;
+    top: 14px;
+    bottom: 14px;
+    left: 8px;
+    right: 8px;
+    background: repeating-linear-gradient(90deg,
+        rgba(255,255,255,0.06) 0px, rgba(255,255,255,0.06) 1px,
+        transparent 1px, transparent 10%
+    );
+}
+/* The fader knob/cap */
+.fader-thumb {
+    position: absolute;
+    top: 3px;
+    width: 14px;
+    height: 28px;
+    border-radius: 3px;
+    background: linear-gradient(180deg, #999 0%, #bbb 15%, #aaa 35%, #888 55%, #999 75%, #777 100%);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.6), inset 0 1px 1px rgba(255,255,255,0.4);
+    transition: none;
+    z-index: 1;
+}
+/* Grip line on the thumb */
+.fader-thumb::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 3px;
+    right: 3px;
+    height: 1px;
+    margin-top: -1px;
+    background: rgba(0,0,0,0.3);
+    box-shadow: 0 1px 0 rgba(255,255,255,0.2);
+}
+/* Fill bar (left of thumb) */
+.fader-fill {
+    position: absolute;
+    top: 50%;
+    left: 8px;
+    height: 3px;
+    margin-top: -1.5px;
+    background: var(--accent);
+    opacity: 0.5;
+    border-radius: 1.5px;
+    pointer-events: none;
+}
+
+/* Vertical fader */
+.fader-track.vertical {
+    width: 36px;
+    height: 150px;
+    flex: none;
+    max-width: unset;
+}
+.fader-track.vertical::before {
+    top: 8px;
+    bottom: 8px;
+    left: 50%;
+    width: 2px;
+    height: auto;
+    right: auto;
+    margin-left: -1px;
+    margin-top: 0;
+}
+.fader-track.vertical::after {
+    top: 8px;
+    bottom: 8px;
+    left: 14px;
+    right: 14px;
+    background: repeating-linear-gradient(180deg,
+        rgba(255,255,255,0.06) 0px, rgba(255,255,255,0.06) 1px,
+        transparent 1px, transparent 10%
+    );
+}
+.fader-track.vertical .fader-thumb {
+    top: auto;
+    left: 3px;
+    width: 28px;
+    height: 14px;
+    border-radius: 3px;
+}
+.fader-track.vertical .fader-thumb::before {
+    top: 3px;
+    bottom: 3px;
+    left: 50%;
+    width: 1px;
+    height: auto;
+    right: auto;
+    margin-left: -1px;
+    margin-top: 0;
+}
+.fader-track.vertical .fader-fill {
+    left: 50%;
+    bottom: 8px;
+    width: 3px;
+    height: auto;
+    top: auto;
+    margin-left: -1.5px;
+    margin-top: 0;
+    border-radius: 1.5px;
+}
+
 /* === METAL TOGGLE === */
 .toggle-group {
     display: flex;
@@ -246,6 +415,72 @@ p.sub { font-size: 12px; color: var(--text-dim); margin-bottom: 20px; }
         <span class="wheel-label">Depth</span>
         <div class="wheel-container" id="wheel4" data-min="0" data-max="127" data-value="64" data-step="1"></div>
         <span class="wheel-value" id="wheel4-val">64</span>
+    </div>
+</div>
+
+<div class="card">
+    <h2>Horizontal Faders</h2>
+    <div class="fader-group">
+        <span class="fader-label">Volume</span>
+        <div class="fader-track" id="fader1" data-min="0" data-max="127" data-value="100">
+            <div class="fader-fill"></div>
+            <div class="fader-thumb"></div>
+        </div>
+        <span class="fader-value" id="fader1-val">100</span>
+    </div>
+    <div class="fader-group">
+        <span class="fader-label">CC#74</span>
+        <div class="fader-track" id="fader2" data-min="0" data-max="127" data-value="64">
+            <div class="fader-fill"></div>
+            <div class="fader-thumb"></div>
+        </div>
+        <span class="fader-value" id="fader2-val">64</span>
+    </div>
+    <div class="fader-group">
+        <span class="fader-label">Depth %</span>
+        <div class="fader-track" id="fader3" data-min="0" data-max="100" data-value="50" data-suffix="%">
+            <div class="fader-fill"></div>
+            <div class="fader-thumb"></div>
+        </div>
+        <span class="fader-value" id="fader3-val">50%</span>
+    </div>
+</div>
+
+<div class="card">
+    <h2>Vertical Faders (mixer strip)</h2>
+    <div style="display:flex;justify-content:center;gap:8px;padding:8px 0">
+        <div class="fader-group vertical">
+            <span class="fader-label">Ch 1</span>
+            <div class="fader-track vertical" id="fader4" data-min="0" data-max="127" data-value="100">
+                <div class="fader-fill"></div>
+                <div class="fader-thumb"></div>
+            </div>
+            <span class="fader-value" id="fader4-val">100</span>
+        </div>
+        <div class="fader-group vertical">
+            <span class="fader-label">Ch 2</span>
+            <div class="fader-track vertical" id="fader5" data-min="0" data-max="127" data-value="80">
+                <div class="fader-fill"></div>
+                <div class="fader-thumb"></div>
+            </div>
+            <span class="fader-value" id="fader5-val">80</span>
+        </div>
+        <div class="fader-group vertical">
+            <span class="fader-label">Ch 3</span>
+            <div class="fader-track vertical" id="fader6" data-min="0" data-max="127" data-value="110">
+                <div class="fader-fill"></div>
+                <div class="fader-thumb"></div>
+            </div>
+            <span class="fader-value" id="fader6-val">110</span>
+        </div>
+        <div class="fader-group vertical">
+            <span class="fader-label">Ch 4</span>
+            <div class="fader-track vertical" id="fader7" data-min="0" data-max="127" data-value="64">
+                <div class="fader-fill"></div>
+                <div class="fader-thumb"></div>
+            </div>
+            <span class="fader-value" id="fader7-val">64</span>
+        </div>
     </div>
 </div>
 
@@ -551,6 +786,79 @@ function initWheel(el) {
     el.addEventListener('mousedown', onStart);
 }
 
+// === FADER CONTROL ===
+function initFader(el) {
+    const min = +el.dataset.min;
+    const max = +el.dataset.max;
+    const suffix = el.dataset.suffix || '';
+    let value = +el.dataset.value;
+    const isVert = el.classList.contains('vertical');
+    const thumb = el.querySelector('.fader-thumb');
+    const fill = el.querySelector('.fader-fill');
+    const valEl = document.getElementById(el.id + '-val');
+    const pad = 8;  // px padding at track ends
+
+    function updatePosition() {
+        const pct = (value - min) / (max - min);
+        if (isVert) {
+            const trackH = el.offsetHeight - 2 * pad - thumb.offsetHeight;
+            const top = (1 - pct) * trackH + pad;
+            thumb.style.top = top + 'px';
+            fill.style.top = (top + thumb.offsetHeight) + 'px';
+            fill.style.bottom = pad + 'px';
+        } else {
+            const trackW = el.offsetWidth - 2 * pad - thumb.offsetWidth;
+            const left = pct * trackW + pad;
+            thumb.style.left = left + 'px';
+            fill.style.width = (left - pad) + 'px';
+        }
+        if (valEl) valEl.textContent = value + suffix;
+    }
+
+    function posToValue(clientX, clientY) {
+        const rect = el.getBoundingClientRect();
+        let pct;
+        if (isVert) {
+            const trackH = rect.height - 2 * pad;
+            pct = 1 - (clientY - rect.top - pad) / trackH;
+        } else {
+            const trackW = rect.width - 2 * pad;
+            pct = (clientX - rect.left - pad) / trackW;
+        }
+        pct = Math.max(0, Math.min(1, pct));
+        return Math.round(min + pct * (max - min));
+    }
+
+    updatePosition();
+
+    function onStart(e) {
+        e.preventDefault();
+        if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+        const pt = e.touches ? e.touches[0] : e;
+        value = posToValue(pt.clientX, pt.clientY);
+        updatePosition();
+        const move = (e2) => {
+            e2.preventDefault();
+            const pt2 = e2.touches ? e2.touches[0] : e2;
+            value = posToValue(pt2.clientX, pt2.clientY);
+            updatePosition();
+        };
+        const end = () => {
+            el.removeEventListener('touchmove', move);
+            el.removeEventListener('mousemove', move);
+            window.removeEventListener('touchend', end);
+            window.removeEventListener('mouseup', end);
+        };
+        el.addEventListener('touchmove', move, { passive: false });
+        el.addEventListener('mousemove', move);
+        window.addEventListener('touchend', end);
+        window.addEventListener('mouseup', end);
+    }
+
+    el.addEventListener('touchstart', onStart, { passive: false });
+    el.addEventListener('mousedown', onStart);
+}
+
 // === METAL TOGGLE ===
 function initToggle(el) {
     const valEl = document.getElementById(el.id + '-val');
@@ -577,6 +885,7 @@ document.querySelectorAll('.radio-options').forEach(group => {
 
 // Init controls
 document.querySelectorAll('.wheel-container').forEach(initWheel);
+document.querySelectorAll('.fader-track').forEach(initFader);
 document.querySelectorAll('.metal-toggle').forEach(initToggle);
 </script>
 </body>
