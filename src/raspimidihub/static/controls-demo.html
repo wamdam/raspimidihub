@@ -20,6 +20,141 @@ h1 { font-size: 18px; margin-bottom: 8px; }
 p.sub { font-size: 12px; color: var(--text-dim); margin-bottom: 20px; }
 .card { background: var(--surface); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
 
+/* === STEP EDITOR === */
+.step-editor { overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 4px; }
+.step-grid { display: inline-flex; gap: 2px; min-width: min-content; }
+.step-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 36px;
+    gap: 2px;
+    flex-shrink: 0;
+}
+.step-num {
+    font-size: 9px;
+    color: var(--text-dim);
+    height: 14px;
+    line-height: 14px;
+}
+.step-toggle {
+    width: 32px;
+    height: 32px;
+    border-radius: 4px;
+    background: var(--bg);
+    border: 1px solid rgba(255,255,255,0.08);
+    cursor: pointer;
+    transition: background 0.1s;
+    position: relative;
+}
+.step-toggle.on {
+    background: var(--accent);
+    border-color: var(--accent);
+}
+.step-toggle.on.beat { box-shadow: 0 0 6px rgba(233,69,96,0.4); }
+.step-vel {
+    width: 32px;
+    height: 40px;
+    background: var(--bg);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 3px;
+    position: relative;
+    cursor: ns-resize;
+    touch-action: none;
+    overflow: hidden;
+}
+.step-vel-fill {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: linear-gradient(0deg, rgba(233,69,96,0.7) 0%, rgba(233,69,96,0.3) 100%);
+    transition: height 0.05s;
+    pointer-events: none;
+}
+.step-vel-label {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 9px;
+    color: rgba(255,255,255,0.5);
+    pointer-events: none;
+    z-index: 1;
+}
+.step-oct {
+    width: 32px;
+    height: 22px;
+    background: var(--bg);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 3px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    color: var(--text-dim);
+    cursor: pointer;
+    user-select: none;
+}
+.step-oct.pos { color: var(--accent); }
+.step-oct.neg { color: #5599ff; }
+.step-row-label {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    gap: 2px;
+    width: 28px;
+    flex-shrink: 0;
+    padding-top: 14px;
+}
+.step-row-label span {
+    font-size: 8px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.step-row-label .lbl-on { height: 32px; line-height: 32px; }
+.step-row-label .lbl-vel { height: 40px; line-height: 40px; }
+.step-row-label .lbl-oct { height: 22px; line-height: 22px; }
+.step-playhead {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: #fff;
+    opacity: 0.5;
+    pointer-events: none;
+    transition: left 0.1s;
+}
+
+/* === CURVE EDITOR === */
+.curve-group { margin-bottom: 16px; }
+.curve-canvas-wrap {
+    position: relative;
+    width: 100%;
+    max-width: 280px;
+    aspect-ratio: 1;
+    margin: 8px auto;
+    background: var(--bg);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 8px;
+    overflow: hidden;
+    touch-action: none;
+    cursor: crosshair;
+}
+.curve-canvas-wrap canvas {
+    width: 100%;
+    height: 100%;
+}
+.curve-presets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+    justify-content: center;
+}
+
 /* === WHEEL CONTROL === */
 .wheel-group {
     display: flex;
@@ -542,6 +677,77 @@ p.sub { font-size: 12px; color: var(--text-dim); margin-bottom: 20px; }
 </div>
 
 <div class="card">
+    <h2>Step Editor (16-step)</h2>
+    <div class="radio-group" style="margin-bottom:12px">
+        <span class="radio-label">Steps</span>
+        <div class="radio-options" id="step-length">
+            <div class="radio-opt">8</div>
+            <div class="radio-opt active">16</div>
+            <div class="radio-opt">32</div>
+        </div>
+    </div>
+    <div class="step-editor">
+        <div style="display:flex">
+            <div class="step-row-label">
+                <span class="lbl-on">On</span>
+                <span class="lbl-vel">Vel</span>
+                <span class="lbl-oct">Oct</span>
+            </div>
+            <div class="step-grid" id="step-grid"></div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <h2>Curve Editor</h2>
+    <div class="curve-group">
+        <div class="curve-presets" id="curve-presets">
+            <div class="radio-opt active">Linear</div>
+            <div class="radio-opt">Soft</div>
+            <div class="radio-opt">Hard</div>
+            <div class="radio-opt">Exp</div>
+            <div class="radio-opt">Log</div>
+            <div class="radio-opt">S-Curve</div>
+        </div>
+        <div class="curve-canvas-wrap">
+            <canvas id="curve-canvas" width="280" height="280"></canvas>
+        </div>
+        <p style="font-size:11px;color:var(--text-dim);text-align:center">Drag to draw custom curve. Input (X) → Output (Y)</p>
+    </div>
+</div>
+
+<div class="card">
+    <h2>Grouped UI Elements</h2>
+    <h3 style="font-size:13px;color:var(--text);margin-bottom:10px;border-bottom:1px solid var(--surface2);padding-bottom:6px">Timing</h3>
+    <div class="radio-group">
+        <span class="radio-label">Rate</span>
+        <div class="radio-options" id="radio-grp1">
+            <div class="radio-opt active">1/8</div>
+            <div class="radio-opt">1/16</div>
+        </div>
+    </div>
+    <div class="wheel-group">
+        <span class="wheel-label">Gate %</span>
+        <div class="wheel-container" id="wheel7" data-min="10" data-max="100" data-value="75" data-step="5" data-suffix="%"></div>
+        <span class="wheel-value" id="wheel7-val">75%</span>
+    </div>
+    <h3 style="font-size:13px;color:var(--text);margin:16px 0 10px;border-bottom:1px solid var(--surface2);padding-bottom:6px">Output</h3>
+    <div class="wheel-group">
+        <span class="wheel-label">Channel</span>
+        <div class="wheel-container" id="wheel8" data-min="1" data-max="16" data-value="1" data-step="1"></div>
+        <span class="wheel-value" id="wheel8-val">1</span>
+    </div>
+    <div class="fader-group">
+        <span class="fader-label">Velocity</span>
+        <div class="fader-track" id="fader8" data-min="0" data-max="127" data-value="100">
+            <div class="fader-fill"></div>
+            <div class="fader-thumb"></div>
+        </div>
+        <span class="fader-value" id="fader8-val">100</span>
+    </div>
+</div>
+
+<div class="card">
     <h2>Combined — Arpeggiator</h2>
     <div class="radio-group">
         <span class="radio-label">Pattern</span>
@@ -785,6 +991,224 @@ function initWheel(el) {
     el.addEventListener('touchstart', onStart, { passive: true });
     el.addEventListener('mousedown', onStart);
 }
+
+// === STEP EDITOR ===
+function initStepEditor(gridEl, numSteps) {
+    gridEl.innerHTML = '';
+    const steps = [];
+    for (let i = 0; i < numSteps; i++) {
+        const col = document.createElement('div');
+        col.className = 'step-col';
+        const isBeat = i % 4 === 0;
+
+        // Step number
+        const num = document.createElement('div');
+        num.className = 'step-num';
+        num.textContent = i + 1;
+        col.appendChild(num);
+
+        // On/off toggle
+        const on = i % 2 === 0;  // default pattern
+        const tog = document.createElement('div');
+        tog.className = 'step-toggle' + (on ? ' on' : '') + (isBeat ? ' beat' : '');
+        tog.addEventListener('click', () => {
+            tog.classList.toggle('on');
+            steps[i].on = tog.classList.contains('on');
+            tickFeedback();
+        });
+        col.appendChild(tog);
+
+        // Velocity bar (drag)
+        const vel = 80 + Math.floor(Math.random() * 47);
+        const velWrap = document.createElement('div');
+        velWrap.className = 'step-vel';
+        const velFill = document.createElement('div');
+        velFill.className = 'step-vel-fill';
+        velFill.style.height = (vel / 127 * 100) + '%';
+        const velLabel = document.createElement('div');
+        velLabel.className = 'step-vel-label';
+        velLabel.textContent = vel;
+        velWrap.appendChild(velFill);
+        velWrap.appendChild(velLabel);
+
+        const setVel = (clientY) => {
+            const rect = velWrap.getBoundingClientRect();
+            const pct = 1 - Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
+            const v = Math.round(pct * 127);
+            steps[i].vel = v;
+            velFill.style.height = (pct * 100) + '%';
+            velLabel.textContent = v;
+        };
+        velWrap.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            setVel(e.touches[0].clientY);
+            const move = (e2) => { e2.preventDefault(); setVel(e2.touches[0].clientY); };
+            const end = () => { velWrap.removeEventListener('touchmove', move); window.removeEventListener('touchend', end); };
+            velWrap.addEventListener('touchmove', move, { passive: false });
+            window.addEventListener('touchend', end);
+        }, { passive: false });
+        velWrap.addEventListener('mousedown', (e) => {
+            setVel(e.clientY);
+            const move = (e2) => setVel(e2.clientY);
+            const end = () => { velWrap.removeEventListener('mousemove', move); window.removeEventListener('mouseup', end); };
+            velWrap.addEventListener('mousemove', move);
+            window.addEventListener('mouseup', end);
+        });
+        col.appendChild(velWrap);
+
+        // Octave tap
+        let oct = 0;
+        const octEl = document.createElement('div');
+        octEl.className = 'step-oct';
+        octEl.textContent = '0';
+        octEl.addEventListener('click', () => {
+            oct = oct >= 2 ? -2 : oct + 1;
+            steps[i].oct = oct;
+            octEl.textContent = oct > 0 ? '+' + oct : oct;
+            octEl.className = 'step-oct' + (oct > 0 ? ' pos' : oct < 0 ? ' neg' : '');
+            tickFeedback();
+        });
+        col.appendChild(octEl);
+
+        gridEl.appendChild(col);
+        steps.push({ on, vel, oct });
+    }
+    return steps;
+}
+
+// Init step editor with length switcher
+let stepData = initStepEditor(document.getElementById('step-grid'), 16);
+document.getElementById('step-length').querySelectorAll('.radio-opt').forEach(opt => {
+    opt.addEventListener('click', () => {
+        document.getElementById('step-length').querySelectorAll('.radio-opt').forEach(o => o.classList.remove('active'));
+        opt.classList.add('active');
+        tickFeedback();
+        stepData = initStepEditor(document.getElementById('step-grid'), +opt.textContent);
+    });
+});
+
+// === CURVE EDITOR ===
+function initCurveEditor(canvasEl, presetsEl) {
+    const ctx = canvasEl.getContext('2d');
+    const w = 280, h = 280;
+    const pad = 10;
+    let curve = new Array(128);
+
+    function setCurvePreset(name) {
+        for (let i = 0; i < 128; i++) {
+            const x = i / 127;
+            switch (name) {
+                case 'Linear': curve[i] = Math.round(x * 127); break;
+                case 'Soft': curve[i] = Math.round(Math.pow(x, 0.5) * 127); break;
+                case 'Hard': curve[i] = Math.round(Math.pow(x, 2) * 127); break;
+                case 'Exp': curve[i] = Math.round(Math.pow(x, 3) * 127); break;
+                case 'Log': curve[i] = Math.round(Math.pow(x, 0.33) * 127); break;
+                case 'S-Curve': curve[i] = Math.round((x < 0.5 ? 2 * x * x : 1 - 2 * (1-x) * (1-x)) * 127); break;
+            }
+        }
+        draw();
+    }
+
+    function draw() {
+        ctx.clearRect(0, 0, w, h);
+        // Grid
+        ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+        ctx.lineWidth = 1;
+        for (let i = 0; i <= 4; i++) {
+            const p = pad + (w - 2*pad) * i/4;
+            ctx.beginPath(); ctx.moveTo(p, pad); ctx.lineTo(p, h-pad); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(pad, p); ctx.lineTo(w-pad, p); ctx.stroke();
+        }
+        // Diagonal reference
+        ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath(); ctx.moveTo(pad, h-pad); ctx.lineTo(w-pad, pad); ctx.stroke();
+        ctx.setLineDash([]);
+        // Curve
+        ctx.strokeStyle = '#e94560';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        for (let i = 0; i < 128; i++) {
+            const x = pad + (i / 127) * (w - 2*pad);
+            const y = h - pad - (curve[i] / 127) * (h - 2*pad);
+            if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+        // Axis labels
+        ctx.fillStyle = 'rgba(255,255,255,0.3)';
+        ctx.font = '9px system-ui';
+        ctx.textAlign = 'center';
+        ctx.fillText('0', pad, h - 1);
+        ctx.fillText('127', w - pad, h - 1);
+        ctx.textAlign = 'left';
+        ctx.fillText('127', 1, pad + 4);
+    }
+
+    // Draw on touch/mouse
+    function posToIndex(clientX, clientY) {
+        const rect = canvasEl.getBoundingClientRect();
+        const scaleX = w / rect.width;
+        const scaleY = h / rect.height;
+        const cx = (clientX - rect.left) * scaleX;
+        const cy = (clientY - rect.top) * scaleY;
+        const i = Math.round(((cx - pad) / (w - 2*pad)) * 127);
+        const v = Math.round((1 - (cy - pad) / (h - 2*pad)) * 127);
+        return [Math.max(0, Math.min(127, i)), Math.max(0, Math.min(127, v))];
+    }
+
+    let lastIdx = -1;
+    function paint(clientX, clientY) {
+        const [i, v] = posToIndex(clientX, clientY);
+        // Interpolate between last point and current to avoid gaps
+        if (lastIdx >= 0 && Math.abs(i - lastIdx) > 1) {
+            const step = i > lastIdx ? 1 : -1;
+            const startV = curve[lastIdx];
+            const dist = Math.abs(i - lastIdx);
+            for (let j = 0; j <= dist; j++) {
+                const idx = lastIdx + j * step;
+                if (idx >= 0 && idx < 128) {
+                    curve[idx] = Math.round(startV + (v - startV) * (j / dist));
+                }
+            }
+        } else {
+            curve[i] = v;
+        }
+        lastIdx = i;
+        draw();
+        // Clear active preset
+        presetsEl.querySelectorAll('.radio-opt').forEach(o => o.classList.remove('active'));
+    }
+
+    function onStart(e) {
+        e.preventDefault();
+        if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+        const pt = e.touches ? e.touches[0] : e;
+        lastIdx = -1;
+        paint(pt.clientX, pt.clientY);
+        const move = (e2) => { e2.preventDefault(); const pt2 = e2.touches ? e2.touches[0] : e2; paint(pt2.clientX, pt2.clientY); };
+        const end = () => { lastIdx = -1; canvasEl.removeEventListener('touchmove', move); canvasEl.removeEventListener('mousemove', move); window.removeEventListener('touchend', end); window.removeEventListener('mouseup', end); };
+        canvasEl.addEventListener('touchmove', move, { passive: false });
+        canvasEl.addEventListener('mousemove', move);
+        window.addEventListener('touchend', end);
+        window.addEventListener('mouseup', end);
+    }
+    canvasEl.addEventListener('touchstart', onStart, { passive: false });
+    canvasEl.addEventListener('mousedown', onStart);
+
+    // Presets
+    presetsEl.querySelectorAll('.radio-opt').forEach(opt => {
+        opt.addEventListener('click', () => {
+            presetsEl.querySelectorAll('.radio-opt').forEach(o => o.classList.remove('active'));
+            opt.classList.add('active');
+            tickFeedback();
+            setCurvePreset(opt.textContent);
+        });
+    });
+
+    setCurvePreset('Linear');
+}
+
+initCurveEditor(document.getElementById('curve-canvas'), document.getElementById('curve-presets'));
 
 // === FADER CONTROL ===
 function initFader(el) {
