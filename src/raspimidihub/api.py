@@ -14,6 +14,7 @@ from .config import Config
 from .midi_engine import MidiEngine, Connection
 from .midi_filter import MidiFilter, MidiMapping, MappingType, ALL_CHANNELS, ALL_MSG_TYPES
 from .web import Request, Response, WebServer
+from .bluetooth import BluetoothMidi
 from .wifi import WifiManager
 
 log = logging.getLogger(__name__)
@@ -111,7 +112,8 @@ _CAPTIVE_ROUTES = {
 
 
 def register_api(server: WebServer, engine: MidiEngine, config: Config,
-                  wifi: WifiManager | None = None):
+                  wifi: WifiManager | None = None,
+                  bluetooth: BluetoothMidi | None = None):
     """Register all API routes on the web server."""
 
     for path, (body, status, fmt) in _CAPTIVE_ROUTES.items():
@@ -232,6 +234,8 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
                 entry["pid"] = info.pid
                 entry["usb_path"] = info.usb_path
                 entry["is_plugin"] = info.is_plugin
+                if info.is_bluetooth:
+                    entry["is_bluetooth"] = True
             entry["online"] = True
             # Add plugin instance info if this is a virtual device
             if info and info.is_plugin and engine._plugin_host:
@@ -1211,6 +1215,68 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         if ok:
             return Response.json({"status": "configured", "interface": iface})
         return Response.error("Failed to configure interface", 500)
+
+    # ================================================================
+    # Bluetooth MIDI API
+    # ================================================================
+
+    if bluetooth and bluetooth.is_available():
+        @server.route("GET", "/api/bluetooth")
+        async def api_bluetooth_status(req: Request) -> Response:
+            devices = await bluetooth.get_paired_devices()
+            return Response.json({"available": True, "devices": devices})
+
+        @server.route("POST", "/api/bluetooth/scan")
+        async def api_bluetooth_scan(req: Request) -> Response:
+            devices = await bluetooth.scan(timeout=10)
+            return Response.json(devices)
+
+        @server.route("POST", "/api/bluetooth/pair")
+        async def api_bluetooth_pair(req: Request) -> Response:
+            address = req.json.get("address", "")
+            if not address:
+                return Response.error("address required")
+            ok = await bluetooth.pair(address)
+            if ok:
+                # Trigger device rescan so the new ALSA port is picked up
+                await asyncio.sleep(2)
+                await server.send_sse("device-connected", {})
+                return Response.json({"status": "paired"})
+            return Response.error("Pairing failed", 502)
+
+        @server.route("POST", "/api/bluetooth/connect")
+        async def api_bluetooth_connect(req: Request) -> Response:
+            address = req.json.get("address", "")
+            if not address:
+                return Response.error("address required")
+            ok = await bluetooth.connect(address)
+            if ok:
+                await asyncio.sleep(2)
+                await server.send_sse("device-connected", {})
+                return Response.json({"status": "connected"})
+            return Response.error("Connection failed", 502)
+
+        @server.route("POST", "/api/bluetooth/disconnect")
+        async def api_bluetooth_disconnect(req: Request) -> Response:
+            address = req.json.get("address", "")
+            if not address:
+                return Response.error("address required")
+            await bluetooth.disconnect(address)
+            await server.send_sse("device-disconnected", {})
+            return Response.json({"status": "disconnected"})
+
+        @server.route("DELETE", "/api/bluetooth/", exact=False)
+        async def api_bluetooth_forget(req: Request) -> Response:
+            address = req.path_param("/api/bluetooth/")
+            if not address:
+                return Response.error("address required")
+            await bluetooth.forget(address)
+            await server.send_sse("device-disconnected", {})
+            return Response.json({"status": "removed"})
+    else:
+        @server.route("GET", "/api/bluetooth")
+        async def api_bluetooth_unavailable(req: Request) -> Response:
+            return Response.json({"available": False, "devices": []})
 
     # ================================================================
     # WiFi API

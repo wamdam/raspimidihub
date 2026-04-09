@@ -456,7 +456,7 @@ function ConnectionMatrix({ devices, connections, onToggle, onFilterOpen, onRemo
         const inCount = dev.ports.filter(p => p.is_input).length;
         const outCount = dev.ports.filter(p => p.is_output).length;
         for (const p of dev.ports) {
-            const extra = { client_id: dev.client_id, dev_name: dev.name, dev_default_name: dev.default_name || dev.name, port_name: p.name, port_default_name: p.default_name || p.name, online: dev.online !== false, stable_id: dev.stable_id, is_plugin: !!dev.is_plugin, plugin_type: dev.plugin_type };
+            const extra = { client_id: dev.client_id, dev_name: dev.name, dev_default_name: dev.default_name || dev.name, port_name: p.name, port_default_name: p.default_name || p.name, online: dev.online !== false, stable_id: dev.stable_id, is_plugin: !!dev.is_plugin, plugin_type: dev.plugin_type, is_bluetooth: !!dev.is_bluetooth };
             if (p.is_input) inputs.push({ ...p, ...extra, multi: inCount > 1 });
             if (p.is_output) outputs.push({ ...p, ...extra, multi: outCount > 1 });
         }
@@ -494,15 +494,16 @@ function ConnectionMatrix({ devices, connections, onToggle, onFilterOpen, onRemo
     // item.port_default_name = original ALSA port name
     // item.multi = device has multiple input or output ports
     const label = (item) => {
+        const bt = item.is_bluetooth ? '\u16D2 ' : '';  // ᛒ rune prefix for Bluetooth
         // Multi-port device with renamed port: show full custom port name (user chose it)
         if (item.multi && item.port_name !== item.port_default_name) {
-            return item.port_name;
+            return bt + item.port_name;
         }
         // Otherwise: show (possibly renamed) device name, truncated to 2 words
         const parts = item.dev_name.split(' ');
         let short = parts.length > 2 ? parts.slice(0,2).join(' ') : item.dev_name;
         if (item.multi) short += ` p${item.port_id + 1}`;
-        return short;
+        return bt + short;
     };
     const showName = (item) => {
         const name = item.multi ? `${item.dev_name}: ${item.port_name}` : item.dev_name;
@@ -1213,6 +1214,96 @@ function DeviceDetailPanel({ device, onClose, showToast, refresh, pluginDisplays
 // --- Devices Page ---
 
 // --- Network Interface Config ---
+// --- Bluetooth MIDI Card ---
+function BluetoothCard({ showToast }) {
+    const [bt, setBt] = useState(null);
+    const [scanResults, setScanResults] = useState([]);
+    const [scanning, setScanning] = useState(false);
+    const [pairing, setPairing] = useState('');
+
+    const refresh = () => api('/bluetooth').then(setBt).catch(() => {});
+    useEffect(() => { refresh(); }, []);
+
+    if (bt && !bt.available) return null; // No BT hardware — hide card
+    if (!bt) return null;
+
+    const scan = async () => {
+        setScanning(true);
+        setScanResults([]);
+        const results = await api('/bluetooth/scan', { method: 'POST' });
+        setScanResults(Array.isArray(results) ? results : []);
+        setScanning(false);
+    };
+
+    const pair = async (address) => {
+        setPairing(address);
+        const res = await api('/bluetooth/pair', { method: 'POST', body: JSON.stringify({ address }) });
+        setPairing('');
+        if (res.error) showToast('Pairing failed: ' + res.error);
+        else showToast('Paired!');
+        refresh();
+        setScanResults([]);
+    };
+
+    const connect = async (address) => {
+        const res = await api('/bluetooth/connect', { method: 'POST', body: JSON.stringify({ address }) });
+        if (res.error) showToast('Connection failed');
+        else showToast('Connected');
+        refresh();
+    };
+
+    const disconnect = async (address) => {
+        await api('/bluetooth/disconnect', { method: 'POST', body: JSON.stringify({ address }) });
+        showToast('Disconnected');
+        refresh();
+    };
+
+    const forget = async (address, name) => {
+        if (!confirm('Remove ' + name + '?')) return;
+        await api('/bluetooth/' + encodeURIComponent(address), { method: 'DELETE' });
+        showToast('Removed');
+        refresh();
+    };
+
+    return html`
+        <div class="card">
+            <h3>\u16D2 Bluetooth MIDI</h3>
+            ${bt.devices.length > 0 && html`
+                <div style="margin-bottom:12px">
+                    ${bt.devices.map(d => html`
+                        <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--surface2)">
+                            <span style="width:8px;height:8px;border-radius:50%;background:${d.connected ? 'var(--success)' : 'var(--text-dim)'};flex-shrink:0"></span>
+                            <span style="flex:1;font-size:14px">${d.name}</span>
+                            ${d.connected
+                                ? html`<button style="padding:3px 8px;background:var(--surface2);color:var(--text);border:none;border-radius:4px;font-size:11px;cursor:pointer" onclick=${() => disconnect(d.address)}>Disconnect</button>`
+                                : html`<button style="padding:3px 8px;background:var(--accent);color:#fff;border:none;border-radius:4px;font-size:11px;cursor:pointer" onclick=${() => connect(d.address)}>Connect</button>`
+                            }
+                            <button style="padding:3px 8px;background:var(--error);color:#fff;border:none;border-radius:4px;font-size:11px;cursor:pointer" onclick=${() => forget(d.address, d.name)}>Forget</button>
+                        </div>
+                    `)}
+                </div>
+            `}
+            <button class="btn btn-secondary btn-block" onclick=${scan} disabled=${scanning}>
+                ${scanning ? 'Scanning...' : 'Scan for Devices'}
+            </button>
+            ${scanResults.length > 0 && html`
+                <div style="margin-top:12px">
+                    ${scanResults.filter(d => !bt.devices.some(p => p.address === d.address)).map(d => html`
+                        <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--surface2)">
+                            <span style="flex:1;font-size:14px">${d.name}</span>
+                            <span style="font-size:11px;color:var(--text-dim)">${d.rssi ? d.rssi + ' dBm' : ''}</span>
+                            <button style="padding:3px 10px;background:var(--accent);color:#fff;border:none;border-radius:4px;font-size:12px;cursor:pointer"
+                                onclick=${() => pair(d.address)} disabled=${pairing === d.address}>
+                                ${pairing === d.address ? 'Pairing...' : 'Pair'}
+                            </button>
+                        </div>
+                    `)}
+                </div>
+            `}
+        </div>
+    `;
+}
+
 function NetworkCard({ iface, showToast }) {
     const [method, setMethod] = useState(iface.method || 'auto');
     const [address, setAddress] = useState(iface.address || '');
@@ -1529,6 +1620,7 @@ function SettingsPage({ showToast, showMidiBar, toggleMidiBar }) {
             </div>
         `}
         <${WiFiCard} showToast=${showToast} />
+        <${BluetoothCard} showToast=${showToast} />
         ${ifaces.filter(i => i.interface !== 'wlan0').map(i => html`
             <${NetworkCard} iface=${i} showToast=${showToast} />
         `)}

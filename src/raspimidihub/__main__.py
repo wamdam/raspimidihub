@@ -7,6 +7,7 @@ import asyncio
 import logging
 import os
 import signal
+import subprocess
 import sys
 
 from . import __version__
@@ -64,8 +65,17 @@ async def async_main() -> None:
     port = 80 if os.geteuid() == 0 else 8080
     server = WebServer(port=port)
 
+    # Initialize Bluetooth MIDI — ensure radio is unblocked
+    from .bluetooth import BluetoothMidi
+    try:
+        subprocess.run(["rfkill", "unblock", "bluetooth"],
+                       capture_output=True, timeout=5)
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass
+    bt = BluetoothMidi()
+
     # Register API routes
-    register_api(server, engine, config, wifi)
+    register_api(server, engine, config, wifi, bt)
 
     # Wire up LED and SSE to hotplug events
     def on_change():

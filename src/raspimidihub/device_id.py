@@ -3,16 +3,16 @@
 ALSA client IDs change on every reconnect. We need stable identifiers
 to persist routing configurations across reboots and reconnects.
 
-Stable ID format: "usb-<bus>-<port_path>-<vid>:<pid>"
-Example: "usb-1-1.2-0763:1044" (M-Audio Keystation on bus 1, port 1.2)
-
-For non-USB ALSA devices (built-in audio, HDMI), we use:
-"builtin-<card_id>"
+Stable ID format:
+  USB:       "usb-<bus>-<port_path>-<vid>:<pid>"
+  Bluetooth: "bt-<mac_address>"
+  Built-in:  "builtin-<card_id>"
 """
 
 import logging
 import os
 import re
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -29,6 +29,7 @@ class StableDeviceInfo:
     display_name: str  # User-facing name (custom or default)
     custom_name: str = ""  # User-assigned name (empty = use default)
     is_plugin: bool = False  # True for virtual instrument plugins
+    is_bluetooth: bool = False  # True for BLE-MIDI devices
 
     @property
     def name(self) -> str:
@@ -189,6 +190,23 @@ def alsa_client_to_card(client_id: int) -> int | None:
     return None
 
 
+def _get_bluealsa_macs() -> dict:
+    """Get MAC addresses for connected BlueALSA devices via bluetoothctl."""
+    macs = {}
+    try:
+        result = subprocess.run(
+            ["bluetoothctl", "paired-devices"],
+            capture_output=True, text=True, timeout=5,
+        )
+        for line in result.stdout.splitlines():
+            m = re.match(r"^Device\s+([0-9A-Fa-f:]{17})\s+(.+)$", line)
+            if m:
+                macs[m.group(2)] = m.group(1)  # name -> MAC
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        pass
+    return macs
+
+
 class DeviceRegistry:
     """Maps between ALSA client IDs and stable device identifiers."""
 
@@ -201,15 +219,43 @@ class DeviceRegistry:
         """Load custom device names from config."""
         self._custom_names = dict(names)
 
-    def scan(self, alsa_client_ids: list[int]) -> dict[int, StableDeviceInfo]:
-        """Scan and register devices for the given ALSA client IDs."""
+    def scan(self, alsa_client_ids: list[int],
+             client_names: dict[int, str] | None = None) -> dict[int, StableDeviceInfo]:
+        """Scan and register devices for the given ALSA client IDs.
+
+        client_names: optional mapping of client_id -> ALSA client name string,
+        used to detect BlueALSA (Bluetooth MIDI) clients.
+        """
         self._by_client.clear()
         self._by_stable_id.clear()
 
         # Track how many times each base stable_id appears to disambiguate
         seen_ids: dict[str, int] = {}
 
+        # Detect Bluetooth MIDI devices (BlueALSA clients)
+        bt_macs = _get_bluealsa_macs() if client_names else {}
+
         for client_id in sorted(alsa_client_ids):
+            name = client_names.get(client_id, "") if client_names else ""
+
+            # Check if this is a BlueALSA (Bluetooth MIDI) client
+            if name and "bluealsa" in name.lower():
+                mac = bt_macs.get(name) or bt_macs.get(client_id)
+                if mac:
+                    stable_id = f"bt-{mac}"
+                    info = StableDeviceInfo(
+                        stable_id=stable_id,
+                        vid="", pid="", usb_path="",
+                        card_num=-1,
+                        display_name=name,
+                        is_bluetooth=True,
+                    )
+                    if stable_id in self._custom_names:
+                        info.custom_name = self._custom_names[stable_id]
+                    self._by_client[client_id] = info
+                    self._by_stable_id[stable_id] = info
+                    continue
+
             card_num = alsa_client_to_card(client_id)
             if card_num is None:
                 continue
