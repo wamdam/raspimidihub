@@ -612,7 +612,7 @@ All in `plugins/` directory, each in its own subdirectory:
 **1. Arpeggiator** (`plugins/arpeggiator/`)
 - Hold notes → play as pattern (up, down, up-down, random, as-played)
 - Rate synced to clock or free BPM, gate %, octave range 1-4
-- 16-step editor for custom velocity/octave per step
+- 8/16/32-step editor with per-step note offset (-24 to +24 semitones)
 - Pass through aftertouch, pitch bend
 - CC inputs: rate, gate
 - ~150 lines
