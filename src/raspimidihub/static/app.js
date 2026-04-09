@@ -6,7 +6,11 @@ const html = htm.bind(h);
 
 // --- Reusable hooks ---
 function useEscapeClose(close) {
-    useEscapeClose(close);
+    useEffect(() => {
+        const handler = (e) => { if (e.key === 'Escape') close(); };
+        window.addEventListener('keydown', handler);
+        return () => window.removeEventListener('keydown', handler);
+    }, []);
 }
 
 // --- API helpers ---
