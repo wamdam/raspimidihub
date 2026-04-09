@@ -466,93 +466,140 @@ PATCH  /api/plugins/instances/{id}     # Update params {name: value}
 
 #### Step 1.4: UI Components for Params
 
-All components are framework-provided. Plugins never write JS. Prototypes of all
-controls are in `src/raspimidihub/static/controls-demo.html` with working touch
-interactions, haptic feedback (click sound + vibration), and momentum physics.
+All components are framework-provided. Plugins never write JS/HTML/CSS. Working
+prototypes with touch interactions, haptic feedback, and momentum physics are in
+`src/raspimidihub/static/controls-demo.html` — this file serves as both the
+reference implementation and a live interactive demo.
 
 | Param Type | UI Component | Use Case |
 |-----------|-------------|----------|
-| `Wheel` | Scrollable drum wheel with tick sound, momentum, boundary thud | BPM, gate %, octaves, channel, CC values |
-| `Fader` | Mixer-strip fader (horizontal or vertical), metallic thumb | Volume, CC values, depth % |
+| `Wheel` | Scrollable drum wheel with tick + vibration, momentum, thud at bounds | BPM, gate %, octaves, channel, CC# |
+| `Fader` | Mixer-strip fader (horizontal or vertical), metallic thumb, tick on change | Volume, CC values, depth % |
 | `Radio` | Tap-to-select pill buttons | Pattern, rate, waveform, scale |
 | `Toggle` | Metal switch with LED indicator | Sync on/off, passthrough |
-| `StepEditor` | Touch grid (8/16/32 steps, per-step on/vel/oct) | Arp patterns, drum patterns |
-| `CurveEditor` | Draw-on-canvas curve with presets (128 points) | Velocity curves, CC response |
-| `NoteSelect` | Wheel with note names (C0-G10) | Split point, root note |
+| `StepEditor` | 8-col grid, tap dot = on/off, mini-wheel = note offset per step | Arp patterns |
+| `CurveEditor` | Draw-on-canvas 128-point curve with presets | Velocity curves, CC response |
+| `NoteSelect` | Wheel with note names (C-2 to G8) | Split point, root note |
 | `ChannelSelect` | Wheel (1-16) | Output channel |
-| `Group` | Titled section with border, groups related params | "Timing", "Output", "Pattern" |
+| `Group` | Titled section, groups related params with heading + border | "Timing", "Output" |
 
-**Wheel:** (replaces slider/knob)
-- Vertical scroll drum — only center visible, values scroll through
-- Every value labeled, active value highlighted, neighbors dimmed
-- Momentum: swipe fast → continues spinning with friction decay
-- Boundary: stops at min/max with low thud sound + 30ms vibration
-- Click sound (3500Hz square, 20ms) + 2ms vibration on each tick
-- Used for ALL numeric inputs including channel selects and CC numbers
+##### Wheel
+- 100px wide vertical scroll drum — active value centered, neighbors visible
+- Every value labeled (active = white bold, ±1 = dimmed, rest = faint)
+- Momentum: swipe fast → continues spinning with friction (0.95) decay
+- Boundary: stops at min/max with low thud sound (150Hz, 80ms) + 30ms vibration
+- Tick: click sound (3500Hz square, 20ms) + 2ms vibration on each value change
+- Used for ALL numeric inputs including channel, CC#, note selects
+- Plugin declaration: `Wheel("gate", "Gate %", min=10, max=100, default=80)`
 
-**Fader:**
-- Horizontal or vertical mixer-strip style
-- Metallic thumb with grip line on grooved track
-- Red fill bar showing current level
-- Touch anywhere to jump, drag to slide — smooth, no ticking
-- Best for continuous values like CC, velocity, depth
+##### Fader
+- Horizontal or vertical mixer-strip style, metallic thumb with grip line
+- Grooved track with tick marks, red fill bar showing current level
+- Touch anywhere to jump, drag to slide
+- Tick: click sound + vibration on each integer value change
+- Vertical variant for mixer-strip layouts (multiple side by side)
+- Plugin declaration: `Fader("volume", "Volume", min=0, max=127, default=100)`
+- Vertical: `Fader("volume", "Volume", min=0, max=127, default=100, vertical=True)`
 
-**Radio:**
-- Pill-shaped buttons, tap to select, red accent when active
-- Click sound on selection
-- Can be used with `visible_when` to show/hide other params
-  (e.g., selecting "8/16/32" steps reconfigures the StepEditor)
+##### Radio
+- Pill-shaped buttons in a flex-wrap row
+- Tap to select, red accent background when active, click sound
+- Can drive `visible_when` on other params (e.g., "8/16/32" switches StepEditor length)
+- Plugin declaration: `Radio("pattern", "Pattern", ["up", "down", "up-down", "random"], default="up")`
 
-**Toggle:**
-- Metal switch with inset slot and LED indicator
+##### Toggle
+- Metal switch: dark inset slot, metallic sliding thumb, red LED dot on ON side
 - Click sound + vibration on flip
-- Can drive `visible_when` to show/hide dependent params
-  (e.g., "Sync: ON" hides BPM wheel, shows clock division radio)
+- Can drive `visible_when` (e.g., "Sync ON" hides BPM wheel)
+- Plugin declaration: `Toggle("sync", "Sync to Clock", default=True)`
 
-**StepEditor:**
-- Tap step → toggle on/off (red = active, dark = off, beat markers on 1/5/9/13)
-- Drag vertically on velocity bar → set level (0-127)
-- Tap octave → cycle through -2, -1, 0, +1, +2
-- Horizontal scroll for >8 steps visible
-- Step count switchable via Radio (8/16/32) — rebuilds grid
-- Per-step params declared by plugin (on, velocity, octave, note offset, etc.)
+##### StepEditor
+- 8 columns per row, wrapping (16 steps = 2 rows, 32 = 4 rows)
+- Each step: red LED dot (tap = on/off) + mini-wheel for note offset (-24 to +24 semitones)
+- Mini-wheels have same physics as full wheels (momentum, boundary thud, tick)
+- Beat markers on steps 1/5/9/13 (highlighted border when on)
+- No velocity (comes from input), no step numbers (grid is self-evident)
+- Step count linked to a Radio via `length_param`
+- Plugin declaration:
+  ```python
+  Radio("step_count", "Steps", ["8", "16", "32"], default="16"),
+  StepEditor("steps", "Pattern", length_param="step_count"),
+  ```
 
-**CurveEditor:**
-- 280×280 canvas with grid lines and diagonal reference
-- Preset curves: Linear, Soft, Hard, Exponential, Logarithmic, S-Curve
-- Draw directly on canvas to create custom curves (interpolated, no gaps)
-- 128-point array (0-127 input → 0-127 output)
-- Selecting a preset resets to that curve; drawing clears preset selection
+##### CurveEditor
+- 280×280 canvas with grid lines and diagonal reference line
+- 6 presets: Linear, Soft, Hard, Exponential, Logarithmic, S-Curve
+- Draw directly with finger — interpolated so no gaps on fast drags
+- 128-point array (input 0-127 → output 0-127)
+- Selecting a preset resets the curve; drawing clears the preset highlight
+- Plugin declaration: `CurveEditor("curve", "Velocity Curve")`
 
-**Group:**
-- Titled section with subtle bottom border
-- Groups related params visually (e.g., "Timing" section with rate + gate)
-- Declared by plugin: `Group("Timing", [Radio("rate", ...), Wheel("gate", ...)])`
+##### NoteSelect / ChannelSelect
+- Specialized Wheels with appropriate ranges and labels
+- NoteSelect: MIDI 0-127 with note names (C-2, C#-2, ..., G8)
+- ChannelSelect: 1-16
+- Plugin declaration: `NoteSelect("split", "Split Point", default=60)`
+- Plugin declaration: `ChannelSelect("out_ch", "Output Channel", default=1)`
 
-**Conditional visibility (`visible_when`):**
-- Any param can declare `visible_when=(other_param, value)` or `visible_when=(other_param, [values])`
+##### Group
+- Titled section with heading + subtle bottom border
+- Groups related params visually inside the plugin config panel
+- Plugin declaration:
+  ```python
+  Group("Timing", [
+      Radio("rate", "Rate", ["1/4", "1/8", "1/16"], default="1/8"),
+      Wheel("gate", "Gate %", min=10, max=100, default=80),
+  ]),
+  Group("Output", [
+      ChannelSelect("out_ch", "Channel", default=1),
+      Fader("velocity", "Velocity", min=0, max=127, default=100),
+  ]),
+  ```
+
+##### Conditional Visibility (`visible_when`)
+- Any param can declare `visible_when=(other_param, value)` or `visible_when=(other_param, [val1, val2])`
 - When the condition is false, the param is hidden (not just disabled)
-- Example: `Wheel("bpm", ..., visible_when=("sync", False))` — BPM only shows when sync is off
-- Radio/Toggle changes trigger re-evaluation of all visible_when conditions
+- Example: `Wheel("bpm", "BPM", min=40, max=300, default=120, visible_when=("sync", False))`
+- Radio/Toggle changes trigger re-evaluation — UI updates instantly
+
+##### Haptic Feedback (all controls)
+- **Tick:** 3500Hz square wave (20ms) + navigator.vibrate(2) on value change
+- **Thud:** 150Hz sine (80ms) + navigator.vibrate(30) on hitting min/max boundary
+- **Toggle/Radio:** tick feedback on selection
+- Audio context resumed on first touch gesture (browser autoplay policy)
+- Vibration API primed with vibrate(0) on first touch (Android requires gesture)
 
 #### Step 1.4b: Retrofit existing UI
 
 The existing mapping UI (channel selection, CC numbers, note selection) in the
-filter panel should also use these new control components for consistency:
+filter panel should use these new control components for visual consistency:
 - Channel dropdowns → Wheel (1-16)
 - CC number inputs → Wheel (0-127)
-- Note inputs → Wheel with note names
+- Note inputs → NoteSelect wheel
 - Mapping type selector → Radio pills
 
 This is a separate task after plugins ship but noted here for planning.
 
 #### Step 1.4c: UI Component Documentation
 
-Each UI component must have documentation covering:
-- **For plugin developers:** Param declaration syntax, all options, examples
-- **For framework developers:** Implementation details, event flow, CSS classes
-- Documentation lives in `plugins/README.md` alongside the plugin API docs
-- The `controls-demo.html` page serves as a live interactive reference
+**Required deliverable.** Each UI component must have thorough documentation:
+
+For **plugin developers** (`plugins/README.md`):
+- Declaration syntax for every param type with all options
+- Working examples for each (copy-paste ready)
+- How to use Groups to organize params with titled sections
+- How `visible_when` works with examples
+- How `cc_inputs` maps hardware CCs to params
+- How `StepEditor.length_param` links to a Radio for dynamic sizing
+
+For **framework developers** (inline code docs):
+- Event flow: touch → sound/vibration → state update → callback
+- CSS class naming and theming variables
+- How to add a new param type
+
+**Live reference:** `controls-demo.html` is the canonical demo page. It shows
+every control type with working touch interactions and serves as both a test
+page during development and a visual reference for plugin authors.
 
 #### Step 1.5: Built-in Plugins (8-10)
 
