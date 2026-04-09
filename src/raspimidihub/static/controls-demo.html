@@ -21,111 +21,94 @@ p.sub { font-size: 12px; color: var(--text-dim); margin-bottom: 20px; }
 .card { background: var(--surface); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
 
 /* === STEP EDITOR === */
-.step-editor { overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 4px; }
-.step-grid { display: inline-flex; gap: 2px; min-width: min-content; }
-.step-col {
+.step-editor { padding-bottom: 4px; }
+.step-grid {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    gap: 3px;
+}
+.step-cell {
+    border-radius: 5px;
+    background: var(--bg);
+    border: 1px solid rgba(255,255,255,0.06);
     display: flex;
     flex-direction: column;
     align-items: center;
-    width: 36px;
-    gap: 2px;
-    flex-shrink: 0;
-}
-.step-num {
-    font-size: 9px;
-    color: var(--text-dim);
-    height: 14px;
-    line-height: 14px;
-}
-.step-toggle {
-    width: 32px;
-    height: 32px;
-    border-radius: 4px;
-    background: var(--bg);
-    border: 1px solid rgba(255,255,255,0.08);
-    cursor: pointer;
-    transition: background 0.1s;
+    padding: 3px 0;
     position: relative;
+    min-height: 74px;
 }
-.step-toggle.on {
-    background: var(--accent);
+.step-cell.on {
+    background: rgba(233,69,96,0.15);
     border-color: var(--accent);
 }
-.step-toggle.on.beat { box-shadow: 0 0 6px rgba(233,69,96,0.4); }
-.step-vel {
-    width: 32px;
-    height: 40px;
-    background: var(--bg);
-    border: 1px solid rgba(255,255,255,0.06);
-    border-radius: 3px;
-    position: relative;
-    cursor: ns-resize;
-    touch-action: none;
-    overflow: hidden;
+.step-cell.on.beat {
+    border-color: #ff6b82;
 }
-.step-vel-fill {
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    background: linear-gradient(0deg, rgba(233,69,96,0.7) 0%, rgba(233,69,96,0.3) 100%);
-    transition: height 0.05s;
-    pointer-events: none;
-}
-.step-vel-label {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 9px;
-    color: rgba(255,255,255,0.5);
-    pointer-events: none;
-    z-index: 1;
-}
-.step-oct {
-    width: 32px;
-    height: 22px;
-    background: var(--bg);
-    border: 1px solid rgba(255,255,255,0.06);
-    border-radius: 3px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 10px;
-    color: var(--text-dim);
+/* Step number + on/off tap area */
+.step-head {
+    width: 100%;
+    text-align: center;
     cursor: pointer;
+    padding: 2px 0;
+    font-size: 9px;
+    color: var(--text-dim);
     user-select: none;
 }
-.step-oct.pos { color: var(--accent); }
-.step-oct.neg { color: #5599ff; }
-.step-row-label {
-    display: flex;
-    flex-direction: column;
-    justify-content: flex-start;
-    gap: 2px;
-    width: 28px;
-    flex-shrink: 0;
-    padding-top: 14px;
+.step-cell.on .step-head { color: var(--accent); font-weight: 700; }
+/* Mini wheel inside step */
+.mini-wheel {
+    width: 38px;
+    height: 24px;
+    overflow: hidden;
+    border-radius: 4px;
+    background: linear-gradient(180deg, #080810 0%, #181828 50%, #080810 100%);
+    box-shadow: inset 0 1px 4px rgba(0,0,0,0.6);
+    position: relative;
+    touch-action: none;
+    cursor: grab;
+    border: 1px solid rgba(255,255,255,0.04);
+    margin: 1px 0;
 }
-.step-row-label span {
-    font-size: 8px;
-    color: var(--text-dim);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-}
-.step-row-label .lbl-on { height: 32px; line-height: 32px; }
-.step-row-label .lbl-vel { height: 40px; line-height: 40px; }
-.step-row-label .lbl-oct { height: 22px; line-height: 22px; }
-.step-playhead {
+.mini-wheel:active { cursor: grabbing; }
+.mini-wheel-inner {
     position: absolute;
-    top: 0;
-    bottom: 0;
+    width: 100%;
+    will-change: transform;
+}
+.mini-wheel-tick {
+    height: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 8px;
+    color: rgba(255,255,255,0.2);
+    user-select: none;
+}
+.mini-wheel-tick.active {
+    color: #fff;
+    font-weight: 700;
+    font-size: 9px;
+}
+.mini-wheel-tick.near { color: rgba(255,255,255,0.35); }
+.mini-wheel::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 0;
     width: 2px;
-    background: #fff;
-    opacity: 0.5;
+    height: 1px;
+    background: var(--accent);
     pointer-events: none;
-    transition: left 0.1s;
+    z-index: 2;
+}
+.mini-wheel::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse 160% 50% at 50% 50%, transparent 20%, rgba(0,0,0,0.8) 100%);
+    pointer-events: none;
+    z-index: 1;
 }
 
 /* === CURVE EDITOR === */
@@ -677,7 +660,7 @@ p.sub { font-size: 12px; color: var(--text-dim); margin-bottom: 20px; }
 </div>
 
 <div class="card">
-    <h2>Step Editor (16-step)</h2>
+    <h2>Step Editor</h2>
     <div class="radio-group" style="margin-bottom:12px">
         <span class="radio-label">Steps</span>
         <div class="radio-options" id="step-length">
@@ -687,15 +670,9 @@ p.sub { font-size: 12px; color: var(--text-dim); margin-bottom: 20px; }
         </div>
     </div>
     <div class="step-editor">
-        <div style="display:flex">
-            <div class="step-row-label">
-                <span class="lbl-on">On</span>
-                <span class="lbl-vel">Vel</span>
-                <span class="lbl-oct">Oct</span>
-            </div>
-            <div class="step-grid" id="step-grid"></div>
-        </div>
+        <div class="step-grid" id="step-grid"></div>
     </div>
+    <p style="font-size:10px;color:var(--text-dim);margin-top:8px;text-align:center">Tap = on/off. Scroll top wheel = note. Scroll bottom wheel = velocity.</p>
 </div>
 
 <div class="card">
@@ -992,86 +969,160 @@ function initWheel(el) {
     el.addEventListener('mousedown', onStart);
 }
 
+// === MINI WHEEL (for inside step cells) ===
+const NOTES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+function noteName(n) { return NOTES[n % 12] + (Math.floor(n / 12) - 2); }
+
+function createMiniWheel(parent, min, max, value, labels, onChange) {
+    const el = document.createElement('div');
+    el.className = 'mini-wheel';
+    const inner = document.createElement('div');
+    inner.className = 'mini-wheel-inner';
+    const tickH = 12;
+    const pad = 2;
+    const steps = max - min;
+
+    for (let i = -pad; i <= steps + pad; i++) {
+        const tick = document.createElement('div');
+        tick.className = 'mini-wheel-tick';
+        const v = min + i;
+        if (v >= min && v <= max) tick.textContent = labels ? labels(v) : v;
+        tick.dataset.index = i;
+        inner.appendChild(tick);
+    }
+    el.appendChild(inner);
+    parent.appendChild(el);
+
+    const containerH = 24; // matches CSS height
+    const centerOff = containerH / 2 - tickH / 2;
+    const minOff = -(steps + pad) * tickH + centerOff;
+    const maxOff = -pad * tickH + centerOff;
+
+    let offset = -(Math.round((value - min)) + pad) * tickH + centerOff;
+    let curVal = value;
+    inner.style.transform = `translateY(${offset}px)`;
+    updateMiniTicks();
+
+    function updateMiniTicks() {
+        const ai = Math.round(curVal - min);
+        inner.querySelectorAll('.mini-wheel-tick').forEach(t => {
+            const i = +t.dataset.index;
+            t.classList.remove('active', 'near');
+            if (i === ai) t.classList.add('active');
+            else if (Math.abs(i - ai) === 1) t.classList.add('near');
+        });
+    }
+
+    let startY, startOff, lastY, lastT, vel, animId, atBound = false;
+
+    function onStart(e) {
+        e.stopPropagation(); // Don't trigger step toggle
+        if (animId) cancelAnimationFrame(animId);
+        if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+        vibrate(0);
+        atBound = false;
+        const pt = e.touches ? e.touches[0] : e;
+        startY = pt.clientY;
+        startOff = offset;
+        lastY = startY; lastT = Date.now(); vel = 0;
+        const move = (e2) => {
+            e2.preventDefault(); e2.stopPropagation();
+            const pt2 = e2.touches ? e2.touches[0] : e2;
+            const dy = pt2.clientY - startY;
+            const now = Date.now(); const dt = now - lastT;
+            if (dt > 0) vel = (pt2.clientY - lastY) / dt;
+            lastY = pt2.clientY; lastT = now;
+            let raw = startOff + dy;
+            const clamped = Math.max(minOff, Math.min(maxOff, raw));
+            if (raw !== clamped && !atBound) { thudFeedback(); vel = 0; atBound = true; }
+            else if (raw === clamped) atBound = false;
+            offset = clamped;
+            const nv = Math.max(min, Math.min(max, min + Math.round((centerOff - offset) / tickH) - pad));
+            if (nv !== curVal) { tickFeedback(); curVal = nv; updateMiniTicks(); if (onChange) onChange(nv); }
+            inner.style.transform = `translateY(${offset}px)`;
+        };
+        const end = () => {
+            el.removeEventListener('touchmove', move);
+            el.removeEventListener('mousemove', move);
+            window.removeEventListener('touchend', end);
+            window.removeEventListener('mouseup', end);
+            if (Math.abs(vel) > 0.15) momentum(); else snap();
+        };
+        el.addEventListener('touchmove', move, { passive: false });
+        el.addEventListener('mousemove', move);
+        window.addEventListener('touchend', end);
+        window.addEventListener('mouseup', end);
+    }
+    function momentum() {
+        const fr = 0.93;
+        function frame() {
+            vel *= fr;
+            let raw = offset + vel * 16;
+            const clamped = Math.max(minOff, Math.min(maxOff, raw));
+            if (raw !== clamped) { offset = clamped; vel = 0; thudFeedback(); snap(); return; }
+            offset = clamped;
+            const nv = Math.max(min, Math.min(max, min + Math.round((centerOff - offset) / tickH) - pad));
+            if (nv !== curVal) { tickFeedback(); curVal = nv; updateMiniTicks(); if (onChange) onChange(nv); }
+            inner.style.transform = `translateY(${offset}px)`;
+            if (Math.abs(vel) > 0.03) animId = requestAnimationFrame(frame); else snap();
+        }
+        animId = requestAnimationFrame(frame);
+    }
+    function snap() {
+        const target = -(Math.round(curVal - min) + pad) * tickH + centerOff;
+        function s() {
+            offset += (target - offset) * 0.3;
+            inner.style.transform = `translateY(${offset}px)`;
+            if (Math.abs(target - offset) > 0.5) animId = requestAnimationFrame(s);
+            else { offset = target; inner.style.transform = `translateY(${offset}px)`; }
+        }
+        animId = requestAnimationFrame(s);
+    }
+    el.addEventListener('touchstart', onStart, { passive: false });
+    el.addEventListener('mousedown', (e) => { e.preventDefault(); onStart(e); });
+    return { getValue: () => curVal };
+}
+
 // === STEP EDITOR ===
 function initStepEditor(gridEl, numSteps) {
     gridEl.innerHTML = '';
     const steps = [];
+
     for (let i = 0; i < numSteps; i++) {
-        const col = document.createElement('div');
-        col.className = 'step-col';
+        const cell = document.createElement('div');
+        const on = i % 2 === 0;
         const isBeat = i % 4 === 0;
+        cell.className = 'step-cell' + (on ? ' on' : '') + (isBeat && on ? ' beat' : '');
 
-        // Step number
-        const num = document.createElement('div');
-        num.className = 'step-num';
-        num.textContent = i + 1;
-        col.appendChild(num);
-
-        // On/off toggle
-        const on = i % 2 === 0;  // default pattern
-        const tog = document.createElement('div');
-        tog.className = 'step-toggle' + (on ? ' on' : '') + (isBeat ? ' beat' : '');
-        tog.addEventListener('click', () => {
-            tog.classList.toggle('on');
-            steps[i].on = tog.classList.contains('on');
+        // Step number + tap to toggle
+        const head = document.createElement('div');
+        head.className = 'step-head';
+        head.textContent = i + 1;
+        head.addEventListener('click', () => {
+            const isOn = cell.classList.toggle('on');
+            if (isBeat && isOn) cell.classList.add('beat');
+            else cell.classList.remove('beat');
+            steps[i].on = isOn;
             tickFeedback();
         });
-        col.appendChild(tog);
+        cell.appendChild(head);
 
-        // Velocity bar (drag)
-        const vel = 80 + Math.floor(Math.random() * 47);
-        const velWrap = document.createElement('div');
-        velWrap.className = 'step-vel';
-        const velFill = document.createElement('div');
-        velFill.className = 'step-vel-fill';
-        velFill.style.height = (vel / 127 * 100) + '%';
-        const velLabel = document.createElement('div');
-        velLabel.className = 'step-vel-label';
-        velLabel.textContent = vel;
-        velWrap.appendChild(velFill);
-        velWrap.appendChild(velLabel);
+        // Note mini-wheel (C-2 to G8 = MIDI 0-127)
+        const defaultNote = 60; // C3
+        const noteWheel = createMiniWheel(cell, 0, 127, defaultNote,
+            (v) => noteName(v),
+            (v) => { steps[i].note = v; }
+        );
 
-        const setVel = (clientY) => {
-            const rect = velWrap.getBoundingClientRect();
-            const pct = 1 - Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
-            const v = Math.round(pct * 127);
-            steps[i].vel = v;
-            velFill.style.height = (pct * 100) + '%';
-            velLabel.textContent = v;
-        };
-        velWrap.addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            setVel(e.touches[0].clientY);
-            const move = (e2) => { e2.preventDefault(); setVel(e2.touches[0].clientY); };
-            const end = () => { velWrap.removeEventListener('touchmove', move); window.removeEventListener('touchend', end); };
-            velWrap.addEventListener('touchmove', move, { passive: false });
-            window.addEventListener('touchend', end);
-        }, { passive: false });
-        velWrap.addEventListener('mousedown', (e) => {
-            setVel(e.clientY);
-            const move = (e2) => setVel(e2.clientY);
-            const end = () => { velWrap.removeEventListener('mousemove', move); window.removeEventListener('mouseup', end); };
-            velWrap.addEventListener('mousemove', move);
-            window.addEventListener('mouseup', end);
-        });
-        col.appendChild(velWrap);
+        // Velocity mini-wheel
+        const defaultVel = 100;
+        const velWheel = createMiniWheel(cell, 0, 127, defaultVel,
+            null,
+            (v) => { steps[i].vel = v; }
+        );
 
-        // Octave tap
-        let oct = 0;
-        const octEl = document.createElement('div');
-        octEl.className = 'step-oct';
-        octEl.textContent = '0';
-        octEl.addEventListener('click', () => {
-            oct = oct >= 2 ? -2 : oct + 1;
-            steps[i].oct = oct;
-            octEl.textContent = oct > 0 ? '+' + oct : oct;
-            octEl.className = 'step-oct' + (oct > 0 ? ' pos' : oct < 0 ? ' neg' : '');
-            tickFeedback();
-        });
-        col.appendChild(octEl);
-
-        gridEl.appendChild(col);
-        steps.push({ on, vel, oct });
+        gridEl.appendChild(cell);
+        steps.push({ on, note: defaultNote, vel: defaultVel });
     }
     return steps;
 }
