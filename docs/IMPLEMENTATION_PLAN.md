@@ -83,7 +83,7 @@ Paired Devices:
 3. User taps **[Pair]** next to a device
 4. Pairing happens automatically ("Just Works" — no PIN needed for BLE-MIDI)
 5. Device appears under "Paired Devices" as "Connected"
-6. Device immediately shows up in the connection matrix with a `⸙` Bluetooth icon
+6. Device immediately shows up in the connection matrix with a `ᛒ` Bluetooth icon
 7. User routes it like any other device
 
 ### Reconnection
@@ -95,13 +95,13 @@ Paired Devices:
 
 ### Matrix Label
 
-Bluetooth devices get a small `⸙` icon prefix in the matrix row/column header to distinguish from USB:
+Bluetooth devices get a small `ᛒ` icon prefix in the matrix row/column header to distinguish from USB:
 
 ```
-FROM ↓          | Digitone | ⸙ WIDI | KeyStep
+FROM ↓          | Digitone | ᛒ WIDI | KeyStep
 ────────────────+──────────+────────+────────
 Digitone ▶      |          |   ✓    |   ✓
-⸙ WIDI Master   |    ✓     |        |   ✓
+ᛒ WIDI Master   |    ✓     |        |   ✓
 KeyStep mk2     |    ✓     |   ✓    |
 ```
 
@@ -161,7 +161,7 @@ DELETE /api/bluetooth/{address}    # Forget device
 - Scan button with spinner + results list
 - Pair/Connect/Forget buttons per device
 - Connection status indicators (green dot = connected, gray = disconnected)
-- Add `⸙` prefix to Bluetooth device labels in ConnectionMatrix
+- Add `ᛒ` prefix to Bluetooth device labels in ConnectionMatrix
 
 ### Step 5: Packaging
 
@@ -171,6 +171,16 @@ DELETE /api/bluetooth/{address}    # Forget device
 
 ---
 
+## Bidirectional MIDI
+
+BLE-MIDI is fully bidirectional. bluez-alsa creates ALSA seq ports with both input and output capabilities — identical to USB MIDI. This means:
+
+- **Receive:** BLE keyboard → route to USB synths
+- **Send:** USB controller → route to BLE synth
+- **BLE ↔ BLE:** Also works (two Bluetooth devices routing through the Pi)
+
+No special handling needed — existing routing, filters, and mappings work in both directions.
+
 ## Latency Considerations
 
 BLE-MIDI adds ~15-40ms latency + jitter vs USB's <1ms. This is:
@@ -178,7 +188,7 @@ BLE-MIDI adds ~15-40ms latency + jitter vs USB's <1ms. This is:
 - **Noticeable for:** Live keyboard playing, tight drum sequencing
 - **Mitigated by:** BLE 5.0 connection intervals (Pi 4/5 support BLE 5.0)
 
-The UI should show a subtle latency indicator (e.g., `⸙` icon tooltip: "Bluetooth — higher latency than USB").
+The UI should show a subtle latency indicator (e.g., `ᛒ` icon tooltip: "Bluetooth — higher latency than USB").
 
 ---
 
