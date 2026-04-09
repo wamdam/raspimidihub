@@ -18,13 +18,14 @@ body { background: var(--bg); color: var(--text); font-family: -apple-system, sy
 h2 { font-size: 14px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; margin: 24px 0 12px; }
 h1 { font-size: 18px; margin-bottom: 8px; }
 p.sub { font-size: 12px; color: var(--text-dim); margin-bottom: 20px; }
+.card { background: var(--surface); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
 
 /* === WHEEL CONTROL === */
 .wheel-group {
     display: flex;
     align-items: center;
-    gap: 16px;
-    margin-bottom: 20px;
+    gap: 12px;
+    margin-bottom: 16px;
 }
 .wheel-label {
     font-size: 13px;
@@ -39,17 +40,28 @@ p.sub { font-size: 12px; color: var(--text-dim); margin-bottom: 20px; }
     font-variant-numeric: tabular-nums;
 }
 .wheel-container {
-    flex: 1;
-    max-width: 200px;
-    height: 54px;
+    width: 100px;
+    height: 60px;
     overflow: hidden;
-    border-radius: 12px;
-    background: linear-gradient(180deg, #0a0a1a 0%, #1a1a3e 15%, #22224a 50%, #1a1a3e 85%, #0a0a1a 100%);
-    box-shadow: inset 0 2px 8px rgba(0,0,0,0.6), inset 0 -2px 8px rgba(0,0,0,0.6), 0 1px 3px rgba(255,255,255,0.05);
+    border-radius: 10px;
     position: relative;
     touch-action: none;
     cursor: grab;
-    border: 1px solid rgba(255,255,255,0.06);
+    /* Tire / textured plastic feel */
+    background: linear-gradient(180deg,
+        #080810 0%,
+        #141420 8%,
+        #1c1c30 20%,
+        #222238 50%,
+        #1c1c30 80%,
+        #141420 92%,
+        #080810 100%
+    );
+    border: 1px solid rgba(255,255,255,0.04);
+    box-shadow:
+        inset 0 3px 10px rgba(0,0,0,0.8),
+        inset 0 -3px 10px rgba(0,0,0,0.8),
+        0 1px 2px rgba(255,255,255,0.03);
 }
 .wheel-container:active { cursor: grabbing; }
 .wheel-inner {
@@ -59,54 +71,56 @@ p.sub { font-size: 12px; color: var(--text-dim); margin-bottom: 20px; }
     will-change: transform;
 }
 .wheel-tick {
-    height: 18px;
+    height: 20px;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 12px;
-    color: rgba(255,255,255,0.2);
+    font-size: 11px;
+    color: rgba(255,255,255,0.25);
     position: relative;
     font-variant-numeric: tabular-nums;
+    user-select: none;
 }
+/* Grip lines — rubber tire texture */
 .wheel-tick::before {
     content: '';
     position: absolute;
-    left: 0;
-    right: 0;
+    left: 12px;
+    right: 12px;
     top: 0;
     height: 1px;
-    background: rgba(255,255,255,0.06);
-}
-.wheel-tick.major {
-    color: rgba(255,255,255,0.5);
-    font-weight: 500;
+    background: rgba(255,255,255,0.04);
 }
 .wheel-tick.active {
     color: #fff;
     font-weight: 700;
-    text-shadow: 0 0 8px rgba(233,69,96,0.5);
+    font-size: 13px;
+    text-shadow: 0 0 10px rgba(233,69,96,0.6);
 }
-/* Highlight center line */
+.wheel-tick.near {
+    color: rgba(255,255,255,0.45);
+    font-size: 11px;
+}
+/* Center indicator line */
 .wheel-container::after {
     content: '';
     position: absolute;
     top: 50%;
-    left: 8px;
-    right: 8px;
+    left: 0;
+    width: 4px;
     height: 2px;
     margin-top: -1px;
     background: var(--accent);
-    opacity: 0.6;
-    border-radius: 1px;
+    border-radius: 0 1px 1px 0;
     pointer-events: none;
     z-index: 2;
 }
-/* Curved shadow overlay for 3D drum effect */
+/* 3D curvature overlay */
 .wheel-container::before {
     content: '';
     position: absolute;
     inset: 0;
-    background: radial-gradient(ellipse 120% 50% at 50% 50%, transparent 40%, rgba(0,0,0,0.7) 100%);
+    background: radial-gradient(ellipse 160% 50% at 50% 50%, transparent 30%, rgba(0,0,0,0.85) 100%);
     pointer-events: none;
     z-index: 1;
 }
@@ -116,7 +130,7 @@ p.sub { font-size: 12px; color: var(--text-dim); margin-bottom: 20px; }
     display: flex;
     align-items: center;
     gap: 16px;
-    margin-bottom: 20px;
+    margin-bottom: 16px;
 }
 .toggle-label {
     font-size: 13px;
@@ -147,15 +161,10 @@ p.sub { font-size: 12px; color: var(--text-dim); margin-bottom: 20px; }
     transition: left 0.15s cubic-bezier(0.4, 0, 0.2, 1);
     left: 3px;
 }
-.metal-toggle.on::before {
-    left: 29px;
-}
+.metal-toggle.on::before { left: 29px; }
 .metal-toggle .slot {
     position: absolute;
-    top: 3px;
-    bottom: 3px;
-    left: 6px;
-    right: 6px;
+    top: 3px; bottom: 3px; left: 6px; right: 6px;
     border-radius: 2px;
     background: linear-gradient(180deg, #0a0a0a 0%, #1a1a1a 100%);
     box-shadow: inset 0 1px 3px rgba(0,0,0,0.9);
@@ -163,65 +172,51 @@ p.sub { font-size: 12px; color: var(--text-dim); margin-bottom: 20px; }
 .metal-toggle .indicator {
     position: absolute;
     top: 11px;
-    width: 6px;
-    height: 6px;
+    width: 6px; height: 6px;
     border-radius: 50%;
     transition: opacity 0.15s, background 0.15s;
 }
-.metal-toggle .indicator.off-dot {
-    left: 10px;
-    background: #333;
-}
-.metal-toggle .indicator.on-dot {
-    right: 10px;
-    background: #333;
-}
-.metal-toggle.on .indicator.on-dot {
-    background: var(--accent);
-    box-shadow: 0 0 6px var(--accent);
-}
-.toggle-state {
-    font-size: 13px;
-    font-weight: 500;
-    min-width: 30px;
-}
+.metal-toggle .indicator.off-dot { left: 10px; background: #333; }
+.metal-toggle .indicator.on-dot { right: 10px; background: #333; }
+.metal-toggle.on .indicator.on-dot { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
+.toggle-state { font-size: 13px; font-weight: 500; min-width: 30px; }
 .toggle-state.on { color: var(--accent); }
 .toggle-state.off { color: var(--text-dim); }
 
-/* === SELECT (already exists, styled for consistency) === */
-.styled-select {
+/* === RADIO GROUP === */
+.radio-group {
     display: flex;
-    align-items: center;
-    gap: 16px;
-    margin-bottom: 20px;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 16px;
 }
-.styled-select label {
+.radio-group .radio-label {
     font-size: 13px;
     color: var(--text-dim);
     min-width: 70px;
+    padding-top: 6px;
 }
-.styled-select select {
-    flex: 1;
-    max-width: 200px;
-    padding: 10px 12px;
-    background: var(--surface);
+.radio-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+.radio-opt {
+    padding: 7px 14px;
+    background: var(--bg);
     border: 1px solid var(--surface2);
-    border-radius: 8px;
-    color: var(--text);
-    font-size: 14px;
-    -webkit-appearance: none;
-    appearance: none;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23999' fill='none' stroke-width='1.5'/%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-position: right 12px center;
+    border-radius: 6px;
+    color: var(--text-dim);
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.15s;
+    user-select: none;
 }
-
-/* === DEMO LAYOUT === */
-.card {
-    background: var(--surface);
-    border-radius: 12px;
-    padding: 16px;
-    margin-bottom: 16px;
+.radio-opt.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+    font-weight: 500;
 }
 </style>
 </head>
@@ -234,7 +229,7 @@ p.sub { font-size: 12px; color: var(--text-dim); margin-bottom: 20px; }
     <h2>Wheel Controls</h2>
     <div class="wheel-group">
         <span class="wheel-label">Gate %</span>
-        <div class="wheel-container" id="wheel1" data-min="10" data-max="100" data-value="80" data-step="1"></div>
+        <div class="wheel-container" id="wheel1" data-min="10" data-max="100" data-value="80" data-step="1" data-suffix="%"></div>
         <span class="wheel-value" id="wheel1-val">80%</span>
     </div>
     <div class="wheel-group">
@@ -277,31 +272,63 @@ p.sub { font-size: 12px; color: var(--text-dim); margin-bottom: 20px; }
 </div>
 
 <div class="card">
-    <h2>Combined Example — Arpeggiator</h2>
-    <div class="styled-select">
-        <label>Pattern</label>
-        <select>
-            <option>Up</option>
-            <option>Down</option>
-            <option>Up-Down</option>
-            <option>Random</option>
-            <option>As Played</option>
-        </select>
+    <h2>Radio Groups</h2>
+    <div class="radio-group">
+        <span class="radio-label">Pattern</span>
+        <div class="radio-options" id="radio1">
+            <div class="radio-opt active">Up</div>
+            <div class="radio-opt">Down</div>
+            <div class="radio-opt">Up-Down</div>
+            <div class="radio-opt">Random</div>
+            <div class="radio-opt">As Played</div>
+        </div>
     </div>
-    <div class="styled-select">
-        <label>Rate</label>
-        <select>
-            <option>1/4</option>
-            <option selected>1/8</option>
-            <option>1/16</option>
-            <option>1/32</option>
-            <option>1/8 Triplet</option>
-            <option>1/16 Triplet</option>
-        </select>
+    <div class="radio-group">
+        <span class="radio-label">Rate</span>
+        <div class="radio-options" id="radio2">
+            <div class="radio-opt">1/4</div>
+            <div class="radio-opt active">1/8</div>
+            <div class="radio-opt">1/16</div>
+            <div class="radio-opt">1/32</div>
+            <div class="radio-opt">1/8T</div>
+            <div class="radio-opt">1/16T</div>
+        </div>
+    </div>
+    <div class="radio-group">
+        <span class="radio-label">Waveform</span>
+        <div class="radio-options" id="radio3">
+            <div class="radio-opt active">Sine</div>
+            <div class="radio-opt">Triangle</div>
+            <div class="radio-opt">Square</div>
+            <div class="radio-opt">Saw</div>
+            <div class="radio-opt">S&H</div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <h2>Combined — Arpeggiator</h2>
+    <div class="radio-group">
+        <span class="radio-label">Pattern</span>
+        <div class="radio-options" id="radio4">
+            <div class="radio-opt active">Up</div>
+            <div class="radio-opt">Down</div>
+            <div class="radio-opt">Up-Down</div>
+            <div class="radio-opt">Random</div>
+        </div>
+    </div>
+    <div class="radio-group">
+        <span class="radio-label">Rate</span>
+        <div class="radio-options" id="radio5">
+            <div class="radio-opt">1/4</div>
+            <div class="radio-opt active">1/8</div>
+            <div class="radio-opt">1/16</div>
+            <div class="radio-opt">1/32</div>
+        </div>
     </div>
     <div class="wheel-group">
         <span class="wheel-label">Gate %</span>
-        <div class="wheel-container" id="wheel5" data-min="10" data-max="100" data-value="75" data-step="5"></div>
+        <div class="wheel-container" id="wheel5" data-min="10" data-max="100" data-value="75" data-step="5" data-suffix="%"></div>
         <span class="wheel-value" id="wheel5-val">75%</span>
     </div>
     <div class="wheel-group">
@@ -321,30 +348,42 @@ p.sub { font-size: 12px; color: var(--text-dim); margin-bottom: 20px; }
 </div>
 
 <script>
+// === CLICK SOUND via Web Audio API ===
+let audioCtx;
+function clickSound() {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.frequency.value = 3500;
+    osc.type = 'square';
+    gain.gain.setValueAtTime(0.03, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.02);
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.02);
+}
+
 // === WHEEL CONTROL ===
 function initWheel(el) {
     const min = +el.dataset.min;
     const max = +el.dataset.max;
     const step = +el.dataset.step || 1;
+    const suffix = el.dataset.suffix || '';
     let value = +el.dataset.value;
     const range = max - min;
-    const tickH = 18;
+    const tickH = 20;
     const steps = Math.round(range / step);
 
-    // Build ticks
     const inner = document.createElement('div');
     inner.className = 'wheel-inner';
-    // Padding ticks above and below
     const pad = 3;
     for (let i = -pad; i <= steps + pad; i++) {
         const tick = document.createElement('div');
         tick.className = 'wheel-tick';
         const v = min + i * step;
         if (v >= min && v <= max) {
-            if (i % 10 === 0 || steps <= 10) {
-                tick.classList.add('major');
-                tick.textContent = v;
-            }
+            tick.textContent = v;
         }
         tick.dataset.index = i;
         inner.appendChild(tick);
@@ -359,7 +398,6 @@ function initWheel(el) {
         const idx = Math.round((v - min) / step);
         return -(idx + pad) * tickH + centerOffset;
     }
-
     function offsetToValue(off) {
         const idx = Math.round((centerOffset - off) / tickH) - pad;
         return Math.max(min, Math.min(max, min + idx * step));
@@ -373,19 +411,19 @@ function initWheel(el) {
         const activeIdx = Math.round((value - min) / step);
         inner.querySelectorAll('.wheel-tick').forEach(t => {
             const i = +t.dataset.index;
-            t.classList.toggle('active', i === activeIdx);
+            t.classList.remove('active', 'near');
+            if (i === activeIdx) t.classList.add('active');
+            else if (Math.abs(i - activeIdx) === 1) t.classList.add('near');
         });
-        if (valEl) {
-            const suffix = el.id.includes('wheel1') || el.id.includes('wheel5') ? '%' : '';
-            valEl.textContent = value + suffix;
-        }
+        if (valEl) valEl.textContent = value + suffix;
     }
 
-    // Touch / mouse handling
     let startY, startOffset, lastY, lastT, velocity, animId;
 
     function onStart(e) {
         if (animId) cancelAnimationFrame(animId);
+        // Resume audio context on first touch (browser autoplay policy)
+        if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
         const pt = e.touches ? e.touches[0] : e;
         startY = pt.clientY;
         startOffset = offset;
@@ -407,12 +445,10 @@ function initWheel(el) {
         if (dt > 0) velocity = (pt.clientY - lastY) / dt;
         lastY = pt.clientY;
         lastT = now;
-
         offset = startOffset + dy;
         const newVal = offsetToValue(offset);
         if (newVal !== value) {
-            // Haptic tick
-            if (navigator.vibrate) navigator.vibrate(1);
+            clickSound();
             value = newVal;
             updateTicks();
         }
@@ -424,13 +460,8 @@ function initWheel(el) {
         el.removeEventListener('mousemove', onMove);
         window.removeEventListener('touchend', onEnd);
         window.removeEventListener('mouseup', onEnd);
-
-        // Momentum
-        if (Math.abs(velocity) > 0.2) {
-            animateMomentum();
-        } else {
-            snapToValue();
-        }
+        if (Math.abs(velocity) > 0.2) animateMomentum();
+        else snapToValue();
     }
 
     function animateMomentum() {
@@ -440,38 +471,25 @@ function initWheel(el) {
             offset += velocity * 16;
             const newVal = offsetToValue(offset);
             if (newVal !== value) {
-                if (navigator.vibrate) navigator.vibrate(1);
+                clickSound();
                 value = newVal;
                 updateTicks();
             }
             inner.style.transform = `translateY(${offset}px)`;
-
-            if (Math.abs(velocity) > 0.05) {
-                animId = requestAnimationFrame(frame);
-            } else {
-                snapToValue();
-            }
+            if (Math.abs(velocity) > 0.05) animId = requestAnimationFrame(frame);
+            else snapToValue();
         }
         animId = requestAnimationFrame(frame);
     }
 
     function snapToValue() {
         const target = valueToOffset(value);
-        const diff = target - offset;
-        if (Math.abs(diff) < 0.5) {
-            offset = target;
-            inner.style.transform = `translateY(${offset}px)`;
-            return;
-        }
+        if (Math.abs(target - offset) < 0.5) { offset = target; inner.style.transform = `translateY(${offset}px)`; return; }
         function snap() {
             offset += (target - offset) * 0.3;
             inner.style.transform = `translateY(${offset}px)`;
-            if (Math.abs(target - offset) > 0.5) {
-                animId = requestAnimationFrame(snap);
-            } else {
-                offset = target;
-                inner.style.transform = `translateY(${offset}px)`;
-            }
+            if (Math.abs(target - offset) > 0.5) animId = requestAnimationFrame(snap);
+            else { offset = target; inner.style.transform = `translateY(${offset}px)`; }
         }
         animId = requestAnimationFrame(snap);
     }
@@ -485,7 +503,7 @@ function initToggle(el) {
     const valEl = document.getElementById(el.id + '-val');
     el.addEventListener('click', () => {
         const isOn = el.classList.toggle('on');
-        if (navigator.vibrate) navigator.vibrate(isOn ? [5, 30, 5] : [5]);
+        clickSound();
         if (valEl) {
             valEl.textContent = isOn ? 'ON' : 'OFF';
             valEl.className = 'toggle-state ' + (isOn ? 'on' : 'off');
@@ -493,7 +511,18 @@ function initToggle(el) {
     });
 }
 
-// Init all controls
+// === RADIO GROUP ===
+document.querySelectorAll('.radio-options').forEach(group => {
+    group.querySelectorAll('.radio-opt').forEach(opt => {
+        opt.addEventListener('click', () => {
+            group.querySelectorAll('.radio-opt').forEach(o => o.classList.remove('active'));
+            opt.classList.add('active');
+            clickSound();
+        });
+    });
+});
+
+// Init controls
 document.querySelectorAll('.wheel-container').forEach(initWheel);
 document.querySelectorAll('.metal-toggle').forEach(initToggle);
 </script>
