@@ -56,4 +56,6 @@ make clean            # Remove build artifacts
 2. `git commit && git push`
 3. `git tag vX.Y.Z && git push origin vX.Y.Z`
 4. `make clean && make deb`
-5. `gh release create vX.Y.Z dist/*.deb --title "vX.Y.Z" --notes "..."`
+5. `gh release create vX.Y.Z dist/*.deb scripts/install.sh --title "vX.Y.Z" --notes "..."`
+
+**Important:** Always include `scripts/install.sh` in every release — the one-line installer downloads it from the latest release.
