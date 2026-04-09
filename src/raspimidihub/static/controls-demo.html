@@ -1312,13 +1312,16 @@ function initFader(el) {
     function onStart(e) {
         e.preventDefault();
         if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+        vibrate(0);
         const pt = e.touches ? e.touches[0] : e;
-        value = posToValue(pt.clientX, pt.clientY);
+        const nv = posToValue(pt.clientX, pt.clientY);
+        if (nv !== value) { value = nv; tickFeedback(); }
         updatePosition();
         const move = (e2) => {
             e2.preventDefault();
             const pt2 = e2.touches ? e2.touches[0] : e2;
-            value = posToValue(pt2.clientX, pt2.clientY);
+            const nv2 = posToValue(pt2.clientX, pt2.clientY);
+            if (nv2 !== value) { value = nv2; tickFeedback(); }
             updatePosition();
         };
         const end = () => {
