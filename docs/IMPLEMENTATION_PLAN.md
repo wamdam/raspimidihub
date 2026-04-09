@@ -151,8 +151,10 @@ class MyPlugin(PluginBase):
         74: "rate",       # CC#74 controls the rate parameter
         75: "gate",       # CC#75 controls the gate parameter
     }
+    # --- Declare I/O (shown in config panel so user knows how to wire) ---
+    inputs = ["Notes", "CC#74 (rate)", "CC#75 (gate)", "Clock", "Aftertouch"]
+    outputs = ["Notes (arpeggiated)", "Aftertouch (pass-through)"]
     cc_outputs = [1]      # List of CC numbers this plugin may send
-    outputs = ["Notes (arpeggiated)", "Aftertouch", "Pitch Bend"]  # Human-readable output description
 
     # --- Clock subscription ---
     clock_divisions = ["1/8", "1/16"]  # Which divisions to receive
@@ -360,12 +362,14 @@ Step Pattern:
 │●│●│○│●│●│○│●│○│●│●│○│●│●│○│●│○│
 └─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┘
 
-━━ CC Inputs ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  CC#74 → Rate
-  CC#75 → Gate %
+━━ Inputs ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Notes, CC#74 (rate), CC#75 (gate), Clock, Aftertouch
 
 ━━ Outputs ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  Notes (arpeggiated), Aftertouch, Pitch Bend
+  Notes (arpeggiated), Aftertouch (pass-through)
+
+  CC automation: when CC#74 or CC#75 arrives on the
+  IN port, the Rate/Gate wheels move in real-time.
 
 ━━ MIDI Monitor ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   Note On ch1 C3 vel=100
@@ -751,19 +755,33 @@ Plugin instances and all their parameter values are saved in `config.json`. They
 
 2. **Plugin code is simple.** A developer implements `on_note_on`, `on_tick`, calls `self.send_note_on`. No ALSA knowledge, no threading knowledge, no UI code. The framework does everything else.
 
-3. **UI is declarative.** Plugins declare params, the framework renders them. No HTML, no JS, no CSS in plugins. The step editor, knobs, dropdowns are all framework-provided components that render consistently on mobile.
+3. **UI is declarative.** Plugins declare params, the framework renders them. No HTML, no JS, no CSS in plugins. The step editor, wheels, faders, toggles are all framework-provided components that render consistently on mobile.
 
-4. **CC inputs are first-class.** Any numeric parameter can be controlled by a CC. This means hardware knobs → plugin parameters → sound changes. Declared in one line: `cc_inputs = {74: "rate"}`.
+4. **One IN, one OUT.** Each plugin gets exactly one ALSA input port and one ALSA output port. No multi-port plugins. If a plugin needs clock AND notes, it receives both on the same input — the plugin ignores what it doesn't need. This keeps the matrix simple and the plugin store manageable.
 
-5. **Clock is easy.** `clock_divisions = ["1/8"]` and implement `on_tick("1/8")`. The framework handles PPQ counting, tempo detection, free-running fallback.
+5. **CC automation is first-class.** Any numeric parameter can be controlled by incoming CC. The framework maps CC 0-127 to the param's range, updates the param, calls `on_param_change()`, AND updates the UI in real-time (faders/wheels move on screen). Declared in one line: `cc_inputs = {74: "rate"}`. If the user moves the UI control while external CC is also controlling it, the last one wins — no conflict resolution needed.
 
-6. **Matrix integration is free.** Plugins are ALSA devices. All existing features (routing, filtering, channel mapping, presets, save/load, offline persistence) work without any plugin-specific code.
+6. **I/O transparency.** Each plugin declares what it listens to and what it outputs in human-readable strings. The config panel shows these clearly so the user knows how to wire things in the matrix:
+   - `inputs = ["Notes", "CC#74 (rate)", "CC#75 (gate)", "Clock", "Aftertouch"]`
+   - `outputs = ["Notes (arpeggiated)", "Aftertouch (pass-through)"]`
+
+7. **Clock is easy.** `clock_divisions = ["1/8"]` and implement `on_tick("1/8")`. The framework handles PPQ counting, tempo detection, free-running fallback.
+
+8. **Matrix integration is free.** Plugins are ALSA devices. All existing features (routing, filtering, channel mapping, presets, save/load, offline persistence) work without any plugin-specific code.
+
+9. **Sandboxed.** Plugins run in-process but are restricted:
+   - No filesystem access (no `open()`, no `Path`)
+   - No network access (no `socket`, no `urllib`)
+   - No subprocess spawning
+   - Only allowed imports: `math`, `random`, `collections`, `dataclasses`, `enum`
+   - The framework enforces this by running plugins with a restricted `__builtins__` and validating imports on load
+   - Future phases may relax this for synth plugins that need audio output
 
 ---
 
-## Open Questions for Later
+## Resolved Questions
 
-- Should plugins be able to declare multiple ports (e.g., Arp with separate "clock in" and "note in")?
-- MIDI 2.0 / MPE support in plugins?
-- Plugin sandboxing (restrict file system access, network, etc.)?
-- Should plugin params be automatable via MIDI program change (switch presets)?
+- **Multiple ports?** No. One IN, one OUT per plugin. Clock and notes arrive on the same input — the plugin filters by event type. This keeps the matrix clean and the store simple.
+- **MIDI 2.0 / MPE?** Out of scope for now.
+- **Plugin sandboxing?** Yes, restricted from phase 1. No filesystem, no network, no subprocess.
+- **CC automation of params?** Yes, first-class. CC changes reflect live in the UI (faders/wheels animate). Declared via `cc_inputs`.
