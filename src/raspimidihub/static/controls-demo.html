@@ -34,9 +34,10 @@ p.sub { font-size: 12px; color: var(--text-dim); margin-bottom: 20px; }
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: 3px 0;
+    justify-content: center;
+    padding: 6px 0;
     position: relative;
-    min-height: 74px;
+    min-height: 70px;
 }
 .step-cell.on {
     background: rgba(233,69,96,0.15);
@@ -45,21 +46,31 @@ p.sub { font-size: 12px; color: var(--text-dim); margin-bottom: 20px; }
 .step-cell.on.beat {
     border-color: #ff6b82;
 }
-/* Step number + on/off tap area */
+/* On/off tap area */
 .step-head {
     width: 100%;
-    text-align: center;
+    height: 16px;
     cursor: pointer;
-    padding: 2px 0;
-    font-size: 9px;
-    color: var(--text-dim);
+    display: flex;
+    align-items: center;
+    justify-content: center;
     user-select: none;
 }
-.step-cell.on .step-head { color: var(--accent); font-weight: 700; }
+.step-head::after {
+    content: '';
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.1);
+}
+.step-cell.on .step-head::after {
+    background: var(--accent);
+    box-shadow: 0 0 6px rgba(233,69,96,0.5);
+}
 /* Mini wheel inside step */
 .mini-wheel {
     width: 38px;
-    height: 24px;
+    height: 40px;
     overflow: hidden;
     border-radius: 4px;
     background: linear-gradient(180deg, #080810 0%, #181828 50%, #080810 100%);
@@ -672,7 +683,7 @@ p.sub { font-size: 12px; color: var(--text-dim); margin-bottom: 20px; }
     <div class="step-editor">
         <div class="step-grid" id="step-grid"></div>
     </div>
-    <p style="font-size:10px;color:var(--text-dim);margin-top:8px;text-align:center">Tap = on/off. Scroll top wheel = note. Scroll bottom wheel = velocity.</p>
+    <p style="font-size:10px;color:var(--text-dim);margin-top:8px;text-align:center">Tap dot = on/off. Scroll wheel = note offset from input (-24 to +24 semitones).</p>
 </div>
 
 <div class="card">
@@ -993,7 +1004,7 @@ function createMiniWheel(parent, min, max, value, labels, onChange) {
     el.appendChild(inner);
     parent.appendChild(el);
 
-    const containerH = 24; // matches CSS height
+    const containerH = 40; // matches CSS height
     const centerOff = containerH / 2 - tickH / 2;
     const minOff = -(steps + pad) * tickH + centerOff;
     const maxOff = -pad * tickH + centerOff;
@@ -1094,10 +1105,9 @@ function initStepEditor(gridEl, numSteps) {
         const isBeat = i % 4 === 0;
         cell.className = 'step-cell' + (on ? ' on' : '') + (isBeat && on ? ' beat' : '');
 
-        // Step number + tap to toggle
+        // On/off dot — tap to toggle
         const head = document.createElement('div');
         head.className = 'step-head';
-        head.textContent = i + 1;
         head.addEventListener('click', () => {
             const isOn = cell.classList.toggle('on');
             if (isBeat && isOn) cell.classList.add('beat');
@@ -1107,22 +1117,15 @@ function initStepEditor(gridEl, numSteps) {
         });
         cell.appendChild(head);
 
-        // Note mini-wheel (C-2 to G8 = MIDI 0-127)
-        const defaultNote = 60; // C3
-        const noteWheel = createMiniWheel(cell, 0, 127, defaultNote,
-            (v) => noteName(v),
-            (v) => { steps[i].note = v; }
-        );
-
-        // Velocity mini-wheel
-        const defaultVel = 100;
-        const velWheel = createMiniWheel(cell, 0, 127, defaultVel,
-            null,
-            (v) => { steps[i].vel = v; }
+        // Note offset mini-wheel (-24 to +24 semitones from input)
+        const defaultOffset = 0;
+        createMiniWheel(cell, -24, 24, defaultOffset,
+            (v) => (v > 0 ? '+' : '') + v,
+            (v) => { steps[i].offset = v; }
         );
 
         gridEl.appendChild(cell);
-        steps.push({ on, note: defaultNote, vel: defaultVel });
+        steps.push({ on, offset: defaultOffset });
     }
     return steps;
 }
