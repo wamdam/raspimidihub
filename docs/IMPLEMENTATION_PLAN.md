@@ -244,84 +244,151 @@ This allows hardware knobs to control plugin parameters without any extra wiring
 
 ## UI Design
 
-### Plugins Page (new tab in bottom nav)
+### Navigation Change
 
-New bottom nav icon between Presets and Status:
-
-```
-Routing | Presets | Plugins | Status | Settings
-```
-
-The Plugins page shows:
+The bottom nav changes from 4 to 4 tabs — **Status is replaced by Devices**:
 
 ```
-PLUGIN INSTANCES
+Before:  Routing | Presets | Status   | Settings
+After:   Routing | Presets | Devices  | Settings
+```
+
+System info (hostname, version, CPU, RAM, uptime, IPs) moves to the top of Settings.
+
+### Devices Page (replaces Status)
+
+A unified screen for **all** devices — USB, Bluetooth, and virtual. They are equals.
+
+```
+DEVICES (7)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  ● Arp 1                    [Edit] [✕]
-  ● LFO Mod                  [Edit] [✕]
-  ○ Note Split (stopped)     [▶]   [✕]
+  ● Elektron Digitone II       1 port ›
+  ● Impact GX49                2 ports ›
+  ● KeyStep mk2                1 port ›
+  ● LCXL3 1                    4 ports ›
+  ● S-1                        1 port ›
+  ● Ṿ Arp 1                   Arpeggiator ›
+  ● Ṿ Soft Touch              Velocity Curve ›
 
-[+ Add Plugin]
+[+ Add Virtual Device]
 ```
 
-### Add Plugin Sheet
+- All devices sorted alphabetically, virtual mixed in with Ṿ prefix
+- USB/BT show port count, virtual show plugin type name
+- Green dot = online/running, gray = offline/stopped/crashed
+- Tap any device → device panel slides up
+- **[+ Add Virtual Device]** at bottom opens plugin type browser
 
-Tapping "Add Plugin" opens a selection sheet:
+### Add Virtual Device Sheet
 
 ```
-ADD PLUGIN
+ADD VIRTUAL DEVICE
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
   Arpeggiator
-  Plays held notes as a pattern
-                                [Add]
+  Plays held notes as a pattern             [Add]
+
+  Velocity Curve
+  Remap velocity response                   [Add]
 
   Note Splitter
-  Split keyboard at a note
-                                [Add]
+  Split keyboard at a note                  [Add]
 
   CC LFO
-  Generate CC waveforms
-                                [Add]
+  Generate CC waveforms                     [Add]
+  ...
 ```
 
-### Plugin Edit Panel
+Tapping [Add] creates an instance with a default name, starts it (ALSA port appears, matrix updates via SSE), and opens its device panel.
 
-Tapping "Edit" opens the plugin's own configuration screen (same slide-up style as device detail). The screen is **fully declared by the plugin** using the framework's UI elements — no JavaScript in plugins.
+### Device Panel — USB/Bluetooth (unchanged)
+
+Tapping a USB or Bluetooth device opens the same panel as today:
 
 ```
-ARPEGGIATOR — "Arp 1"                           ✕
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+LCXL3 1                                       ✕
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Name: [Arp 1                    ]
+Device
+  Client: 20    USB: 1235:0148    Ports: 4
 
-Pattern:  [Up      ▾]
-Rate:     [1/8     ▾]
+  Name: [LCXL3 1                ]
+
+Ports
+  IN/OUT  [LCXL3 1 MIDI In          ]
+  IN/OUT  [LCXL3 1 DAW In           ]
+  OUT     [LCXL3 Octa               ]
+  OUT     [LCXL3 1 To DIN Out 2     ]
+
+MIDI Monitor
+  Waiting for MIDI...
+
+MIDI Test Sender
+  Channel [1 ▾]    Port [MIDI In ▾]
+  [piano keyboard]    [CC slider]
+```
+
+No changes — rename device, rename ports, MIDI monitor, test sender.
+
+### Device Panel — Virtual Device (extended)
+
+Tapping a virtual device opens the same panel but with a **plugin config section** between the name and the MIDI monitor:
+
+```
+Ṿ ARPEGGIATOR — "Arp 1"                      ✕
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Name: [Arp 1                   ]
+
+━━ Plugin Config ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Pattern:  [Up          ▾]
+Rate:     [1/8         ▾]
 Gate:     [====●=====] 80%
 Octaves:  [==●=======] 1
 Sync:     [●] On
 
 Step Pattern:
 ┌─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┐
-│●│●│○│●│●│○│●│○│●│●│○│●│●│○│●│○│  On/Off
-├─┼─┼─┼─┼─┼─┼─┼─┼─┼─┼─┼─┼─┼─┼─┼─┤
-│█│█│ │█│▄│ │█│ │█│█│ │█│▄│ │█│ │  Velocity
-├─┼─┼─┼─┼─┼─┼─┼─┼─┼─┼─┼─┼─┼─┼─┼─┤
-│0│0│ │1│0│ │0│ │-│0│ │1│0│ │0│ │  Octave
+│●│●│○│●│●│○│●│○│●│●│○│●│●│○│●│○│
 └─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┘
 
-━━ CC INPUTS ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  CC#74  →  Rate          (wire a controller to change rate)
-  CC#75  →  Gate %        (wire a controller to change gate)
+━━ CC Inputs ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  CC#74 → Rate
+  CC#75 → Gate %
 
-━━ OUTPUTS ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+━━ Outputs ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   Notes (arpeggiated), Aftertouch, Pitch Bend
+
+━━ MIDI Monitor ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Note On ch1 C3 vel=100
+  Note On ch1 E3 vel=95
+
+MIDI Test Sender
+  Channel [1 ▾]
+  [piano keyboard]    [CC slider]
+
+                                [Delete Plugin]
 ```
 
-The CC inputs section is auto-generated from the plugin's `cc_inputs` declaration. It tells the user which CCs the plugin responds to — wire a controller to the plugin's IN port in the matrix and those CCs will control the parameters live.
+The panel has everything a USB device has (rename, MIDI monitor, test sender) PLUS the plugin config section. The test sender is useful for debugging — play notes into the plugin to see what it outputs in the monitor.
 
-The outputs section is auto-generated from the plugin's `outputs` declaration. It describes what the plugin sends on its OUT port.
+### Settings Page (updated)
+
+System info moves here from the old Status page:
+
+```
+Settings:
+  [System: hostname, version, CPU, RAM, uptime, IPs]
+  [WiFi]
+  [Bluetooth MIDI]
+  [ETH0]
+  [MIDI Routing: default routing for new devices]
+  [Display: MIDI activity bar toggle]
+  [Software Update]
+  [Reboot]
+```
 
 ---
 
@@ -373,17 +440,21 @@ GET    /api/plugins/instances/{id}     # Config + params + cc_inputs + outputs
 PATCH  /api/plugins/instances/{id}     # Update params {name: value}
 ```
 
-#### Step 1.3: Plugins Tab + Config UI
+#### Step 1.3: Unified Devices Tab + Config UI
 
-- New **Plugins** tab in bottom nav (between Presets and Status)
-- Instance list with status indicators, Edit/Delete buttons
-- **Add Plugin** browser: shows all discovered types with name, description, author
-- **Plugin config panel** (slide-up): rendered from plugin's `params` declaration
-  - Each param type maps to a UI component
-  - CC inputs section at bottom: shows which CCs control which params
-  - Outputs section: describes what the plugin sends
-  - All changes applied immediately via PATCH API
-- **Ṿ prefix** on plugin device labels in the connection matrix
+- Rename **Status** tab to **Devices** in bottom nav
+- Move system info (hostname, CPU, RAM, uptime, IPs) to Settings page top
+- Unified device list: USB, Bluetooth, and virtual devices sorted together
+- Virtual devices show Ṿ prefix and plugin type name instead of port count
+- **[+ Add Virtual Device]** button opens plugin type browser sheet
+- Device panel (slide-up) extended for virtual devices:
+  - Rename (same as USB)
+  - **Plugin config section** rendered from `params` declaration
+  - CC inputs/outputs section (auto-generated from plugin declarations)
+  - MIDI monitor + test sender (same as USB — useful for debugging plugins)
+  - **[Delete Plugin]** button at bottom
+  - All param changes applied immediately via PATCH API
+- **Ṿ prefix** on virtual device labels in the connection matrix
 - `device_id.py`: `plugin-{instance_id}` stable IDs, `is_plugin=True` flag
 
 #### Step 1.4: UI Components for Params
