@@ -145,7 +145,8 @@ class MyPlugin(PluginBase):
         74: "rate",       # CC#74 controls the rate parameter
         75: "gate",       # CC#75 controls the gate parameter
     }
-    cc_outputs = []       # List of CC numbers this plugin sends
+    cc_outputs = [1]      # List of CC numbers this plugin may send
+    outputs = ["Notes (arpeggiated)", "Aftertouch", "Pitch Bend"]  # Human-readable output description
 
     # --- Clock subscription ---
     clock_divisions = ["1/8", "1/16"]  # Which divisions to receive
@@ -287,11 +288,11 @@ ADD PLUGIN
 
 ### Plugin Edit Panel
 
-Tapping "Edit" opens the plugin config panel (same slide-up style as device detail):
+Tapping "Edit" opens the plugin's own configuration screen (same slide-up style as device detail). The screen is **fully declared by the plugin** using the framework's UI elements — no JavaScript in plugins.
 
 ```
-ARPEGGIATOR — "Arp 1"
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ARPEGGIATOR — "Arp 1"                           ✕
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 Name: [Arp 1                    ]
 
@@ -310,93 +311,214 @@ Step Pattern:
 │0│0│ │1│0│ │0│ │-│0│ │1│0│ │0│ │  Octave
 └─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┘
 
-CC Inputs:
-  CC#74 → Rate
-  CC#75 → Gate
+━━ CC INPUTS ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  CC#74  →  Rate          (wire a controller to change rate)
+  CC#75  →  Gate %        (wire a controller to change gate)
+
+━━ OUTPUTS ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Notes (arpeggiated), Aftertouch, Pitch Bend
 ```
+
+The CC inputs section is auto-generated from the plugin's `cc_inputs` declaration. It tells the user which CCs the plugin responds to — wire a controller to the plugin's IN port in the matrix and those CCs will control the parameters live.
+
+The outputs section is auto-generated from the plugin's `outputs` declaration. It describes what the plugin sends on its OUT port.
 
 ---
 
 ## Implementation Phases
 
-### Phase 1: Plugin Framework (foundation)
+### Phase 1: Framework + Built-in Plugins
 
-**Goal:** Framework that can load, run, and manage plugin instances. No plugins yet, but the skeleton works end to end.
+**Goal:** Complete plugin system with framework, UI, and 8-10 built-in plugins. Ship as v2.0.
 
-Files to create:
+#### Step 1.1: Plugin API + Host (`plugin_api.py`, `plugin_host.py`)
+
 ```
 src/raspimidihub/
-├── plugin_api.py        # PluginBase class, Param types, clock bus
-├── plugin_host.py       # Loads plugins, manages instances, threads, ALSA ports
-plugins/
-└── _example/
-    └── __init__.py      # Minimal "pass-through" plugin for testing
+├── plugin_api.py        # PluginBase, Param types, clock bus, output methods
+├── plugin_host.py       # Discovery, instance lifecycle, threads, ALSA ports
 ```
 
-Steps:
-1. **`plugin_api.py`** — Define `PluginBase`, `Param` types (Select, Knob, Toggle, StepEditor, NoteSelect, ChannelSelect), `visible_when` logic, CC input/output declarations
-2. **`plugin_host.py`** — `PluginHost` class:
-   - `discover_plugins()` — scan `plugins/` directory, import each `__init__.py`
-   - `create_instance(plugin_type, name)` — create ALSA seq client (via `AlsaSeq`), start plugin thread, wire event reader
-   - `stop_instance(instance_id)` — stop thread, destroy ALSA client
-   - `get_instances()` — list running instances with status
-   - Plugin thread loop: read ALSA events from IN port → dispatch to `on_note_on/off/cc/etc` → plugin calls `self.send_*` → write to OUT port
-3. **Clock bus** — Dedicated thread that receives MIDI clock (24 PPQ), maintains tick counter, calls `on_tick(division)` on subscribed plugins at correct divisions. Supports free-running mode with configurable BPM.
-4. **`_example` plugin** — Minimal pass-through: receives notes, sends them out unchanged. Proves the framework works.
-5. **Config persistence** — Save/load plugin instances and their params in `config.json` under `"plugins"` key. Restore on boot.
+**`plugin_api.py`:**
+- `PluginBase` class with all callbacks (`on_note_on`, `on_tick`, etc.)
+- `Param` types: `Select`, `Knob`, `Toggle`, `StepEditor`, `NoteSelect`, `ChannelSelect`, `CurveEditor`
+- `visible_when` conditional visibility
+- `cc_inputs` / `cc_outputs` / `outputs` declarations
+- `send_note_on/off`, `send_cc`, `send_pitchbend`, `send_aftertouch` output methods
+- Plugin metadata: `NAME`, `DESCRIPTION`, `AUTHOR`, `VERSION`, `MIN_HOST_VERSION`
 
-### Phase 2: API & Plugin Management UI
+**`plugin_host.py`:**
+- `discover_plugins()` — scan `plugins/` directory, validate metadata, import
+- `create_instance(plugin_type, name)` — create ALSA seq client, start thread
+- `stop_instance(id)` — stop thread, destroy ALSA client, remove from config
+- `get_instances()` / `get_instance(id)` — status + serialized params
+- `set_param(id, name, value)` — update param, notify plugin via `on_param_change`
+- Plugin thread loop: read ALSA IN → dispatch to callbacks → plugin calls `self.send_*` → write ALSA OUT
+- Crash isolation: `try/except` around all callbacks, log error, mark instance as crashed
 
-**Goal:** Create/delete plugin instances from the web UI. Configure params. See plugins in the matrix.
+**Clock bus (in `plugin_host.py`):**
+- Dedicated thread, receives MIDI clock (24 PPQ) from engine
+- Counts ticks, fires `on_tick(division)` for: `1/1`, `1/2`, `1/4`, `1/8`, `1/16`, `1/32`, `1/4T`, `1/8T`, `1/16T`
+- Free-running mode: internal tick generator from BPM value
+- Auto-detect: if external clock present, sync to it; otherwise use free-running
 
-Steps:
-1. **API endpoints:**
-   ```
-   GET    /api/plugins                    # List available plugin types
-   GET    /api/plugins/instances          # List running instances
-   POST   /api/plugins/instances          # Create instance {type, name}
-   DELETE /api/plugins/instances/{id}     # Stop and remove
-   GET    /api/plugins/instances/{id}     # Get instance config + params
-   PATCH  /api/plugins/instances/{id}     # Update params {name: value}
-   ```
-2. **Plugins tab** in bottom nav — list instances, add/remove buttons
-3. **Plugin type browser** — shows available plugins from `plugins/` dir with name, description, author
-4. **Basic param rendering** — Select, Knob (slider), Toggle rendered from param declarations. No StepEditor yet.
-5. **Plugin labels in matrix** — prefix with `♦` or similar icon to distinguish from hardware devices. Extend `device_id.py` for `plugin-{instance_id}` stable IDs.
+#### Step 1.2: API Endpoints
 
-### Phase 3: Arpeggiator Plugin
+```
+GET    /api/plugins                    # List available plugin types (from plugins/ dir)
+GET    /api/plugins/instances          # List running instances + status
+POST   /api/plugins/instances          # Create {type, name}
+DELETE /api/plugins/instances/{id}     # Stop and remove
+GET    /api/plugins/instances/{id}     # Config + params + cc_inputs + outputs
+PATCH  /api/plugins/instances/{id}     # Update params {name: value}
+```
 
-**Goal:** First real plugin. Proves the framework works for time-based instruments.
+#### Step 1.3: Plugins Tab + Config UI
 
-Steps:
-1. **`plugins/arpeggiator/__init__.py`** — Implement:
-   - Hold notes in a sorted list
-   - On `on_tick("1/8")` (or configured rate): advance step, output next note in pattern
-   - Patterns: up, down, up-down, random, as-played
-   - Gate: schedule note-off after gate% of step duration
-   - Octave range: cycle through octaves per pattern cycle
-   - Pass through aftertouch, pitch bend to output
-   - Respond to CC inputs for rate/gate control
-2. **Step editor UI** — implement StepEditor param type in frontend:
-   - Touch-friendly grid (min 44px per cell)
-   - Tap to toggle step on/off
-   - Vertical drag for velocity
-   - Tap octave to cycle
-   - Horizontal scroll for >8 steps
-3. **Clock sync** — Arp syncs to external MIDI clock by default. Falls back to free-running BPM if no clock detected.
+- New **Plugins** tab in bottom nav (between Presets and Status)
+- Instance list with status indicators, Edit/Delete buttons
+- **Add Plugin** browser: shows all discovered types with name, description, author
+- **Plugin config panel** (slide-up): rendered from plugin's `params` declaration
+  - Each param type maps to a UI component
+  - CC inputs section at bottom: shows which CCs control which params
+  - Outputs section: describes what the plugin sends
+  - All changes applied immediately via PATCH API
+- **Ṿ prefix** on plugin device labels in the connection matrix
+- `device_id.py`: `plugin-{instance_id}` stable IDs, `is_plugin=True` flag
 
-### Phase 4: More Plugins + Polish
+#### Step 1.4: UI Components for Params
 
-**Goal:** Prove the framework supports diverse plugin types.
+All components are framework-provided. Plugins never write JS.
 
-1. **Note Splitter plugin** — Split point selector (NoteSelect param), outputs lower range on channel A, upper on channel B
-2. **CC LFO plugin** — Waveform (sine/triangle/square/saw), frequency (Hz or synced), CC number, channel, depth. CC input for frequency modulation.
-3. **Plugin docs** — Developer guide with API reference, tutorial for creating a plugin from scratch
-4. **Plugin hot-reload** — Stop instance, reimport module, restart with same config (for development)
+| Param Type | UI Component | Use Case |
+|-----------|-------------|----------|
+| `Select` | Dropdown | Pattern, waveform, scale type |
+| `Knob` | Slider + value label | Gate %, depth, BPM |
+| `Toggle` | Switch | Sync on/off, passthrough |
+| `NoteSelect` | Note picker (tap → piano roll or dropdown C0-G10) | Split point, root note |
+| `ChannelSelect` | Channel dropdown (1-16) | Output channel |
+| `StepEditor` | Touch grid (8/16/32 steps, per-step on/vel/oct) | Arp patterns |
+| `CurveEditor` | Touch-draggable curve (X=input, Y=output, 0-127) | Velocity curves |
+
+**StepEditor detail:**
+- Tap step → toggle on/off
+- Drag vertically on velocity → set level
+- Tap octave → cycle -2..+2
+- Horizontal scroll for >8 steps
+- Configurable: 8, 16, or 32 steps
+- Per-step params declared by plugin (on, velocity, octave, note offset, etc.)
+
+**CurveEditor detail:**
+- 128×128 grid (rendered as touch-friendly bezier curve)
+- Preset curves: linear, exponential, logarithmic, S-curve, hard
+- Drag control points to customize
+- X axis = input value (0-127), Y axis = output value (0-127)
+
+#### Step 1.5: Built-in Plugins (8-10)
+
+All in `plugins/` directory, each in its own subdirectory:
+
+**1. Arpeggiator** (`plugins/arpeggiator/`)
+- Hold notes → play as pattern (up, down, up-down, random, as-played)
+- Rate synced to clock or free BPM, gate %, octave range 1-4
+- 16-step editor for custom velocity/octave per step
+- Pass through aftertouch, pitch bend
+- CC inputs: rate, gate
+- ~150 lines
+
+**2. Note Splitter** (`plugins/note_splitter/`)
+- Split point (NoteSelect), lower notes → channel A, upper → channel B
+- Optional overlap (notes at split point go to both)
+- CC input: split point (for live adjustment)
+- ~60 lines
+
+**3. CC LFO** (`plugins/cc_lfo/`)
+- Waveforms: sine, triangle, square, saw, random S&H
+- Frequency: Hz (free) or synced (1/4, 1/8, etc.)
+- Output: configurable CC number and channel
+- Depth (0-127), center offset
+- CC input: frequency, depth
+- ~80 lines
+
+**4. Velocity Curve** (`plugins/velocity_curve/`)
+- CurveEditor for input→output velocity mapping
+- Preset curves: linear, soft, hard, exponential, compressed
+- Fixes cheap keyboards with bad velocity response
+- Passes through all other events unchanged
+- ~40 lines
+
+**5. Chord Generator** (`plugins/chord_generator/`)
+- Input note → output chord (root + intervals)
+- Scale selector: major, minor, 7th, maj7, min7, sus2, sus4, custom
+- Inversion selector (root, 1st, 2nd)
+- Velocity scaling for added notes
+- ~80 lines
+
+**6. MIDI Delay** (`plugins/midi_delay/`)
+- Delays notes by configurable time (ms or synced divisions)
+- Feedback: 0-100% (repeats)
+- Optional velocity decay per repeat
+- CC input: delay time, feedback
+- ~90 lines
+
+**7. Channel Router** (`plugins/channel_router/`)
+- Routes all input from any channel to a fixed output channel
+- Or: maps channel A→B, C→D (configurable mapping table)
+- Simpler than the matrix channel remap — a dedicated tool
+- ~40 lines
+
+**8. CC Smoother** (`plugins/cc_smoother/`)
+- Smooths incoming CC values to remove jitter
+- Configurable smoothing amount (response time)
+- Input CC → output CC (same or different number)
+- Useful for noisy controllers
+- ~50 lines
+
+**9. Panic Button** (`plugins/panic/`)
+- When activated, sends All Notes Off + All Sound Off on all channels
+- Can be triggered by a specific CC input (e.g., a footswitch)
+- Outputs on its OUT port — wire to all devices that need it
+- ~30 lines
+
+**10. Monitor/Logger** (`plugins/monitor/`)
+- No audio processing — just logs all incoming MIDI to a scrollable list in its config screen
+- Useful for debugging: wire any device → Monitor to see what it sends
+- Config screen shows live event log (like device detail, but for any connection)
+- ~40 lines
+
+#### Step 1.6: Config Persistence
+
+- Plugin instances saved in `config.json` under `"plugins"` key
+- Restored on boot: host recreates instances, applies saved params
+- Instance params updated on every PATCH (not just on "Save Config")
+- Presets include plugin instance state
+
+#### Step 1.7: Developer Documentation
+
+- `plugins/README.md` — How to create a plugin (tutorial style)
+- API reference for PluginBase, all Param types, clock divisions
+- Annotated `plugins/_example/` with comments on every method
+
+### Phase 2: Plugin Store (future)
+
+**Goal:** Discover and install community plugins from a GitHub directory.
+
+1. **Plugin registry** — A `plugins.json` file in a GitHub repo listing available plugins with:
+   - Name, description, author, version, min host version
+   - Download URL (GitHub release or raw file)
+   - Screenshot/preview
+2. **Store UI** — New section in Plugins tab: "Browse Community Plugins"
+   - Fetches registry, shows available plugins
+   - Install button: downloads to `plugins/`, auto-discovers
+   - Update button: checks version, re-downloads
+3. **Plugin validation** — On install, check `MIN_HOST_VERSION` against current version
+4. **Plugin hot-reload** — Stop instance, reimport module, restart with same config
 
 ---
 
 ## Config Schema
+
+Plugin instances and all their parameter values are saved in `config.json`. They are included in config export/import and in presets. When loading a config or preset, plugin instances are recreated with their saved params.
 
 ```json
 {
@@ -415,14 +537,24 @@ Steps:
         "steps": [
           {"on": true, "velocity": 100, "octave": 0},
           {"on": true, "velocity": 100, "octave": 0},
-          {"on": false},
-          ...
+          {"on": false}
         ]
+      }
+    },
+    {
+      "id": "vel-1",
+      "type": "velocity_curve",
+      "name": "Soft Touch",
+      "params": {
+        "curve": [0, 5, 12, 20, 30, ...],
+        "preset": "exponential"
       }
     }
   ]
 }
 ```
+
+**Save/Export flow:** When the user taps Save Config or Export Config, the current plugin instance list with all params is serialized into the config. When importing or loading, instances are stopped and recreated from the saved data. Missing plugin types (e.g., plugin not installed) are silently skipped with a warning.
 
 ---
 
@@ -445,6 +577,6 @@ Steps:
 ## Open Questions for Later
 
 - Should plugins be able to declare multiple ports (e.g., Arp with separate "clock in" and "note in")?
-- Should there be a "plugin store" or just a plugins/ directory?
-- Should plugins be installable as separate .deb packages?
 - MIDI 2.0 / MPE support in plugins?
+- Plugin sandboxing (restrict file system access, network, etc.)?
+- Should plugin params be automatable via MIDI program change (switch presets)?
