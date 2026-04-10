@@ -668,9 +668,8 @@ body {
 /* === Plugin Control Styles === */
 
 /* Wheel */
-.wheel-group { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
-.wheel-label { font-size: 13px; color: var(--text-dim); min-width: 70px; }
-.wheel-value { font-size: 15px; font-weight: 600; min-width: 40px; text-align: right; font-variant-numeric: tabular-nums; }
+.wheel-group { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+.wheel-label { font-size: 13px; color: var(--text-dim); min-width: 60px; }
 .wheel-container {
     width: 100px; height: 60px; overflow: hidden; border-radius: 10px;
     position: relative; touch-action: none; cursor: grab;

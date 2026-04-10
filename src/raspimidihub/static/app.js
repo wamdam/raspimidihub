@@ -900,12 +900,6 @@ function DeviceDetailPanel({ device, onClose, showToast, refresh }) {
                     </div>
                 `}
 
-                <div class="card">
-                    <h3>MIDI Monitor</h3>
-                    <div class="midi-last" ref=${lastEventRef}>Waiting for MIDI...</div>
-                    <div class="midi-monitor" ref=${monitorRef}></div>
-                </div>
-
                 ${outPorts.length > 0 && html`
                     <div class="card">
                         <h3>MIDI Test Sender</h3>
@@ -971,6 +965,12 @@ function DeviceDetailPanel({ device, onClose, showToast, refresh }) {
                         </div>
                     </div>
                 `}
+
+                <div class="card">
+                    <h3>MIDI Monitor</h3>
+                    <div class="midi-last" ref=${lastEventRef}>Waiting for MIDI...</div>
+                    <div class="midi-monitor" ref=${monitorRef}></div>
+                </div>
 
                 ${isPlugin && html`
                     <div style="margin-top:16px;padding:16px 0">
