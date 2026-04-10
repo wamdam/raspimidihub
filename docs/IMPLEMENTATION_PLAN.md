@@ -822,7 +822,10 @@ Plugin instances and all their parameter values are saved in `config.json`. They
 
 - **Arpeggiator step editor** — add StepEditor param with 8/16/32-step pattern, per-step note offset, linked to Rate radio. The arp currently cycles held notes; step editor would add programmable patterns.
 - **Step 1.4b continued** — channel selection in filter panel could use wheels
-- **Plugin sandbox enforcement** — restricted __builtins__ and import validation not yet implemented (plugins currently have full Python access)
+- **Plugin sandbox enforcement** — restricted __builtins__ and import validation not yet implemented (plugins currently have full Python access). Should also include:
+  - Thread CPU monitoring: track per-plugin thread CPU time, warn/kill if a plugin consumes >50% for >5 seconds
+  - Event output throttling: already rate-limited to 1000/sec per plugin, but should also detect infinite loops in callbacks (watchdog timer per callback invocation, kill thread if callback doesn't return within 1 second)
+  - Memory monitoring: track per-plugin memory growth, kill if exceeding a threshold (e.g. 50MB)
 - **Plugin hot-reload** — stop instance, reimport module, restart with same config
 - **CC automation live UI updates** — CC changes to params don't yet animate the UI controls in real-time (only the value changes server-side)
 - **Plugin crash recovery UI** — show crashed status in device list, offer restart button
