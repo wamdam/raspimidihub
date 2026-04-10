@@ -56,10 +56,16 @@ class Wheel(Param):
     min: int = 0
     max: int = 127
     default: int = 0
+    display_factor: float = 0  # if >0, display value*factor (e.g. 0.1 for Hz tenths)
+    unit: str = ""  # suffix shown after value (e.g. "Hz", "%")
 
     def to_dict(self) -> dict:
         d = super().to_dict()
         d.update({"min": self.min, "max": self.max, "default": self.default})
+        if self.display_factor:
+            d["display_factor"] = self.display_factor
+        if self.unit:
+            d["unit"] = self.unit
         return d
 
 
@@ -70,11 +76,17 @@ class Fader(Param):
     max: int = 127
     default: int = 0
     vertical: bool = False
+    display_format: str = ""  # Python format string, e.g. "{:.1f} Hz" with display_factor
+    display_factor: float = 0  # if >0, thumb shows value*factor formatted by display_format
 
     def to_dict(self) -> dict:
         d = super().to_dict()
         d.update({"min": self.min, "max": self.max, "default": self.default,
                   "vertical": self.vertical})
+        if self.display_factor:
+            d["display_factor"] = self.display_factor
+        if self.display_format:
+            d["display_format"] = self.display_format
         return d
 
 
@@ -144,6 +156,17 @@ class ChannelSelect(Param):
 
 
 @dataclass
+class Display(Param):
+    """Inline display output placeholder — references a display_output by name."""
+    display_name: str = ""  # name of the display_output to render here
+
+    def to_dict(self) -> dict:
+        d = super().to_dict()
+        d["display_name"] = self.display_name
+        return d
+
+
+@dataclass
 class Group:
     """Titled section grouping related params."""
     title: str
@@ -205,7 +228,8 @@ class PluginBase:
 
     # --- Metadata (override in subclass) ---
     NAME: str = "Unnamed Plugin"
-    DESCRIPTION: str = ""
+    DESCRIPTION: str = ""  # short one-liner for plugin browser
+    HELP: str = ""  # longer help text with examples, shown via ? button
     AUTHOR: str = ""
     VERSION: str = "1.0"
 
@@ -223,8 +247,13 @@ class PluginBase:
     # --- Clock ---
     clock_divisions: list[str] = []  # e.g. ["1/8", "1/16"]
 
+    # --- Display outputs (declared in subclass, framework renders read-only) ---
+    # Each entry: {"name": str, "type": "meter"|"text", "label": str, "min": 0, "max": 127}
+    display_outputs: list[dict] = []
+
     def __init__(self):
         self._param_values: dict[str, Any] = {}
+        self._display_values: dict[str, Any] = {}
         # Injected by host:
         self._send_note_on = None
         self._send_note_off = None
@@ -233,12 +262,24 @@ class PluginBase:
         self._send_aftertouch = None
         self._send_program_change = None
         self._notify_param_change = None  # callback to notify UI of param update
+        self._notify_display = None  # callback to push display updates to UI
 
     # --- Current param values ---
 
     def get_param(self, name: str) -> Any:
         """Get current value of a parameter."""
         return self._param_values.get(name)
+
+    # --- Display output (push live state to UI) ---
+
+    def set_display(self, name: str, value: Any) -> None:
+        """Update a display output value. Pushed to UI via SSE."""
+        self._display_values[name] = value
+        if self._notify_display:
+            try:
+                self._notify_display(name, value)
+            except Exception:
+                pass
 
     # --- Event handlers (override in subclass) ---
 

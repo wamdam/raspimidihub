@@ -10,6 +10,13 @@ class VelocityEqualizer(PluginBase):
     DESCRIPTION = "Normalize velocities to fixed value or compressed range"
     AUTHOR = "RaspiMIDIHub"
     VERSION = "1.0"
+    HELP = """\
+Normalizes note velocities to a fixed value or compresses them into a
+narrower range. Use fixed mode for drum machines that need consistent
+hits, or compress mode to tame an uneven player.
+
+Example: Set mode=fixed, velocity=100 to make every note the same
+volume -- ideal for triggering samples where dynamics are unwanted."""
 
     params = [
         Radio("mode", "Mode", ["fixed", "compress", "expand"], default="fixed"),

@@ -261,6 +261,7 @@ class PluginHost:
         self._next_id: int = 1
         self._lock = threading.Lock()
         self.clock_bus = ClockBus()
+        self._on_display_callback = None  # (instance_id, name, value) -> None
 
     # --- Discovery ---
 
@@ -396,6 +397,18 @@ class PluginHost:
             MidiEventType.CHANPRESS, channel=ch, value=val)
         instance.plugin._send_program_change = lambda ch, prog: alsa_client.send_event(
             MidiEventType.PGMCHANGE, channel=ch, value=prog)
+
+        # Wire display output callback (throttled — plugins may call this rapidly)
+        import time as _time
+        _last_display = {}
+        def _on_display(name, value):
+            now = _time.monotonic()
+            if now - _last_display.get(name, 0) < 0.05:  # 20 Hz max per display output
+                return
+            _last_display[name] = now
+            if self._on_display_callback:
+                self._on_display_callback(instance.id, name, value)
+        instance.plugin._notify_display = _on_display
 
         # Subscribe to clock if requested
         if instance.plugin.clock_divisions:
@@ -609,6 +622,9 @@ class PluginHost:
             "inputs": cls.inputs,
             "outputs": cls.outputs,
             "clock_divisions": cls.clock_divisions,
+            "help": cls.HELP,
+            "display_outputs": cls.display_outputs,
+            "display_values": dict(instance.plugin._display_values),
         }
 
     def get_plugin_client_ids(self) -> set[int]:

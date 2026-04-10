@@ -27,6 +27,13 @@ class ChordGenerator(PluginBase):
     DESCRIPTION = "Input note triggers a full chord"
     AUTHOR = "RaspiMIDIHub"
     VERSION = "1.0"
+    HELP = """\
+Turns single notes into full chords. Play one key and hear a major,
+minor, 7th, sus, or other chord type with optional inversions.
+
+Example: Set type=minor, play C3, and get C-Eb-G simultaneously.
+Useful for one-finger chord pads or making a bass line trigger
+power chords on a second synth."""
 
     params = [
         Group("Chord", [

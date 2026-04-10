@@ -10,6 +10,13 @@ class VelocityCurve(PluginBase):
     DESCRIPTION = "Remap velocity response with a drawable curve"
     AUTHOR = "RaspiMIDIHub"
     VERSION = "1.0"
+    HELP = """\
+Remaps note velocity through a drawable curve. Shape the dynamic
+response of any keyboard to match your playing style or target synth.
+
+Example: Draw a steep curve at the low end to make a stiff keyboard
+feel more responsive to soft playing, or flatten the top to prevent
+accidental loud notes on a sensitive controller."""
 
     params = [
         CurveEditor("curve", "Velocity Curve"),

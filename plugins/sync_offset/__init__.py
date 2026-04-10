@@ -13,6 +13,14 @@ class SyncOffset(PluginBase):
     DESCRIPTION = "Offset note timing relative to clock beats"
     AUTHOR = "RaspiMIDIHub"
     VERSION = "1.0"
+    HELP = """\
+Shifts note timing forward by milliseconds relative to the beat, or
+quantizes notes to a grid. Fixes timing drift between devices or adds
+deliberate push/pull feel.
+
+Example: A drum machine triggers 10ms late due to USB latency. Set
+offset=-10 to compensate (negative = send earlier). Or enable quantize
+to snap sloppy playing to the nearest 1/8 note grid."""
 
     params = [
         Group("Timing", [

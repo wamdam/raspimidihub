@@ -129,6 +129,17 @@ async def async_main() -> None:
         # Discover available plugins
         plugin_host.discover_plugins()
 
+        # Wire plugin display outputs to SSE (called from plugin threads)
+        _loop = asyncio.get_event_loop()
+        def _on_plugin_display(instance_id, name, value):
+            _loop.call_soon_threadsafe(
+                asyncio.ensure_future,
+                server.send_sse("plugin-display", {
+                    "instance_id": instance_id, "name": name, "value": value,
+                })
+            )
+        plugin_host._on_display_callback = _on_plugin_display
+
         engine.start()
 
         # Load custom device names from config

@@ -12,6 +12,13 @@ class NoteSplitter(PluginBase):
     DESCRIPTION = "Split keyboard at a note into two channels"
     AUTHOR = "RaspiMIDIHub"
     VERSION = "1.0"
+    HELP = """\
+Splits a keyboard at a chosen note, sending lower notes to one MIDI
+channel and upper notes to another. Lets you play two sounds from
+a single keyboard.
+
+Example: Set split point to C4, lower to channel 1 (bass), upper to
+channel 2 (piano). Left hand plays bass, right hand plays piano."""
 
     params = [
         NoteSelect("split_point", "Split Point", default=60),

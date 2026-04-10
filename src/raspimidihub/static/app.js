@@ -31,7 +31,7 @@ function useSSE(onEvent, onConnChange) {
             try { onEvent(type, JSON.parse(e.data)); }
             catch {}
         };
-        for (const ev of ['device-connected','device-disconnected','connection-changed','midi-activity','midi-rates']) {
+        for (const ev of ['device-connected','device-disconnected','connection-changed','midi-activity','midi-rates','plugin-display']) {
             es.addEventListener(ev, handler(ev));
         }
         es.onopen = () => onConnChange(true);
@@ -423,6 +423,19 @@ function MatrixCell({ on, filtered, onTap, onLongPress, offline }) {
 }
 
 // --- Connection Matrix ---
+function MatrixHeader({ item, label, isPlugin, pluginType, sendsClock, multiClock, online, stableId, onTap, onLongPress, midiRate }) {
+    const timerRef = useRef(null);
+    const didLong = useRef(false);
+    const start = () => { didLong.current = false; timerRef.current = setTimeout(() => { didLong.current = true; onLongPress(); }, 500); };
+    const end = () => { if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; } };
+    const click = (e) => { if (!didLong.current) onTap(); };
+    const ctx = (e) => { e.preventDefault(); onLongPress(); };
+    return html`<th class="row-header ${online ? '' : 'offline'} ${isPlugin ? 'plugin-row' : ''}" style="cursor:pointer"
+        onclick=${click} onContextMenu=${ctx}
+        onTouchStart=${start} onTouchEnd=${end} onTouchCancel=${end}>${isPlugin ? html`<${PluginIcon} type=${pluginType} />` : html`<span class="dev-icon din" style="display:inline-flex;vertical-align:middle;margin-right:3px">${IconDIN}</span>`} ${label}${sendsClock ? html`<span class="clock-icon ${multiClock ? 'clock-warn' : ''}" title="${multiClock ? 'Multiple clock sources!' : 'Sending clock'}"></span>` : ''}
+        <${RateMeter} rate=${midiRate} /></th>`;
+}
+
 function RateMeter({ rate }) {
     if (!rate) return null;
     const max = 1000; // DIN MIDI limit
@@ -433,7 +446,7 @@ function RateMeter({ rate }) {
     </div>`;
 }
 
-function ConnectionMatrix({ devices, connections, onToggle, onFilterOpen, onRemoveDevice, showToast, clockSources, midiRates }) {
+function ConnectionMatrix({ devices, connections, onToggle, onFilterOpen, onRemoveDevice, showToast, clockSources, midiRates, onDeviceOpen, onAddPlugin }) {
     const inputs = [];
     const outputs = [];
     for (const dev of devices) {
@@ -515,7 +528,8 @@ function ConnectionMatrix({ devices, connections, onToggle, onFilterOpen, onRemo
                         <th class="corner-header"><span class="from-label">FROM \u2193</span><span class="to-label">TO \u2192</span></th>
                         ${outputs.map(o => html`<th class="${o.online ? '' : 'offline'} ${o.is_plugin ? 'plugin-col' : ''}" style="cursor:pointer"
                             title="${o.multi ? o.dev_name + ': ' + o.port_name : o.dev_name}"
-                            onclick=${() => o.online ? showName(o) : (o.stable_id && onRemoveDevice && confirm('Remove ' + o.dev_name + '?') && onRemoveDevice(o.stable_id))}><span>${label(o)}</span></th>`)}
+                            onclick=${() => o.online && o.client_id ? onDeviceOpen(o.client_id) : (o.stable_id && onRemoveDevice && confirm('Remove ' + o.dev_name + '?') && onRemoveDevice(o.stable_id))}
+                            onContextMenu=${(e) => { e.preventDefault(); if (o.online) showName(o); }}><span>${label(o)}</span></th>`)}
                     </tr>
                 </thead>
                 <tbody>
@@ -523,10 +537,12 @@ function ConnectionMatrix({ devices, connections, onToggle, onFilterOpen, onRemo
                         const sendsClock = clockClientIds.includes(inp.client_id);
                         return html`
                         <tr>
-                            <th class="row-header ${inp.online ? '' : 'offline'} ${inp.is_plugin ? 'plugin-row' : ''}" style="cursor:pointer"
-                                title="${inp.multi ? inp.dev_name + ': ' + inp.port_name : inp.dev_name}"
-                                onclick=${() => inp.online ? showName(inp) : (inp.stable_id && onRemoveDevice && confirm('Remove ' + inp.dev_name + '?') && onRemoveDevice(inp.stable_id))}>${inp.is_plugin ? html`<${PluginIcon} type=${inp.plugin_type} />` : html`<span class="dev-icon din" style="display:inline-flex;vertical-align:middle;margin-right:3px">${IconDIN}</span>`} ${label(inp)}${sendsClock ? html`<span class="clock-icon ${multiClock ? 'clock-warn' : ''}" title="${multiClock ? 'Multiple clock sources!' : 'Sending clock'}"></span>` : ''}
-                                <${RateMeter} rate=${midiRates && midiRates[inp.client_id + ':' + inp.port_id]} /></th>
+                            <${MatrixHeader} item=${inp} label=${label(inp)} isPlugin=${inp.is_plugin} pluginType=${inp.plugin_type}
+                                sendsClock=${sendsClock} multiClock=${multiClock}
+                                online=${inp.online} stableId=${inp.stable_id}
+                                onTap=${() => inp.online && inp.client_id ? onDeviceOpen(inp.client_id) : (inp.stable_id && onRemoveDevice && confirm('Remove ' + inp.dev_name + '?') && onRemoveDevice(inp.stable_id))}
+                                onLongPress=${() => inp.online && showName(inp)}
+                                midiRate=${midiRates && midiRates[inp.client_id + ':' + inp.port_id]} />
                             ${outputs.map(out => {
                                 if (isSelf(inp, out)) return html`<td class="self"></td>`;
                                 const offline = isOffline(inp, out);
@@ -539,6 +555,12 @@ function ConnectionMatrix({ devices, connections, onToggle, onFilterOpen, onRemo
                             })}
                         </tr>
                     `;})}
+                    ${onAddPlugin && html`<tr>
+                        <th class="row-header" style="padding:4px 6px">
+                            <button style="background:var(--accent);color:#fff;border:none;border-radius:4px;padding:5px 12px;font-size:12px;font-weight:600;cursor:pointer;width:100%" onclick=${onAddPlugin}>Add</button>
+                        </th>
+                        ${outputs.map(() => html`<td></td>`)}
+                    </tr>`}
                 </tbody>
             </table>
         </div>
@@ -549,8 +571,17 @@ function ConnectionMatrix({ devices, connections, onToggle, onFilterOpen, onRemo
 }
 
 // --- Routing Page ---
-function RoutingPage({ devices, connections, refresh, showToast, clockSources, midiRates }) {
+function RoutingPage({ devices, connections, refresh, showToast, clockSources, midiRates, onDeviceOpen }) {
     const [filterConnId, setFilterConnId] = useState(null);
+    const [showAddPlugin, setShowAddPlugin] = useState(false);
+    const [pluginTypes, setPluginTypes] = useState({});
+    const loadPluginTypes = () => { api('/plugins').then(setPluginTypes).catch(() => {}); };
+    const addPlugin = async (typeName) => {
+        await api('/plugins/instances', { method: 'POST', body: JSON.stringify({ type: typeName }) });
+        showToast('Virtual device created');
+        setShowAddPlugin(false);
+        refresh();
+    };
     const filterConn = filterConnId ? connections.find(c => c.id === filterConnId) || null : null;
 
     const onToggle = async (inp, out, connect) => {
@@ -641,7 +672,8 @@ function RoutingPage({ devices, connections, refresh, showToast, clockSources, m
             srcClientId=${filterConn.src_client} />`}
         <${ConnectionMatrix} devices=${devices} connections=${connections} onToggle=${onToggle} onFilterOpen=${(conn) => setFilterConnId(conn.id)}
             onRemoveDevice=${async (sid) => { await api('/devices/' + encodeURIComponent(sid), { method: 'DELETE' }); refresh(); }}
-            showToast=${showToast} clockSources=${clockSources} midiRates=${midiRates} />
+            showToast=${showToast} clockSources=${clockSources} midiRates=${midiRates}
+            onDeviceOpen=${onDeviceOpen} onAddPlugin=${() => { loadPluginTypes(); setShowAddPlugin(true); }} />
         <div class="btn-group">
             <button class="btn btn-primary" onclick=${saveConfig} disabled=${saving || loading}>${saving ? 'Saving...' : 'Save Config'}</button>
             <button class="btn btn-secondary" onclick=${loadConfig} disabled=${saving || loading}>${loading ? 'Loading...' : 'Load Config'}</button>
@@ -655,6 +687,27 @@ function RoutingPage({ devices, connections, refresh, showToast, clockSources, m
                 inp.click();
             }}>Import Config</button>
         </div>
+        ${showAddPlugin && html`
+            <div class="filter-overlay" onclick=${(e) => e.target.className === 'filter-overlay' && setShowAddPlugin(false)}>
+                <div class="filter-panel" style="max-height:70vh">
+                    <div class="panel-header"><div class="panel-handle"></div></div>
+                    <div class="panel-header">
+                        <h3>Add Virtual Device</h3>
+                        <button class="panel-close" onclick=${() => setShowAddPlugin(false)}>\u2715</button>
+                    </div>
+                    ${Object.entries(pluginTypes).filter(([t]) => !t.startsWith('_')).map(([type, info]) => html`
+                        <div class="device" style="cursor:pointer;padding:12px 0;display:flex;align-items:center;gap:10px" onclick=${() => addPlugin(type)}>
+                            <${PluginIcon} type=${type} />
+                            <div style="flex:1">
+                                <div style="font-weight:600;margin-bottom:2px;color:#4dd9c0">${info.name}</div>
+                                <div style="font-size:12px;color:var(--text-dim)">${info.description}</div>
+                            </div>
+                            <span style="color:var(--accent);font-size:13px;font-weight:600">Add</span>
+                        </div>
+                    `)}
+                </div>
+            </div>
+        `}
     `;
 }
 
@@ -908,7 +961,7 @@ function ScrollablePiano({ heldNotes, onNoteDown, onNoteUp, pianoKeys }) {
     </div>`;
 }
 
-function DeviceDetailPanel({ device, onClose, showToast, refresh }) {
+function DeviceDetailPanel({ device, onClose, showToast, refresh, pluginDisplays }) {
     const panelRef = { current: null };
     const close = () => animateClose(panelRef.current, onClose);
     const swipe = useSwipeDismiss(close);
@@ -924,8 +977,8 @@ function DeviceDetailPanel({ device, onClose, showToast, refresh }) {
     // Plugin state
     const isPlugin = !!device.is_plugin;
     const [pluginData, setPluginData] = useState(null);
+    const [showHelp, setShowHelp] = useState(false);
     const [pluginParams, setPluginParams] = useState({});
-
     useEffect(() => {
         if (isPlugin && device.plugin_instance_id) {
             api(`/plugins/instances/${device.plugin_instance_id}`)
@@ -933,6 +986,9 @@ function DeviceDetailPanel({ device, onClose, showToast, refresh }) {
                 .catch(() => {});
         }
     }, [device.plugin_instance_id]);
+
+    // Display values come from SSE via pluginDisplays prop
+    const displayValues = (pluginDisplays && device.plugin_instance_id) ? pluginDisplays[device.plugin_instance_id] || {} : {};
 
     const onPluginParamChange = useCallback((name, value) => {
         setPluginParams(prev => ({ ...prev, [name]: value }));
@@ -1046,9 +1102,25 @@ function DeviceDetailPanel({ device, onClose, showToast, refresh }) {
                     <button class="panel-close" onclick=${close}>\u2715</button>
                 </div>
 
+                ${isPlugin && html`
+                    <div class="card">
+                        <h3>Ports</h3>
+                        ${device.ports.map(p => html`
+                            <${PortRenameRow} device=${device} port=${p} showToast=${showToast} />
+                        `)}
+                    </div>
+                `}
+
                 ${isPlugin && pluginData && html`
                     <div class="card">
-                        <h3>Plugin Config</h3>
+                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+                            <h3 style="margin:0">Plugin Config</h3>
+                            ${pluginData.help && html`<button style="width:24px;height:24px;border-radius:50%;border:1px solid var(--text-dim);background:none;color:var(--text-dim);font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center"
+                                onclick=${() => setShowHelp(h => !h)}>?</button>`}
+                        </div>
+                        ${showHelp && pluginData.help && html`
+                            <div style="font-size:12px;color:var(--text-dim);background:var(--bg);padding:10px;border-radius:6px;margin-bottom:12px;white-space:pre-wrap;line-height:1.5">${pluginData.help}</div>
+                        `}
                         <${PluginConfigPanel}
                             instanceId=${device.plugin_instance_id}
                             paramsSchema=${pluginData.params_schema}
@@ -1056,7 +1128,9 @@ function DeviceDetailPanel({ device, onClose, showToast, refresh }) {
                             onParamChange=${onPluginParamChange}
                             inputs=${pluginData.inputs}
                             outputs=${pluginData.outputs}
-                            ccInputs=${pluginData.cc_inputs} />
+                            ccInputs=${pluginData.cc_inputs}
+                            displayOutputs=${pluginData.display_outputs}
+                            displayValues=${displayValues} />
                     </div>
                 `}
 
@@ -1486,6 +1560,7 @@ function SettingsPage({ showToast, showMidiBar, toggleMidiBar }) {
                     <div class="stat"><div class="label">Version</div><div class="value">${sys.version}</div></div>
                     <div class="stat"><div class="label">CPU Temp</div><div class="value">${sys.cpu_temp_c != null ? sys.cpu_temp_c + '\u00b0C' : '?'}</div></div>
                     <div class="stat"><div class="label">Uptime</div><div class="value">${uptimeStr}</div></div>
+                    ${sys.load1 != null && html`<div class="stat"><div class="label">Load (1m)</div><div class="value">${sys.load1}</div></div>`}
                     <div class="stat"><div class="label">RAM</div><div class="value">${sys.ram.available_mb || '?'} / ${sys.ram.total_mb || '?'} MB</div></div>
                     ${(sys.ip_addresses || []).map(ip => html`
                         <div class="stat"><div class="label">${ip.interface}</div><div class="value">${ip.address}</div></div>
@@ -1539,6 +1614,7 @@ function App() {
     const [midiEvents, setMidiEvents] = useState({});  // src_client -> {name, text}
     const [clockSources, setClockSources] = useState({});  // src_client -> timestamp
     const [midiRates, setMidiRates] = useState({});  // "client:port" -> msgs/sec
+    const [pluginDisplays, setPluginDisplays] = useState({});  // instance_id -> {name: value}
     const [sseConnected, setSseConnected] = useState(true);
 
     const refresh = useCallback(async () => {
@@ -1611,6 +1687,12 @@ function App() {
         if (type === 'midi-rates') {
             setMidiRates(data);
         }
+        if (type === 'plugin-display') {
+            setPluginDisplays(prev => ({
+                ...prev,
+                [data.instance_id]: { ...(prev[data.instance_id] || {}), [data.name]: data.value },
+            }));
+        }
     }, (connected) => {
         setSseConnected(connected);
         if (connected) refresh();
@@ -1630,7 +1712,8 @@ function App() {
     let page;
     switch (tab) {
         case 'routing':
-            page = html`<${RoutingPage} devices=${devices} connections=${connections} refresh=${refresh} showToast=${showToast} clockSources=${clockSources} midiRates=${midiRates} />`;
+            page = html`<${RoutingPage} devices=${devices} connections=${connections} refresh=${refresh} showToast=${showToast} clockSources=${clockSources} midiRates=${midiRates}
+                onDeviceOpen=${(clientId) => setSelectedDeviceId(clientId)} />`;
             break;
         case 'presets':
             page = html`<${PresetsPage} refresh=${refresh} showToast=${showToast} />`;
@@ -1660,7 +1743,8 @@ function App() {
         </nav>
         ${selectedDevice && html`<${DeviceDetailPanel} key=${selectedDeviceId} device=${selectedDevice}
             onClose=${() => { setSelectedDeviceId(null); refresh(); }}
-            showToast=${showToast} refresh=${refresh} />`}
+            showToast=${showToast} refresh=${refresh}
+            pluginDisplays=${pluginDisplays} />`}
         <${Toast} message=${toast} />
     `;
 }

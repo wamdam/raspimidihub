@@ -20,7 +20,7 @@ all: deb deb-rosetup
 
 deb: $(DEB_FILE)
 
-$(DEB_FILE): src/raspimidihub/*.py src/raspimidihub/static/* systemd/raspimidihub.service udev/90-raspimidihub.rules debian/postinst debian/postrm
+$(DEB_FILE): src/raspimidihub/*.py src/raspimidihub/static/* plugins/*/*.py plugins/*/*.svg systemd/raspimidihub.service udev/90-raspimidihub.rules debian/postinst debian/postrm
 	@mkdir -p dist
 	@rm -rf $(BUILD_DIR)
 	@mkdir -p $(BUILD_DIR)/DEBIAN

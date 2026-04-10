@@ -10,6 +10,12 @@ class NoteTranspose(PluginBase):
     DESCRIPTION = "Shift all notes up or down by semitones"
     AUTHOR = "RaspiMIDIHub"
     VERSION = "1.0"
+    HELP = """\
+Shifts all incoming notes up or down by a fixed number of semitones.
+All other MIDI messages pass through unchanged.
+
+Example: Set semitones=12 to transpose a keyboard up one octave, or
+set semitones=-7 to drop everything by a fifth."""
 
     params = [
         Wheel("semitones", "Semitones", min=-48, max=48, default=0),

@@ -22,6 +22,13 @@ class ScaleRemapper(PluginBase):
     DESCRIPTION = "Quantize notes to a musical scale"
     AUTHOR = "RaspiMIDIHub"
     VERSION = "1.0"
+    HELP = """\
+Quantizes every note to the nearest note in a chosen musical scale.
+Play any key and only in-scale notes come out -- no wrong notes.
+
+Example: Set scale=pentatonic, root=C. Now any key you press snaps
+to C-D-E-G-A. Great for jamming, live performance, or making a
+grid controller always sound musical."""
 
     params = [
         Radio("scale", "Scale", list(SCALES.keys()), default="major"),

@@ -168,11 +168,17 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
             uptime = int(float(Path("/proc/uptime").read_text().split()[0]))
         except Exception:
             pass
+        load1 = None
+        try:
+            load1 = float(Path("/proc/loadavg").read_text().split()[0])
+        except Exception:
+            pass
 
         return Response.json({
             "hostname": hostname, "version": __version__,
             "ip_addresses": ips, "cpu_temp_c": temp, "ram": ram,
-            "uptime_seconds": uptime, "config_fallback": config.fallback_active,
+            "uptime_seconds": uptime, "load1": load1,
+            "config_fallback": config.fallback_active,
             "default_routing": config.default_routing,
         })
 

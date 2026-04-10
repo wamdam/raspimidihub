@@ -15,6 +15,14 @@ class MidiDelay(PluginBase):
     DESCRIPTION = "Delay notes with feedback and velocity decay"
     AUTHOR = "RaspiMIDIHub"
     VERSION = "1.0"
+    HELP = """\
+Repeats notes after a delay, like a tape echo for MIDI. Each repeat
+gets quieter based on velocity decay, and feedback controls how many
+echoes you hear.
+
+Example: Set delay=250ms, feedback=50%, decay=20% to add rhythmic
+echoes to a lead synth line. Plays the original note immediately,
+then softer repeats that fade out."""
 
     params = [
         Group("Timing", [

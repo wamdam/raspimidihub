@@ -13,6 +13,13 @@ class MasterClock(PluginBase):
     DESCRIPTION = "Generate MIDI clock from internal BPM"
     AUTHOR = "RaspiMIDIHub"
     VERSION = "1.0"
+    HELP = """\
+Generates MIDI clock at a configurable BPM. Use this when no external
+clock source (DAW, drum machine) is available but other plugins need
+tempo sync.
+
+Example: Set BPM=120 and hit Run to provide clock to an Arpeggiator
+and CC LFO downstream, keeping everything in time."""
 
     params = [
         Wheel("bpm", "BPM", min=20, max=300, default=120),

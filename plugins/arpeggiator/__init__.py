@@ -16,6 +16,13 @@ class Arpeggiator(PluginBase):
     DESCRIPTION = "Plays held notes as a pattern (up, down, up-down, random)"
     AUTHOR = "RaspiMIDIHub"
     VERSION = "1.0"
+    HELP = """\
+Turns held notes into a rhythmic pattern, cycling through them in order.
+Supports up, down, up-down, random, and as-played patterns.
+
+Example: Hold a C minor chord and the arpeggiator plays C-Eb-G-C-Eb-G
+in tempo. Great for turning pads into rhythmic sequences without
+recording separate notes."""
 
     params = [
         Group("Pattern", [

@@ -16,6 +16,13 @@ class Monitor(PluginBase):
     DESCRIPTION = "View all incoming MIDI events in the config panel"
     AUTHOR = "RaspiMIDIHub"
     VERSION = "1.0"
+    HELP = """\
+Displays all incoming MIDI events in a scrolling log. Does not modify
+or forward any data -- purely a debugging and inspection tool.
+
+Example: Plug in a controller and open Monitor to verify which channel,
+CC numbers, and note values it actually sends. Invaluable when setting
+up a new device or diagnosing why a connection is not working."""
 
     params = []
 

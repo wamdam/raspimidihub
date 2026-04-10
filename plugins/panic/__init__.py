@@ -16,6 +16,13 @@ class Panic(PluginBase):
     DESCRIPTION = "Send All Notes Off + All Sound Off on all channels"
     AUTHOR = "RaspiMIDIHub"
     VERSION = "1.0"
+    HELP = """\
+Sends All Notes Off and All Sound Off on all 16 MIDI channels. Kills
+stuck notes instantly. Can be triggered from the UI or via a CC.
+
+Example: A stuck note is droning on your synth. Hit the Panic toggle
+or send CC#64 value 127 from a foot switch to silence everything.
+Keep this wired to your output as a safety net."""
 
     params = [
         Toggle("trigger", "Panic!", default=False),

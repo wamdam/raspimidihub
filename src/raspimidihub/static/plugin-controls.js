@@ -223,7 +223,7 @@ function PluginWheel({ name, label, min, max, value, onChange, suffix, tickLabel
 // =======================================================================
 // FADER — mixer-strip style
 // =======================================================================
-function PluginFader({ name, label, min, max, value, onChange, vertical, suffix }) {
+function PluginFader({ name, label, min, max, value, onChange, vertical, suffix, displayFactor, displayFormat }) {
     const trackRef = useRef(null);
     const onChangeRef = useRef(onChange);
     onChangeRef.current = onChange;
@@ -311,7 +311,7 @@ function PluginFader({ name, label, min, max, value, onChange, vertical, suffix 
         <div class="fader-track ${vertical ? 'vertical' : ''}" ref=${trackRef}>
             <div class="fader-fill" style=${fillStyle}></div>
             <div class="fader-thumb" style=${thumbStyle}>
-                <span class="fader-thumb-val">${val}${suffix || ''}</span>
+                <span class="fader-thumb-val">${displayFactor ? ((val * displayFactor) % 1 === 0 ? (val * displayFactor) : (val * displayFactor).toFixed(1)) + (displayFormat || '') : val + (suffix || '')}</span>
             </div>
         </div>
     </div>`;
@@ -346,13 +346,10 @@ function PluginToggle({ name, label, value, onChange }) {
     };
     return html`<div class="toggle-group">
         <span class="toggle-label">${label}</span>
-        <div style="display:flex;align-items:center;gap:8px">
-            <div class="metal-toggle ${value ? 'on' : ''}" onclick=${toggle}>
-                <div class="slot"></div>
-                <div class="indicator off-dot"></div>
-                <div class="indicator on-dot"></div>
-            </div>
-            <span class="toggle-state ${value ? 'on' : 'off'}">${value ? 'On' : 'Off'}</span>
+        <div class="metal-toggle ${value ? 'on' : ''}" onclick=${toggle}>
+            <div class="slot"></div>
+            <span class="toggle-text off-text">Off</span>
+            <span class="toggle-text on-text">On</span>
         </div>
     </div>`;
 }
@@ -640,7 +637,7 @@ function PluginGroup({ title, children }) {
 // =======================================================================
 // PARAM RENDERER — maps param schema to components
 // =======================================================================
-function renderParam(param, values, onChange, allValues) {
+function renderParam(param, values, onChange, allValues, displayCtx) {
     const val = values[param.name];
 
     // Check visible_when condition
@@ -656,14 +653,18 @@ function renderParam(param, values, onChange, allValues) {
     }
 
     switch (param.type) {
-        case 'wheel':
+        case 'wheel': {
+            const df = param.display_factor;
+            const tl = df ? (v) => (v * df) % 1 === 0 ? `${v * df}${param.unit || ''}` : `${(v * df).toFixed(1)}${param.unit || ''}` : param.unit ? (v) => `${v}${param.unit}` : null;
             return html`<${PluginWheel} name=${param.name} label=${param.label}
                 min=${param.min} max=${param.max} value=${val != null ? val : param.default}
-                onChange=${onChange} />`;
+                onChange=${onChange} tickLabel=${tl} />`;
+        }
         case 'fader':
             return html`<${PluginFader} name=${param.name} label=${param.label}
                 min=${param.min} max=${param.max} value=${val != null ? val : param.default}
-                vertical=${param.vertical} onChange=${onChange} />`;
+                vertical=${param.vertical} onChange=${onChange}
+                displayFactor=${param.display_factor} displayFormat=${param.display_format} />`;
         case 'radio':
             return html`<${PluginRadio} name=${param.name} label=${param.label}
                 options=${param.options} value=${val != null ? val : param.default}
@@ -684,50 +685,47 @@ function renderParam(param, values, onChange, allValues) {
         case 'channelselect':
             return html`<${PluginChannelSelect} name=${param.name} label=${param.label}
                 value=${val != null ? val : param.default || 1} onChange=${onChange} />`;
+        case 'display': {
+            if (!displayCtx) return null;
+            const dout = (displayCtx.outputs || []).find(d => d.name === param.display_name);
+            if (!dout) return null;
+            const dv = displayCtx.values && displayCtx.values[param.display_name];
+            if (dout.type === 'scope') return html`<div style="flex:1;min-width:80px"><${DisplayScope} label=${dout.label} value=${dv} min=${dout.min} max=${dout.max} duration=${dout.duration} /></div>`;
+            if (dout.type === 'meter') return html`<div style="flex:1;min-width:80px"><${DisplayMeter} label=${dout.label} value=${dv} min=${dout.min} max=${dout.max} /></div>`;
+            return null;
+        }
         default:
             return html`<div style="color:var(--text-dim);font-size:12px">Unknown: ${param.type}</div>`;
     }
 }
 
-const INLINE_TYPES = new Set(['wheel', 'noteselect', 'channelselect', 'toggle']);
+const INLINE_TYPES = new Set(['wheel', 'fader', 'noteselect', 'channelselect', 'toggle', 'display']);
 
-function renderParamGroup(items, values, onChange) {
-    // Group consecutive inline params into flex rows
+function renderParamGroup(items, values, onChange, displayCtx) {
     const result = [];
     let inlineRun = [];
     const flushInline = () => {
         if (inlineRun.length === 0) return;
-        if (inlineRun.length === 1) {
-            result.push(inlineRun[0]);
-        } else {
-            result.push(html`<div class="param-row">${inlineRun}</div>`);
-        }
+        if (inlineRun.length === 1) result.push(inlineRun[0]);
+        else result.push(html`<div class="param-row">${inlineRun}</div>`);
         inlineRun = [];
     };
     for (const p of items) {
-        const rendered = renderParam(p, values, onChange, values);
+        const rendered = renderParam(p, values, onChange, values, displayCtx);
         if (!rendered) continue;
-        if (INLINE_TYPES.has(p.type)) {
-            inlineRun.push(rendered);
-        } else {
-            flushInline();
-            result.push(rendered);
-        }
+        if (INLINE_TYPES.has(p.type)) inlineRun.push(rendered);
+        else { flushInline(); result.push(rendered); }
     }
     flushInline();
     return result;
 }
 
-function renderParamList(params, values, onChange) {
+function renderParamList(params, values, onChange, displayCtx) {
     if (!params) return null;
-    // Expand groups in place, then run the inline grouping
     const expanded = [];
     for (const p of params) {
-        if (p.type === 'group') {
-            expanded.push({ _isGroup: true, title: p.title, children: p.children });
-        } else {
-            expanded.push(p);
-        }
+        if (p.type === 'group') expanded.push({ _isGroup: true, title: p.title, children: p.children });
+        else expanded.push(p);
     }
     const result = [];
     let inlineRun = [];
@@ -741,10 +739,10 @@ function renderParamList(params, values, onChange) {
         if (p._isGroup) {
             flushInline();
             result.push(html`<${PluginGroup} title=${p.title}>
-                ${renderParamGroup(p.children, values, onChange)}
+                ${renderParamGroup(p.children, values, onChange, displayCtx)}
             <//>`);
         } else {
-            const rendered = renderParam(p, values, onChange, values);
+            const rendered = renderParam(p, values, onChange, values, displayCtx);
             if (!rendered) continue;
             if (INLINE_TYPES.has(p.type)) inlineRun.push(rendered);
             else { flushInline(); result.push(rendered); }
@@ -757,9 +755,80 @@ function renderParamList(params, values, onChange) {
 // =======================================================================
 // PLUGIN CONFIG PANEL — renders full plugin parameter UI
 // =======================================================================
-function PluginConfigPanel({ instanceId, paramsSchema, params, onParamChange, inputs, outputs, ccInputs }) {
+function DisplayMeter({ label, value, min, max }) {
+    const pct = Math.max(0, Math.min(100, ((value || 0) - (min || 0)) / ((max || 127) - (min || 0)) * 100));
+    const color = pct < 50 ? 'var(--success)' : pct < 80 ? '#f0ad4e' : 'var(--accent)';
+    return html`<div style="margin-bottom:12px">
+        <div style="font-size:12px;color:var(--text-dim);margin-bottom:4px">${label}: ${value || 0}</div>
+        <div style="height:8px;background:rgba(255,255,255,0.06);border-radius:4px;overflow:hidden">
+            <div style="height:100%;width:${pct}%;background:${color};border-radius:4px;transition:width 0.1s"></div>
+        </div>
+    </div>`;
+}
+
+function DisplayScope({ label, value, min, max, duration }) {
+    const canvasRef = useRef(null);
+    const historyRef = useRef([]);
+    const valueRef = useRef(value);
+    valueRef.current = value;
+    const dur = duration || 2;
+    const MAX_POINTS = Math.round(dur * 20);
+    const lo = min || 0, hi = max || 127, mid = Math.round((lo + hi) / 2);
+
+    // Use interval to sample valueRef at fixed rate — independent of React renders
+    useEffect(() => {
+        const interval = setInterval(() => {
+            const h = historyRef.current;
+            const v = valueRef.current;
+            h.push(v != null ? v : lo);
+        if (h.length > MAX_POINTS) h.shift();
+
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        const w = canvas.width, ht = canvas.height;
+
+        ctx.clearRect(0, 0, w, ht);
+
+        // Grid: center line
+        ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(0, ht / 2); ctx.lineTo(w, ht / 2); ctx.stroke();
+
+        // Waveform
+        if (h.length < 2) return;
+        ctx.strokeStyle = '#4dd9c0';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        for (let i = 0; i < h.length; i++) {
+            const x = (i / (MAX_POINTS - 1)) * w;
+            const y = ht - ((h[i] - lo) / (hi - lo)) * ht;
+            if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+            ctx.stroke();
+        }, 50); // 20 Hz redraw
+        return () => clearInterval(interval);
+    }, []);
+
+    return html`<div style="margin-bottom:8px">
+        <div style="font-size:12px;color:var(--text-dim);margin-bottom:4px;text-align:center">${label}</div>
+        <div style="display:flex;align-items:stretch;gap:4px">
+        <div style="display:flex;flex-direction:column;justify-content:space-between;font-size:9px;color:var(--text-dim);padding:1px 0;min-width:18px;text-align:right">
+            <span>${hi}</span><span>${mid}</span><span>${lo}</span>
+        </div>
+        <div style="flex:1;position:relative">
+            <canvas ref=${canvasRef} width="200" height="50"
+                style="width:100%;height:50px;border-radius:4px;background:var(--bg);border:1px solid rgba(255,255,255,0.06)"></canvas>
+            <span style="position:absolute;bottom:2px;right:4px;font-size:9px;color:var(--text-dim)">${dur}s</span>
+        </div>
+        </div>
+    </div>`;
+}
+
+function PluginConfigPanel({ instanceId, paramsSchema, params, onParamChange, inputs, outputs, ccInputs, displayOutputs, displayValues }) {
+    const displayCtx = { outputs: displayOutputs, values: displayValues };
     return html`<div>
-        ${renderParamList(paramsSchema, params, onParamChange)}
+        ${renderParamList(paramsSchema, params, onParamChange, displayCtx)}
 
         ${inputs && inputs.length > 0 && html`
             <div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--surface2)">

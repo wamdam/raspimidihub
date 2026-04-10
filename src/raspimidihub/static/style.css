@@ -668,7 +668,7 @@ body {
 /* === Plugin Control Styles === */
 
 /* Wheel */
-.wheel-group { display: flex; flex-direction: column; align-items: center; gap: 4px; margin-bottom: 12px; }
+.wheel-group { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; margin-bottom: 12px; }
 .wheel-label { font-size: 12px; color: var(--text-dim); }
 .wheel-container {
     width: 100px; height: 60px; overflow: hidden; border-radius: 10px;
@@ -701,7 +701,7 @@ body {
 /* Fader — mixer strip style */
 .fader-group { display: flex; flex-direction: column; align-items: stretch; gap: 4px; margin-bottom: 12px; flex: 1; min-width: 120px; }
 .fader-group.vertical { align-items: center; width: 60px; display: inline-flex; margin-right: 12px; min-width: unset; }
-.fader-label { font-size: 12px; color: var(--text-dim); text-align: center; }
+.fader-label { font-size: 12px; color: var(--text-dim); }
 
 /* Horizontal track */
 .fader-track {
@@ -768,40 +768,39 @@ body {
 .fader-track.vertical .fader-fill { left: 50%; bottom: 12px; width: 4px; height: auto; top: auto; margin-left: -2px; margin-top: 0; }
 
 /* Toggle (metal switch) */
-.toggle-group { display: flex; flex-direction: column; align-items: center; gap: 4px; margin-bottom: 12px; }
+.toggle-group { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; margin-bottom: 12px; }
 .toggle-label { font-size: 12px; color: var(--text-dim); }
 .metal-toggle {
-    width: 56px; height: 30px; border-radius: 4px;
+    width: 80px; height: 44px; border-radius: 4px;
     background: linear-gradient(180deg, #2a2a2a 0%, #1a1a1a 40%, #0f0f0f 100%);
     box-shadow: inset 0 1px 3px rgba(0,0,0,0.8), 0 1px 2px rgba(255,255,255,0.05);
     position: relative; cursor: pointer; border: 1px solid #333; overflow: hidden; touch-action: none;
+    display: flex; align-items: center;
 }
 .metal-toggle::before {
-    content: ''; position: absolute; top: 2px; width: 22px; height: 24px; border-radius: 3px;
+    content: ''; position: absolute; top: 3px; width: 34px; height: 36px; border-radius: 3px;
     background: linear-gradient(180deg, #888 0%, #aaa 20%, #999 40%, #777 60%, #888 80%, #666 100%);
     box-shadow: 0 1px 4px rgba(0,0,0,0.6), inset 0 1px 1px rgba(255,255,255,0.4);
     transition: left 0.15s cubic-bezier(0.4, 0, 0.2, 1); left: 3px;
 }
-.metal-toggle.on::before { left: 29px; }
+.metal-toggle.on::before { left: 41px; }
 .metal-toggle .slot {
-    position: absolute; top: 3px; bottom: 3px; left: 6px; right: 6px; border-radius: 2px;
+    position: absolute; top: 4px; bottom: 4px; left: 8px; right: 8px; border-radius: 2px;
     background: linear-gradient(180deg, #0a0a0a 0%, #1a1a1a 100%);
     box-shadow: inset 0 1px 3px rgba(0,0,0,0.9);
 }
-.metal-toggle .indicator {
-    position: absolute; top: 11px; width: 6px; height: 6px; border-radius: 50%;
-    transition: opacity 0.15s, background 0.15s;
+.metal-toggle .indicator { display: none; }
+.metal-toggle .toggle-text {
+    position: absolute; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
+    pointer-events: none; z-index: 1;
 }
-.metal-toggle .indicator.off-dot { left: 10px; background: #333; }
-.metal-toggle .indicator.on-dot { right: 10px; background: #333; }
-.metal-toggle.on .indicator.on-dot { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
-.toggle-state { font-size: 13px; font-weight: 500; min-width: 30px; }
-.toggle-state.on { color: var(--accent); }
-.toggle-state.off { color: var(--text-dim); }
+.metal-toggle .toggle-text.off-text { left: 10px; color: var(--text-dim); }
+.metal-toggle .toggle-text.on-text { right: 10px; color: var(--text-dim); }
+.metal-toggle.on .toggle-text.on-text { color: var(--accent); }
 
 /* Radio group */
-.radio-group { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 16px; }
-.radio-group .radio-label { font-size: 13px; color: var(--text-dim); min-width: 70px; padding-top: 6px; }
+.radio-group { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
+.radio-group .radio-label { font-size: 12px; color: var(--text-dim); }
 .radio-options { display: flex; flex-wrap: wrap; gap: 6px; }
 .radio-opt {
     padding: 7px 14px; background: var(--bg); border: 1px solid var(--surface2); border-radius: 6px;
