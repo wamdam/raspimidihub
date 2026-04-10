@@ -655,7 +655,10 @@ function renderParam(param, values, onChange, allValues, displayCtx) {
     switch (param.type) {
         case 'wheel': {
             const df = param.display_factor;
-            const tl = df ? (v) => (v * df) % 1 === 0 ? `${v * df}${param.unit || ''}` : `${(v * df).toFixed(1)}${param.unit || ''}` : param.unit ? (v) => `${v}${param.unit}` : null;
+            const lbls = param.labels;
+            const tl = lbls && lbls.length ? (v) => lbls[v - (param.min || 0)] || v
+                : df ? (v) => (v * df) % 1 === 0 ? `${v * df}${param.unit || ''}` : `${(v * df).toFixed(1)}${param.unit || ''}`
+                : param.unit ? (v) => `${v}${param.unit}` : null;
             return html`<${PluginWheel} name=${param.name} label=${param.label}
                 min=${param.min} max=${param.max} value=${val != null ? val : param.default}
                 onChange=${onChange} tickLabel=${tl} />`;

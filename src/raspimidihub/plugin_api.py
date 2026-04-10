@@ -58,10 +58,13 @@ class Wheel(Param):
     default: int = 0
     display_factor: float = 0  # if >0, display value*factor (e.g. 0.1 for Hz tenths)
     unit: str = ""  # suffix shown after value (e.g. "Hz", "%")
+    labels: list[str] = field(default_factory=list)  # if set, show labels[value-min] instead of number
 
     def to_dict(self) -> dict:
         d = super().to_dict()
         d.update({"min": self.min, "max": self.max, "default": self.default})
+        if self.labels:
+            d["labels"] = self.labels
         if self.display_factor:
             d["display_factor"] = self.display_factor
         if self.unit:

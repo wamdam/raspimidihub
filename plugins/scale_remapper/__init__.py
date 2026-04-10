@@ -33,7 +33,8 @@ a grid controller always sound musical."""
 
     params = [
         Radio("scale", "Scale", list(SCALES.keys()), default="major"),
-        Wheel("root", "Root Note", min=0, max=11, default=0),
+        Wheel("root", "Root", min=0, max=11, default=0,
+              labels=["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]),
     ]
 
     inputs = ["Notes"]
