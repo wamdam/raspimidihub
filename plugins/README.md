@@ -6,7 +6,7 @@ This guide covers everything you need to create plugins for RaspiMIDIHub.
 
 1. Create a directory under `plugins/` with your plugin name (e.g. `plugins/my_plugin/`).
 2. Add an `__init__.py` that inherits from `PluginBase`.
-3. Add an `icon.svg` (20x20 viewBox, uses `currentColor` for stroke/fill — rendered in turquoise).
+3. Add an `icon.svg` for the matrix and plugin browser (see Icon Convention below).
 4. Set the required metadata, declare parameters, and implement callbacks.
 
 Here is the minimal plugin -- a pass-through that forwards all MIDI unchanged:
@@ -46,6 +46,41 @@ class PassThrough(PluginBase):
 ```
 
 The framework auto-discovers your plugin at startup. No registration step is needed.
+
+
+## Icon Convention
+
+Every plugin should include an `icon.svg` in its directory. Requirements:
+
+- **ViewBox:** `0 0 20 20` (20x20 logical pixels)
+- **Colors:** Use `currentColor` for all stroke and fill attributes. The UI renders the icon in turquoise; using `currentColor` ensures it adapts automatically.
+- **Style:** Simple line art works best at the small sizes used in the matrix and plugin browser.
+
+Example:
+
+```xml
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="none"
+     stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+  <path d="M4 16 L4 6 L10 3 L16 6 L16 16"/>
+</svg>
+```
+
+
+## HELP Text Convention
+
+Set the `HELP` class attribute to a multi-line string with a longer explanation of
+what your plugin does, how to use it, and practical examples. This text is shown
+when the user taps the `?` button in the plugin config panel.
+
+Keep it concise but useful -- a short paragraph plus one or two examples is ideal.
+No markdown formatting; the UI renders it as plain preformatted text.
+
+```python
+HELP = """\
+Generates an automatic CC waveform on any CC number. Runs free or
+synced to MIDI clock. Depth = amplitude, Center = midpoint.
+Example: Set wave=sine, CC#1, 0.5 Hz for a slow vibrato."""
+```
 
 
 ## Plugin API Reference
@@ -111,20 +146,44 @@ Declare parameters as a `params` class attribute (a list).
 
 ### Wheel
 
-Numeric scroll wheel with momentum.
+Numeric scroll wheel with momentum, tick sound, and boundary thud.
 
 ```python
 Wheel("gate", "Gate %", min=10, max=100, default=80)
 ```
 
+Optional fields:
+
+- **`labels`**: list of strings to display instead of numeric values. The label at
+  index `value - min` is shown. Useful for named values like note names:
+  ```python
+  Wheel("root", "Root", min=0, max=11, default=0,
+        labels=["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"])
+  ```
+- **`display_factor`**: if > 0, the displayed value is `value * display_factor`
+  (e.g., `display_factor=0.1` to show tenths).
+- **`unit`**: suffix shown after the value (e.g., `"Hz"`, `"%"`).
+
 ### Fader
 
-Mixer-style fader, horizontal by default.
+Mixer-style fader with metallic thumb and tick feedback. Horizontal by default.
 
 ```python
 Fader("depth", "Depth", min=0, max=127, default=127)
 Fader("volume", "Volume", min=0, max=127, default=100, vertical=True)
 ```
+
+Optional fields:
+
+- **`display_factor`**: if > 0, the thumb tooltip shows `value * display_factor`
+  instead of the raw integer.
+- **`display_format`**: suffix string appended to the displayed value (e.g., `" Hz"`).
+  Used together with `display_factor`:
+  ```python
+  Fader("freq", "Frequency", min=1, max=200, default=5,
+        display_factor=0.1, display_format=" Hz")
+  ```
+  This displays "0.5 Hz" when the raw value is 5.
 
 ### Radio
 
@@ -197,6 +256,20 @@ out_ch = (self.get_param("out_ch") or 1) - 1
 self.send_note_on(out_ch, note, velocity)
 ```
 
+### Display
+
+Inline display output placeholder. References a `display_output` by name and
+renders the live scope or meter at that position in the parameter layout.
+
+```python
+Display("_scope", "Scope", display_name="level")
+```
+
+The `display_name` must match the `name` field of an entry in `display_outputs`
+(see Display Outputs below). Place a `Display` param anywhere in your `params`
+list to control where the scope or meter appears relative to other controls.
+
+
 ### Group
 
 Titled section that visually groups related parameters.
@@ -246,6 +319,51 @@ documentation and routing purposes:
 ```python
 cc_outputs = [1]
 ```
+
+
+## Display Outputs
+
+Declare `display_outputs` as a class attribute to add live read-only displays
+(scopes, meters) to your plugin's UI. Each entry is a dict:
+
+```python
+display_outputs = [
+    {"name": "level", "type": "scope", "label": "Output", "min": 0, "max": 127, "duration": 2},
+    {"name": "beat", "type": "meter", "label": "Beat", "min": 0, "max": 3},
+]
+```
+
+| Field | Description |
+|-------|-------------|
+| `name` | Unique identifier, used with `set_display()` and `Display` param |
+| `type` | `"scope"` (rolling waveform) or `"meter"` (segmented level indicator) |
+| `label` | Label shown in the UI |
+| `min` / `max` | Value range |
+| `duration` | Scope only: visible time window in seconds |
+
+Push values from your callbacks:
+
+```python
+self.set_display("level", value)
+```
+
+To position the display inline among other controls, add a `Display` param
+(see Parameter Types above). Without a `Display` param, display outputs
+appear at the bottom of the plugin panel.
+
+
+## Transport Output
+
+Plugins can generate MIDI clock and transport messages by calling these methods:
+
+- `self.send_clock()` -- Send a single MIDI Clock tick (24 PPQ)
+- `self.send_start()` -- Send MIDI Start (begin transport from position 0)
+- `self.send_stop()` -- Send MIDI Stop (halt transport)
+- `self.send_continue()` -- Send MIDI Continue (resume transport from current position)
+
+These are used by clock-generating plugins like Master Clock. The messages are
+sent out through the plugin's ALSA output port and can be routed to any device
+or plugin in the matrix.
 
 
 ## Clock

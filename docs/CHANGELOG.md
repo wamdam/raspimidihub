@@ -4,6 +4,96 @@ All notable changes to RaspiMIDIHub will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [2.0.0-alpha2] - 2026-04-10
+
+Massive release introducing the virtual instrument / plugin system. Plugins appear as
+routable MIDI devices in the matrix with their own configuration panels, live scopes,
+and full MIDI clock integration.
+
+### Plugin System
+- **Plugin framework:** auto-discovery, sandboxed threads, per-plugin ALSA MIDI ports
+- **Plugin API:** `PluginBase` with event callbacks, output methods, parameter declarations,
+  clock sync, CC automation, display outputs, and transport control
+- **Parameter types:** Wheel, Fader, Radio, Toggle, StepEditor, CurveEditor, NoteSelect,
+  ChannelSelect, Display, Group (with conditional `visible_when`)
+- **CC automation:** map incoming CC numbers to plugin parameters via `cc_inputs` dict
+- **Clock distribution:** plugins declare `clock_divisions` to receive tempo-synced ticks
+- **Transport output:** plugins can call `send_clock()`, `send_start()`, `send_stop()`,
+  `send_continue()` to generate MIDI clock and transport
+- **Display outputs:** plugins push live values to scopes and meters via `set_display()`
+- **HELP text:** plugins declare a `HELP` string shown via a `?` button in the UI
+- **12 built-in plugins:**
+  - Arpeggiator -- pattern player with clock sync, step editor, gate control
+  - CC LFO -- waveform generator (sine, triangle, square, saw, S&H) with live scope
+  - CC Smoother -- jitter removal with configurable smoothing factor and scope
+  - Chord Generator -- input note triggers full chords (major, minor, 7th, custom)
+  - Master Clock -- internal BPM clock with start/stop/pause transport and beat meter
+  - MIDI Delay -- note delay with feedback repeats and velocity decay
+  - Note Splitter -- keyboard split at configurable note into two channels
+  - Note Transpose -- semitone shift up or down
+  - Panic Button -- All Notes Off + All Sound Off on all 16 channels
+  - Scale Remapper -- quantize notes to musical scales with labeled root-note wheel
+  - Velocity Curve -- drawable 128-point response curve
+  - Velocity Equalizer -- normalize velocity to fixed value or compressed range
+
+### UI Components
+- **Wheel control:** scrollable drum wheel with momentum, tick sound, boundary thud,
+  optional `labels` list (e.g. note names), `display_factor` and `unit` for scaled display
+- **Fader control:** mixer-style horizontal/vertical fader with metallic thumb, tick feedback,
+  `display_factor` and `display_format` for custom value display
+- **Radio control:** pill-style tap-to-select buttons replacing dropdown menus
+- **Toggle control:** metal switch with LED indicator for boolean parameters
+- **CurveEditor:** drawable 128-point canvas with preset curves (linear, exponential, etc.)
+- **StepEditor:** step sequencer grid with on/off dots and per-step note offset mini-wheels
+- **Scope display:** real-time waveform/level visualization inline in plugin panels
+- **Meter display:** beat/level indicator with segmented display
+- **Display param type:** inline placement of display outputs within the parameter layout
+
+### Routing Matrix
+- **Device icons:** plugin icons (from `icon.svg`) shown in matrix labels
+- **Rate meters:** live MIDI message rate shown per connection cell
+- **Add button:** "+" button in matrix to add a new plugin instance
+- **Tap-to-open device:** tap a device label to open its detail/config panel directly
+
+### Device Panel
+- **Editable title:** rename devices inline from the detail panel header
+- **Plugin config:** full plugin parameter panel with all control types rendered
+  inside the device detail panel
+- **Port list:** input/output port display with rename support
+- **Scrollable piano:** multi-octave piano keyboard with scroll, multitouch support
+- **Multitouch:** simultaneous control of multiple faders/wheels on touch devices
+
+### Presets
+- **Plugins included:** presets now save and restore plugin instances and parameter values
+- **Save/overwrite:** saving with an existing name prompts for overwrite confirmation
+- **Confirmation dialogs:** delete and overwrite require explicit confirmation
+
+### Settings
+- **System info:** hostname, version, CPU temperature, uptime, RAM, IP addresses
+- **Load indicator:** CPU and memory usage shown in real time
+- **PWA install:** "Install App" button for adding to home screen
+- **Reload button:** force-reload the web UI without clearing cache
+- **Software update:** check, view changelog, one-click install (unchanged from 1.x)
+
+### Mapping UI
+- **Wheel/fader/radio/toggle controls** replace dropdown menus in mapping editor
+  for faster editing on stage
+- **MIDI Learn** works across all mapping types with visual feedback
+
+### Performance
+- **CC coalescing:** rapid CC streams are coalesced to reduce UI update overhead
+- **Rate limiting:** SSE events throttled to prevent browser overload with many devices
+- **SSE timeout:** idle SSE connections are cleaned up after configurable timeout
+
+### Bug Fixes
+- Filter engine: write ports now correctly removed when switching between direct
+  ALSA subscription and userspace filter
+- Clock bus: clock events no longer leak between unconnected devices
+- Hanging notes: All Notes Off sent on plugin stop and connection disconnect
+- Matrix scroll: fixed scroll position jump when adding/removing devices
+- Preset load: plugin parameter values fully restored (not just connections)
+- Device panel: MIDI monitor no longer causes dropdown flickering from rapid events
+
 ## [1.3.3] - 2026-04-07
 
 ### Fixed
@@ -14,8 +104,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 - **Offline connections**: saved connections for offline devices shown as grayed-out
-  checkboxes in the matrix — can be toggled on/off even while the device is unplugged.
-- **Clock indicator**: pulsing play icon (▶) on FROM devices sending MIDI clock.
+  checkboxes in the matrix -- can be toggled on/off even while the device is unplugged.
+- **Clock indicator**: pulsing play icon on FROM devices sending MIDI clock.
   Turns orange when multiple devices send clock simultaneously (common mistake).
 - **MIDI bar auto-expire**: bottom bar entries vanish after 2 seconds of inactivity.
 - **Toast shows original name**: tapping a renamed device in the matrix shows the
@@ -42,7 +132,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 - **Config restore on reconnect**: toggling a connection back on restores its
   previous filters and mappings automatically.
 - **Default routing setting**: choose "all-to-all" or "none (manual)" for new
-  devices in Settings → MIDI Routing.
+  devices in Settings > MIDI Routing.
 - **Offline devices**: unplugged devices with saved config shown grayed out in
   the connection matrix.
 
@@ -59,7 +149,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 - **In-app software updates**: check for new releases, view changelog, one-click
-  install with live progress (Downloading → Installing → Restarting).
+  install with live progress (Downloading > Installing > Restarting).
   Uses an external update script that survives the service restart.
 - Version number displayed in header bar.
 - Page auto-reloads after upgrade to pick up new JS/CSS.
@@ -126,7 +216,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   endpoints now return proper success responses instead of redirects.
 
 ### Added
-- Devices sorted alphabetically in connection matrix and device list —
+- Devices sorted alphabetically in connection matrix and device list --
   rename with `1_...`, `2_...` prefixes for consistent ordering.
 - Network settings page for configuring eth0 (DHCP or static IP).
 - Enhanced MIDI activity bar with split left/right showing device names.
@@ -142,14 +232,14 @@ First stable release.
 
 **Core MIDI Hub**
 - Automatic all-to-all MIDI routing between USB devices via ALSA sequencer
-- Hotplug support with 500ms debounce — add/remove devices at any time
+- Hotplug support with 500ms debounce -- add/remove devices at any time
 - Loop prevention (no self-connections)
 - Multi-port device support
 
 **MIDI Filtering (per-connection)**
 - Channel filtering with 16-channel bitmask
 - Message type filtering (notes, CC, program change, pitch bend, aftertouch, SysEx, clock/realtime)
-- Instant apply — no confirmation needed
+- Instant apply -- no confirmation needed
 - Colorblind-friendly traffic light indicators
 
 **MIDI Mapping (per-connection)**

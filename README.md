@@ -1,84 +1,87 @@
 # RaspiMIDIHub
 
-**Turn your Raspberry Pi into a plug-and-play USB MIDI hub.**
+**Turn your Raspberry Pi into a plug-and-play USB MIDI hub with virtual instruments.**
 
-RaspiMIDIHub automatically connects all USB MIDI devices to each other. Plug in your keyboards, synths, drum machines, and controllers — they all talk to each other instantly. No computer needed, no configuration required.
+RaspiMIDIHub automatically connects all USB MIDI devices to each other. Plug in your keyboards, synths, drum machines, and controllers -- they all talk to each other instantly. No computer needed, no configuration required.
 
-The Raspberry Pi runs on a **read-only filesystem**, so you can pull the power at any time without risk of SD card corruption. Your last saved MIDI routing configuration is preserved across reboots and power cycles.
+With the built-in plugin system, you can add virtual instruments and effects (arpeggiator, LFO, chord generator, and more) that appear as MIDI devices in the routing matrix. Configure everything from your phone -- the Pi creates its own WiFi network with a captive portal.
 
-For custom routing, filtering, and MIDI mapping, open the web interface from your phone — the Pi creates its own WiFi network with a captive portal that opens the configuration page automatically.
+The Raspberry Pi runs on a **read-only filesystem**, so you can pull the power at any time without risk of SD card corruption.
 
 ![License](https://img.shields.io/badge/license-LGPL-blue.svg)
 
 <p align="center">
   <img src="docs/screenshots/01-routing.png" width="200" alt="Routing Matrix" />
+  <img src="docs/screenshots/09-plugin-arpeggiator.png" width="200" alt="Arpeggiator Plugin" />
   <img src="docs/screenshots/05-filter-panel.png" width="200" alt="Filter & Mapping Panel" />
-  <img src="docs/screenshots/03-status.png" width="200" alt="Status Page" />
   <img src="docs/screenshots/04-settings.png" width="200" alt="Settings" />
 </p>
 
-See the full [UI Guide](docs/UI_GUIDE.md) for all screens.
+See all screenshots in [docs/screenshots/](docs/screenshots/) and the full [UI Guide](docs/UI_GUIDE.md).
 
 ---
 
 ## Features
 
-### Zero-Configuration MIDI Routing
-- **Automatic all-to-all:** Every connected MIDI device can send to every other device
-- **Loop prevention:** Self-connections are excluded automatically
-- **Hot-plug support:** Add or remove devices at any time — routing updates within 2 seconds
-- **Multi-port devices:** Devices with multiple MIDI ports are fully supported
+### MIDI Routing Matrix
+- **Automatic all-to-all routing** between USB MIDI devices out of the box
+- **Tap-to-connect matrix** with device icons and live rate meters
+- **Hot-plug support** -- add or remove devices at any time
+- **Offline connections** -- configure routing for unplugged devices
+- **Loop prevention** -- self-connections excluded automatically
+- **Multi-port devices** fully supported
+
+### Virtual Instruments and Plugins
+- **12 built-in plugins** that appear as routable MIDI devices
+- **Custom UI controls** -- wheels, faders, toggles, step editors, curve editors, scopes
+- **MIDI clock sync** -- plugins can sync to external clock or generate their own
+- **CC automation** -- map hardware knobs to plugin parameters
+- **Live display outputs** -- scopes and meters show plugin state in real time
+- **Plugin sandbox** -- plugins run in restricted threads, no filesystem or network access
+
+### Built-in Plugins
+
+| Plugin | Description |
+|--------|-------------|
+| Arpeggiator | Plays held notes as a pattern (up, down, up-down, random) with clock sync |
+| CC LFO | Generates CC waveforms (sine, triangle, square, saw, sample-and-hold) |
+| CC Smoother | Smooths incoming CC values to remove jitter from noisy knobs |
+| Chord Generator | Input note triggers a full chord (major, minor, 7th, custom intervals) |
+| Master Clock | Generates MIDI clock (24 PPQ) with transport controls (start/stop/pause) |
+| MIDI Delay | Delays notes with feedback repeats and velocity decay |
+| Note Splitter | Splits keyboard at a configurable note into two MIDI channels |
+| Note Transpose | Shifts all notes up or down by semitones |
+| Panic Button | Sends All Notes Off and All Sound Off on all 16 channels |
+| Scale Remapper | Quantizes notes to a musical scale (major, minor, pentatonic, blues, etc.) |
+| Velocity Curve | Remaps velocity response with a drawable 128-point curve |
+| Velocity Equalizer | Normalizes velocities to a fixed value or compressed range |
+
+### MIDI Filtering and Mapping
+- **Per-connection channel filtering** -- enable/disable any of 16 MIDI channels
+- **Message type filtering** -- block notes, CCs, program changes, pitch bend, aftertouch, SysEx, or clock
+- **Note to CC / Note to CC toggle / CC to CC / Channel remap** mappings
+- **MIDI Learn** -- press a key or move a knob to auto-fill the mapping source
+- **Wheels, faders, radio buttons, and toggles** replace dropdowns for fast editing on stage
+
+### Presets
+- **Save and recall** named routing configurations including plugin states
+- **Export/import** as JSON files for backup or sharing between devices
+- **Overwrite confirmation** prevents accidental preset loss
+
+### WiFi and Web Interface
+- **Built-in WiFi access point** -- connect from your phone, captive portal opens automatically
+- **Progressive Web App (PWA)** -- install to home screen for app-like experience
+- **Mobile-first touch UI** designed for live performance
+- **Real-time sync** across multiple browsers via SSE
+- **Client mode** -- join an existing WiFi network, reachable at `http://raspimidihub.local`
+- **Auto-fallback** -- if WiFi connection is lost, reverts to AP mode within ~90 seconds
 
 ### Appliance Reliability
-- **Read-only filesystem:** The SD card is never written to during normal operation, preventing corruption
-- **Power-safe:** Pull the power cord at any time. The Pi boots back up with your last saved configuration intact
-- **Auto-start:** MIDI routing is active within 30 seconds of power-on
-- **Watchdog:** The service automatically restarts if anything goes wrong
-- **LED status:** Green ACT LED steady = running, blinks on MIDI activity. Red PWR LED off = healthy, on = config fallback
-
-### WiFi & Web Interface
-- **Built-in WiFi access point:** The Pi creates its own WiFi network (`RaspiMIDIHub-XXXX`)
-- **Captive portal:** Connect from your phone and the config page opens automatically
-- **Mobile-first design:** Touch-friendly interface designed for phones on stage
-- **Connection matrix:** Tap to connect/disconnect, long-press (or right-click) for filters and mappings
-- **Clock indicator:** Pulsing play icon on devices sending MIDI clock — turns orange when multiple sources detected
-- **Offline connections:** Configure routing for unplugged devices — connections shown grayed out in matrix
-- **Presets:** Save and recall routing configurations for different songs or shows
-- **MIDI activity bar:** Persistent live MIDI event display with auto-expire (toggleable)
-- **MIDI monitor:** Per-device real-time event log with note names
-- **MIDI test sender:** Piano keyboard and CC slider for testing connections
-- **Ethernet network config:** Configure eth0 as DHCP or static IP with gateway and DNS
-- **Client mode:** Join an existing WiFi network. Reachable at `http://raspimidihub.local`
-- **WiFi network scanner:** Browse available networks from the settings page
-- **Auto-fallback:** If WiFi connection is lost, the Pi automatically reverts to AP mode within ~90 seconds
-- **Remove offline devices:** Tap an offline device label in the matrix to remove it from saved config
-
-### MIDI Filtering
-- **Per-connection channel filtering:** Enable/disable any of the 16 MIDI channels per connection
-- **Message type filtering:** Block notes, CCs, program changes, pitch bend, aftertouch, SysEx, or clock/realtime per connection
-- **Instant apply:** Filters take effect immediately when toggled
-- **Colorblind-friendly:** Traffic light indicators (red/green dots) for channel state
-
-### MIDI Mapping
-- **Note to CC:** Convert note on/off to CC values (e.g., use a pad to toggle an effect)
-- **Note to CC (toggle):** Each note press alternates between two CC values (e.g., mute/unmute)
-- **CC to CC:** Remap CC numbers with configurable input/output ranges (scaling, inversion)
-- **Channel remap:** Route events from one MIDI channel to another
-- **Pass-through option:** Optionally forward the original event alongside the mapped output
-- **MIDI Learn:** Press a key or move a knob to auto-fill the mapping source
-- **Per-connection:** Each connection can have independent mappings
-- **Persisted:** Mappings survive reboots via stable USB device identification
-
-### Device Management
-- **Device renaming:** Assign custom names that persist across reboots
-- **Port renaming:** Rename individual ports on multi-port devices (e.g., name a DIN output after the synth connected to it)
-- **Stable identification:** Devices are tracked by USB topology path + VID:PID, not volatile ALSA client IDs
-- **Device detail panel:** View device info, monitor MIDI, send test events
-- **Config export/import:** Export full configuration as JSON, import on another Pi
-
-### Easy Installation
-- **Single package install:** Download one `.deb` file, install, reboot — done
-- **Clean uninstall:** `dpkg --purge` fully restores the original system
+- **Read-only filesystem** -- SD card never written during normal operation
+- **Power-safe** -- pull the power at any time, boots back to last saved config
+- **Auto-start** -- MIDI routing active within 30 seconds of power-on
+- **Watchdog** -- service automatically restarts on failure
+- **LED status** -- green ACT LED steady = running, blinks on MIDI activity
 
 ---
 
@@ -90,13 +93,11 @@ See the full [UI Guide](docs/UI_GUIDE.md) for all screens.
 - **Fresh** Raspberry Pi OS **Lite** (Trixie/Bookworm or later)
 - microSD card (4 GB+)
 - USB MIDI devices
-- **Internet connection** during installation (for downloading dependencies)
+- **Internet connection** during installation
 
-> **Warning:** This software is designed for a **fresh Raspberry Pi OS Lite** image. Installing on a Pi with other software already configured (desktop environment, Docker, custom services, etc.) may cause conflicts and could render the system unusable — especially the `raspimidihub-rosetup` package which converts the filesystem to read-only. **Do not install on a Pi you use for other purposes.**
+> **Warning:** Install on a **fresh Raspberry Pi OS Lite** image only. The `raspimidihub-rosetup` package converts the filesystem to read-only and may conflict with other software. Do not install on a Pi you use for other purposes.
 
 ### Installation
-
-The Pi needs internet access during installation to download dependencies (hostapd, dnsmasq, ntpsec). Connect via Ethernet or configure WiFi first.
 
 ```bash
 curl -sL https://github.com/wamdam/raspimidihub/releases/latest/download/install.sh | bash
@@ -107,80 +108,74 @@ sudo reboot
 <summary>Manual installation</summary>
 
 ```bash
-wget https://github.com/wamdam/raspimidihub/releases/latest/download/raspimidihub_1.3.3-1_all.deb
+wget https://github.com/wamdam/raspimidihub/releases/latest/download/raspimidihub_2.0.0-1_all.deb
 wget https://github.com/wamdam/raspimidihub/releases/latest/download/raspimidihub-rosetup_1.0.0-1_all.deb
-sudo apt install ./raspimidihub_1.3.3-1_all.deb ./raspimidihub-rosetup_1.0.0-1_all.deb
+sudo apt install ./raspimidihub_2.0.0-1_all.deb ./raspimidihub-rosetup_1.0.0-1_all.deb
 sudo reboot
 ```
 </details>
 
-After reboot, the Pi runs with a read-only filesystem and all connected MIDI devices are automatically routed to each other. The WiFi AP starts automatically — no internet needed after installation.
+After reboot, the Pi runs with a read-only filesystem and all connected MIDI devices are automatically routed. The WiFi AP starts automatically.
 
-### Connecting to the Web Interface
+### Connecting
 
 1. On your phone, go to WiFi settings
 2. Connect to `RaspiMIDIHub-XXXX` (default password: `midihub1`)
 3. The configuration page opens automatically (captive portal)
-4. Tap the connection matrix to route devices, long-press (or right-click) for filters and mappings
-5. Hit **Save Config** to persist across reboots
-
-### Client WiFi Mode
-
-To connect the Pi to an existing WiFi network instead of running its own AP:
-
-1. Open Settings in the web UI
-2. Select a network from the dropdown (scanned automatically)
-3. Enter the password and tap Connect
-4. Find the Pi at **http://raspimidihub.local** on the same network
-
-**Safety net:** If the WiFi network becomes unreachable, the Pi automatically falls back to AP mode within ~90 seconds. On boot, if the saved WiFi fails to connect, AP mode activates immediately.
+4. Tap the matrix to route devices, long-press for filters and mappings
+5. Open the Devices tab to add plugins and configure them
+6. Hit **Save Config** to persist across reboots
 
 ---
 
-## Usage Examples
+## Screenshots
 
-### Simple Keyboard-to-Synth
+See [docs/screenshots/](docs/screenshots/) for the full set. Highlights:
 
+| Screen | File |
+|--------|------|
+| Routing Matrix | `01-routing.png` |
+| Presets | `02-presets.png` |
+| Devices | `03-devices.png` |
+| Settings | `04-settings.png` |
+| Filter & Mapping Panel | `05-filter-panel.png` |
+| Device Detail / Plugin Config | `06-device-detail.png` |
+| Mapping (Note to CC) | `07-mapping-note-to-cc.png` |
+| Mapping (CC to CC) | `08-mapping-cc-to-cc.png` |
+| Arpeggiator Plugin | `09-plugin-arpeggiator.png` |
+| Velocity Curve Plugin | `10-plugin-velocity-curve.png` |
+| Note Splitter Plugin | `11-plugin-note-splitter.png` |
+| CC LFO Plugin | `12-plugin-cc-lfo.png` |
+| Chord Generator Plugin | `13-plugin-chord-generator.png` |
+| MIDI Delay Plugin | `14-plugin-midi-delay.png` |
+| CC Smoother Plugin | `16-plugin-cc-smoother.png` |
+| Panic Plugin | `17-plugin-panic.png` |
+
+---
+
+## Plugin Development
+
+Plugins are Python classes that inherit from `PluginBase`. Drop a directory under `plugins/` with an `__init__.py` and an `icon.svg`, and the framework auto-discovers it at startup.
+
+```python
+from raspimidihub.plugin_api import PluginBase, Wheel, Toggle
+
+class MyPlugin(PluginBase):
+    NAME = "My Plugin"
+    DESCRIPTION = "Does something cool"
+    AUTHOR = "You"
+    VERSION = "1.0"
+
+    params = [
+        Wheel("speed", "Speed", min=1, max=10, default=5),
+        Toggle("active", "Active", default=True),
+    ]
+
+    def on_note_on(self, channel, note, velocity):
+        self.send_note_on(channel, note, velocity)
 ```
-[MIDI Keyboard] --USB--> [Raspberry Pi] --USB--> [Synthesizer]
-```
 
-Connect both USB MIDI cables, power on the Pi, play. No configuration needed.
-
-### Live Performance
-
-```
-[Controller Keyboard]  --+
-[Drum Machine]         --+-- [Raspberry Pi] -- all-to-all
-[Bass Synth]           --+
-[Sampler]              --+
-```
-
-All devices talk to each other. Pull the power after the gig — next time it works exactly the same.
-
-### Custom Routing
-
-1. Connect your phone to the Pi's WiFi
-2. Tap connections in the matrix to enable/disable routes
-3. Long-press (or right-click) a connection for channel filters or MIDI mappings
-4. Save Config to persist
-
-### MIDI Mapping Example
-
-Map a keyboard pad to a synth mute toggle:
-
-1. Long-press the keyboard→synth connection
-2. Tap **+ Add Mapping**
-3. Select "Note → CC (toggle)"
-4. Hit **MIDI Learn**, press the pad
-5. Set Dest CC to the synth's mute CC, values 127/0
-6. Tap Add, then Save Config
-
-### Song-Based Presets
-
-1. Configure routing for Song 1, save as preset "Song 1 - Ballad"
-2. Configure routing for Song 2, save as preset "Song 2 - Rock"
-3. During the show: select preset → routing changes instantly
+See the full [Plugin Developer Guide](plugins/README.md) for parameter types, clock sync, CC automation, display outputs, and sandbox restrictions.
 
 ---
 
@@ -190,71 +185,26 @@ RaspiMIDIHub consists of two Debian packages:
 
 | Package | Purpose |
 |---------|---------|
-| `raspimidihub` | MIDI routing service + web UI + WiFi AP |
+| `raspimidihub` | MIDI routing service + plugin host + web UI + WiFi AP |
 | `raspimidihub-rosetup` | Read-only filesystem hardening (optional but recommended) |
 
-The MIDI routing uses the Linux ALSA sequencer at the kernel level via ctypes bindings to libasound2, adding virtually zero latency for direct connections. Filtered and mapped connections route through userspace with ~1-3ms latency.
+MIDI routing uses the Linux ALSA sequencer at the kernel level via ctypes bindings to libasound2, adding virtually zero latency for direct connections. Filtered and mapped connections route through userspace with ~1-3ms latency. Plugins run as virtual ALSA MIDI devices with their own input and output ports.
 
-The web UI is a Preact SPA served by a Python stdlib async HTTP server — no build step, no npm, no external dependencies.
-
-See [docs/FSD.md](docs/FSD.md) for the full functional specification and [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) for the development roadmap.
-
----
-
-## Important Notes
-
-### Power Safety
-
-**You can power off the Raspberry Pi at any time.** The read-only filesystem ensures that sudden power loss will never corrupt the SD card or the operating system.
-
-Your MIDI routing configuration is stored on the boot partition (FAT32) and is written only when you explicitly tap Save Config. The last saved configuration — including connections, filters, and mappings — is automatically restored on every boot using stable USB device identifiers.
-
-If the saved configuration cannot be read, the Pi falls back to default all-to-all routing. The red PWR LED stays on and the green ACT LED blinks to indicate fallback mode.
-
-### Network & Security
-
-The Pi creates its own WiFi network by default. The WPA2 password is the only security gate — anyone with the password can access the configuration page. This is intentional for trusted environments (your studio, your stage).
-
-- Change the default AP password (`midihub1`) via Settings
-- The Pi is reachable at `http://raspimidihub.local` via mDNS/Avahi
-
-### SD Card Lifetime
-
-With the read-only filesystem enabled, the SD card receives zero writes during normal operation. An inexpensive SD card should last for many years of continuous use.
+The web UI is a Preact SPA served by a Python stdlib async HTTP server -- no build step, no npm, no external dependencies.
 
 ---
 
 ## Maintenance
 
-### Remounting Read-Write
-
-If you need to make system changes via SSH:
-
-```bash
-sudo mount -o remount,rw /
-sudo mount -o remount,rw /boot/firmware
-# ... make changes ...
-sudo mount -o remount,ro /boot/firmware
-sudo mount -o remount,ro /
-```
-
-The `rw` and `ro` shell aliases are provided by `raspimidihub-rosetup`.
-
 ### Resetting WiFi to Access Point
-
-If the Pi joined a WiFi network and you can't find it, connect a keyboard+monitor (or serial console) and run:
 
 ```bash
 sudo reset-wifi
 ```
 
-This removes saved WiFi connections and switches back to AP mode. You can then reconnect via the `RaspiMIDIHub-XXXX` WiFi network.
-
 ### Updating
 
-The easiest way to update is to connect the Pi to your router via **Ethernet cable** — the access point keeps running, so you connect to it via WiFi as usual. Then go to **Settings → Software Update** and click **Install**. The Pi downloads and installs the update automatically.
-
-No need to switch to WiFi client mode or use SSH.
+Connect via Ethernet, then go to **Settings > Software Update** and click **Install**. The access point keeps running so you stay connected via WiFi.
 
 ### Uninstalling
 
@@ -264,8 +214,6 @@ rw
 sudo apt purge raspimidihub raspimidihub-rosetup
 sudo reboot
 ```
-
-This fully restores the Pi to a normal read-write Raspberry Pi OS installation.
 
 ---
 
@@ -282,14 +230,14 @@ This fully restores the Pi to a normal read-write Raspberry Pi OS installation.
 
 ## Documentation
 
-- [UI Guide](docs/UI_GUIDE.md) — Walkthrough of every screen with screenshots
-- [Building from Source](docs/BUILDING.md) — How to build the .deb packages
-- [Changelog](docs/CHANGELOG.md) — Release history
+- [UI Guide](docs/UI_GUIDE.md) -- Walkthrough of every screen
+- [Plugin Developer Guide](plugins/README.md) -- Creating custom plugins
+- [Building from Source](docs/BUILDING.md) -- How to build the .deb packages
+- [Changelog](docs/CHANGELOG.md) -- Release history
 - [Functional Specification](docs/FSD.md)
-- [Implementation Plan](docs/IMPLEMENTATION_PLAN.md)
 
 ---
 
 ## License
 
-LGPL — see [LICENSE](LICENSE) for details. Includes bundled Preact (MIT) and HTM (Apache-2.0).
+LGPL -- see [LICENSE](LICENSE) for details. Includes bundled Preact (MIT) and HTM (Apache-2.0).

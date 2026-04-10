@@ -1,4 +1,4 @@
-# RaspiMIDIHub — UI Guide
+# RaspiMIDIHub -- UI Guide
 
 This guide walks through every screen of the RaspiMIDIHub web interface.
 
@@ -6,15 +6,19 @@ This guide walks through every screen of the RaspiMIDIHub web interface.
 
 ## Routing Page
 
-The main screen shows the **connection matrix** — a grid where rows are MIDI sources (FROM) and columns are destinations (TO). Tap a cell to connect or disconnect two devices. Purple cells indicate connections with active filters or mappings.
+The main screen shows the **connection matrix** -- a grid where rows are MIDI sources (FROM) and columns are destinations (TO). Tap a cell to connect or disconnect two devices. Purple cells indicate connections with active filters or mappings.
 
-**Offline devices** (saved but unplugged) appear grayed out with their saved connections shown as dimmed checkboxes. You can toggle offline connections on/off — the settings are stored and applied when the device is plugged back in.
+**Plugins** appear in the matrix alongside USB devices. Each plugin shows its icon (from `icon.svg`) next to the device name. Live **rate meters** on connection cells show MIDI message throughput.
 
-A pulsing **▶ play icon** appears next to devices sending MIDI clock. If multiple devices send clock simultaneously (a common misconfiguration), the icon turns orange as a warning.
+**Offline devices** (saved but unplugged) appear grayed out with their saved connections shown as dimmed checkboxes. You can toggle offline connections on/off -- the settings are stored and applied when the device is plugged back in.
 
-Tap a device label to see its full name in a toast. Renamed devices also show the original ALSA name in gray.
+A pulsing play icon appears next to devices sending MIDI clock. If multiple devices send clock simultaneously (a common misconfiguration), the icon turns orange as a warning.
 
-At the bottom: **Save Config** persists the current routing to disk (survives reboots), **Load Config** reloads the last saved state. **Export Config** / **Import Config** let you back up or transfer the full configuration as JSON. Disconnected connections are also saved and restored.
+Tap a device label to open its **device detail panel** directly. Renamed devices also show the original ALSA name in gray.
+
+The **"+" button** in the matrix header lets you add a new plugin instance. Select a plugin type from the list, and it appears as a new device in the matrix with its own IN and OUT ports.
+
+At the bottom: **Save Config** persists the current routing (including plugin states) to disk. **Load Config** reloads the last saved state. **Export Config** / **Import Config** let you back up or transfer the full configuration as JSON.
 
 ![Routing Page](screenshots/01-routing.png)
 
@@ -30,7 +34,7 @@ Long-press (or right-click) a connected cell to open the connection panel. Here 
 
 Dismiss the panel by swiping down, tapping X, pressing ESC, or tapping the dark overlay.
 
-Toggling a connection off in the matrix preserves its filters and mappings — they are restored when you re-enable it.
+Toggling a connection off in the matrix preserves its filters and mappings -- they are restored when you re-enable it.
 
 ![Filter & Mapping Panel](screenshots/05-filter-panel.png)
 
@@ -38,7 +42,9 @@ Toggling a connection off in the matrix preserves its filters and mappings — t
 
 ## Add / Edit Mapping
 
-The mapping form opens as a sub-overlay. Mapping types:
+The mapping form opens as a sub-overlay. Controls use **wheels, faders, radio buttons, and toggles** instead of dropdowns for fast editing on stage.
+
+Mapping types:
 
 | Type | Description |
 |------|-------------|
@@ -48,19 +54,21 @@ The mapping form opens as a sub-overlay. Mapping types:
 | **Channel Remap** | Route all events to a different MIDI channel |
 
 - **Src Ch / Dst Ch:** Filter by source channel and remap to destination channel
-- **MIDI Learn:** Press the button, then play a note or move a knob — the source is auto-filled
+- **MIDI Learn:** Press the button, then play a note or move a knob -- the source is auto-filled with visual feedback
 - **Pass through original event:** When checked, the original note/CC is forwarded alongside the mapped output
+
+![Mapping (Note to CC)](screenshots/07-mapping-note-to-cc.png)
 
 ---
 
 ## Presets Page
 
-Save the current routing as a named preset and recall it later. Useful for switching between different setups at a gig.
+Save the current routing as a named preset and recall it later. Presets now include plugin instances and their parameter values.
 
-- **Save:** Enter a name and tap Save to snapshot the current routing
-- **Load:** Activate a saved preset instantly
-- **Export/Import:** Share presets as JSON files between devices
-- **Delete:** Remove presets you no longer need
+- **Save:** Enter a name and tap Save. If the name already exists, a confirmation dialog asks whether to overwrite.
+- **Load:** Activate a saved preset instantly -- routing, filters, mappings, and plugin states are all restored.
+- **Export/Import:** Share presets as JSON files between devices.
+- **Delete:** Remove presets with a confirmation dialog.
 
 Note: After loading a preset, tap **Save Config** on the Routing page to make it the boot default.
 
@@ -68,28 +76,45 @@ Note: After loading a preset, tap **Save Config** on the Routing page to make it
 
 ---
 
-## Status Page
+## Devices Page
 
-System overview and device list.
+The Devices tab shows all connected MIDI devices and active plugin instances.
 
 - **System info:** Hostname, version, CPU temperature, uptime, RAM, IP addresses
+- **Load indicator:** CPU and memory usage shown in real time
 - **Connected Devices:** Tap a device to open its detail panel
+- **Plugin instances:** Listed alongside hardware devices, tap to configure
 
-![Status Page](screenshots/03-status.png)
+![Devices Page](screenshots/03-devices.png)
 
 ---
 
 ## Device Detail Panel
 
-Tap a device on the Status page to open the detail panel (slides up). Features:
+Tap a device on the Devices page or tap a device label in the routing matrix to open the detail panel (slides up).
 
-- **Device info:** ALSA client ID, USB VID:PID, port types
-- **Rename:** Assign a custom device name that persists across reboots (stored by USB topology)
-- **Port rename:** For multi-port devices, rename individual ports (e.g., name a DIN output "Octatrack")
+### For USB MIDI devices:
+
+- **Editable title:** Rename the device inline from the panel header. Custom names persist across reboots (stored by USB topology).
+- **Port rename:** For multi-port devices, rename individual ports (e.g., name a DIN output "Octatrack").
 - **MIDI Monitor:** Live display of incoming MIDI events with note names (e.g., "Note On ch1 C3 vel=100"). Uses direct DOM updates so it won't interfere with other controls.
-- **MIDI Test Sender:** Select channel and port, then use the piano keyboard (one octave, adjustable with +/- octave buttons) and CC slider for testing connections without physical MIDI input
+- **MIDI Test Sender:** Scrollable multi-octave piano keyboard with multitouch support, plus CC slider for testing connections.
 
-![Device Detail Panel](screenshots/06-device-detail.png)
+### For plugin devices:
+
+- **Plugin config panel:** Full parameter UI rendered inside the detail panel. Controls include:
+  - **Wheels** -- scrollable drums with momentum and optional labels (e.g., note names on the Scale Remapper root selector)
+  - **Faders** -- horizontal or vertical mixer-style sliders with optional scaled display (e.g., "0.5 Hz" on the CC LFO)
+  - **Radio buttons** -- pill-style tap-to-select (e.g., waveform shape, scale type)
+  - **Toggles** -- metal switches with LED indicators (e.g., clock sync on/off)
+  - **Step Editor** -- step sequencer grid with on/off dots and per-step note offsets (arpeggiator)
+  - **Curve Editor** -- drawable 128-point curve canvas (velocity curve)
+  - **Scope** -- real-time waveform display showing plugin output (CC LFO, CC Smoother)
+  - **Meter** -- segmented beat/level indicator (Master Clock)
+- **Help button:** "?" icon shows the plugin's extended HELP text with usage examples.
+- **Port list:** Input and output ports with connection info.
+
+![Device Detail (Plugin)](screenshots/09-plugin-arpeggiator.png)
 
 ---
 
@@ -98,10 +123,12 @@ Tap a device on the Status page to open the detail panel (slides up). Features:
 Configuration and system controls.
 
 - **WiFi:** Current mode (AP or client) with clear status badge. Join WiFi or change AP password.
-- **Ethernet (eth0):** Configure as DHCP or static IP with address, netmask, gateway, and DNS (8.8.8.8 added automatically for static).
-- **MIDI Routing:** Default routing for new devices — "Connect all" (every new device connects to all others) or "None" (new devices start disconnected).
+- **Ethernet (eth0):** Configure as DHCP or static IP with address, netmask, gateway, and DNS.
+- **MIDI Routing:** Default routing for new devices -- "Connect all" or "None" (new devices start disconnected).
 - **Display:** Toggle the persistent MIDI activity bar.
-- **Software Update:** Check for updates, view changelog, one-click install (requires internet — easiest via Ethernet cable, which works alongside the WiFi AP).
+- **PWA Install:** "Install App" button for adding RaspiMIDIHub to your device's home screen.
+- **Reload:** Force-reload the web UI.
+- **Software Update:** Check for updates, view changelog, one-click install (requires internet -- easiest via Ethernet cable alongside the WiFi AP).
 - **System:** Reboot the Pi remotely.
 
 **Safety net:** If the WiFi connection is lost in client mode, the Pi automatically falls back to AP mode within ~90 seconds. Run `sudo reset-wifi` from a console to force AP mode.
@@ -112,7 +139,7 @@ Configuration and system controls.
 
 ## MIDI Activity Bar
 
-A persistent bar above the bottom navigation showing the latest MIDI events from two sources — left and right. Device names are truncated to fit. Clock events are not shown here (they appear as the ▶ indicator in the matrix instead). Entries auto-expire after 2 seconds of inactivity. Toggleable in Settings > Display.
+A persistent bar above the bottom navigation showing the latest MIDI events from two sources -- left and right. Device names are truncated to fit. Clock events are not shown here (they appear as the play indicator in the matrix instead). Entries auto-expire after 2 seconds of inactivity. Toggleable in Settings > Display.
 
 ---
 
