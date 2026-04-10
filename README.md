@@ -132,24 +132,16 @@ After reboot, the Pi runs with a read-only filesystem and all connected MIDI dev
 
 See [docs/screenshots/](docs/screenshots/) for the full set. Highlights:
 
-| Screen | File |
-|--------|------|
-| Routing Matrix | `01-routing.png` |
-| Presets | `02-presets.png` |
-| Devices | `03-devices.png` |
-| Settings | `04-settings.png` |
-| Filter & Mapping Panel | `05-filter-panel.png` |
-| Device Detail / Plugin Config | `06-device-detail.png` |
-| Mapping (Note to CC) | `07-mapping-note-to-cc.png` |
-| Mapping (CC to CC) | `08-mapping-cc-to-cc.png` |
-| Arpeggiator Plugin | `09-plugin-arpeggiator.png` |
-| Velocity Curve Plugin | `10-plugin-velocity-curve.png` |
-| Note Splitter Plugin | `11-plugin-note-splitter.png` |
-| CC LFO Plugin | `12-plugin-cc-lfo.png` |
-| Chord Generator Plugin | `13-plugin-chord-generator.png` |
-| MIDI Delay Plugin | `14-plugin-midi-delay.png` |
-| CC Smoother Plugin | `16-plugin-cc-smoother.png` |
-| Panic Plugin | `17-plugin-panic.png` |
+| | | |
+|---|---|---|
+| ![Routing](docs/screenshots/01-routing.png) | ![Devices](docs/screenshots/03-devices.png) | ![Settings](docs/screenshots/04-settings.png) |
+| Routing Matrix | Devices (USB + Virtual) | Settings |
+| ![Filter](docs/screenshots/05-filter-panel.png) | ![Mapping](docs/screenshots/07-mapping-note-to-cc.png) | ![Device](docs/screenshots/06-device-detail.png) |
+| Filter Panel | Mapping (Note to CC) | Device Detail |
+| ![Arp](docs/screenshots/09-plugin-arpeggiator.png) | ![LFO](docs/screenshots/10-plugin-cc-lfo.png) | ![Curve](docs/screenshots/19-plugin-velocity-curve.png) |
+| Arpeggiator | CC LFO with Scope | Velocity Curve |
+| ![Splitter](docs/screenshots/15-plugin-note-splitter.png) | ![Delay](docs/screenshots/14-plugin-midi-delay.png) | ![Chord](docs/screenshots/12-plugin-chord-generator.png) |
+| Note Splitter | MIDI Delay | Chord Generator |
 
 ---
 

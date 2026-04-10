@@ -57,7 +57,10 @@ Mapping types:
 - **MIDI Learn:** Press the button, then play a note or move a knob -- the source is auto-filled with visual feedback
 - **Pass through original event:** When checked, the original note/CC is forwarded alongside the mapped output
 
-![Mapping (Note to CC)](screenshots/07-mapping-note-to-cc.png)
+| | |
+|---|---|
+| ![Mapping Note to CC](screenshots/07-mapping-note-to-cc.png) | ![Mapping CC to CC](screenshots/08-mapping-cc-to-cc.png) |
+| Note to CC | CC to CC with ranges |
 
 ---
 
@@ -78,12 +81,11 @@ Note: After loading a preset, tap **Save Config** on the Routing page to make it
 
 ## Devices Page
 
-The Devices tab shows all connected MIDI devices and active plugin instances.
+The Devices tab shows all connected MIDI devices and active plugin instances in a unified list. Virtual instruments (plugins) are sorted first, shown with turquoise icons. Hardware devices show a DIN MIDI connector icon.
 
-- **System info:** Hostname, version, CPU temperature, uptime, RAM, IP addresses
-- **Load indicator:** CPU and memory usage shown in real time
-- **Connected Devices:** Tap a device to open its detail panel
-- **Plugin instances:** Listed alongside hardware devices, tap to configure
+- **Tap any device** to open its detail/config panel
+- **"+ Add Virtual Device"** button opens the plugin browser with icons and descriptions
+- **Online/offline status** shown via green/gray dot
 
 ![Devices Page](screenshots/03-devices.png)
 
@@ -114,7 +116,18 @@ Tap a device on the Devices page or tap a device label in the routing matrix to 
 - **Help button:** "?" icon shows the plugin's extended HELP text with usage examples.
 - **Port list:** Input and output ports with connection info.
 
-![Device Detail (Plugin)](screenshots/09-plugin-arpeggiator.png)
+![Device Detail (USB)](screenshots/06-device-detail.png)
+
+![Plugin Config (Arpeggiator)](screenshots/09-plugin-arpeggiator.png)
+
+More plugin examples:
+
+| | | |
+|---|---|---|
+| ![CC LFO](screenshots/10-plugin-cc-lfo.png) | ![Velocity Curve](screenshots/19-plugin-velocity-curve.png) | ![Note Splitter](screenshots/15-plugin-note-splitter.png) |
+| CC LFO with scope | Velocity Curve editor | Note Splitter |
+| ![MIDI Delay](screenshots/14-plugin-midi-delay.png) | ![Scale Remapper](screenshots/18-plugin-scale-remapper.png) | ![CC Smoother](screenshots/11-plugin-cc-smoother.png) |
+| MIDI Delay | Scale Remapper | CC Smoother with scopes |
 
 ---
 
