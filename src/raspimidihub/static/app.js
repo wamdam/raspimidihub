@@ -440,7 +440,7 @@ function ConnectionMatrix({ devices, connections, onToggle, onFilterOpen, onRemo
         const inCount = dev.ports.filter(p => p.is_input).length;
         const outCount = dev.ports.filter(p => p.is_output).length;
         for (const p of dev.ports) {
-            const extra = { client_id: dev.client_id, dev_name: dev.name, dev_default_name: dev.default_name || dev.name, port_name: p.name, port_default_name: p.default_name || p.name, online: dev.online !== false, stable_id: dev.stable_id, is_plugin: !!dev.is_plugin };
+            const extra = { client_id: dev.client_id, dev_name: dev.name, dev_default_name: dev.default_name || dev.name, port_name: p.name, port_default_name: p.default_name || p.name, online: dev.online !== false, stable_id: dev.stable_id, is_plugin: !!dev.is_plugin, plugin_type: dev.plugin_type };
             if (p.is_input) inputs.push({ ...p, ...extra, multi: inCount > 1 });
             if (p.is_output) outputs.push({ ...p, ...extra, multi: outCount > 1 });
         }
@@ -478,17 +478,15 @@ function ConnectionMatrix({ devices, connections, onToggle, onFilterOpen, onRemo
     // item.port_default_name = original ALSA port name
     // item.multi = device has multiple input or output ports
     const label = (item) => {
-        // Plugin prefix
-        const prefix = item.is_plugin ? '\u1E7C ' : '';
         // Multi-port device with renamed port: show full custom port name (user chose it)
         if (item.multi && item.port_name !== item.port_default_name) {
-            return prefix + item.port_name;
+            return item.port_name;
         }
         // Otherwise: show (possibly renamed) device name, truncated to 2 words
         const parts = item.dev_name.split(' ');
         let short = parts.length > 2 ? parts.slice(0,2).join(' ') : item.dev_name;
         if (item.multi) short += ` p${item.port_id + 1}`;
-        return prefix + short;
+        return short;
     };
     const showName = (item) => {
         const name = item.multi ? `${item.dev_name}: ${item.port_name}` : item.dev_name;
@@ -515,7 +513,7 @@ function ConnectionMatrix({ devices, connections, onToggle, onFilterOpen, onRemo
                 <thead>
                     <tr>
                         <th class="corner-header"><span class="from-label">FROM \u2193</span><span class="to-label">TO \u2192</span></th>
-                        ${outputs.map(o => html`<th class=${o.online ? '' : 'offline'} style="cursor:pointer"
+                        ${outputs.map(o => html`<th class="${o.online ? '' : 'offline'} ${o.is_plugin ? 'plugin-col' : ''}" style="cursor:pointer"
                             title="${o.multi ? o.dev_name + ': ' + o.port_name : o.dev_name}"
                             onclick=${() => o.online ? showName(o) : (o.stable_id && onRemoveDevice && confirm('Remove ' + o.dev_name + '?') && onRemoveDevice(o.stable_id))}><span>${label(o)}</span></th>`)}
                     </tr>
@@ -525,9 +523,9 @@ function ConnectionMatrix({ devices, connections, onToggle, onFilterOpen, onRemo
                         const sendsClock = clockClientIds.includes(inp.client_id);
                         return html`
                         <tr>
-                            <th class="row-header ${inp.online ? '' : 'offline'}" style="cursor:pointer"
+                            <th class="row-header ${inp.online ? '' : 'offline'} ${inp.is_plugin ? 'plugin-row' : ''}" style="cursor:pointer"
                                 title="${inp.multi ? inp.dev_name + ': ' + inp.port_name : inp.dev_name}"
-                                onclick=${() => inp.online ? showName(inp) : (inp.stable_id && onRemoveDevice && confirm('Remove ' + inp.dev_name + '?') && onRemoveDevice(inp.stable_id))}>${label(inp)}${sendsClock ? html`<span class="clock-icon ${multiClock ? 'clock-warn' : ''}" title="${multiClock ? 'Multiple clock sources!' : 'Sending clock'}"></span>` : ''}
+                                onclick=${() => inp.online ? showName(inp) : (inp.stable_id && onRemoveDevice && confirm('Remove ' + inp.dev_name + '?') && onRemoveDevice(inp.stable_id))}>${inp.is_plugin ? html`<${PluginIcon} type=${inp.plugin_type} />` : html`<span class="dev-icon din" style="display:inline-flex;vertical-align:middle;margin-right:3px">${IconDIN}</span>`} ${label(inp)}${sendsClock ? html`<span class="clock-icon ${multiClock ? 'clock-warn' : ''}" title="${multiClock ? 'Multiple clock sources!' : 'Sending clock'}"></span>` : ''}
                                 <${RateMeter} rate=${midiRates && midiRates[inp.client_id + ':' + inp.port_id]} /></th>
                             ${outputs.map(out => {
                                 if (isSelf(inp, out)) return html`<td class="self"></td>`;

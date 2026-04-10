@@ -861,6 +861,8 @@ body {
 
 /* Virtual device name color */
 .dev-name-plugin { color: #4dd9c0; }
+.matrix .plugin-row { color: #4dd9c0; }
+.matrix .plugin-col { color: #4dd9c0; }
 
 /* Device list offline dot */
 .dot.offline { background: #555 !important; }
