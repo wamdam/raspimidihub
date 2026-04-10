@@ -18,10 +18,11 @@ class CcSmoother(PluginBase):
     HELP = """\
 Smooths incoming CC values to remove jitter from noisy knobs and faders.
 Applies a low-pass filter so jumpy values glide to their target.
-
-Example: A cheap MIDI controller sends CC#7 (volume) values that jitter
-between 95-100. The smoother outputs a steady stream instead of audible
-zipper noise. Essential for older or budget controllers."""
+Higher Smoothing values = smoother output but slower response to
+changes. Lower values track the input faster but filter less.
+Example: A cheap MIDI controller sends CC#7 (volume) values that
+jitter between 95-100. The smoother outputs a steady stream instead
+of audible zipper noise."""
 
     params = [
         Group("Settings", [

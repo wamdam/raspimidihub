@@ -30,10 +30,11 @@ class ChordGenerator(PluginBase):
     HELP = """\
 Turns single notes into full chords. Play one key and hear a major,
 minor, 7th, sus, or other chord type with optional inversions.
-
-Example: Set type=minor, play C3, and get C-Eb-G simultaneously.
-Useful for one-finger chord pads or making a bass line trigger
-power chords on a second synth."""
+Added Note Vel % scales the velocity of harmony notes relative to
+the root, so the root stays loudest for a natural sound.
+Inversions rotate the lowest notes up an octave (1st = bottom note
+up, 2nd = bottom two notes up).
+Example: Set type=minor, play C3, and get C-Eb-G simultaneously."""
 
     params = [
         Group("Chord", [

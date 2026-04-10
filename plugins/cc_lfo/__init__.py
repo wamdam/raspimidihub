@@ -20,9 +20,11 @@ class CcLfo(PluginBase):
     HELP = """\
 Generates an automatic CC waveform (sine, triangle, square, saw, or
 sample-and-hold) on any CC number. Runs free or synced to MIDI clock.
-
-Example: Set wave=sine, CC#1 (mod wheel), 0.5 Hz to add a slow vibrato
-to a synth pad without touching a physical controller."""
+Depth = amplitude (0 = flat line, 127 = full swing). Center =
+midpoint of the waveform (64 = centered around middle of CC range).
+S&H picks a random value and holds it until the next cycle.
+Example: Set wave=sine, CC#1 (mod wheel), 0.5 Hz to add a slow
+vibrato to a synth pad without touching a physical controller."""
 
     params = [
         Group("Waveform", [

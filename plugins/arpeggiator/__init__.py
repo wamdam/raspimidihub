@@ -19,10 +19,11 @@ class Arpeggiator(PluginBase):
     HELP = """\
 Turns held notes into a rhythmic pattern, cycling through them in order.
 Supports up, down, up-down, random, and as-played patterns.
-
-Example: Hold a C minor chord and the arpeggiator plays C-Eb-G-C-Eb-G
-in tempo. Great for turning pads into rhythmic sequences without
-recording separate notes."""
+Gate % = how long each note sounds relative to the step length
+(100 = legato, 10 = staccato). As-played pattern cycles notes in
+the order you pressed them rather than sorted by pitch.
+Example: Hold a C minor chord and the arpeggiator plays C-Eb-G
+in tempo. Great for turning pads into rhythmic sequences."""
 
     params = [
         Group("Pattern", [

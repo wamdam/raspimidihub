@@ -17,10 +17,11 @@ class SyncOffset(PluginBase):
 Shifts note timing forward by milliseconds relative to the beat, or
 quantizes notes to a grid. Fixes timing drift between devices or adds
 deliberate push/pull feel.
-
+Negative offset cannot actually go back in time -- it just sends the
+note immediately with no delay.
 Example: A drum machine triggers 10ms late due to USB latency. Set
-offset=-10 to compensate (negative = send earlier). Or enable quantize
-to snap sloppy playing to the nearest 1/8 note grid."""
+offset=-10 to compensate. Or enable quantize to snap sloppy playing
+to the nearest 1/8 note grid."""
 
     params = [
         Group("Timing", [

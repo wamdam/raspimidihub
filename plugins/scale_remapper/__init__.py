@@ -25,10 +25,11 @@ class ScaleRemapper(PluginBase):
     HELP = """\
 Quantizes every note to the nearest note in a chosen musical scale.
 Play any key and only in-scale notes come out -- no wrong notes.
-
-Example: Set scale=pentatonic, root=C. Now any key you press snaps
-to C-D-E-G-A. Great for jamming, live performance, or making a
-grid controller always sound musical."""
+Root Note is 0-11 where 0=C, 1=C#, 2=D, 3=D#, 4=E, 5=F, 6=F#,
+7=G, 8=G#, 9=A, 10=A#, 11=B.
+Example: Set scale=pentatonic, root=0 (C). Now any key you press
+snaps to C-D-E-G-A. Great for jamming, live performance, or making
+a grid controller always sound musical."""
 
     params = [
         Radio("scale", "Scale", list(SCALES.keys()), default="major"),

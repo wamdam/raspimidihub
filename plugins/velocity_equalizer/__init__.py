@@ -13,8 +13,9 @@ class VelocityEqualizer(PluginBase):
     HELP = """\
 Normalizes note velocities to a fixed value or compresses them into a
 narrower range. Use fixed mode for drum machines that need consistent
-hits, or compress mode to tame an uneven player.
-
+hits, or compress mode to tame an uneven player. Expand mode
+stretches a narrow input range (set via Min/Max) to the full 0-127
+output range, useful for controllers with limited dynamic range.
 Example: Set mode=fixed, velocity=100 to make every note the same
 volume -- ideal for triggering samples where dynamics are unwanted."""
 
