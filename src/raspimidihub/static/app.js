@@ -31,7 +31,7 @@ function useSSE(onEvent, onConnChange) {
             try { onEvent(type, JSON.parse(e.data)); }
             catch {}
         };
-        for (const ev of ['device-connected','device-disconnected','connection-changed','midi-activity']) {
+        for (const ev of ['device-connected','device-disconnected','connection-changed','midi-activity','midi-rates']) {
             es.addEventListener(ev, handler(ev));
         }
         es.onopen = () => onConnChange(true);
@@ -87,10 +87,16 @@ function animateClose(panelEl, onDone) {
 }
 
 // --- Swipe-down dismiss hook ---
+const _swipeIgnore = '.wheel-container, .fader-track, .metal-toggle, .piano, .piano-key, .mini-wheel, .curve-canvas-wrap, .step-head';
 function useSwipeDismiss(onDismiss) {
-    const [s] = useState(() => ({ startY: 0, el: null }));
-    const onTouchStart = (e) => { s.startY = e.touches[0].clientY; s.el = e.currentTarget; };
+    const [s] = useState(() => ({ startY: 0, el: null, ignore: false }));
+    const onTouchStart = (e) => {
+        s.startY = e.touches[0].clientY;
+        s.el = e.currentTarget;
+        s.ignore = !!e.target.closest(_swipeIgnore);
+    };
     const onTouchEnd = (e) => {
+        if (s.ignore) return;
         const dy = e.changedTouches[0].clientY - s.startY;
         if (dy > 80 && s.el && s.el.scrollTop <= 0) onDismiss();
     };
@@ -395,7 +401,17 @@ function MatrixCell({ on, filtered, onTap, onLongPress, offline }) {
 }
 
 // --- Connection Matrix ---
-function ConnectionMatrix({ devices, connections, onToggle, onFilterOpen, onRemoveDevice, showToast, clockSources }) {
+function RateMeter({ rate }) {
+    if (!rate) return null;
+    const max = 1000; // DIN MIDI limit
+    const pct = Math.min(100, (rate / max) * 100);
+    const color = pct < 50 ? 'var(--success)' : pct < 80 ? '#f0ad4e' : 'var(--accent)';
+    return html`<div class="rate-meter" title="${rate} msg/s">
+        <div class="rate-bar" style="width:${pct}%;background:${color}"></div>
+    </div>`;
+}
+
+function ConnectionMatrix({ devices, connections, onToggle, onFilterOpen, onRemoveDevice, showToast, clockSources, midiRates }) {
     const inputs = [];
     const outputs = [];
     for (const dev of devices) {
@@ -489,7 +505,8 @@ function ConnectionMatrix({ devices, connections, onToggle, onFilterOpen, onRemo
                         <tr>
                             <th class="row-header ${inp.online ? '' : 'offline'}" style="cursor:pointer"
                                 title="${inp.multi ? inp.dev_name + ': ' + inp.port_name : inp.dev_name}"
-                                onclick=${() => inp.online ? showName(inp) : (inp.stable_id && onRemoveDevice && confirm('Remove ' + inp.dev_name + '?') && onRemoveDevice(inp.stable_id))}>${label(inp)}${sendsClock ? html`<span class="clock-icon ${multiClock ? 'clock-warn' : ''}" title="${multiClock ? 'Multiple clock sources!' : 'Sending clock'}"></span>` : ''}</th>
+                                onclick=${() => inp.online ? showName(inp) : (inp.stable_id && onRemoveDevice && confirm('Remove ' + inp.dev_name + '?') && onRemoveDevice(inp.stable_id))}>${label(inp)}${sendsClock ? html`<span class="clock-icon ${multiClock ? 'clock-warn' : ''}" title="${multiClock ? 'Multiple clock sources!' : 'Sending clock'}"></span>` : ''}
+                                <${RateMeter} rate=${midiRates && midiRates[inp.client_id + ':' + inp.port_id]} /></th>
                             ${outputs.map(out => {
                                 if (isSelf(inp, out)) return html`<td class="self"></td>`;
                                 const offline = isOffline(inp, out);
@@ -512,7 +529,7 @@ function ConnectionMatrix({ devices, connections, onToggle, onFilterOpen, onRemo
 }
 
 // --- Routing Page ---
-function RoutingPage({ devices, connections, refresh, showToast, clockSources }) {
+function RoutingPage({ devices, connections, refresh, showToast, clockSources, midiRates }) {
     const [filterConnId, setFilterConnId] = useState(null);
     const filterConn = filterConnId ? connections.find(c => c.id === filterConnId) || null : null;
 
@@ -604,7 +621,7 @@ function RoutingPage({ devices, connections, refresh, showToast, clockSources })
             srcClientId=${filterConn.src_client} />`}
         <${ConnectionMatrix} devices=${devices} connections=${connections} onToggle=${onToggle} onFilterOpen=${(conn) => setFilterConnId(conn.id)}
             onRemoveDevice=${async (sid) => { await api('/devices/' + encodeURIComponent(sid), { method: 'DELETE' }); refresh(); }}
-            showToast=${showToast} clockSources=${clockSources} />
+            showToast=${showToast} clockSources=${clockSources} midiRates=${midiRates} />
         <div class="btn-group">
             <button class="btn btn-primary" onclick=${saveConfig} disabled=${saving || loading}>${saving ? 'Saving...' : 'Save Config'}</button>
             <button class="btn btn-secondary" onclick=${loadConfig} disabled=${saving || loading}>${loading ? 'Loading...' : 'Load Config'}</button>
@@ -739,9 +756,13 @@ function PortRenameRow({ device, port, showToast }) {
 function ScrollablePiano({ heldNotes, onNoteDown, onNoteUp, pianoKeys }) {
     const scrollRef = useRef(null);
     const pianoRef = useRef(null);
+    const noteDownRef = useRef(onNoteDown);
+    noteDownRef.current = onNoteDown;
+    const noteUpRef = useRef(onNoteUp);
+    noteUpRef.current = onNoteUp;
     // Per-touch state: { startX, startY, scrolling, note, moved }
     const touches = useRef(new Map());
-    const SCROLL_THRESH = 12; // px horizontal before switching to scroll
+    const SCROLL_THRESH = 12;
 
     // Scroll to C3 on mount
     useEffect(() => {
@@ -772,7 +793,7 @@ function ScrollablePiano({ heldNotes, onNoteDown, onNoteUp, pianoKeys }) {
                 // Play note immediately (will cancel if it becomes a scroll)
                 if (note != null) {
                     touches.current.get(t.identifier).note = note;
-                    onNoteDown(note);
+                    noteDownRef.current(note);
                 }
             }
         }
@@ -790,7 +811,7 @@ function ScrollablePiano({ heldNotes, onNoteDown, onNoteUp, pianoKeys }) {
                     if (Math.abs(dx) > SCROLL_THRESH && Math.abs(dx) > Math.abs(dy)) {
                         state.scrolling = true;
                         // Cancel the note if we started one
-                        if (state.note != null) { onNoteUp(state.note); state.note = null; }
+                        if (state.note != null) { noteUpRef.current(state.note); state.note = null; }
                     } else if (Math.abs(dy) > SCROLL_THRESH) {
                         state.moved = true; // vertical — not a scroll, keep note
                     }
@@ -806,7 +827,7 @@ function ScrollablePiano({ heldNotes, onNoteDown, onNoteUp, pianoKeys }) {
             for (const t of e.changedTouches) {
                 const state = touches.current.get(t.identifier);
                 if (!state) continue;
-                if (state.note != null) onNoteUp(state.note);
+                if (state.note != null) noteUpRef.current(state.note);
                 touches.current.delete(t.identifier);
             }
         }
@@ -821,7 +842,7 @@ function ScrollablePiano({ heldNotes, onNoteDown, onNoteUp, pianoKeys }) {
             container.removeEventListener('touchend', onTouchEnd);
             container.removeEventListener('touchcancel', onTouchEnd);
         };
-    }, [onNoteDown, onNoteUp]);
+    }, []);  // stable refs — no re-attach on render
 
     // Mouse: drag background to scroll, click keys to play
     const onMouseDown = (e) => {
@@ -1494,6 +1515,7 @@ function App() {
     const [showMidiBar, setShowMidiBar] = useState(() => localStorage.getItem('midiBar') !== 'off');
     const [midiEvents, setMidiEvents] = useState({});  // src_client -> {name, text}
     const [clockSources, setClockSources] = useState({});  // src_client -> timestamp
+    const [midiRates, setMidiRates] = useState({});  // "client:port" -> msgs/sec
     const [sseConnected, setSseConnected] = useState(true);
 
     const refresh = useCallback(async () => {
@@ -1563,6 +1585,9 @@ function App() {
                 return {...prev, [data.src_client]: { name, detail, ts: Date.now(), count }};
             });
         }
+        if (type === 'midi-rates') {
+            setMidiRates(data);
+        }
     }, (connected) => {
         setSseConnected(connected);
         if (connected) refresh();
@@ -1582,7 +1607,7 @@ function App() {
     let page;
     switch (tab) {
         case 'routing':
-            page = html`<${RoutingPage} devices=${devices} connections=${connections} refresh=${refresh} showToast=${showToast} clockSources=${clockSources} />`;
+            page = html`<${RoutingPage} devices=${devices} connections=${connections} refresh=${refresh} showToast=${showToast} clockSources=${clockSources} midiRates=${midiRates} />`;
             break;
         case 'presets':
             page = html`<${PresetsPage} refresh=${refresh} showToast=${showToast} />`;

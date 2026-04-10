@@ -181,6 +181,9 @@ async def async_main() -> None:
         # WiFi client mode watchdog — fall back to AP if connection lost
         asyncio.ensure_future(_wifi_watchdog(wifi, config, server))
 
+        # MIDI rate meter — snapshot and broadcast every second
+        asyncio.ensure_future(_rate_meter(engine, server))
+
         await engine.run_event_loop()
     except KeyboardInterrupt:
         log.info("Interrupted")
@@ -335,6 +338,15 @@ def _apply_saved_config(engine: MidiEngine, config: Config) -> None:
 
     log.info("Config restored: %d connections applied, %d pending (devices not present)",
              applied, pending)
+
+
+async def _rate_meter(engine, server) -> None:
+    """Broadcast per-port MIDI message rates every second."""
+    while True:
+        await asyncio.sleep(1.0)
+        rates = engine.snapshot_rates()
+        if rates:
+            await server.send_sse("midi-rates", rates)
 
 
 async def _watchdog_ping(interval: float) -> None:

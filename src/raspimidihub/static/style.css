@@ -837,5 +837,12 @@ body {
 .param-row .wheel-group { margin-bottom: 12px; }
 .param-row .toggle-group { margin-bottom: 12px; }
 
+/* MIDI rate meter */
+.rate-meter {
+    height: 3px; width: 100%; margin-top: 2px; border-radius: 1.5px;
+    background: rgba(255,255,255,0.06); overflow: hidden;
+}
+.rate-bar { height: 100%; border-radius: 1.5px; transition: width 0.8s ease-out; }
+
 /* Device list offline dot */
 .dot.offline { background: #555 !important; }

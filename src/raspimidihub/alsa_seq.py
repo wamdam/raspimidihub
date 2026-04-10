@@ -316,6 +316,10 @@ class AlsaSeq:
         )
         check(self._output_port, "Failed to create output port")
 
+        # CC coalescing state for send_event_coalesced
+        self._cc_pending: dict = {}  # (dest, port, ch, cc) -> value
+        self._cc_flush_timer = None
+
         # Subscribe to system announcements
         check(
             snd_seq_connect_from(
@@ -470,6 +474,40 @@ class AlsaSeq:
                 "send_event to %d:%d failed: %s", dest_client, dest_port,
                 err.decode() if err else f"error {ret}"
             )
+
+    def send_event_coalesced(self, ev: SndSeqEvent, dest_client: int, dest_port: int) -> None:
+        """Send a MIDI event with CC coalescing.
+
+        For CC events, only the latest value per (dest, channel, cc#) is sent,
+        flushed at ~333 Hz. Notes and other events pass through immediately.
+        This prevents flooding the MIDI bus from rapid UI fader/wheel changes.
+        """
+        if ev.type == MidiEventType.CONTROLLER:
+            key = (dest_client, dest_port, ev.data.control.channel, ev.data.control.param)
+            self._cc_pending[key] = ev.data.control.value
+            self._start_cc_flush()
+        else:
+            self.send_event(ev, dest_client, dest_port)
+
+    def _start_cc_flush(self) -> None:
+        """Start the CC flush timer if not already running."""
+        if self._cc_flush_timer is not None:
+            return
+        import threading
+        def flush():
+            self._cc_flush_timer = None
+            pending = dict(self._cc_pending)
+            self._cc_pending.clear()
+            for (dc, dp, ch, cc), val in pending.items():
+                ev = SndSeqEvent()
+                ev.type = MidiEventType.CONTROLLER
+                ev.data.control.channel = ch
+                ev.data.control.param = cc
+                ev.data.control.value = val
+                self.send_event(ev, dc, dp)
+        self._cc_flush_timer = threading.Timer(0.003, flush)  # 3ms = ~333 Hz
+        self._cc_flush_timer.daemon = True
+        self._cc_flush_timer.start()
 
     def send_note_on(self, dest_client: int, dest_port: int,
                      channel: int, note: int, velocity: int = 100) -> None:

@@ -391,7 +391,13 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
             elif msg_type == "cc":
                 cc = data.get("cc", 1)
                 value = data.get("value", 0)
-                engine._seq.send_cc(client_id, port, channel, cc, value)
+                from .alsa_seq import SndSeqEvent, MidiEventType
+                ev = SndSeqEvent()
+                ev.type = MidiEventType.CONTROLLER
+                ev.data.control.channel = channel
+                ev.data.control.param = cc
+                ev.data.control.value = value
+                engine._seq.send_event_coalesced(ev, client_id, port)
                 return Response.json({"status": "sent", "type": "cc"})
             else:
                 return Response.error("Unknown type. Use: note_on, note_off, cc")

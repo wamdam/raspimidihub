@@ -50,6 +50,9 @@ class MidiEngine:
         self._config = None  # set externally for config-aware rescan
         self._on_change_callbacks: list = []
         self._on_midi_event_callbacks: list = []
+        # Per-port message counters for rate metering
+        self._port_msg_counts: dict[str, int] = {}  # "client:port" -> count
+        self._port_rates: dict[str, int] = {}  # "client:port" -> msgs/sec (last snapshot)
 
     @property
     def devices(self) -> list[MidiDevice]:
@@ -282,6 +285,11 @@ class MidiEngine:
                 except ValueError:
                     pass
 
+                # Count messages per source port (monitor port only to avoid double-counting)
+                if ev.dest.port == self._monitor_port:
+                    key = f"{ev.source.client}:{ev.source.port}"
+                    self._port_msg_counts[key] = self._port_msg_counts.get(key, 0) + 1
+
                 # Notify MIDI event listeners (for monitoring)
                 if self._on_midi_event_callbacks:
                     for cb in self._on_midi_event_callbacks:
@@ -310,6 +318,13 @@ class MidiEngine:
 
             if hotplug:
                 self._schedule_rescan()
+
+    def snapshot_rates(self) -> dict[str, int]:
+        """Snapshot per-port message rates (msgs/sec) and reset counters."""
+        rates = dict(self._port_msg_counts)
+        self._port_msg_counts.clear()
+        self._port_rates = rates
+        return rates
 
     def _schedule_rescan(self) -> None:
         """Debounce rescans to allow multi-port devices to finish enumeration."""
