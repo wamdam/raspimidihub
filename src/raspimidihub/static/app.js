@@ -458,7 +458,7 @@ function ConnectionMatrix({ devices, connections, onToggle, onFilterOpen, onRemo
             if (p.is_output) outputs.push({ ...p, ...extra, multi: outCount > 1 });
         }
     }
-    const byName = (a, b) => a.dev_name.localeCompare(b.dev_name);
+    const byName = (a, b) => (b.is_plugin - a.is_plugin) || a.dev_name.localeCompare(b.dev_name);
     inputs.sort(byName);
     outputs.sort(byName);
 
@@ -1211,7 +1211,7 @@ function DevicesPage({ devices, onDeviceSelect, showToast, refresh }) {
         }
     };
 
-    const sorted = [...devices].sort((a, b) => a.name.localeCompare(b.name));
+    const sorted = [...devices].sort((a, b) => (!!b.is_plugin - !!a.is_plugin) || a.name.localeCompare(b.name));
 
     return html`
         <div class="card">
@@ -1307,10 +1307,11 @@ function NetworkCard({ iface, showToast }) {
 // --- Upgrade Card ---
 const UPDATE_LABELS = { downloading: 'Downloading...', installing: 'Installing...', done: 'Updated! Restarting...' };
 
-function UpgradeCard({ showToast }) {
+function UpgradeCard({ showToast, onUpdatingChange }) {
     const [info, setInfo] = useState(null);
     const [checking, setChecking] = useState(false);
-    const [updating, setUpdating] = useState(false);
+    const [updating, _setUpdating] = useState(false);
+    const setUpdating = (v) => { _setUpdating(v); if (onUpdatingChange) onUpdatingChange(v); };
     const [status, setStatus] = useState('');
     const [showLog, setShowLog] = useState(false);
     const [showAll, setShowAll] = useState(false);
@@ -1531,6 +1532,7 @@ function SettingsPage({ showToast, showMidiBar, toggleMidiBar }) {
     const [ifaces, setIfaces] = useState([]);
     const [sys, setSys] = useState(null);
     const [defaultRouting, setDefaultRouting] = useState('all');
+    const [isUpgrading, setIsUpgrading] = useState(false);
     useEffect(() => { api('/network').then(setIfaces).catch(() => {}); }, []);
     useEffect(() => { api('/system').then(s => { setSys(s); setDefaultRouting(s.default_routing || 'all'); }).catch(() => {}); }, []);
 
@@ -1590,10 +1592,10 @@ function SettingsPage({ showToast, showMidiBar, toggleMidiBar }) {
                 <span>MIDI activity bar</span>
             </label>
         </div>
-        <${UpgradeCard} showToast=${showToast} />
+        <${UpgradeCard} showToast=${showToast} onUpdatingChange=${setIsUpgrading} />
         <div class="card">
-            <button class="btn btn-secondary btn-block" style="margin-bottom:8px" onclick=${() => location.reload()}>Reload App</button>
-            <button class="btn btn-danger btn-block" onclick=${rebootPi}>Reboot Pi</button>
+            <button class="btn btn-secondary btn-block" style="margin-bottom:8px" onclick=${() => location.reload()} disabled=${isUpgrading}>Reload App</button>
+            <button class="btn btn-danger btn-block" onclick=${rebootPi} disabled=${isUpgrading}>${isUpgrading ? 'Upgrade in progress...' : 'Reboot Pi'}</button>
         </div>
     `;
 }

@@ -46,7 +46,12 @@ then softer repeats that fade out."""
     clock_divisions = ["1/4", "1/8", "1/16", "1/4T", "1/8T", "1/16T"]
 
     def on_start(self):
-        self._pending = []  # [(fire_time, channel, note, velocity, repeats_left)]
+        # Free mode: [(fire_time, channel, note, velocity, repeat)]
+        self._pending = []
+        # Sync mode: [(ticks_remaining, channel, note, velocity, repeat)]
+        self._sync_queue = []
+        # Note-offs: [(fire_time, channel, note)]
+        self._note_offs = []
         self._lock = threading.Lock()
         self._running = True
         self._timer_thread = threading.Thread(target=self._timer_loop, daemon=True)
@@ -56,9 +61,7 @@ then softer repeats that fade out."""
         self._running = False
 
     def on_note_on(self, channel, note, velocity):
-        # Pass through immediately
         self.send_note_on(channel, note, velocity)
-        # Schedule delayed echo
         self._schedule_echo(channel, note, velocity, 0)
 
     def on_note_off(self, channel, note):
@@ -70,9 +73,27 @@ then softer repeats that fade out."""
     def on_pitchbend(self, channel, value):
         self.send_pitchbend(channel, value)
 
+    def on_tick(self, division):
+        if not self.get_param("sync"):
+            return
+        rate = self.get_param("rate") or "1/8"
+        if division != rate:
+            return
+        with self._lock:
+            remaining = []
+            for ticks, ch, note, vel, repeat in self._sync_queue:
+                if ticks <= 1:
+                    self.send_note_on(ch, note, vel)
+                    # Schedule note-off via timer loop (no thread spawn)
+                    self._note_offs.append((time.monotonic() + 0.05, ch, note))
+                    self._schedule_echo(ch, note, vel, repeat)
+                else:
+                    remaining.append((ticks - 1, ch, note, vel, repeat))
+            self._sync_queue = remaining
+
     def _schedule_echo(self, channel, note, velocity, repeat):
         feedback = (self.get_param("feedback") or 50) / 100.0
-        max_repeats = int(feedback * 10)  # 0-10 repeats based on feedback
+        max_repeats = max(0, min(10, int(feedback * 10)))
         if repeat >= max_repeats:
             return
 
@@ -81,18 +102,26 @@ then softer repeats that fade out."""
         if new_vel < 1:
             return
 
-        delay_sec = (self.get_param("delay_ms") or 250) / 1000.0
-        fire_time = time.monotonic() + delay_sec
-
-        with self._lock:
-            self._pending.append((fire_time, channel, note, new_vel, repeat + 1))
+        if self.get_param("sync"):
+            with self._lock:
+                # Safety: cap sync queue to prevent runaway
+                if len(self._sync_queue) < 50:
+                    self._sync_queue.append((1, channel, note, new_vel, repeat + 1))
+        else:
+            delay_sec = (self.get_param("delay_ms") or 250) / 1000.0
+            fire_time = time.monotonic() + delay_sec
+            with self._lock:
+                if len(self._pending) < 50:
+                    self._pending.append((fire_time, channel, note, new_vel, repeat + 1))
 
     def _timer_loop(self):
         while self._running:
             now = time.monotonic()
             to_fire = []
+            offs_to_send = []
 
             with self._lock:
+                # Free-mode echoes
                 remaining = []
                 for item in self._pending:
                     if item[0] <= now:
@@ -101,10 +130,22 @@ then softer repeats that fade out."""
                         remaining.append(item)
                 self._pending = remaining
 
+                # Note-offs
+                off_remaining = []
+                for item in self._note_offs:
+                    if item[0] <= now:
+                        offs_to_send.append(item)
+                    else:
+                        off_remaining.append(item)
+                self._note_offs = off_remaining
+
             for fire_time, channel, note, velocity, repeat in to_fire:
                 self.send_note_on(channel, note, velocity)
-                # Auto note-off after short duration
-                threading.Timer(0.05, self.send_note_off, args=(channel, note)).start()
+                with self._lock:
+                    self._note_offs.append((now + 0.05, channel, note))
                 self._schedule_echo(channel, note, velocity, repeat)
 
-            time.sleep(0.005)  # 5ms resolution
+            for _, channel, note in offs_to_send:
+                self.send_note_off(channel, note)
+
+            time.sleep(0.005)

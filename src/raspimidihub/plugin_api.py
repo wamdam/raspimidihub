@@ -261,6 +261,10 @@ class PluginBase:
         self._send_pitchbend = None
         self._send_aftertouch = None
         self._send_program_change = None
+        self._send_clock = None
+        self._send_start = None
+        self._send_stop = None
+        self._send_continue = None
         self._notify_param_change = None  # callback to notify UI of param update
         self._notify_display = None  # callback to push display updates to UI
 
@@ -338,3 +342,23 @@ class PluginBase:
     def send_program_change(self, channel: int, program: int) -> None:
         if self._send_program_change:
             self._send_program_change(channel, program)
+
+    def send_clock(self) -> None:
+        """Send MIDI Clock tick (24 PPQ)."""
+        if self._send_clock:
+            self._send_clock()
+
+    def send_start(self) -> None:
+        """Send MIDI Start (transport)."""
+        if self._send_start:
+            self._send_start()
+
+    def send_stop(self) -> None:
+        """Send MIDI Stop (transport)."""
+        if self._send_stop:
+            self._send_stop()
+
+    def send_continue(self) -> None:
+        """Send MIDI Continue (transport)."""
+        if self._send_continue:
+            self._send_continue()

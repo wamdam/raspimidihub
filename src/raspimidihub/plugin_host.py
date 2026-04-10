@@ -397,6 +397,10 @@ class PluginHost:
             MidiEventType.CHANPRESS, channel=ch, value=val)
         instance.plugin._send_program_change = lambda ch, prog: alsa_client.send_event(
             MidiEventType.PGMCHANGE, channel=ch, value=prog)
+        instance.plugin._send_clock = lambda: alsa_client.send_event(MidiEventType.CLOCK)
+        instance.plugin._send_start = lambda: alsa_client.send_event(MidiEventType.START)
+        instance.plugin._send_stop = lambda: alsa_client.send_event(MidiEventType.STOP)
+        instance.plugin._send_continue = lambda: alsa_client.send_event(MidiEventType.CONTINUE)
 
         # Wire display output callback (throttled — plugins may call this rapidly)
         import time as _time
