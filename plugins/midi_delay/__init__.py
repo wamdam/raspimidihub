@@ -1,4 +1,4 @@
-"""MIDI Delay — delays notes with optional feedback and velocity decay."""
+"""MIDI Delay — delays notes using a clock-synced circular buffer."""
 
 import threading
 import time
@@ -17,12 +17,12 @@ class MidiDelay(PluginBase):
     VERSION = "1.0"
     HELP = """\
 Repeats notes after a delay, like a tape echo for MIDI.
-Feedback % controls how many repeats (0 = one echo, 100 = maximum
-repeats). Vel Decay % makes each repeat quieter by that amount, so
-echoes fade out naturally.
-Example: Set delay=250ms, feedback=50%, decay=20% to add rhythmic
-echoes to a lead synth line. Plays the original note immediately,
-then softer repeats that fade out."""
+Repeats sets the exact number of echoes (0-10). Vel Decay %
+makes each repeat quieter by that amount so echoes fade out.
+In sync mode, echoes land exactly on beat divisions. In free mode,
+echoes are timed in milliseconds.
+Example: Set delay=250ms, repeats=3, decay=20% for three rhythmic
+echoes that fade out on a lead synth line."""
 
     params = [
         Group("Timing", [
@@ -33,36 +33,41 @@ then softer repeats that fade out."""
                   visible_when=("sync", True)),
         ]),
         Group("Controls", [
-            Fader("feedback", "Feedback %", min=0, max=100, default=50),
+            Wheel("repeats", "Repeats", min=0, max=10, default=3),
             Fader("vel_decay", "Vel Decay %", min=0, max=100, default=20),
         ]),
     ]
 
-    cc_inputs = {74: "delay_ms", 75: "feedback"}
+    cc_inputs = {74: "delay_ms", 75: "repeats"}
 
-    inputs = ["Notes", "CC#74 (delay time)", "CC#75 (feedback)", "Clock"]
+    inputs = ["Notes", "CC#74 (delay time)", "CC#75 (repeats)", "Clock"]
     outputs = ["Notes (original + delayed)"]
 
     clock_divisions = ["1/4", "1/8", "1/16", "1/4T", "1/8T", "1/16T"]
 
     def on_start(self):
-        # Free mode: [(fire_time, channel, note, velocity, repeat)]
-        self._pending = []
-        # Sync mode: [(ticks_remaining, channel, note, velocity, repeat)]
-        self._sync_queue = []
-        # Note-offs: [(fire_time, channel, note)]
-        self._note_offs = []
+        # Sync mode: circular buffer of 32 tick slots
+        # Each slot: dict of (channel, note) -> velocity
+        self._buf_size = 32
+        self._buffer = [dict() for _ in range(self._buf_size)]
+        self._buf_pos = 0  # current write position (advances on each tick)
+
+        # Free mode: timed pending list
+        self._pending = []  # [(fire_time, channel, note, velocity)]
+        self._note_offs = []  # [(fire_time, channel, note)]
         self._lock = threading.Lock()
         self._running = True
-        self._timer_thread = threading.Thread(target=self._timer_loop, daemon=True)
-        self._timer_thread.start()
+        self._timer = threading.Thread(target=self._timer_loop, daemon=True)
+        self._timer.start()
 
     def on_stop(self):
         self._running = False
 
     def on_note_on(self, channel, note, velocity):
+        # Pass through immediately
         self.send_note_on(channel, note, velocity)
-        self._schedule_echo(channel, note, velocity, 0)
+        # Place echoes into future
+        self._place_echoes(channel, note, velocity)
 
     def on_note_off(self, channel, note):
         self.send_note_off(channel, note)
@@ -79,49 +84,60 @@ then softer repeats that fade out."""
         rate = self.get_param("rate") or "1/8"
         if division != rate:
             return
-        with self._lock:
-            remaining = []
-            for ticks, ch, note, vel, repeat in self._sync_queue:
-                if ticks <= 1:
-                    self.send_note_on(ch, note, vel)
-                    # Schedule note-off via timer loop (no thread spawn)
+        # Advance buffer position and play notes in current slot
+        self._buf_pos = (self._buf_pos + 1) % self._buf_size
+        slot = self._buffer[self._buf_pos]
+        if slot:
+            for (ch, note), vel in slot.items():
+                self.send_note_on(ch, note, vel)
+                # Schedule note-off
+                with self._lock:
                     self._note_offs.append((time.monotonic() + 0.05, ch, note))
-                    self._schedule_echo(ch, note, vel, repeat)
-                else:
-                    remaining.append((ticks - 1, ch, note, vel, repeat))
-            self._sync_queue = remaining
+            slot.clear()
 
-    def _schedule_echo(self, channel, note, velocity, repeat):
-        feedback = (self.get_param("feedback") or 50) / 100.0
-        max_repeats = max(0, min(10, int(feedback * 10)))
-        if repeat >= max_repeats:
-            return
-
+    def _place_echoes(self, channel, note, velocity):
+        """Place echo notes into future buffer slots or pending list."""
+        max_repeats = self.get_param("repeats")
+        if max_repeats is None:
+            max_repeats = 3
+        max_repeats = max(0, min(10, max_repeats))
         vel_decay = (self.get_param("vel_decay") or 20) / 100.0
-        new_vel = int(velocity * (1 - vel_decay))
-        if new_vel < 1:
-            return
 
         if self.get_param("sync"):
-            with self._lock:
-                # Safety: cap sync queue to prevent runaway
-                if len(self._sync_queue) < 50:
-                    self._sync_queue.append((1, channel, note, new_vel, repeat + 1))
+            # Place into circular buffer at future tick positions
+            vel = velocity
+            for i in range(1, max_repeats + 1):
+                vel = int(vel * (1 - vel_decay))
+                if vel < 1:
+                    break
+                slot_idx = (self._buf_pos + i) % self._buf_size
+                key = (channel, note)
+                slot = self._buffer[slot_idx]
+                if key in slot:
+                    # Note already in this slot — add velocities (cap at 127)
+                    slot[key] = min(127, slot[key] + vel)
+                else:
+                    slot[key] = vel
         else:
+            # Free mode: place into timed pending list
             delay_sec = (self.get_param("delay_ms") or 250) / 1000.0
-            fire_time = time.monotonic() + delay_sec
-            with self._lock:
-                if len(self._pending) < 50:
-                    self._pending.append((fire_time, channel, note, new_vel, repeat + 1))
+            vel = velocity
+            for i in range(1, max_repeats + 1):
+                vel = int(vel * (1 - vel_decay))
+                if vel < 1:
+                    break
+                fire_time = time.monotonic() + delay_sec * i
+                with self._lock:
+                    self._pending.append((fire_time, channel, note, vel))
 
     def _timer_loop(self):
         while self._running:
             now = time.monotonic()
             to_fire = []
-            offs_to_send = []
+            offs = []
 
             with self._lock:
-                # Free-mode echoes
+                # Free mode echoes
                 remaining = []
                 for item in self._pending:
                     if item[0] <= now:
@@ -130,22 +146,21 @@ then softer repeats that fade out."""
                         remaining.append(item)
                 self._pending = remaining
 
-                # Note-offs
+                # Note-offs (both modes)
                 off_remaining = []
                 for item in self._note_offs:
                     if item[0] <= now:
-                        offs_to_send.append(item)
+                        offs.append(item)
                     else:
                         off_remaining.append(item)
                 self._note_offs = off_remaining
 
-            for fire_time, channel, note, velocity, repeat in to_fire:
+            for _, channel, note, velocity in to_fire:
                 self.send_note_on(channel, note, velocity)
                 with self._lock:
                     self._note_offs.append((now + 0.05, channel, note))
-                self._schedule_echo(channel, note, velocity, repeat)
 
-            for _, channel, note in offs_to_send:
+            for _, channel, note in offs:
                 self.send_note_off(channel, note)
 
             time.sleep(0.005)

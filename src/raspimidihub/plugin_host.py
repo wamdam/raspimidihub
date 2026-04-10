@@ -87,6 +87,9 @@ class PluginAlsaClient:
         )
         check(self._out_port, "plugin: create OUT port")
 
+        # Rate limiter
+        self._rate_window = []
+
     @property
     def client_id(self) -> int:
         return self._client_id
@@ -114,7 +117,14 @@ class PluginAlsaClient:
         return ev.contents
 
     def send_event(self, ev_type: int, **kwargs) -> None:
-        """Build and send an ALSA event on the OUT port."""
+        """Build and send an ALSA event on the OUT port. Rate-limited."""
+        # Drop events if rate exceeds DIN MIDI limit (1000/sec)
+        now = time.monotonic()
+        self._rate_window = [t for t in self._rate_window if now - t < 1.0]
+        if len(self._rate_window) >= 1000:
+            return
+        self._rate_window.append(now)
+
         ev = self._alsa.SndSeqEvent()
         ev.type = ev_type
         ev.source.client = self._client_id
