@@ -1163,10 +1163,11 @@ function DevicesPage({ devices, onDeviceSelect, showToast, refresh }) {
                         <h3>Add Virtual Device</h3>
                         <button class="panel-close" onclick=${() => setShowAddSheet(false)}>\u2715</button>
                     </div>
-                    ${Object.entries(pluginTypes).map(([type, info]) => html`
-                        <div class="device" style="cursor:pointer;padding:12px 0" onclick=${() => addPlugin(type)}>
+                    ${Object.entries(pluginTypes).filter(([t]) => !t.startsWith('_')).map(([type, info]) => html`
+                        <div class="device" style="cursor:pointer;padding:12px 0;display:flex;align-items:center;gap:10px" onclick=${() => addPlugin(type)}>
+                            <${PluginIcon} type=${type} />
                             <div style="flex:1">
-                                <div style="font-weight:600;margin-bottom:2px">${info.name}</div>
+                                <div style="font-weight:600;margin-bottom:2px;color:#4dd9c0">${info.name}</div>
                                 <div style="font-size:12px;color:var(--text-dim)">${info.description}</div>
                             </div>
                             <span style="color:var(--accent);font-size:13px;font-weight:600">Add</span>
