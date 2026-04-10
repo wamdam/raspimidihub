@@ -55,10 +55,13 @@ function thudFeedback() {
 const NOTE_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
 function noteName(n) { return `${NOTE_NAMES[n % 12]}${Math.floor(n / 12) - 2}`; }
 
+// Global touch lock: only one wheel active per touch
+const _activeWheelTouch = new Map(); // touchId -> element
+
 // =======================================================================
 // WHEEL — scrollable drum wheel (pixel-offset based, matching controls-demo.html)
 // =======================================================================
-function PluginWheel({ name, label, min, max, value, onChange, suffix }) {
+function PluginWheel({ name, label, min, max, value, onChange, suffix, tickLabel }) {
     const containerRef = useRef(null);
     const innerRef = useRef(null);
     const TICK_H = 20;
@@ -116,6 +119,13 @@ function PluginWheel({ name, label, min, max, value, onChange, suffix }) {
 
         function onStart(e) {
             e.preventDefault(); e.stopPropagation();
+            // Touch lock: claim this touch, skip if another wheel owns it
+            if (e.touches) {
+                const tid = e.touches[0].identifier;
+                if (_activeWheelTouch.has(tid)) return;
+                _activeWheelTouch.set(tid, el);
+                s._touchId = tid;
+            }
             if (s.animId) { cancelAnimationFrame(s.animId); s.animId = null; }
             s.atBoundary = false;
             const pt = e.touches ? e.touches[0] : e;
@@ -145,6 +155,8 @@ function PluginWheel({ name, label, min, max, value, onChange, suffix }) {
         }
         function onEnd(e) {
             if (e && e.touches) e.stopPropagation();
+            // Release touch lock
+            if (s._touchId != null) { _activeWheelTouch.delete(s._touchId); s._touchId = null; }
             el.removeEventListener('touchmove', onMove);
             window.removeEventListener('mousemove', onMove);
             window.removeEventListener('touchend', onEnd);
@@ -193,7 +205,7 @@ function PluginWheel({ name, label, min, max, value, onChange, suffix }) {
 
     const ticks = [];
     for (let i = min; i <= max; i++) {
-        ticks.push(html`<div class="wheel-tick" key=${i}>${suffix ? i + suffix : i}</div>`);
+        ticks.push(html`<div class="wheel-tick" key=${i}>${tickLabel ? tickLabel(i) : suffix ? i + suffix : i}</div>`);
     }
 
     return html`<div class="wheel-group">
@@ -209,41 +221,56 @@ function PluginWheel({ name, label, min, max, value, onChange, suffix }) {
 // =======================================================================
 function PluginFader({ name, label, min, max, value, onChange, vertical, suffix }) {
     const trackRef = useRef(null);
+    const s = useRef({ val: value }).current;
     const [val, setVal] = useState(value);
-    const lastVal = useRef(value);
 
-    useEffect(() => { setVal(value); lastVal.current = value; }, [value]);
+    useEffect(() => { s.val = value; setVal(value); }, [value]);
 
-    const calcValue = (clientX, clientY) => {
-        const rect = trackRef.current.getBoundingClientRect();
-        let ratio;
-        if (vertical) {
-            ratio = 1 - (clientY - rect.top) / rect.height;
-        } else {
-            ratio = (clientX - rect.left) / rect.width;
+    // Native event listeners for passive:false (multitouch compat)
+    useEffect(() => {
+        const el = trackRef.current;
+        if (!el) return;
+
+        function calcValue(clientX, clientY) {
+            const rect = el.getBoundingClientRect();
+            let ratio = vertical
+                ? 1 - (clientY - rect.top) / rect.height
+                : (clientX - rect.left) / rect.width;
+            ratio = Math.max(0, Math.min(1, ratio));
+            return Math.round(min + ratio * (max - min));
         }
-        ratio = Math.max(0, Math.min(1, ratio));
-        return Math.round(min + ratio * (max - min));
-    };
 
-    const handleMove = (clientX, clientY) => {
-        const newVal = calcValue(clientX, clientY);
-        if (newVal !== lastVal.current) {
-            lastVal.current = newVal;
-            setVal(newVal);
-            onChange(name, newVal);
-            tickFeedback();
+        function handleMove(clientX, clientY) {
+            const nv = calcValue(clientX, clientY);
+            if (nv !== s.val) { s.val = nv; setVal(nv); onChange(name, nv); tickFeedback(); }
         }
-    };
 
-    const onTouchStart = (e) => { e.preventDefault(); handleMove(e.touches[0].clientX, e.touches[0].clientY); };
-    const onTouchMove = (e) => { e.preventDefault(); handleMove(e.touches[0].clientX, e.touches[0].clientY); };
-    const onMouseDown = (e) => {
-        e.preventDefault(); handleMove(e.clientX, e.clientY);
-        const mm = (ev) => handleMove(ev.clientX, ev.clientY);
-        const mu = () => { window.removeEventListener('mousemove', mm); window.removeEventListener('mouseup', mu); };
-        window.addEventListener('mousemove', mm); window.addEventListener('mouseup', mu);
-    };
+        function onTouchStart(e) {
+            e.preventDefault(); e.stopPropagation();
+            handleMove(e.touches[0].clientX, e.touches[0].clientY);
+            el.addEventListener('touchmove', onTouchMove, { passive: false });
+            window.addEventListener('touchend', onTouchEnd);
+        }
+        function onTouchMove(e) {
+            e.preventDefault(); e.stopPropagation();
+            handleMove(e.touches[0].clientX, e.touches[0].clientY);
+        }
+        function onTouchEnd(e) {
+            if (e) e.stopPropagation();
+            el.removeEventListener('touchmove', onTouchMove);
+            window.removeEventListener('touchend', onTouchEnd);
+        }
+        function onMouseDown(e) {
+            e.preventDefault(); handleMove(e.clientX, e.clientY);
+            const mm = (ev) => handleMove(ev.clientX, ev.clientY);
+            const mu = () => { window.removeEventListener('mousemove', mm); window.removeEventListener('mouseup', mu); };
+            window.addEventListener('mousemove', mm); window.addEventListener('mouseup', mu);
+        }
+
+        el.addEventListener('touchstart', onTouchStart, { passive: false });
+        el.addEventListener('mousedown', onMouseDown);
+        return () => { el.removeEventListener('touchstart', onTouchStart); el.removeEventListener('mousedown', onMouseDown); };
+    }, [min, max, name, vertical]);
 
     const ratio = (val - min) / (max - min || 1);
     const thumbStyle = vertical
@@ -255,13 +282,12 @@ function PluginFader({ name, label, min, max, value, onChange, vertical, suffix 
 
     return html`<div class="fader-group ${vertical ? 'vertical' : ''}">
         <span class="fader-label">${label}</span>
-        <div class="fader-track ${vertical ? 'vertical' : ''}" ref=${trackRef}
-            onTouchStart=${onTouchStart} onTouchMove=${onTouchMove}
-            onMouseDown=${onMouseDown}>
+        <div class="fader-track ${vertical ? 'vertical' : ''}" ref=${trackRef}>
             <div class="fader-fill" style=${fillStyle}></div>
-            <div class="fader-thumb" style=${thumbStyle}></div>
+            <div class="fader-thumb" style=${thumbStyle}>
+                <span class="fader-thumb-val">${val}${suffix || ''}</span>
+            </div>
         </div>
-        <span class="fader-value">${val}${suffix || ''}</span>
     </div>`;
 }
 
@@ -294,12 +320,14 @@ function PluginToggle({ name, label, value, onChange }) {
     };
     return html`<div class="toggle-group">
         <span class="toggle-label">${label}</span>
-        <div class="metal-toggle ${value ? 'on' : ''}" onclick=${toggle}>
-            <div class="slot"></div>
-            <div class="indicator off-dot"></div>
-            <div class="indicator on-dot"></div>
+        <div style="display:flex;align-items:center;gap:8px">
+            <div class="metal-toggle ${value ? 'on' : ''}" onclick=${toggle}>
+                <div class="slot"></div>
+                <div class="indicator off-dot"></div>
+                <div class="indicator on-dot"></div>
+            </div>
+            <span class="toggle-state ${value ? 'on' : 'off'}">${value ? 'On' : 'Off'}</span>
         </div>
-        <span class="toggle-state ${value ? 'on' : 'off'}">${value ? 'On' : 'Off'}</span>
     </div>`;
 }
 
@@ -635,16 +663,69 @@ function renderParam(param, values, onChange, allValues) {
     }
 }
 
+const INLINE_TYPES = new Set(['wheel', 'noteselect', 'channelselect', 'toggle']);
+
+function renderParamGroup(items, values, onChange) {
+    // Group consecutive inline params into flex rows
+    const result = [];
+    let inlineRun = [];
+    const flushInline = () => {
+        if (inlineRun.length === 0) return;
+        if (inlineRun.length === 1) {
+            result.push(inlineRun[0]);
+        } else {
+            result.push(html`<div class="param-row">${inlineRun}</div>`);
+        }
+        inlineRun = [];
+    };
+    for (const p of items) {
+        const rendered = renderParam(p, values, onChange, values);
+        if (!rendered) continue;
+        if (INLINE_TYPES.has(p.type)) {
+            inlineRun.push(rendered);
+        } else {
+            flushInline();
+            result.push(rendered);
+        }
+    }
+    flushInline();
+    return result;
+}
+
 function renderParamList(params, values, onChange) {
     if (!params) return null;
-    return params.map(p => {
+    // Expand groups in place, then run the inline grouping
+    const expanded = [];
+    for (const p of params) {
         if (p.type === 'group') {
-            return html`<${PluginGroup} title=${p.title}>
-                ${p.children.map(child => renderParam(child, values, onChange, values))}
-            <//>`;
+            expanded.push({ _isGroup: true, title: p.title, children: p.children });
+        } else {
+            expanded.push(p);
         }
-        return renderParam(p, values, onChange, values);
-    });
+    }
+    const result = [];
+    let inlineRun = [];
+    const flushInline = () => {
+        if (inlineRun.length === 0) return;
+        if (inlineRun.length === 1) result.push(inlineRun[0]);
+        else result.push(html`<div class="param-row">${inlineRun}</div>`);
+        inlineRun = [];
+    };
+    for (const p of expanded) {
+        if (p._isGroup) {
+            flushInline();
+            result.push(html`<${PluginGroup} title=${p.title}>
+                ${renderParamGroup(p.children, values, onChange)}
+            <//>`);
+        } else {
+            const rendered = renderParam(p, values, onChange, values);
+            if (!rendered) continue;
+            if (INLINE_TYPES.has(p.type)) inlineRun.push(rendered);
+            else { flushInline(); result.push(rendered); }
+        }
+    }
+    flushInline();
+    return result;
 }
 
 // =======================================================================

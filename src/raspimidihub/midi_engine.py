@@ -177,8 +177,6 @@ class MidiEngine:
                 pass  # device may already be gone
 
         self._connections.clear()
-        # Clear send subscription cache so they're re-established on next send
-        self._seq._send_subscriptions.clear()
 
     def _update_monitor_subscriptions(self) -> None:
         """Subscribe monitor port to all device output ports for MIDI activity UI."""

@@ -1,7 +1,7 @@
 import { h, render } from './lib/preact.module.js';
 import { useState, useEffect, useCallback, useRef } from './lib/hooks.module.js';
 import htm from './lib/htm.module.js';
-import { PluginConfigPanel, renderParamList, tickFeedback, PluginWheel, PluginRadio, PluginNoteSelect, PluginToggle } from './plugin-controls.js';
+import { PluginConfigPanel, renderParamList, tickFeedback, PluginWheel, PluginFader, PluginRadio, PluginNoteSelect, PluginToggle } from './plugin-controls.js';
 
 const html = htm.bind(h);
 
@@ -193,37 +193,36 @@ function MappingFormOverlay({ onSubmit, onClose, editing, srcClientId }) {
                     options=${MAPPING_TYPES.map(t => t.label)}
                     value=${MAPPING_TYPES.find(t => t.value === type)?.label || type}
                     onChange=${(_, label) => { const t = MAPPING_TYPES.find(m => m.label === label); if (t) setType(t.value); }} />
-                <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
-                    <div class="form-group" style="min-width:80px">
-                        <label style="font-size:13px;color:var(--text-dim)">Src Ch</label>
-                        <select value=${srcChannel} onChange=${e => onSrcChannelChange(e.target.value)} style="min-height:40px">
-                            <option value="">Any</option>
-                            ${Array.from({length:16},(_,i) => html`<option value=${i}>${i+1}</option>`)}
-                        </select>
-                    </div>
+                <div style="display:flex;gap:12px;flex-wrap:wrap">
+                    <${PluginWheel} name="srcCh" label="Src Ch" min=${0} max=${16}
+                        value=${srcChannel === '' ? 0 : +srcChannel + 1}
+                        tickLabel=${(v) => v === 0 ? 'Any' : v}
+                        onChange=${(_, v) => { if (v === 0) setSrcChannel(''); else setSrcChannel(String(v - 1)); }} />
                     <${PluginWheel} name="dstCh" label="Dst Ch" min=${1} max=${16}
                         value=${dstChannel + 1} onChange=${(_, v) => setDstChannel(v - 1)} />
                 </div>
                 ${(type === 'note_to_cc' || type === 'note_to_cc_toggle') && html`
-                    <${PluginNoteSelect} name="srcNote" label="Source Note"
-                        value=${srcNote} onChange=${w(setSrcNote)} />
-                    <${PluginWheel} name="dstCc" label="Dest CC" min=${0} max=${127}
-                        value=${dstCc} onChange=${w(setDstCc)} />
-                    <div style="display:flex;gap:12px">
-                        <${PluginWheel} name="onVal" label="On Value" min=${0} max=${127}
+                    <div style="display:flex;gap:12px;flex-wrap:wrap">
+                        <${PluginNoteSelect} name="srcNote" label="Src Note"
+                            value=${srcNote} onChange=${w(setSrcNote)} />
+                        <${PluginWheel} name="dstCc" label="Dst CC" min=${0} max=${127}
+                            value=${dstCc} onChange=${w(setDstCc)} />
+                    </div>
+                    <div style="display:flex;gap:12px;flex-wrap:wrap">
+                        <${PluginWheel} name="onVal" label="On Val" min=${0} max=${127}
                             value=${ccOnVal} onChange=${w(setCcOnVal)} />
-                        <${PluginWheel} name="offVal" label="Off Value" min=${0} max=${127}
+                        <${PluginWheel} name="offVal" label="Off Val" min=${0} max=${127}
                             value=${ccOffVal} onChange=${w(setCcOffVal)} />
                     </div>
                 `}
                 ${type === 'cc_to_cc' && html`
-                    <div style="display:flex;gap:12px">
-                        <${PluginWheel} name="srcCc" label="Source CC" min=${0} max=${127}
+                    <div style="display:flex;gap:12px;flex-wrap:wrap">
+                        <${PluginWheel} name="srcCc" label="Src CC" min=${0} max=${127}
                             value=${srcCc} onChange=${w(setSrcCc)} />
-                        <${PluginWheel} name="dstCcNum" label="Dest CC" min=${0} max=${127}
+                        <${PluginWheel} name="dstCcNum" label="Dst CC" min=${0} max=${127}
                             value=${dstCcNum} onChange=${w(setDstCcNum)} />
                     </div>
-                    <div style="display:flex;gap:12px">
+                    <div style="display:flex;gap:12px;flex-wrap:wrap">
                         <${PluginWheel} name="inMin" label="In Min" min=${0} max=${127}
                             value=${inMin} onChange=${w(setInMin)} />
                         <${PluginWheel} name="inMax" label="In Max" min=${0} max=${127}
@@ -729,6 +728,137 @@ function PortRenameRow({ device, port, showToast }) {
     `;
 }
 
+// --- Scrollable Piano (JS-based scroll + multitouch notes) ---
+// touch-action:none so multitouch works with fader simultaneously
+function ScrollablePiano({ heldNotes, onNoteDown, onNoteUp, pianoKeys }) {
+    const scrollRef = useRef(null);
+    const pianoRef = useRef(null);
+    // Per-touch state: { startX, startY, scrolling, note, moved }
+    const touches = useRef(new Map());
+    const SCROLL_THRESH = 12; // px horizontal before switching to scroll
+
+    // Scroll to C3 on mount
+    useEffect(() => {
+        const el = scrollRef.current;
+        if (el) el.scrollLeft = 3 * 7 * 34;
+    }, []);
+
+    const noteFromPoint = (x, y) => {
+        const el = document.elementFromPoint(x, y);
+        if (!el || !el.dataset.midi) return null;
+        return +el.dataset.midi;
+    };
+
+    // All touch handling in JS — no native scroll
+    useEffect(() => {
+        const container = scrollRef.current;
+        if (!container) return;
+
+        function onTouchStart(e) {
+            e.preventDefault();
+            for (const t of e.changedTouches) {
+                const note = noteFromPoint(t.clientX, t.clientY);
+                touches.current.set(t.identifier, {
+                    startX: t.clientX, startY: t.clientY,
+                    scrollLeft: container.scrollLeft,
+                    scrolling: false, note: null, moved: false,
+                });
+                // Play note immediately (will cancel if it becomes a scroll)
+                if (note != null) {
+                    touches.current.get(t.identifier).note = note;
+                    onNoteDown(note);
+                }
+            }
+        }
+
+        function onTouchMove(e) {
+            e.preventDefault();
+            for (const t of e.changedTouches) {
+                const state = touches.current.get(t.identifier);
+                if (!state) continue;
+                const dx = t.clientX - state.startX;
+                const dy = t.clientY - state.startY;
+
+                if (!state.scrolling && !state.moved) {
+                    // Decide: horizontal scroll or vertical stay
+                    if (Math.abs(dx) > SCROLL_THRESH && Math.abs(dx) > Math.abs(dy)) {
+                        state.scrolling = true;
+                        // Cancel the note if we started one
+                        if (state.note != null) { onNoteUp(state.note); state.note = null; }
+                    } else if (Math.abs(dy) > SCROLL_THRESH) {
+                        state.moved = true; // vertical — not a scroll, keep note
+                    }
+                }
+
+                if (state.scrolling) {
+                    container.scrollLeft = state.scrollLeft - dx;
+                }
+            }
+        }
+
+        function onTouchEnd(e) {
+            for (const t of e.changedTouches) {
+                const state = touches.current.get(t.identifier);
+                if (!state) continue;
+                if (state.note != null) onNoteUp(state.note);
+                touches.current.delete(t.identifier);
+            }
+        }
+
+        container.addEventListener('touchstart', onTouchStart, { passive: false });
+        container.addEventListener('touchmove', onTouchMove, { passive: false });
+        container.addEventListener('touchend', onTouchEnd, { passive: false });
+        container.addEventListener('touchcancel', onTouchEnd, { passive: false });
+        return () => {
+            container.removeEventListener('touchstart', onTouchStart);
+            container.removeEventListener('touchmove', onTouchMove);
+            container.removeEventListener('touchend', onTouchEnd);
+            container.removeEventListener('touchcancel', onTouchEnd);
+        };
+    }, [onNoteDown, onNoteUp]);
+
+    // Mouse: drag background to scroll, click keys to play
+    const onMouseDown = (e) => {
+        if (e.target.closest('.piano-key')) return;
+        const el = scrollRef.current;
+        const startX = e.clientX, startScroll = el.scrollLeft;
+        const onMove = (ev) => { el.scrollLeft = startScroll - (ev.clientX - startX); };
+        const onUp = () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
+        window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp);
+    };
+
+    const isHeld = (midi) => heldNotes && heldNotes.has(midi);
+
+    return html`<div ref=${scrollRef} style="margin-bottom:16px;overflow-x:hidden;touch-action:none"
+        onMouseDown=${onMouseDown}>
+        <div class="piano" ref=${pianoRef} style="width:${7 * 8 * 34}px"
+            onMouseLeave=${() => onNoteUp()}>
+            ${Array.from({length: 8}, (_, oct) =>
+                pianoKeys.filter(k => !k.black).map(k => {
+                    const midi = (oct + 1) * 12 + k.n;
+                    if (midi > 127) return null;
+                    return html`<div class="piano-key white ${isHeld(midi) ? 'active' : ''}" data-midi=${midi}
+                        onMouseDown=${() => onNoteDown(midi)} onMouseUp=${() => onNoteUp(midi)}>
+                        ${k.n === 0 ? html`<span class="piano-label">C${oct}</span>` : ''}
+                    </div>`;
+                })
+            ).flat()}
+            ${Array.from({length: 8}, (_, oct) =>
+                pianoKeys.filter(k => k.black).map(k => {
+                    const midi = (oct + 1) * 12 + k.n;
+                    if (midi > 127) return null;
+                    const whitesBefore = oct * 7 + pianoKeys.filter(x => !x.black && x.n < k.n).length;
+                    const leftPx = whitesBefore * 34;
+                    return html`<div class="piano-key black ${isHeld(midi) ? 'active' : ''}" data-midi=${midi}
+                        style="left:${leftPx}px"
+                        onMouseDown=${(e) => { e.stopPropagation(); onNoteDown(midi); }} onMouseUp=${() => onNoteUp(midi)}>
+                    </div>`;
+                })
+            ).flat()}
+        </div>
+    </div>`;
+}
+
 function DeviceDetailPanel({ device, onClose, showToast, refresh }) {
     const panelRef = { current: null };
     const close = () => animateClose(panelRef.current, onClose);
@@ -739,8 +869,7 @@ function DeviceDetailPanel({ device, onClose, showToast, refresh }) {
     const [sendPort, setSendPort] = useState(0);
     const [ccNum, setCcNum] = useState(1);
     const [ccVal, setCcVal] = useState(64);
-    const [heldNote, setHeldNote] = useState(null);
-    const [octave, setOctave] = useState(3);
+    const [heldNotes, setHeldNotes] = useState(new Set());
     const maxEvents = 50;
 
     // Plugin state
@@ -829,8 +958,11 @@ function DeviceDetailPanel({ device, onClose, showToast, refresh }) {
         });
     };
 
-    const pianoNoteDown = (n) => { if (heldNote !== n) { if (heldNote !== null) sendMidi('note_off', { note: heldNote }); setHeldNote(n); sendMidi('note_on', { note: n, velocity: 100 }); } };
-    const pianoNoteUp = () => { if (heldNote !== null) { sendMidi('note_off', { note: heldNote }); setHeldNote(null); } };
+    const pianoNoteDown = (n) => { if (!heldNotes.has(n)) { sendMidi('note_on', { note: n, velocity: 100 }); setHeldNotes(prev => new Set(prev).add(n)); } };
+    const pianoNoteUp = (n) => {
+        if (n != null) { sendMidi('note_off', { note: n }); setHeldNotes(prev => { const s = new Set(prev); s.delete(n); return s; }); }
+        else { heldNotes.forEach(note => sendMidi('note_off', { note })); setHeldNotes(new Set()); }
+    };
     const pianoKeys = [
         { n: 0, name: 'C', black: false },
         { n: 1, name: 'C#', black: true },
@@ -857,24 +989,12 @@ function DeviceDetailPanel({ device, onClose, showToast, refresh }) {
                 <div class="panel-header">
                     <div class="panel-handle"></div>
                 </div>
-                <div class="panel-header">
-                    <h3>${device.default_name || device.name}</h3>
+                <div class="panel-header" style="display:flex;align-items:center;gap:8px">
+                    <input style="flex:1;padding:6px 10px;background:var(--bg);border:1px solid var(--surface2);border-radius:6px;color:var(--text);font-size:16px;font-weight:600"
+                        value=${editName} onInput=${e => { setEditName(e.target.value); setNameDirty(true); }}
+                        onKeyDown=${e => e.key === 'Enter' && rename()} />
+                    ${nameDirty && editName.trim() !== device.name && html`<button style="padding:5px 12px;background:var(--accent);color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer;white-space:nowrap" onclick=${rename}>Save</button>`}
                     <button class="panel-close" onclick=${close}>\u2715</button>
-                </div>
-
-                <div class="card">
-                    <h3>Device</h3>
-                    <div class="stat-grid">
-                        <div class="stat"><div class="label">Client</div><div class="value">${device.client_id}</div></div>
-                        ${device.vid ? html`<div class="stat"><div class="label">USB</div><div class="value">${device.vid}:${device.pid}</div></div>` : ''}
-                        <div class="stat"><div class="label">Ports</div><div class="value">${device.ports.map(p => (p.is_input?'IN':'')+(p.is_input&&p.is_output?'/':'')+(p.is_output?'OUT':'')).join(', ')}</div></div>
-                    </div>
-                    <div style="display:flex;gap:8px;margin-top:12px;align-items:center">
-                        <input style="flex:1;padding:8px 10px;background:var(--bg);border:1px solid var(--surface2);border-radius:6px;color:var(--text);font-size:14px"
-                            value=${editName} onInput=${e => { setEditName(e.target.value); setNameDirty(true); }}
-                            onKeyDown=${e => e.key === 'Enter' && rename()} />
-                        ${nameDirty && editName.trim() !== device.name && html`<button style="padding:6px 14px;background:var(--accent);color:#fff;border:none;border-radius:6px;font-size:13px;cursor:pointer;white-space:nowrap" onclick=${rename}>Save</button>`}
-                    </div>
                 </div>
 
                 ${isPlugin && pluginData && html`
@@ -903,16 +1023,12 @@ function DeviceDetailPanel({ device, onClose, showToast, refresh }) {
                 ${outPorts.length > 0 && html`
                     <div class="card">
                         <h3>MIDI Test Sender</h3>
-                        <div class="stat-grid" style="margin-bottom:12px">
-                            <div class="form-group">
-                                <label>Channel</label>
-                                <select value=${sendChannel} onChange=${e => setSendChannel(+e.target.value)}>
-                                    ${Array.from({length:16},(_,i) => html`<option value=${i}>${i+1}</option>`)}
-                                </select>
-                            </div>
+                        <div style="display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap;margin-bottom:8px">
+                            <${PluginWheel} name="ch" label="Channel" min=${1} max=${16}
+                                value=${sendChannel + 1} onChange=${(_, v) => setSendChannel(v - 1)} />
                             ${outPorts.length > 1 ? html`
                                 <div class="form-group">
-                                    <label>Port</label>
+                                    <label style="font-size:12px;color:var(--text-dim)">Port</label>
                                     <select value=${sendPort} onChange=${e => setSendPort(+e.target.value)}>
                                         ${outPorts.map(p => html`<option value=${p.port_id}>${p.name}</option>`)}
                                     </select>
@@ -920,48 +1036,15 @@ function DeviceDetailPanel({ device, onClose, showToast, refresh }) {
                             ` : ''}
                         </div>
 
-                        <div style="margin-bottom:16px">
-                            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-                                <button class="btn btn-secondary" style="min-width:40px;min-height:36px;padding:4px 10px" onclick=${() => setOctave(o => Math.max(0, o - 1))}>-</button>
-                                <span style="font-size:13px;color:var(--text-dim);min-width:70px;text-align:center">Octave: ${octave}</span>
-                                <button class="btn btn-secondary" style="min-width:40px;min-height:36px;padding:4px 10px" onclick=${() => setOctave(o => Math.min(9, o + 1))}>+</button>
-                            </div>
-                            <div class="piano" onMouseLeave=${pianoNoteUp} onTouchEnd=${(e) => { e.preventDefault(); pianoNoteUp(); }}>
-                                ${pianoKeys.filter(k => !k.black).map(k => {
-                                    const midi = (octave + 1) * 12 + k.n;
-                                    return html`<div class="piano-key white ${heldNote === midi ? 'active' : ''}"
-                                        onMouseDown=${() => pianoNoteDown(midi)} onMouseUp=${pianoNoteUp}
-                                        onTouchStart=${(e) => { e.preventDefault(); pianoNoteDown(midi); }}>
-                                        <span class="piano-label">${k.name}${octave}</span>
-                                    </div>`;
-                                })}
-                                ${pianoKeys.filter(k => k.black).map(k => {
-                                    const midi = (octave + 1) * 12 + k.n;
-                                    const whiteIdx = pianoKeys.filter(x => !x.black && x.n < k.n).length;
-                                    const leftPct = (whiteIdx * (100/7)) + '%';
-                                    return html`<div class="piano-key black ${heldNote === midi ? 'active' : ''}"
-                                        style="left:${leftPct}"
-                                        onMouseDown=${(e) => { e.stopPropagation(); pianoNoteDown(midi); }} onMouseUp=${pianoNoteUp}
-                                        onTouchStart=${(e) => { e.preventDefault(); e.stopPropagation(); pianoNoteDown(midi); }}>
-                                    </div>`;
-                                })}
-                            </div>
-                        </div>
+                        <${ScrollablePiano} heldNotes=${heldNotes}
+                            onNoteDown=${pianoNoteDown} onNoteUp=${pianoNoteUp}
+                            pianoKeys=${pianoKeys} />
 
-                        <div>
-                            <div style="display:flex;gap:8px;margin-bottom:8px">
-                                <div class="form-group" style="flex:1">
-                                    <label>CC Number</label>
-                                    <input type="number" min="0" max="127" value=${ccNum}
-                                        onInput=${e => setCcNum(Math.max(0, Math.min(127, +e.target.value)))} />
-                                </div>
-                                <div class="form-group" style="flex:1">
-                                    <label>Value: ${ccVal}</label>
-                                    <input type="range" min="0" max="127" value=${ccVal}
-                                        onInput=${e => sendCC(+e.target.value)}
-                                        style="min-height:48px;width:100%" />
-                                </div>
-                            </div>
+                        <div style="display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap">
+                            <${PluginWheel} name="cc" label="CC #" min=${0} max=${127}
+                                value=${ccNum} onChange=${(_, v) => setCcNum(v)} />
+                            <${PluginFader} name="ccval" label="Value" min=${0} max=${127}
+                                value=${ccVal} onChange=${(_, v) => sendCC(v)} />
                         </div>
                     </div>
                 `}

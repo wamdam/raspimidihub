@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Wheel Design Ideas</title>
+<style>
+:root { --bg: #1a1a2e; --surface: #16213e; --surface2: #0f3460; --accent: #e94560; --text: #eee; --text-dim: #999; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--text); font-family: -apple-system, system-ui, sans-serif; padding: 20px; }
+h1 { font-size: 16px; margin-bottom: 4px; }
+p.sub { font-size: 12px; color: var(--text-dim); margin-bottom: 24px; }
+h2 { font-size: 13px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; margin: 28px 0 12px; }
+.card { background: var(--surface); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+.row { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 20px; }
+
+/* === Shared wheel behavior === */
+.wheel-proto { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.wheel-proto .wlabel { font-size: 12px; color: var(--text-dim); }
+.wheel-proto .wbody { position: relative; touch-action: none; cursor: grab; overflow: hidden; }
+.wheel-proto .wbody:active { cursor: grabbing; }
+.wheel-proto .winner { position: absolute; width: 100%; will-change: transform; }
+.wheel-proto .wtick {
+    height: 20px; display: flex; align-items: center; justify-content: center;
+    font-size: 11px; color: rgba(255,255,255,0.2); user-select: none;
+    font-variant-numeric: tabular-nums;
+}
+.wheel-proto .wtick.active { color: #fff; font-weight: 700; font-size: 13px; }
+.wheel-proto .wtick.near { color: rgba(255,255,255,0.4); }
+
+/* =============================================
+   IDEA A: Steering wheel thumb roller
+   Silver brushed metal, narrow, with display area on left
+   ============================================= */
+.idea-a .wbody {
+    display: flex; width: 160px; height: 60px; border-radius: 8px;
+    background: var(--bg); border: 1px solid rgba(255,255,255,0.06);
+}
+.idea-a .wdisplay {
+    flex: 1; display: flex; align-items: center; justify-content: center;
+    font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums;
+    color: #fff; text-shadow: 0 0 8px rgba(233,69,96,0.4);
+    background: linear-gradient(180deg, #0c0c18 0%, #14142a 50%, #0c0c18 100%);
+    border-radius: 7px 0 0 7px;
+}
+.idea-a .wroller {
+    width: 50px; position: relative; overflow: hidden;
+    border-radius: 0 7px 7px 0;
+    /* Brushed silver metal */
+    background: linear-gradient(180deg,
+        #888 0%, #aaa 5%, #999 10%, #bbb 15%, #aaa 20%,
+        #999 25%, #bbb 30%, #aaa 35%, #999 40%, #bbb 45%,
+        #aaa 50%, #999 55%, #bbb 60%, #aaa 65%, #999 70%,
+        #bbb 75%, #aaa 80%, #999 85%, #bbb 90%, #aaa 95%, #888 100%
+    );
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.5), inset 0 -2px 4px rgba(0,0,0,0.5);
+}
+/* Rubber grip ridges overlay */
+.idea-a .wroller::after {
+    content: ''; position: absolute; inset: 0;
+    background: repeating-linear-gradient(180deg,
+        transparent 0px, transparent 3px,
+        rgba(0,0,0,0.15) 3px, rgba(0,0,0,0.15) 4px
+    );
+    pointer-events: none;
+}
+/* Center indicator */
+.idea-a .wroller::before {
+    content: ''; position: absolute; top: 50%; right: 0; width: 3px; height: 2px; margin-top: -1px;
+    background: var(--accent); border-radius: 1px 0 0 1px; z-index: 2;
+}
+/* Shadow overlay for 3D curvature */
+.idea-a .wcurve {
+    position: absolute; inset: 0;
+    background: radial-gradient(ellipse 200% 50% at 50% 50%, transparent 30%, rgba(0,0,0,0.7) 100%);
+    pointer-events: none; z-index: 1;
+}
+
+/* =============================================
+   IDEA B: Rubber knurled roller + display left
+   Dark rubber texture, industrial look
+   ============================================= */
+.idea-b .wbody {
+    display: flex; width: 160px; height: 60px; border-radius: 8px;
+    background: var(--bg); border: 1px solid rgba(255,255,255,0.06);
+}
+.idea-b .wdisplay {
+    flex: 1; display: flex; align-items: center; justify-content: center;
+    font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums;
+    color: #fff; text-shadow: 0 0 8px rgba(233,69,96,0.4);
+    background: linear-gradient(180deg, #0c0c18 0%, #14142a 50%, #0c0c18 100%);
+    border-radius: 7px 0 0 7px;
+}
+.idea-b .wroller {
+    width: 50px; position: relative; overflow: hidden;
+    border-radius: 0 7px 7px 0;
+    /* Dark rubber */
+    background: linear-gradient(180deg,
+        #1a1a1a 0%, #2a2a2a 8%, #333 20%, #3a3a3a 50%, #333 80%, #2a2a2a 92%, #1a1a1a 100%
+    );
+    box-shadow: inset 0 3px 8px rgba(0,0,0,0.8), inset 0 -3px 8px rgba(0,0,0,0.8);
+}
+/* Knurled diamond pattern */
+.idea-b .wroller::after {
+    content: ''; position: absolute; inset: 0;
+    background:
+        repeating-linear-gradient(45deg, transparent 0px, transparent 2px, rgba(255,255,255,0.04) 2px, rgba(255,255,255,0.04) 3px),
+        repeating-linear-gradient(-45deg, transparent 0px, transparent 2px, rgba(255,255,255,0.04) 2px, rgba(255,255,255,0.04) 3px);
+    pointer-events: none;
+}
+.idea-b .wroller::before {
+    content: ''; position: absolute; top: 50%; right: 0; width: 3px; height: 2px; margin-top: -1px;
+    background: var(--accent); border-radius: 1px 0 0 1px; z-index: 2;
+}
+.idea-b .wcurve {
+    position: absolute; inset: 0;
+    background: radial-gradient(ellipse 200% 50% at 50% 50%, transparent 25%, rgba(0,0,0,0.8) 100%);
+    pointer-events: none; z-index: 1;
+}
+
+/* =============================================
+   IDEA C: Wide rubber roller (full width), display overlay
+   Like a fat tire, value shown as floating overlay in center
+   ============================================= */
+.idea-c .wbody {
+    width: 130px; height: 60px; border-radius: 10px; position: relative;
+    /* Rubber tire */
+    background: linear-gradient(180deg,
+        #141414 0%, #222 8%, #2c2c2c 20%, #333 50%, #2c2c2c 80%, #222 92%, #141414 100%
+    );
+    border: 1px solid rgba(255,255,255,0.04);
+    box-shadow: inset 0 3px 10px rgba(0,0,0,0.8), inset 0 -3px 10px rgba(0,0,0,0.8), 0 1px 2px rgba(255,255,255,0.03);
+}
+/* Horizontal rubber ridges */
+.idea-c .wbody::after {
+    content: ''; position: absolute; inset: 0; border-radius: 10px;
+    background: repeating-linear-gradient(180deg,
+        transparent 0px, transparent 4px,
+        rgba(255,255,255,0.03) 4px, rgba(255,255,255,0.03) 5px
+    );
+    pointer-events: none;
+}
+.idea-c .wcurve {
+    position: absolute; inset: 0; border-radius: 10px;
+    background: radial-gradient(ellipse 160% 50% at 50% 50%, transparent 30%, rgba(0,0,0,0.85) 100%);
+    pointer-events: none; z-index: 1;
+}
+.idea-c .woverlay {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    font-size: 16px; font-weight: 700; color: #fff; z-index: 3;
+    text-shadow: 0 1px 4px rgba(0,0,0,0.9), 0 0 10px rgba(233,69,96,0.3);
+    font-variant-numeric: tabular-nums; pointer-events: none;
+}
+/* Indicator line */
+.idea-c .wbody::before {
+    content: ''; position: absolute; top: 50%; left: 0; width: 4px; height: 2px; margin-top: -1px;
+    background: var(--accent); border-radius: 0 1px 1px 0; z-index: 2;
+}
+
+/* =============================================
+   IDEA D: Split — display left, brushed metal roller right
+   Compact, premium feel, red accent line
+   ============================================= */
+.idea-d .wbody {
+    display: flex; width: 140px; height: 60px; border-radius: 6px;
+    border: 1px solid rgba(255,255,255,0.08);
+    overflow: hidden;
+}
+.idea-d .wdisplay {
+    width: 55px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: linear-gradient(180deg, #0a0a14 0%, #12122a 50%, #0a0a14 100%);
+    border-right: 2px solid var(--accent);
+}
+.idea-d .wdisplay .wval {
+    font-size: 17px; font-weight: 700; color: #fff;
+    font-variant-numeric: tabular-nums;
+    text-shadow: 0 0 8px rgba(233,69,96,0.3);
+}
+.idea-d .wdisplay .wsub {
+    font-size: 9px; color: var(--text-dim); margin-top: 1px;
+}
+.idea-d .wroller {
+    flex: 1; position: relative; overflow: hidden;
+    /* Brushed aluminum */
+    background: linear-gradient(90deg,
+        #666 0%, #999 2%, #888 5%,
+        #aaa 10%, #999 15%, #bbb 20%, #aaa 25%,
+        #999 30%, #bbb 35%, #aaa 40%, #999 45%,
+        #bbb 50%, #aaa 55%, #999 60%, #bbb 65%,
+        #aaa 70%, #999 75%, #bbb 80%, #aaa 85%,
+        #999 90%, #888 95%, #999 98%, #666 100%
+    );
+    box-shadow: inset 0 3px 6px rgba(0,0,0,0.5), inset 0 -3px 6px rgba(0,0,0,0.5);
+}
+/* Horizontal grip grooves */
+.idea-d .wroller::after {
+    content: ''; position: absolute; inset: 0;
+    background: repeating-linear-gradient(180deg,
+        transparent 0px, transparent 2.5px,
+        rgba(0,0,0,0.12) 2.5px, rgba(0,0,0,0.12) 3.5px
+    );
+    pointer-events: none;
+}
+.idea-d .wcurve {
+    position: absolute; inset: 0;
+    background: radial-gradient(ellipse 300% 50% at 50% 50%, transparent 30%, rgba(0,0,0,0.6) 100%);
+    pointer-events: none; z-index: 1;
+}
+
+/* === Fader matched to wheel height === */
+.fader-demo {
+    position: relative; height: 60px; width: 100%; border-radius: 6px;
+    background: linear-gradient(180deg, #08080e 0%, #10101a 30%, #181825 50%, #10101a 70%, #08080e 100%);
+    box-shadow: inset 0 2px 6px rgba(0,0,0,0.8); border: 1px solid rgba(255,255,255,0.06);
+    overflow: visible;
+}
+.fader-demo::before {
+    content: ''; position: absolute; top: 50%; left: 12px; right: 12px; height: 2px; margin-top: -1px;
+    background: rgba(255,255,255,0.08); border-radius: 1px;
+}
+.fader-demo .fill {
+    position: absolute; top: 50%; left: 12px; width: 50%; height: 4px; margin-top: -2px;
+    background: var(--accent); opacity: 0.5; border-radius: 2px;
+}
+.fader-demo .thumb {
+    position: absolute; top: 4px; left: 50%; width: 40px; height: 52px; border-radius: 5px;
+    transform: translateX(-50%);
+    background: linear-gradient(180deg, #aaa 0%, #ccc 10%, #bbb 25%, #999 45%, #aaa 55%, #888 70%, #999 85%, #777 100%);
+    box-shadow: 0 2px 6px rgba(0,0,0,0.7), inset 0 1px 1px rgba(255,255,255,0.5);
+    display: flex; align-items: center; justify-content: center;
+}
+.fader-demo .thumb::before {
+    content: ''; position: absolute; top: 50%; left: 6px; right: 6px; height: 1px; margin-top: -3px;
+    background: rgba(0,0,0,0.25); box-shadow: 0 1px 0 rgba(255,255,255,0.2), 0 3px 0 rgba(0,0,0,0.2), 0 4px 0 rgba(255,255,255,0.15);
+}
+.fader-demo .thumb span {
+    font-size: 11px; font-weight: 700; color: #333; position: relative; top: 5px;
+    text-shadow: 0 1px 0 rgba(255,255,255,0.3);
+}
+</style>
+</head>
+<body>
+
+<h1>Wheel Redesign Ideas</h1>
+<p class="sub">Same scroll behavior, different looks. Fader height matched.</p>
+
+<div class="card">
+<h2>A: Steering Wheel Silver Roller</h2>
+<p class="sub">Brushed silver metal roller on right, display on left. Like a BMW iDrive scroll.</p>
+<div class="row">
+    <div class="wheel-proto idea-a">
+        <span class="wlabel">Gate %</span>
+        <div class="wbody">
+            <div class="wdisplay">80</div>
+            <div class="wroller">
+                <div class="wcurve"></div>
+            </div>
+        </div>
+    </div>
+    <div class="wheel-proto idea-a">
+        <span class="wlabel">Octaves</span>
+        <div class="wbody">
+            <div class="wdisplay">1</div>
+            <div class="wroller">
+                <div class="wcurve"></div>
+            </div>
+        </div>
+    </div>
+</div>
+</div>
+
+<div class="card">
+<h2>B: Knurled Rubber Roller</h2>
+<p class="sub">Dark rubber with diamond knurl pattern. Industrial/pro audio feel.</p>
+<div class="row">
+    <div class="wheel-proto idea-b">
+        <span class="wlabel">Gate %</span>
+        <div class="wbody">
+            <div class="wdisplay">80</div>
+            <div class="wroller">
+                <div class="wcurve"></div>
+            </div>
+        </div>
+    </div>
+    <div class="wheel-proto idea-b">
+        <span class="wlabel">Octaves</span>
+        <div class="wbody">
+            <div class="wdisplay">1</div>
+            <div class="wroller">
+                <div class="wcurve"></div>
+            </div>
+        </div>
+    </div>
+</div>
+</div>
+
+<div class="card">
+<h2>C: Fat Rubber Tire + Floating Value</h2>
+<p class="sub">Full-width rubber roller with value overlaid. Widest touch target.</p>
+<div class="row">
+    <div class="wheel-proto idea-c">
+        <span class="wlabel">Gate %</span>
+        <div class="wbody">
+            <div class="woverlay">80</div>
+            <div class="wcurve"></div>
+        </div>
+    </div>
+    <div class="wheel-proto idea-c">
+        <span class="wlabel">Octaves</span>
+        <div class="wbody">
+            <div class="woverlay">1</div>
+            <div class="wcurve"></div>
+        </div>
+    </div>
+</div>
+</div>
+
+<div class="card">
+<h2>D: Split Display + Brushed Metal (Steering Wheel Style)</h2>
+<p class="sub">Value display separated by red accent line. Roller area is brushed aluminum with grip grooves. Most like a car volume roller.</p>
+<div class="row">
+    <div class="wheel-proto idea-d">
+        <span class="wlabel">Gate %</span>
+        <div class="wbody">
+            <div class="wdisplay">
+                <span class="wval">80</span>
+                <span class="wsub">%</span>
+            </div>
+            <div class="wroller">
+                <div class="wcurve"></div>
+            </div>
+        </div>
+    </div>
+    <div class="wheel-proto idea-d">
+        <span class="wlabel">Octaves</span>
+        <div class="wbody">
+            <div class="wdisplay">
+                <span class="wval">1</span>
+            </div>
+            <div class="wroller">
+                <div class="wcurve"></div>
+            </div>
+        </div>
+    </div>
+    <div class="wheel-proto idea-d">
+        <span class="wlabel">BPM</span>
+        <div class="wbody">
+            <div class="wdisplay">
+                <span class="wval">120</span>
+            </div>
+            <div class="wroller">
+                <div class="wcurve"></div>
+            </div>
+        </div>
+    </div>
+</div>
+</div>
+
+<div class="card">
+<h2>Fader (matched height: 60px)</h2>
+<p class="sub">Same height as wheels for side-by-side layout.</p>
+<div style="max-width:300px">
+    <div style="font-size:12px;color:var(--text-dim);margin-bottom:4px;text-align:center">Feedback %</div>
+    <div class="fader-demo">
+        <div class="fill"></div>
+        <div class="thumb"><span>64</span></div>
+    </div>
+</div>
+</div>
+
+<script>
+// Make all rollers interactive (scroll behavior)
+document.querySelectorAll('.wroller, .idea-c .wbody').forEach(el => {
+    let startY, scrolling = false;
+    const isC = el.classList.contains('wbody');
+    const display = isC ? el.querySelector('.woverlay') : el.closest('.wbody').querySelector('.wdisplay');
+    const sub = display ? display.querySelector('.wsub') : null;
+    let value = parseInt(display ? (display.querySelector('.wval') || display).textContent : '0');
+    const min = 0, max = 127;
+
+    function update() {
+        if (display.querySelector('.wval')) display.querySelector('.wval').textContent = value;
+        else display.textContent = value;
+    }
+
+    el.addEventListener('touchstart', (e) => { e.preventDefault(); startY = e.touches[0].clientY; scrolling = true; }, { passive: false });
+    el.addEventListener('touchmove', (e) => {
+        e.preventDefault();
+        if (!scrolling) return;
+        const dy = startY - e.touches[0].clientY;
+        if (Math.abs(dy) > 8) {
+            const dir = dy > 0 ? 1 : -1;
+            value = Math.max(min, Math.min(max, value + dir));
+            update();
+            startY = e.touches[0].clientY;
+        }
+    }, { passive: false });
+    el.addEventListener('touchend', () => { scrolling = false; });
+
+    el.addEventListener('mousedown', (e) => { e.preventDefault(); startY = e.clientY; scrolling = true;
+        const mm = (ev) => {
+            if (!scrolling) return;
+            const dy = startY - ev.clientY;
+            if (Math.abs(dy) > 8) {
+                value = Math.max(min, Math.min(max, value + (dy > 0 ? 1 : -1)));
+                update(); startY = ev.clientY;
+            }
+        };
+        const mu = () => { scrolling = false; window.removeEventListener('mousemove', mm); window.removeEventListener('mouseup', mu); };
+        window.addEventListener('mousemove', mm); window.addEventListener('mouseup', mu);
+    });
+
+    el.addEventListener('wheel', (e) => { e.preventDefault();
+        value = Math.max(min, Math.min(max, value + (e.deltaY > 0 ? -1 : 1)));
+        update();
+    }, { passive: false });
+});
+</script>
+
+</body>
+</html>
