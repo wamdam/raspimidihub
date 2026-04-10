@@ -364,7 +364,7 @@ class PluginHost:
 
     def _start_instance(self, instance: PluginInstance) -> None:
         """Create ALSA client, wire send methods, start thread."""
-        client_name = f"\u1E7C {instance.name}"  # Ṿ prefix
+        client_name = instance.name
 
         try:
             alsa_client = PluginAlsaClient(client_name)
