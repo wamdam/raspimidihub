@@ -644,6 +644,11 @@ function PresetsPage({ refresh, showToast }) {
         refresh();
         showToast(`Preset "${name}" activated`);
     };
+    const overwrite = async (name) => {
+        if (!confirm(`Overwrite preset "${name}" with current routing?`)) return;
+        await api('/presets', { method: 'POST', body: JSON.stringify({ name }) });
+        showToast(`Preset "${name}" updated`);
+    };
     const del = async (name) => {
         await api(`/presets/${encodeURIComponent(name)}`, { method: 'DELETE' });
         loadPresets();
@@ -690,7 +695,8 @@ function PresetsPage({ refresh, showToast }) {
                 <div class="preset-item">
                     <span class="name">${name}</span>
                     <button class="btn btn-success" onclick=${() => activate(name)}>Load</button>
-                    <button class="btn btn-secondary" onclick=${() => exportPreset(name)}>Export</button>
+                    <button class="btn btn-primary" onclick=${() => overwrite(name)}>Save</button>
+                    <button class="btn btn-secondary" onclick=${() => exportPreset(name)}>Exp</button>
                     <button class="btn btn-danger" onclick=${() => del(name)}>Del</button>
                 </div>
             `)}
@@ -1467,6 +1473,7 @@ function SettingsPage({ showToast, showMidiBar, toggleMidiBar }) {
         </div>
         <${UpgradeCard} showToast=${showToast} />
         <div class="card">
+            <button class="btn btn-secondary btn-block" style="margin-bottom:8px" onclick=${() => location.reload()}>Reload App</button>
             <button class="btn btn-danger btn-block" onclick=${rebootPi}>Reboot Pi</button>
         </div>
     `;

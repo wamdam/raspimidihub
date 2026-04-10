@@ -90,6 +90,26 @@ $(ROSETUP_DEB_FILE): rosetup/setup.sh rosetup/undo.sh rosetup/debian/postinst ro
 clean:
 	rm -rf build/ dist/
 
+# --- Release to GitHub ---
+# Usage: make release NOTES="changelog text here"
+# This builds the deb, tags, pushes, and creates a GitHub release with all required assets.
+
+release: $(DEB_FILE)
+	@if git diff --quiet && git diff --cached --quiet; then \
+		echo "Working tree clean, proceeding..."; \
+	else \
+		echo "Error: uncommitted changes. Commit first."; exit 1; \
+	fi
+	@echo "=== Releasing v$(VERSION) ==="
+	git tag -a v$(VERSION) -m "v$(VERSION)"
+	git push origin HEAD --tags
+	gh release create v$(VERSION) \
+		$(DEB_FILE) \
+		scripts/install.sh \
+		--title "v$(VERSION)" \
+		--notes "$${NOTES:-Release v$(VERSION)}"
+	@echo "=== Released: https://github.com/wamdam/raspimidihub/releases/tag/v$(VERSION) ==="
+
 # --- Pi deployment ---
 
 deploy: $(DEB_FILE)

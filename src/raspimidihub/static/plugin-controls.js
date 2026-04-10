@@ -22,6 +22,31 @@ function ensureAudio() {
     return audioCtx;
 }
 
+// --- Throttle: limit onChange callbacks to avoid MIDI flooding ---
+const THROTTLE_MS = 30; // ~33 updates/sec max
+function throttledOnChange(onChange, stateRef) {
+    return (name, value) => {
+        const now = Date.now();
+        const s = stateRef;
+        s._pendingName = name;
+        s._pendingValue = value;
+        if (now - (s._lastOnChange || 0) >= THROTTLE_MS) {
+            s._lastOnChange = now;
+            onChange(name, value);
+            s._pendingName = null;
+        } else if (!s._throttleTimer) {
+            s._throttleTimer = setTimeout(() => {
+                s._throttleTimer = null;
+                if (s._pendingName != null) {
+                    s._lastOnChange = Date.now();
+                    onChange(s._pendingName, s._pendingValue);
+                    s._pendingName = null;
+                }
+            }, THROTTLE_MS);
+        }
+    };
+}
+
 function tickFeedback() {
     try {
         const ctx = ensureAudio();
@@ -65,7 +90,7 @@ function PluginWheel({ name, label, min, max, value, onChange, suffix, tickLabel
     const containerRef = useRef(null);
     const innerRef = useRef(null);
     const TICK_H = 20;
-    const CENTER = 30 - TICK_H / 2; // container half minus tick half
+    const CENTER = 30 - TICK_H / 2;
     // Persistent state across renders (not React state — direct DOM manipulation)
     const s = useRef({
         value, offset: 0, startY: 0, startOffset: 0, lastY: 0, lastT: 0,
@@ -117,6 +142,18 @@ function PluginWheel({ name, label, min, max, value, onChange, suffix, tickLabel
         const el = containerRef.current;
         if (!el) return;
 
+        // Throttle onChange to avoid MIDI flooding (~33 updates/sec)
+        const th = { last: 0, timer: null, pn: null, pv: null };
+        function fireOnChange(n, v) {
+            const now = Date.now();
+            th.pn = n; th.pv = v;
+            if (now - th.last >= THROTTLE_MS) {
+                th.last = now; onChange(n, v); th.pn = null;
+            } else if (!th.timer) {
+                th.timer = setTimeout(() => { th.timer = null; if (th.pn != null) { th.last = Date.now(); onChange(th.pn, th.pv); th.pn = null; } }, THROTTLE_MS);
+            }
+        }
+
         function onStart(e) {
             e.preventDefault(); e.stopPropagation();
             // Touch lock: claim this touch, skip if another wheel owns it
@@ -150,7 +187,7 @@ function PluginWheel({ name, label, min, max, value, onChange, suffix, tickLabel
             if (hitBound && !s.atBoundary) { thudFeedback(); s.velocity = 0; s.atBoundary = true; }
             else if (!hitBound) s.atBoundary = false;
             const nv = offsetToValue(s.offset);
-            if (nv !== s.value) { tickFeedback(); s.value = nv; updateTicks(); onChange(name, nv); }
+            if (nv !== s.value) { tickFeedback(); s.value = nv; updateTicks(); fireOnChange(name, nv); }
             setOffset(s.offset);
         }
         function onEnd(e) {
@@ -161,6 +198,9 @@ function PluginWheel({ name, label, min, max, value, onChange, suffix, tickLabel
             window.removeEventListener('mousemove', onMove);
             window.removeEventListener('touchend', onEnd);
             window.removeEventListener('mouseup', onEnd);
+            // Flush any pending throttled value
+            if (th.pn != null) { onChange(th.pn, th.pv); th.pn = null; }
+            if (th.timer) { clearTimeout(th.timer); th.timer = null; }
             if (Math.abs(s.velocity) > 0.2) animateMomentum();
             else snapToValue();
         }
@@ -173,7 +213,7 @@ function PluginWheel({ name, label, min, max, value, onChange, suffix, tickLabel
                 if (raw !== clamped) { s.offset = clamped; s.velocity = 0; thudFeedback(); setOffset(s.offset); snapToValue(); return; }
                 s.offset = clamped;
                 const nv = offsetToValue(s.offset);
-                if (nv !== s.value) { tickFeedback(); s.value = nv; updateTicks(); onChange(name, nv); }
+                if (nv !== s.value) { tickFeedback(); s.value = nv; updateTicks(); fireOnChange(name, nv); }
                 setOffset(s.offset);
                 if (Math.abs(s.velocity) > 0.05) s.animId = requestAnimationFrame(frame);
                 else snapToValue();
@@ -189,7 +229,7 @@ function PluginWheel({ name, label, min, max, value, onChange, suffix, tickLabel
             const delta = e.deltaY > 0 ? -1 : 1;
             const nv = Math.max(min, Math.min(max, s.value + delta));
             if (nv !== s.value) {
-                s.value = nv; setOffset(valueToOffset(nv)); updateTicks(); onChange(name, nv);
+                s.value = nv; setOffset(valueToOffset(nv)); updateTicks(); fireOnChange(name, nv);
                 (nv === min || nv === max) ? thudFeedback() : tickFeedback();
             }
         }
@@ -231,6 +271,18 @@ function PluginFader({ name, label, min, max, value, onChange, vertical, suffix 
         const el = trackRef.current;
         if (!el) return;
 
+        // Throttle onChange for MIDI
+        const th = { last: 0, timer: null, pn: null, pv: null };
+        function fireOnChange(n, v) {
+            const now = Date.now();
+            th.pn = n; th.pv = v;
+            if (now - th.last >= THROTTLE_MS) {
+                th.last = now; onChange(n, v); th.pn = null;
+            } else if (!th.timer) {
+                th.timer = setTimeout(() => { th.timer = null; if (th.pn != null) { th.last = Date.now(); onChange(th.pn, th.pv); th.pn = null; } }, THROTTLE_MS);
+            }
+        }
+
         function calcValue(clientX, clientY) {
             const rect = el.getBoundingClientRect();
             let ratio = vertical
@@ -242,7 +294,7 @@ function PluginFader({ name, label, min, max, value, onChange, vertical, suffix 
 
         function handleMove(clientX, clientY) {
             const nv = calcValue(clientX, clientY);
-            if (nv !== s.val) { s.val = nv; setVal(nv); onChange(name, nv); tickFeedback(); }
+            if (nv !== s.val) { s.val = nv; setVal(nv); fireOnChange(name, nv); tickFeedback(); }
         }
 
         function onTouchStart(e) {
@@ -259,11 +311,14 @@ function PluginFader({ name, label, min, max, value, onChange, vertical, suffix 
             if (e) e.stopPropagation();
             el.removeEventListener('touchmove', onTouchMove);
             window.removeEventListener('touchend', onTouchEnd);
+            if (th.pn != null) { onChange(th.pn, th.pv); th.pn = null; }
+            if (th.timer) { clearTimeout(th.timer); th.timer = null; }
         }
         function onMouseDown(e) {
             e.preventDefault(); handleMove(e.clientX, e.clientY);
             const mm = (ev) => handleMove(ev.clientX, ev.clientY);
-            const mu = () => { window.removeEventListener('mousemove', mm); window.removeEventListener('mouseup', mu); };
+            const mu = () => { window.removeEventListener('mousemove', mm); window.removeEventListener('mouseup', mu);
+                if (th.pn != null) { onChange(th.pn, th.pv); th.pn = null; } if (th.timer) { clearTimeout(th.timer); th.timer = null; } };
             window.addEventListener('mousemove', mm); window.addEventListener('mouseup', mu);
         }
 
