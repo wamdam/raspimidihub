@@ -185,14 +185,15 @@ class Config:
     def get_preset(self, name: str) -> dict | None:
         return self._data.get("presets", {}).get(name)
 
-    def save_preset(self, name: str, connections: list) -> bool:
+    def save_preset(self, name: str, connections: list, plugins: list | None = None) -> bool:
         if len(self._data.get("presets", {})) >= MAX_PRESETS:
             return False
         if "presets" not in self._data:
             self._data["presets"] = {}
-        self._data["presets"][name] = {
-            "connections": connections,
-        }
+        preset = {"connections": connections}
+        if plugins:
+            preset["plugins"] = plugins
+        self._data["presets"][name] = preset
         return True
 
     def delete_preset(self, name: str) -> bool:
@@ -205,7 +206,10 @@ class Config:
         preset = self.get_preset(name)
         if preset is None:
             return None
-        return {"name": name, "version": 1, **preset}
+        result = {"name": name, "version": 1, "connections": preset.get("connections", [])}
+        if "plugins" in preset:
+            result["plugins"] = preset["plugins"]
+        return result
 
     def import_preset(self, data: dict) -> str | None:
         """Import a preset from JSON data. Returns preset name or None on error."""
@@ -216,5 +220,6 @@ class Config:
         raw = json.dumps(data)
         if len(raw) > MAX_PRESET_SIZE:
             return None
-        self.save_preset(name, connections)
+        plugins = data.get("plugins", [])
+        self.save_preset(name, connections, plugins=plugins)
         return name

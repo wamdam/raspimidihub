@@ -809,7 +809,12 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         fe = engine.filter_engine
         conns = [_serialize_connection(c, registry, fe) for c in engine.connections]
 
-        if not config.save_preset(name, conns):
+        # Include plugin instances in preset
+        plugins_data = []
+        if engine._plugin_host:
+            plugins_data = engine._plugin_host.serialize_instances()
+
+        if not config.save_preset(name, conns, plugins=plugins_data):
             return Response.error("Too many presets (max 100)")
 
         # Also persist current device names
@@ -835,6 +840,17 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
             preset = config.get_preset(name)
             if preset is None:
                 return Response.not_found()
+
+            # Restore plugin instances from preset
+            if engine._plugin_host:
+                engine._plugin_host.stop_all()
+                preset_plugins = preset.get("plugins", [])
+                if preset_plugins:
+                    loop = asyncio.get_event_loop()
+                    await loop.run_in_executor(
+                        None, engine._plugin_host.restore_instances, preset_plugins)
+                    # Rescan so new plugin ALSA clients are discovered
+                    engine.scan_devices()
 
             # Apply preset connections using stable IDs
             engine.disconnect_all()

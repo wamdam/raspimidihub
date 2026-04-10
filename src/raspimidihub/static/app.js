@@ -1,7 +1,7 @@
 import { h, render } from './lib/preact.module.js';
 import { useState, useEffect, useCallback, useRef } from './lib/hooks.module.js';
 import htm from './lib/htm.module.js';
-import { PluginConfigPanel, renderParamList, tickFeedback } from './plugin-controls.js';
+import { PluginConfigPanel, renderParamList, tickFeedback, PluginWheel, PluginRadio, PluginNoteSelect, PluginToggle } from './plugin-controls.js';
 
 const html = htm.bind(h);
 
@@ -176,13 +176,8 @@ function MappingFormOverlay({ onSubmit, onClose, editing, srcClientId }) {
         onSubmit(m);
     };
 
-    const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, +v || 0));
-    const numInput = (label, val, set, min=0, max=127) => html`
-        <div class="form-group" style="flex:1">
-            <label>${label}</label>
-            <input type="number" min=${min} max=${max} value=${val}
-                onInput=${e => set(clamp(e.target.value, min, max))} />
-        </div>`;
+    // Wheel onChange adapter: (name, value) → state setter
+    const w = (setter) => (_, v) => setter(v);
 
     return html`
         <div class="mapping-overlay" onclick=${(e) => e.target.className === 'mapping-overlay' && close()}>
@@ -194,56 +189,56 @@ function MappingFormOverlay({ onSubmit, onClose, editing, srcClientId }) {
                     <h3>${editing ? 'Edit Mapping' : 'Add Mapping'}</h3>
                     <button class="panel-close" onclick=${close}>\u2715</button>
                 </div>
-                <div style="display:flex;gap:8px;margin-bottom:8px">
-                    <div class="form-group" style="flex:2">
-                        <label>Type</label>
-                        <select value=${type} onChange=${e => setType(e.target.value)}>
-                            ${MAPPING_TYPES.map(t => html`<option value=${t.value}>${t.label}</option>`)}
-                        </select>
-                    </div>
-                    <div class="form-group" style="flex:1">
-                        <label>Src Ch</label>
-                        <select value=${srcChannel} onChange=${e => onSrcChannelChange(e.target.value)}>
+                <${PluginRadio} name="type" label="Type"
+                    options=${MAPPING_TYPES.map(t => t.label)}
+                    value=${MAPPING_TYPES.find(t => t.value === type)?.label || type}
+                    onChange=${(_, label) => { const t = MAPPING_TYPES.find(m => m.label === label); if (t) setType(t.value); }} />
+                <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
+                    <div class="form-group" style="min-width:80px">
+                        <label style="font-size:13px;color:var(--text-dim)">Src Ch</label>
+                        <select value=${srcChannel} onChange=${e => onSrcChannelChange(e.target.value)} style="min-height:40px">
                             <option value="">Any</option>
                             ${Array.from({length:16},(_,i) => html`<option value=${i}>${i+1}</option>`)}
                         </select>
                     </div>
-                    <div class="form-group" style="flex:1">
-                        <label>Dst Ch</label>
-                        <select value=${dstChannel} onChange=${e => setDstChannel(+e.target.value)}>
-                            ${Array.from({length:16},(_,i) => html`<option value=${i}>${i+1}</option>`)}
-                        </select>
-                    </div>
+                    <${PluginWheel} name="dstCh" label="Dst Ch" min=${1} max=${16}
+                        value=${dstChannel + 1} onChange=${(_, v) => setDstChannel(v - 1)} />
                 </div>
                 ${(type === 'note_to_cc' || type === 'note_to_cc_toggle') && html`
-                    <div style="display:flex;gap:8px;margin-bottom:8px">
-                        ${numInput('Source Note', srcNote, setSrcNote)}
-                        ${numInput('Dest CC', dstCc, setDstCc)}
-                    </div>
-                    <div style="display:flex;gap:8px;margin-bottom:8px">
-                        ${numInput('On Value', ccOnVal, setCcOnVal)}
-                        ${numInput('Off Value', ccOffVal, setCcOffVal)}
+                    <${PluginNoteSelect} name="srcNote" label="Source Note"
+                        value=${srcNote} onChange=${w(setSrcNote)} />
+                    <${PluginWheel} name="dstCc" label="Dest CC" min=${0} max=${127}
+                        value=${dstCc} onChange=${w(setDstCc)} />
+                    <div style="display:flex;gap:12px">
+                        <${PluginWheel} name="onVal" label="On Value" min=${0} max=${127}
+                            value=${ccOnVal} onChange=${w(setCcOnVal)} />
+                        <${PluginWheel} name="offVal" label="Off Value" min=${0} max=${127}
+                            value=${ccOffVal} onChange=${w(setCcOffVal)} />
                     </div>
                 `}
                 ${type === 'cc_to_cc' && html`
-                    <div style="display:flex;gap:8px;margin-bottom:8px">
-                        ${numInput('Source CC', srcCc, setSrcCc)}
-                        ${numInput('Dest CC', dstCcNum, setDstCcNum)}
+                    <div style="display:flex;gap:12px">
+                        <${PluginWheel} name="srcCc" label="Source CC" min=${0} max=${127}
+                            value=${srcCc} onChange=${w(setSrcCc)} />
+                        <${PluginWheel} name="dstCcNum" label="Dest CC" min=${0} max=${127}
+                            value=${dstCcNum} onChange=${w(setDstCcNum)} />
                     </div>
-                    <div style="display:flex;gap:8px;margin-bottom:8px">
-                        ${numInput('In Min', inMin, setInMin)}
-                        ${numInput('In Max', inMax, setInMax)}
+                    <div style="display:flex;gap:12px">
+                        <${PluginWheel} name="inMin" label="In Min" min=${0} max=${127}
+                            value=${inMin} onChange=${w(setInMin)} />
+                        <${PluginWheel} name="inMax" label="In Max" min=${0} max=${127}
+                            value=${inMax} onChange=${w(setInMax)} />
                     </div>
-                    <div style="display:flex;gap:8px;margin-bottom:8px">
-                        ${numInput('Out Min', outMin, setOutMin)}
-                        ${numInput('Out Max', outMax, setOutMax)}
+                    <div style="display:flex;gap:12px">
+                        <${PluginWheel} name="outMin" label="Out Min" min=${0} max=${127}
+                            value=${outMin} onChange=${w(setOutMin)} />
+                        <${PluginWheel} name="outMax" label="Out Max" min=${0} max=${127}
+                            value=${outMax} onChange=${w(setOutMax)} />
                     </div>
                 `}
                 ${type !== 'channel_map' && html`
-                    <label class="msg-toggle" style="margin-bottom:8px">
-                        <input type="checkbox" checked=${passThrough} onchange=${() => setPassThrough(p => !p)} />
-                        <span>Pass through original event</span>
-                    </label>
+                    <${PluginToggle} name="passThrough" label="Pass through"
+                        value=${passThrough} onChange=${(_, v) => setPassThrough(v)} />
                 `}
                 <div class="btn-group">
                     <button class="btn btn-primary" onclick=${submit}>${editing ? 'Save' : 'Add'}</button>
