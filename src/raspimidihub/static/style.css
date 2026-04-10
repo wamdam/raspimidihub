@@ -544,7 +544,7 @@ body {
     100% { background: var(--bg); }
 }
 .midi-monitor {
-    max-height: 200px;
+    height: 150px;
     overflow-y: auto;
     font-family: "SF Mono", "Fira Code", monospace;
     font-size: 11px;
@@ -722,24 +722,31 @@ body {
         rgba(255,255,255,0.05) 0px, rgba(255,255,255,0.05) 1px, transparent 1px, transparent 8%);
     pointer-events: none;
 }
-/* Fader cap/thumb — wide, mixer-style */
+/* Fader cap/thumb — mixer-style, sharp edges */
 .fader-thumb {
-    position: absolute; top: 4px; width: 40px; height: 52px; border-radius: 5px;
-    background: linear-gradient(180deg, #aaa 0%, #ccc 10%, #bbb 25%, #999 45%, #aaa 55%, #888 70%, #999 85%, #777 100%);
-    box-shadow: 0 2px 6px rgba(0,0,0,0.7), inset 0 1px 1px rgba(255,255,255,0.5);
+    position: absolute; top: 2px; width: 64px; height: 56px; border-radius: 0;
+    background: linear-gradient(90deg, #444 0%, #555 1px, #aaa 4px, #bbb 20%, #aaa 40%, #999 50%, #aaa 60%, #bbb 80%, #aaa 96%, #555 calc(100% - 1px), #444 100%);
+    box-shadow: 0 2px 5px rgba(0,0,0,0.7), inset 0 1px 0 rgba(255,255,255,0.25), inset 0 -1px 0 rgba(0,0,0,0.4);
     z-index: 1;
     display: flex; align-items: center; justify-content: center;
+    border-top: 1px solid rgba(255,255,255,0.15);
+    border-bottom: 1px solid rgba(0,0,0,0.5);
+    border-left: 2px solid #333;
+    border-right: 2px solid #333;
 }
-/* Grip line on thumb */
+/* Vertical grip lines on thumb */
 .fader-thumb::before {
-    content: ''; position: absolute; top: 50%; left: 6px; right: 6px; height: 1px; margin-top: -3px;
-    background: rgba(0,0,0,0.25); box-shadow: 0 1px 0 rgba(255,255,255,0.2), 0 3px 0 rgba(0,0,0,0.2), 0 4px 0 rgba(255,255,255,0.15);
+    content: ''; position: absolute; left: 50%; top: 12px; bottom: 12px; width: 1px; margin-left: -6px;
+    background: rgba(0,0,0,0.2);
+    box-shadow: 1px 0 0 rgba(255,255,255,0.12), 3px 0 0 rgba(0,0,0,0.15), 4px 0 0 rgba(255,255,255,0.1),
+                6px 0 0 rgba(0,0,0,0.15), 7px 0 0 rgba(255,255,255,0.1), 9px 0 0 rgba(0,0,0,0.15), 10px 0 0 rgba(255,255,255,0.1),
+                12px 0 0 rgba(0,0,0,0.12), 13px 0 0 rgba(255,255,255,0.08);
 }
 /* Value text on thumb */
 .fader-thumb-val {
     font-size: 11px; font-weight: 700; color: #333; font-variant-numeric: tabular-nums;
     text-shadow: 0 1px 0 rgba(255,255,255,0.3);
-    pointer-events: none; position: relative; top: 5px;
+    pointer-events: none;
 }
 /* Fill bar */
 .fader-fill {
@@ -837,12 +844,21 @@ body {
 .param-row .wheel-group { margin-bottom: 12px; }
 .param-row .toggle-group { margin-bottom: 12px; }
 
-/* MIDI rate meter */
+/* MIDI rate meter — absolute positioned at bottom of row header */
 .rate-meter {
-    height: 3px; width: 100%; margin-top: 2px; border-radius: 1.5px;
+    position: absolute; bottom: 1px; left: 2px; right: 2px;
+    height: 2px; border-radius: 1px;
     background: rgba(255,255,255,0.06); overflow: hidden;
 }
-.rate-bar { height: 100%; border-radius: 1.5px; transition: width 0.8s ease-out; }
+.rate-bar { height: 100%; border-radius: 1px; transition: width 0.8s ease-out; }
+
+/* Device icons */
+.dev-icon { width: 18px; height: 18px; vertical-align: middle; flex-shrink: 0; }
+.dev-icon.din { color: var(--text-dim); }
+.dev-icon.plugin { color: #4dd9c0; filter: drop-shadow(0 0 2px rgba(77,217,192,0.3)); }
+
+/* Virtual device name color */
+.dev-name-plugin { color: #4dd9c0; }
 
 /* Device list offline dot */
 .dot.offline { background: #555 !important; }

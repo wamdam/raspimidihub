@@ -253,20 +253,37 @@ function PluginFader({ name, label, min, max, value, onChange, vertical, suffix 
             if (nv !== s.val) { s.val = nv; setVal(nv); oc.current(name, nv); tickFeedback(); }
         }
 
+        let activeTouchId = null;
+        function findTouch(e, id) {
+            for (const t of e.touches) if (t.identifier === id) return t;
+            return null;
+        }
         function onTouchStart(e) {
             e.preventDefault(); e.stopPropagation();
-            handleMove(e.touches[0].clientX, e.touches[0].clientY);
+            const t = e.changedTouches[0];
+            activeTouchId = t.identifier;
+            handleMove(t.clientX, t.clientY);
             el.addEventListener('touchmove', onTouchMove, { passive: false });
             window.addEventListener('touchend', onTouchEnd);
+            window.addEventListener('touchcancel', onTouchEnd);
         }
         function onTouchMove(e) {
             e.preventDefault(); e.stopPropagation();
-            handleMove(e.touches[0].clientX, e.touches[0].clientY);
+            const t = findTouch(e, activeTouchId);
+            if (t) handleMove(t.clientX, t.clientY);
         }
         function onTouchEnd(e) {
             if (e) e.stopPropagation();
-            el.removeEventListener('touchmove', onTouchMove);
-            window.removeEventListener('touchend', onTouchEnd);
+            // Only release if our touch ended
+            for (const t of e.changedTouches) {
+                if (t.identifier === activeTouchId) {
+                    activeTouchId = null;
+                    el.removeEventListener('touchmove', onTouchMove);
+                    window.removeEventListener('touchend', onTouchEnd);
+                    window.removeEventListener('touchcancel', onTouchEnd);
+                    break;
+                }
+            }
         }
         function onMouseDown(e) {
             e.preventDefault(); handleMove(e.clientX, e.clientY);
@@ -281,14 +298,13 @@ function PluginFader({ name, label, min, max, value, onChange, vertical, suffix 
     }, [min, max, name, vertical]);
 
     const ratio = (val - min) / (max - min || 1);
-    // Clamp thumb inside track: pad by half thumb width (20px) from each edge
-    // Use calc() so it works at any track width
+    // Clamp thumb inside track (thumb: 64px horiz, 22px vert)
     const thumbStyle = vertical
-        ? { bottom: `calc(${ratio * 100}% - 26px + ${(1 - ratio) * 52}px)` }
-        : { left: `calc(4px + ${ratio} * (100% - 48px))` };
+        ? { bottom: `calc(3px + ${ratio} * (100% - 28px))` }
+        : { left: `calc(2px + ${ratio} * (100% - 68px))` };
     const fillStyle = vertical
         ? { height: `${ratio * 100}%` }
-        : { width: `calc(12px + ${ratio} * (100% - 24px))` };
+        : { width: `calc(34px + ${ratio} * (100% - 68px))` };
 
     return html`<div class="fader-group ${vertical ? 'vertical' : ''}">
         <span class="fader-label">${label}</span>

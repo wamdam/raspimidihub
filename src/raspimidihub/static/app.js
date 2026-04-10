@@ -46,6 +46,17 @@ const IconPreset = html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
 const IconStatus = html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4m0 12v4m-8-10H2m20 0h-2m-2.93-6.07l-1.41 1.41m-7.32 7.32l-1.41 1.41m12.14 0l-1.41-1.41M6.34 6.34L4.93 4.93"/><circle cx="12" cy="12" r="4"/></svg>`;
 const IconSettings = html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v2m0 18v2m-9-11h2m16 0h2m-3.64-6.36l-1.42 1.42M6.06 17.94l-1.42 1.42m0-12.72l1.42 1.42m11.88 11.88l1.42 1.42"/></svg>`;
 
+// DIN MIDI connector icon (5-pin) for hardware devices
+const IconDIN = html`<svg viewBox="0 0 20 20" class="dev-icon din"><circle cx="10" cy="10" r="8" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="6" cy="8" r="1.2" fill="currentColor"/><circle cx="14" cy="8" r="1.2" fill="currentColor"/><circle cx="10" cy="13" r="1.2" fill="currentColor"/><circle cx="7" cy="12" r="1.2" fill="currentColor"/><circle cx="13" cy="12" r="1.2" fill="currentColor"/></svg>`;
+
+// Plugin icon: loaded from /api/plugins/icon/{type} (each plugin provides icon.svg)
+function DeviceIcon({ device }) {
+    if (device.is_plugin && device.plugin_type) {
+        return html`<img class="dev-icon plugin" src="/api/plugins/icon/${device.plugin_type}" alt="" />`;
+    }
+    return IconDIN;
+}
+
 // --- Toast ---
 function Toast({ message }) {
     if (!message) return null;
@@ -667,6 +678,7 @@ function PresetsPage({ refresh, showToast }) {
         showToast(`Preset "${name}" updated`);
     };
     const del = async (name) => {
+        if (!confirm(`Delete preset "${name}"?`)) return;
         await api(`/presets/${encodeURIComponent(name)}`, { method: 'DELETE' });
         loadPresets();
         showToast('Preset deleted');
@@ -697,7 +709,7 @@ function PresetsPage({ refresh, showToast }) {
 
     return html`
         <div class="card">
-            <h3>Save Current Routing</h3>
+            <h3>Save Current Routing and Instrument Settings</h3>
             <div style="display:flex;gap:8px">
                 <input class="form-group" style="flex:1;margin:0;min-height:48px;padding:10px 12px;background:var(--bg);border:1px solid var(--surface2);border-radius:6px;color:var(--text);font-size:14px"
                     placeholder="Preset name" value=${newName} onInput=${e => setNewName(e.target.value)}
@@ -709,12 +721,14 @@ function PresetsPage({ refresh, showToast }) {
             <h3>Presets</h3>
             ${presets.length === 0 && html`<p style="color:var(--text-dim)">No presets saved</p>`}
             ${presets.map(name => html`
-                <div class="preset-item">
-                    <span class="name">${name}</span>
-                    <button class="btn btn-success" onclick=${() => activate(name)}>Load</button>
-                    <button class="btn btn-primary" onclick=${() => overwrite(name)}>Save</button>
-                    <button class="btn btn-secondary" onclick=${() => exportPreset(name)}>Exp</button>
-                    <button class="btn btn-danger" onclick=${() => del(name)}>Del</button>
+                <div style="margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--surface2)">
+                    <div style="font-weight:500;margin-bottom:6px">${name}</div>
+                    <div style="display:flex;gap:6px">
+                        <button class="btn btn-success" onclick=${() => activate(name)}>Load</button>
+                        <button class="btn btn-primary" onclick=${() => overwrite(name)}>Save</button>
+                        <button class="btn btn-secondary" onclick=${() => exportPreset(name)}>Export</button>
+                        <button class="btn btn-danger" onclick=${() => del(name)}>Del</button>
+                    </div>
                 </div>
             `)}
         </div>
@@ -810,8 +824,7 @@ function ScrollablePiano({ heldNotes, onNoteDown, onNoteUp, pianoKeys }) {
                     // Decide: horizontal scroll or vertical stay
                     if (Math.abs(dx) > SCROLL_THRESH && Math.abs(dx) > Math.abs(dy)) {
                         state.scrolling = true;
-                        // Cancel the note if we started one
-                        if (state.note != null) { noteUpRef.current(state.note); state.note = null; }
+                        // Keep the note held while scrolling — note-off on finger lift
                     } else if (Math.abs(dy) > SCROLL_THRESH) {
                         state.moved = true; // vertical — not a scroll, keep note
                     }
@@ -1121,9 +1134,9 @@ function DevicesPage({ devices, onDeviceSelect, showToast, refresh }) {
         <div class="card">
             <h3>Devices (${devices.length})</h3>
             ${sorted.map(d => html`
-                <div class="device" style="cursor:pointer" onclick=${() => onDeviceSelect(d)}>
-                    <div class="dot ${d.online ? '' : 'offline'}"></div>
-                    <span class="name">${d.is_plugin ? '\u1E7C ' : ''}${d.name}</span>
+                <div class="device" style="cursor:pointer;display:flex;align-items:center;gap:8px" onclick=${() => onDeviceSelect(d)}>
+                    <${DeviceIcon} device=${d} />
+                    <span class="name ${d.is_plugin ? 'dev-name-plugin' : ''}" style="flex:1">${d.name}</span>
                     <span class="ports">${d.is_plugin ? (d.plugin_type_name || d.plugin_type || '') : `${d.ports.length} port${d.ports.length !== 1 ? 's' : ''}`} \u203a</span>
                 </div>
             `)}
@@ -1631,8 +1644,8 @@ function App() {
         ${showMidiBar && html`<${MidiBar} events=${midiEvents} />`}
         <nav class="bottom-nav">
             <button class=${tab === 'routing' ? 'active' : ''} onclick=${() => setTab('routing')}>${IconRouting}<span>Routing</span></button>
-            <button class=${tab === 'presets' ? 'active' : ''} onclick=${() => setTab('presets')}>${IconPreset}<span>Presets</span></button>
             <button class=${tab === 'devices' ? 'active' : ''} onclick=${() => setTab('devices')}>${IconStatus}<span>Devices</span></button>
+            <button class=${tab === 'presets' ? 'active' : ''} onclick=${() => setTab('presets')}>${IconPreset}<span>Presets</span></button>
             <button class=${tab === 'settings' ? 'active' : ''} onclick=${() => setTab('settings')}>${IconSettings}<span>Settings</span></button>
         </nav>
         ${selectedDevice && html`<${DeviceDetailPanel} key=${selectedDeviceId} device=${selectedDevice}

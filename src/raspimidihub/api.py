@@ -1285,6 +1285,21 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
             return Response.json({})
         return Response.json(engine._plugin_host.list_types())
 
+    @server.route("GET", "/api/plugins/icon/", exact=False)
+    async def api_plugin_icon(req: Request) -> Response:
+        """Serve a plugin's icon.svg."""
+        plugin_type = req.path.split("/api/plugins/icon/")[1].rstrip("/")
+        if not engine._plugin_host or not plugin_type:
+            return Response.not_found()
+        icon_path = engine._plugin_host._plugins_dir / plugin_type / "icon.svg"
+        if not icon_path.is_file():
+            return Response.not_found()
+        try:
+            svg = icon_path.read_text()
+            return Response(status=200, body=svg.encode(), content_type="image/svg+xml")
+        except OSError:
+            return Response.not_found()
+
     @server.route("GET", "/api/plugins/instances")
     async def api_plugins_instances(req: Request) -> Response:
         """List running plugin instances."""

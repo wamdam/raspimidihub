@@ -6,7 +6,8 @@ This guide covers everything you need to create plugins for RaspiMIDIHub.
 
 1. Create a directory under `plugins/` with your plugin name (e.g. `plugins/my_plugin/`).
 2. Add an `__init__.py` that inherits from `PluginBase`.
-3. Set the required metadata, declare parameters, and implement callbacks.
+3. Add an `icon.svg` (20x20 viewBox, uses `currentColor` for stroke/fill — rendered in turquoise).
+4. Set the required metadata, declare parameters, and implement callbacks.
 
 Here is the minimal plugin -- a pass-through that forwards all MIDI unchanged:
 

@@ -37,6 +37,7 @@ $(DEB_FILE): src/raspimidihub/*.py src/raspimidihub/static/* systemd/raspimidihu
 		pname=$$(basename "$$d"); \
 		mkdir -p "$(BUILD_DIR)/usr/lib/python3/dist-packages/raspimidihub/plugins/$$pname"; \
 		cp "$$d"__init__.py "$(BUILD_DIR)/usr/lib/python3/dist-packages/raspimidihub/plugins/$$pname/"; \
+		test -f "$$d"icon.svg && cp "$$d"icon.svg "$(BUILD_DIR)/usr/lib/python3/dist-packages/raspimidihub/plugins/$$pname/" || true; \
 	done
 	cp systemd/raspimidihub.service $(BUILD_DIR)/lib/systemd/system/
 	cp udev/90-raspimidihub.rules $(BUILD_DIR)/lib/udev/rules.d/
