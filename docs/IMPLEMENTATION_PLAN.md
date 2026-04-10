@@ -785,3 +785,52 @@ Plugin instances and all their parameter values are saved in `config.json`. They
 - **MIDI 2.0 / MPE?** Out of scope for now.
 - **Plugin sandboxing?** Yes, restricted from phase 1. No filesystem, no network, no subprocess.
 - **CC automation of params?** Yes, first-class. CC changes reflect live in the UI (faders/wheels animate). Declared via `cc_inputs`.
+
+---
+
+## Implementation Status (v2.0.0-alpha2)
+
+### Completed
+
+- **Step 1.1** Plugin API + Host — PluginBase, all param types, clock bus, crash isolation, rate limiting
+- **Step 1.2** API Endpoints — full CRUD for plugin instances, icon serving, display SSE
+- **Step 1.3** Unified Devices Tab — replaces Status, plugin icons, turquoise color, Add button in matrix
+- **Step 1.4** UI Components — Wheel (with labels, display_factor, unit), Fader (display_factor, display_format), Radio, Toggle, StepEditor, CurveEditor, NoteSelect, ChannelSelect, Group, Display (inline scope/meter)
+- **Step 1.4b** Retrofit existing UI — mapping form uses wheels/faders/radio/toggle, MIDI Learn works
+- **Step 1.5** 12 Built-in Plugins — Arpeggiator, CC LFO, CC Smoother, Chord Generator, Master Clock, MIDI Delay, Note Splitter, Note Transpose, Panic Button, Scale Remapper, Velocity Curve, Velocity Equalizer
+- **Step 1.6** Config Persistence — plugins in config.json, presets include plugins, preset overwrite
+- **Step 1.7** Developer Documentation — plugins/README.md with all conventions
+- Plugin display outputs (scope, meter) with SSE push
+- Plugin transport API (send_clock/start/stop/continue)
+- Plugin help text (HELP variable, ? button)
+- Plugin icons (icon.svg convention, turquoise rendering)
+- Per-plugin ALSA output rate limiting (1000 events/sec)
+- MIDI rate meters in routing matrix
+- PWA install support
+- CC coalescing for test sender
+- Scrollable multitouch piano keyboard
+- Mixer-style fader with value on thumb
+
+### Removed (from original plan)
+
+- Channel Router plugin — covered by matrix channel remap mappings
+- Monitor plugin — redundant with device panel MIDI monitor
+- Sync Offset plugin — limited practical use
+- _example plugin — code lives in plugins/README.md as documentation
+
+### Remaining / TODO
+
+- **Arpeggiator step editor** — add StepEditor param with 8/16/32-step pattern, per-step note offset, linked to Rate radio. The arp currently cycles held notes; step editor would add programmable patterns.
+- **Step 1.4b continued** — channel selection in filter panel could use wheels
+- **Plugin sandbox enforcement** — restricted __builtins__ and import validation not yet implemented (plugins currently have full Python access)
+- **Plugin hot-reload** — stop instance, reimport module, restart with same config
+- **CC automation live UI updates** — CC changes to params don't yet animate the UI controls in real-time (only the value changes server-side)
+- **Plugin crash recovery UI** — show crashed status in device list, offer restart button
+- **MIDI test sender settings persistence** — save channel/CC# per device in config
+
+### Phase 2: Plugin Store (future)
+
+- Plugin registry (plugins.json in a GitHub repo)
+- Store UI in the app
+- One-click install/update
+- Version validation
