@@ -153,12 +153,17 @@ class WebServer:
             while True:
                 msg = await queue.get()
                 writer.write(msg.encode())
-                await writer.drain()
-        except (ConnectionResetError, BrokenPipeError, asyncio.CancelledError):
+                await asyncio.wait_for(writer.drain(), timeout=5.0)
+        except (ConnectionResetError, BrokenPipeError, asyncio.CancelledError,
+                OSError, asyncio.TimeoutError):
             pass
         finally:
             if queue in self._sse_queues:
                 self._sse_queues.remove(queue)
+            try:
+                writer.close()
+            except Exception:
+                pass
 
     async def _serve_static(self, path: str) -> Response:
         """Serve a static file from the static directory."""

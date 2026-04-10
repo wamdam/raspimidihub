@@ -1,5 +1,5 @@
 PACKAGE = raspimidihub
-VERSION = 1.3.5
+VERSION = 1.3.6
 DEB_NAME = $(PACKAGE)_$(VERSION)-1_all
 BUILD_DIR = build/$(DEB_NAME)
 DEB_FILE = dist/$(DEB_NAME).deb

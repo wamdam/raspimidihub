@@ -695,17 +695,22 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
             if mapping.src_channel == dst_ch and mapping.src_cc == dst_cc:
                 return Response.error("Same channel and CC number — mapping has no effect")
 
-        # Check for conflicting mappings (same source match)
+        # Check for conflicting mappings (exact duplicate detection)
         for existing in fe.get_mappings(conn_id):
             if existing.type != mapping.type:
                 continue
             if existing.src_channel != mapping.src_channel:
                 continue
-            if mapping.type in (MappingType.CC_TO_CC,) and existing.src_cc == mapping.src_cc:
-                return Response.error(f"A CC mapping for CC{mapping.src_cc} on this channel already exists")
-            if mapping.type in (MappingType.NOTE_TO_CC, MappingType.NOTE_TO_CC_TOGGLE) and \
-               existing.src_note == mapping.src_note:
-                return Response.error(f"A note mapping for this note on this channel already exists")
+            if mapping.type in (MappingType.CC_TO_CC,):
+                # Same src CC AND same dst CC = duplicate. Different dst CC = fan-out (allowed)
+                existing_dst = existing.dst_cc_num if existing.dst_cc_num is not None else existing.src_cc
+                new_dst = mapping.dst_cc_num if mapping.dst_cc_num is not None else mapping.src_cc
+                if existing.src_cc == mapping.src_cc and existing_dst == new_dst:
+                    return Response.error(f"A CC mapping for CC{mapping.src_cc} -> CC{new_dst} on this channel already exists")
+            if mapping.type in (MappingType.NOTE_TO_CC, MappingType.NOTE_TO_CC_TOGGLE):
+                # Same src note AND same dst CC = duplicate
+                if existing.src_note == mapping.src_note and existing.dst_cc == mapping.dst_cc:
+                    return Response.error(f"A note mapping for this note -> CC{mapping.dst_cc} on this channel already exists")
             if mapping.type == MappingType.CHANNEL_MAP:
                 return Response.error("A channel remap for this channel already exists")
 
