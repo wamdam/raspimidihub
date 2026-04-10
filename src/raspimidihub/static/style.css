@@ -854,8 +854,10 @@ body {
 
 /* Device icons */
 .dev-icon { width: 18px; height: 18px; vertical-align: middle; flex-shrink: 0; }
+.dev-icon svg { width: 18px; height: 18px; display: block; }
 .dev-icon.din { color: var(--text-dim); }
-.dev-icon.plugin { color: #4dd9c0; filter: drop-shadow(0 0 2px rgba(77,217,192,0.3)); }
+.dev-icon.plugin { color: #4dd9c0; display: inline-flex; }
+.dev-icon.plugin svg { color: #4dd9c0; }
 
 /* Virtual device name color */
 .dev-name-plugin { color: #4dd9c0; }
