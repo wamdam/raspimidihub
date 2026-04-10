@@ -281,12 +281,14 @@ function PluginFader({ name, label, min, max, value, onChange, vertical, suffix 
     }, [min, max, name, vertical]);
 
     const ratio = (val - min) / (max - min || 1);
+    // Clamp thumb inside track: pad by half thumb width (20px) from each edge
+    // Use calc() so it works at any track width
     const thumbStyle = vertical
-        ? { bottom: `${ratio * 100}%`, transform: 'translateY(50%)' }
-        : { left: `${ratio * 100}%`, transform: 'translateX(-50%)' };
+        ? { bottom: `calc(${ratio * 100}% - 26px + ${(1 - ratio) * 52}px)` }
+        : { left: `calc(4px + ${ratio} * (100% - 48px))` };
     const fillStyle = vertical
         ? { height: `${ratio * 100}%` }
-        : { width: `${ratio * 100}%` };
+        : { width: `calc(12px + ${ratio} * (100% - 24px))` };
 
     return html`<div class="fader-group ${vertical ? 'vertical' : ''}">
         <span class="fader-label">${label}</span>
