@@ -42,6 +42,7 @@ class MidiEngine:
         self._disconnected: dict[str, dict] = {}  # conn_id -> {filter, mappings}
         self._filter_engine: FilterEngine | None = None
         self._device_registry: DeviceRegistry = DeviceRegistry()
+        self._plugin_host = None  # set externally after import
         self._monitor_port: int = -1
         self._monitored_clients: set[int] = set()
         self._debounce_task: asyncio.Task | None = None
@@ -87,7 +88,8 @@ class MidiEngine:
         self._filter_engine = FilterEngine(self._seq)
         # Create a monitor port to receive copies of MIDI events for the UI
         self._monitor_port = self._seq.create_port("monitor", writable=True)
-        log.info("ALSA sequencer opened, client ID %d", self._seq.client_id)
+        log.info("ALSA sequencer opened, client ID %d, monitor port %d",
+                 self._seq.client_id, self._monitor_port)
         self._scan_and_connect()
 
     def stop(self) -> None:
@@ -102,10 +104,20 @@ class MidiEngine:
         """Scan for MIDI devices and return them."""
         if not self._seq:
             return []
-        self._devices = self._seq.scan_devices()
-        # Update device registry with stable IDs
-        client_ids = [d.client_id for d in self._devices]
-        self._device_registry.scan(client_ids)
+        # Include plugin ALSA client IDs so they're discovered as devices
+        plugin_clients = set()
+        if self._plugin_host:
+            plugin_clients = self._plugin_host.get_plugin_client_ids()
+        self._devices = self._seq.scan_devices(include_user_clients=plugin_clients)
+        # Update device registry with stable IDs (hardware devices via sysfs)
+        hw_client_ids = [d.client_id for d in self._devices if d.client_id not in plugin_clients]
+        self._device_registry.scan(hw_client_ids)
+        # Register plugin devices in the registry
+        if self._plugin_host:
+            for inst in self._plugin_host.get_instances():
+                if inst.alsa_client:
+                    self._device_registry.register_plugin(
+                        inst.alsa_client.client_id, inst.id, inst.name)
         return self._devices
 
     def connect_all(self) -> set[Connection]:
@@ -279,6 +291,20 @@ class MidiEngine:
                             cb(ev)
                         except Exception:
                             pass
+
+                # Forward clock events to plugin clock bus (deduplicate: only process
+                # once per source client, since monitor + filter ports both receive copies)
+                if self._plugin_host:
+                    from .alsa_seq import MidiEventType
+                    if ev.type == MidiEventType.CLOCK:
+                        if ev.dest.port == self._monitor_port:
+                            self._plugin_host.clock_bus.on_clock_tick()
+                    elif ev.type == MidiEventType.START:
+                        self._plugin_host.clock_bus.on_start()
+                    elif ev.type == MidiEventType.CONTINUE:
+                        self._plugin_host.clock_bus.on_continue()
+                    elif ev.type == MidiEventType.STOP:
+                        self._plugin_host.clock_bus.on_stop()
 
                 # Process filtered MIDI events
                 if self._filter_engine:

@@ -14,6 +14,7 @@ from .api import register_api
 from .config import Config
 from .led import LedController
 from .midi_engine import MidiEngine, Connection
+from .plugin_host import PluginHost
 from .web import WebServer
 from .wifi import WifiManager
 
@@ -53,6 +54,7 @@ async def async_main() -> None:
     engine = MidiEngine()
     config = Config()
     wifi = WifiManager()
+    plugin_host = PluginHost()
 
     # Load config
     config.init_runtime_copy()
@@ -121,12 +123,25 @@ async def async_main() -> None:
         if config_ok:
             engine._config = config
 
+        # Wire plugin host to engine
+        engine._plugin_host = plugin_host
+
+        # Discover available plugins
+        plugin_host.discover_plugins()
+
         engine.start()
 
         # Load custom device names from config
         device_names = config.data.get("device_names", {})
         if device_names:
             engine.device_registry.load_custom_names(device_names)
+
+        # Restore plugin instances from config
+        saved_plugins = config.data.get("plugins", [])
+        if saved_plugins:
+            plugin_host.restore_instances(saved_plugins)
+            # Rescan so plugin ALSA clients appear in the matrix
+            engine._schedule_rescan()
 
         if not config_ok:
             led.set_fast_blink()
@@ -175,6 +190,7 @@ async def async_main() -> None:
         raise
     finally:
         await server.stop()
+        plugin_host.stop_all()
         engine.stop()
         led.set_off()
         led.restore_default_trigger()

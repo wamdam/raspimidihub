@@ -1,6 +1,7 @@
 import { h, render } from './lib/preact.module.js';
 import { useState, useEffect, useCallback, useRef } from './lib/hooks.module.js';
 import htm from './lib/htm.module.js';
+import { PluginConfigPanel, renderParamList, tickFeedback } from './plugin-controls.js';
 
 const html = htm.bind(h);
 
@@ -407,7 +408,7 @@ function ConnectionMatrix({ devices, connections, onToggle, onFilterOpen, onRemo
         const inCount = dev.ports.filter(p => p.is_input).length;
         const outCount = dev.ports.filter(p => p.is_output).length;
         for (const p of dev.ports) {
-            const extra = { client_id: dev.client_id, dev_name: dev.name, dev_default_name: dev.default_name || dev.name, port_name: p.name, port_default_name: p.default_name || p.name, online: dev.online !== false, stable_id: dev.stable_id };
+            const extra = { client_id: dev.client_id, dev_name: dev.name, dev_default_name: dev.default_name || dev.name, port_name: p.name, port_default_name: p.default_name || p.name, online: dev.online !== false, stable_id: dev.stable_id, is_plugin: !!dev.is_plugin };
             if (p.is_input) inputs.push({ ...p, ...extra, multi: inCount > 1 });
             if (p.is_output) outputs.push({ ...p, ...extra, multi: outCount > 1 });
         }
@@ -445,15 +446,17 @@ function ConnectionMatrix({ devices, connections, onToggle, onFilterOpen, onRemo
     // item.port_default_name = original ALSA port name
     // item.multi = device has multiple input or output ports
     const label = (item) => {
+        // Plugin prefix
+        const prefix = item.is_plugin ? '\u1E7C ' : '';
         // Multi-port device with renamed port: show full custom port name (user chose it)
         if (item.multi && item.port_name !== item.port_default_name) {
-            return item.port_name;
+            return prefix + item.port_name;
         }
         // Otherwise: show (possibly renamed) device name, truncated to 2 words
         const parts = item.dev_name.split(' ');
         let short = parts.length > 2 ? parts.slice(0,2).join(' ') : item.dev_name;
         if (item.multi) short += ` p${item.port_id + 1}`;
-        return short;
+        return prefix + short;
     };
     const showName = (item) => {
         const name = item.multi ? `${item.dev_name}: ${item.port_name}` : item.dev_name;
@@ -731,7 +734,7 @@ function PortRenameRow({ device, port, showToast }) {
     `;
 }
 
-function DeviceDetailPanel({ device, onClose, showToast }) {
+function DeviceDetailPanel({ device, onClose, showToast, refresh }) {
     const panelRef = { current: null };
     const close = () => animateClose(panelRef.current, onClose);
     const swipe = useSwipeDismiss(close);
@@ -744,6 +747,37 @@ function DeviceDetailPanel({ device, onClose, showToast }) {
     const [heldNote, setHeldNote] = useState(null);
     const [octave, setOctave] = useState(3);
     const maxEvents = 50;
+
+    // Plugin state
+    const isPlugin = !!device.is_plugin;
+    const [pluginData, setPluginData] = useState(null);
+    const [pluginParams, setPluginParams] = useState({});
+
+    useEffect(() => {
+        if (isPlugin && device.plugin_instance_id) {
+            api(`/plugins/instances/${device.plugin_instance_id}`)
+                .then(d => { setPluginData(d); setPluginParams(d.params || {}); })
+                .catch(() => {});
+        }
+    }, [device.plugin_instance_id]);
+
+    const onPluginParamChange = useCallback((name, value) => {
+        setPluginParams(prev => ({ ...prev, [name]: value }));
+        if (device.plugin_instance_id) {
+            api(`/plugins/instances/${device.plugin_instance_id}`, {
+                method: 'PATCH',
+                body: JSON.stringify({ params: { [name]: value } }),
+            }).catch(() => {});
+        }
+    }, [device.plugin_instance_id]);
+
+    const deletePlugin = async () => {
+        if (!confirm('Delete this virtual device?')) return;
+        await api(`/plugins/instances/${device.plugin_instance_id}`, { method: 'DELETE' });
+        showToast('Plugin deleted');
+        close();
+        if (refresh) refresh();
+    };
 
     const outPorts = device.ports.filter(p => p.is_output);
 
@@ -848,7 +882,21 @@ function DeviceDetailPanel({ device, onClose, showToast }) {
                     </div>
                 </div>
 
-                ${device.ports.length > 1 && html`
+                ${isPlugin && pluginData && html`
+                    <div class="card">
+                        <h3>Plugin Config</h3>
+                        <${PluginConfigPanel}
+                            instanceId=${device.plugin_instance_id}
+                            paramsSchema=${pluginData.params_schema}
+                            params=${pluginParams}
+                            onParamChange=${onPluginParamChange}
+                            inputs=${pluginData.inputs}
+                            outputs=${pluginData.outputs}
+                            ccInputs=${pluginData.cc_inputs} />
+                    </div>
+                `}
+
+                ${!isPlugin && device.ports.length > 1 && html`
                     <div class="card">
                         <h3>Ports</h3>
                         ${device.ports.map(p => html`
@@ -928,48 +976,79 @@ function DeviceDetailPanel({ device, onClose, showToast }) {
                         </div>
                     </div>
                 `}
+
+                ${isPlugin && html`
+                    <div style="margin-top:16px;padding:16px 0">
+                        <button class="btn btn-danger btn-block" onclick=${deletePlugin}>Delete Plugin</button>
+                    </div>
+                `}
             </div>
         </div>
     `;
 }
 
-// --- Status Page ---
-function StatusPage({ devices, onDeviceSelect }) {
-    const [sys, setSys] = useState(null);
-    useEffect(() => { api('/system').then(setSys); }, []);
+// --- Devices Page ---
+function DevicesPage({ devices, onDeviceSelect, showToast, refresh }) {
+    const [pluginTypes, setPluginTypes] = useState({});
+    const [showAddSheet, setShowAddSheet] = useState(false);
 
-    if (!sys) return html`<div class="loading">Loading...</div>`;
+    useEffect(() => {
+        api('/plugins').then(setPluginTypes).catch(() => {});
+    }, []);
 
-    const uptime = sys.uptime_seconds;
-    const uptimeStr = uptime != null
-        ? `${Math.floor(uptime/3600)}h ${Math.floor((uptime%3600)/60)}m`
-        : '?';
+    const addPlugin = async (typeName) => {
+        try {
+            await api('/plugins/instances', {
+                method: 'POST',
+                body: JSON.stringify({ type: typeName }),
+            });
+            showToast('Virtual device created');
+            setShowAddSheet(false);
+            refresh();
+        } catch (e) {
+            showToast('Failed to create plugin');
+        }
+    };
+
+    const sorted = [...devices].sort((a, b) => a.name.localeCompare(b.name));
 
     return html`
         <div class="card">
-            <h3>System</h3>
-            <div class="stat-grid">
-                <div class="stat"><div class="label">Hostname</div><div class="value">${sys.hostname}</div></div>
-                <div class="stat"><div class="label">Version</div><div class="value">${sys.version}</div></div>
-                <div class="stat"><div class="label">CPU Temp</div><div class="value">${sys.cpu_temp_c != null ? sys.cpu_temp_c + '\u00b0C' : '?'}</div></div>
-                <div class="stat"><div class="label">Uptime</div><div class="value">${uptimeStr}</div></div>
-                <div class="stat"><div class="label">RAM</div><div class="value">${sys.ram.available_mb || '?'} / ${sys.ram.total_mb || '?'} MB</div></div>
-                ${(sys.ip_addresses || []).map(ip => html`
-                    <div class="stat"><div class="label">${ip.interface}</div><div class="value">${ip.address}</div></div>
-                `)}
-            </div>
-        </div>
-        <div class="card">
-            <h3>Connected Devices (${devices.length})</h3>
-            ${[...devices].sort((a, b) => a.name.localeCompare(b.name)).map(d => html`
+            <h3>Devices (${devices.length})</h3>
+            ${sorted.map(d => html`
                 <div class="device" style="cursor:pointer" onclick=${() => onDeviceSelect(d)}>
-                    <div class="dot"></div>
-                    <span class="name">${d.name}</span>
-                    <span class="ports">${d.ports.length} port${d.ports.length !== 1 ? 's' : ''} \u203a</span>
+                    <div class="dot ${d.online ? '' : 'offline'}"></div>
+                    <span class="name">${d.is_plugin ? '\u1E7C ' : ''}${d.name}</span>
+                    <span class="ports">${d.is_plugin ? (d.plugin_type_name || d.plugin_type || '') : `${d.ports.length} port${d.ports.length !== 1 ? 's' : ''}`} \u203a</span>
                 </div>
             `)}
             ${devices.length === 0 && html`<p style="color:var(--text-dim)">No devices connected</p>`}
         </div>
+        <button class="btn btn-primary btn-block" style="margin-top:12px" onclick=${() => setShowAddSheet(true)}>+ Add Virtual Device</button>
+
+        ${showAddSheet && html`
+            <div class="filter-overlay" onclick=${(e) => e.target.className === 'filter-overlay' && setShowAddSheet(false)}>
+                <div class="filter-panel" style="max-height:70vh">
+                    <div class="panel-header">
+                        <div class="panel-handle"></div>
+                    </div>
+                    <div class="panel-header">
+                        <h3>Add Virtual Device</h3>
+                        <button class="panel-close" onclick=${() => setShowAddSheet(false)}>\u2715</button>
+                    </div>
+                    ${Object.entries(pluginTypes).map(([type, info]) => html`
+                        <div class="device" style="cursor:pointer;padding:12px 0" onclick=${() => addPlugin(type)}>
+                            <div style="flex:1">
+                                <div style="font-weight:600;margin-bottom:2px">${info.name}</div>
+                                <div style="font-size:12px;color:var(--text-dim)">${info.description}</div>
+                            </div>
+                            <span style="color:var(--accent);font-size:13px;font-weight:600">Add</span>
+                        </div>
+                    `)}
+                    ${Object.keys(pluginTypes).length === 0 && html`<p style="color:var(--text-dim);padding:16px">No plugins available</p>`}
+                </div>
+            </div>
+        `}
     `;
 }
 
@@ -1032,6 +1111,7 @@ function UpgradeCard({ showToast }) {
     const [updating, setUpdating] = useState(false);
     const [status, setStatus] = useState('');
     const [showLog, setShowLog] = useState(false);
+    const [showAll, setShowAll] = useState(false);
 
     const check = async () => {
         setChecking(true);
@@ -1041,40 +1121,28 @@ function UpgradeCard({ showToast }) {
     };
     useEffect(() => { check(); }, []);
 
-    const install = async () => {
-        if (!info || !info.deb_url) return;
-        if (!confirm(`Update to v${info.latest}? The service will restart.`)) return;
+    const installVersion = async (ver, debUrl) => {
+        if (!debUrl) return;
+        const action = ver === info.latest ? 'Update' : 'Install';
+        if (!confirm(`${action} v${ver}? The service will restart.`)) return;
         setUpdating(true);
         setStatus('starting');
-        const res = await api('/system/update', { method: 'POST', body: JSON.stringify({ deb_url: info.deb_url }) });
+        const res = await api('/system/update', { method: 'POST', body: JSON.stringify({ deb_url: debUrl }) });
         if (res.error) { showToast('Update failed: ' + res.error); setUpdating(false); setStatus(''); return; }
 
-        // Poll update status until done or version changes
         const startVersion = info.current;
         const poll = setInterval(async () => {
             try {
                 const s = await fetch('/api/system/update-status').then(r => r.json()).catch(() => null);
                 if (s && s.status) setStatus(s.status);
-                if (s && s.status === 'done') {
-                    // Service was restarted by dpkg — wait for new version
-                    setStatus('restarting');
-                }
+                if (s && s.status === 'done') setStatus('restarting');
                 if (s && s.status && s.status.startsWith('error')) {
-                    showToast(s.status);
-                    setUpdating(false);
-                    clearInterval(poll);
-                    return;
+                    showToast(s.status); setUpdating(false); clearInterval(poll); return;
                 }
-                // Check if version changed (service restarted with new code)
                 if (s && s.version && s.version !== startVersion) {
-                    clearInterval(poll);
-                    // Reload page to pick up new JS/CSS
-                    location.reload();
-                    return;
+                    clearInterval(poll); location.reload(); return;
                 }
-            } catch (e) {
-                // Service down during restart — keep polling
-            }
+            } catch (e) {}
         }, 1500);
     };
 
@@ -1100,12 +1168,36 @@ function UpgradeCard({ showToast }) {
                     </div>
                 `}
                 ${info.update_available
-                    ? html`<button class="btn btn-success btn-block" onclick=${install} disabled=${updating}>
+                    ? html`<button class="btn btn-success btn-block" onclick=${() => installVersion(info.latest, info.deb_url)} disabled=${updating}>
                         ${'Install v' + info.latest}</button>`
                     : html`<button class="btn btn-secondary btn-block" onclick=${check} disabled=${checking}>
                         ${checking ? 'Checking...' : 'Check for updates'}</button>`}
                 ${updating && html`<p style="font-size:13px;color:var(--warn);margin-top:8px;text-align:center;font-weight:500">${statusLabel || 'Starting...'}</p>`}
                 ${info.offline && html`<p style="font-size:11px;color:var(--text-dim);margin-top:4px">No internet connection — connect to a network to check for updates.</p>`}
+
+                ${info.all_versions && info.all_versions.length > 0 && html`
+                    <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--surface2)">
+                        <button style="background:none;border:none;color:var(--accent);font-size:12px;cursor:pointer;padding:0"
+                            onclick=${() => setShowAll(!showAll)}>${showAll ? '\u25bc' : '\u25b6'} All versions</button>
+                        ${showAll && html`
+                            <div style="margin-top:8px">
+                                ${info.all_versions.map(v => html`
+                                    <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--surface2)">
+                                        <span style="font-size:13px">
+                                            v${v.version}
+                                            ${v.version === info.current ? html` <span style="color:var(--text-dim);font-size:11px">(current)</span>` : ''}
+                                            ${v.prerelease ? html` <span style="color:var(--warn);font-size:11px">pre</span>` : ''}
+                                        </span>
+                                        ${v.version !== info.current && html`
+                                            <button class="btn btn-secondary" style="padding:4px 12px;font-size:12px"
+                                                onclick=${() => installVersion(v.version, v.deb_url)} disabled=${updating}>Install</button>
+                                        `}
+                                    </div>
+                                `)}
+                            </div>
+                        `}
+                    </div>
+                `}
             `}
         </div>
     `;
@@ -1235,9 +1327,10 @@ function WiFiCard({ showToast }) {
 // --- Settings Page ---
 function SettingsPage({ showToast, showMidiBar, toggleMidiBar }) {
     const [ifaces, setIfaces] = useState([]);
+    const [sys, setSys] = useState(null);
     const [defaultRouting, setDefaultRouting] = useState('all');
     useEffect(() => { api('/network').then(setIfaces).catch(() => {}); }, []);
-    useEffect(() => { api('/system').then(s => setDefaultRouting(s.default_routing || 'all')).catch(() => {}); }, []);
+    useEffect(() => { api('/system').then(s => { setSys(s); setDefaultRouting(s.default_routing || 'all'); }).catch(() => {}); }, []);
 
     const changeDefaultRouting = async (val) => {
         setDefaultRouting(val);
@@ -1252,7 +1345,26 @@ function SettingsPage({ showToast, showMidiBar, toggleMidiBar }) {
         }
     };
 
+    const uptimeStr = sys && sys.uptime_seconds != null
+        ? `${Math.floor(sys.uptime_seconds/3600)}h ${Math.floor((sys.uptime_seconds%3600)/60)}m`
+        : '?';
+
     return html`
+        ${sys && html`
+            <div class="card">
+                <h3>System</h3>
+                <div class="stat-grid">
+                    <div class="stat"><div class="label">Hostname</div><div class="value">${sys.hostname}</div></div>
+                    <div class="stat"><div class="label">Version</div><div class="value">${sys.version}</div></div>
+                    <div class="stat"><div class="label">CPU Temp</div><div class="value">${sys.cpu_temp_c != null ? sys.cpu_temp_c + '\u00b0C' : '?'}</div></div>
+                    <div class="stat"><div class="label">Uptime</div><div class="value">${uptimeStr}</div></div>
+                    <div class="stat"><div class="label">RAM</div><div class="value">${sys.ram.available_mb || '?'} / ${sys.ram.total_mb || '?'} MB</div></div>
+                    ${(sys.ip_addresses || []).map(ip => html`
+                        <div class="stat"><div class="label">${ip.interface}</div><div class="value">${ip.address}</div></div>
+                    `)}
+                </div>
+            </div>
+        `}
         <${WiFiCard} showToast=${showToast} />
         ${ifaces.filter(i => i.interface !== 'wlan0').map(i => html`
             <${NetworkCard} iface=${i} showToast=${showToast} />
@@ -1277,7 +1389,6 @@ function SettingsPage({ showToast, showMidiBar, toggleMidiBar }) {
         </div>
         <${UpgradeCard} showToast=${showToast} />
         <div class="card">
-            <h3>System</h3>
             <button class="btn btn-danger btn-block" onclick=${rebootPi}>Reboot Pi</button>
         </div>
     `;
@@ -1391,8 +1502,9 @@ function App() {
         case 'presets':
             page = html`<${PresetsPage} refresh=${refresh} showToast=${showToast} />`;
             break;
-        case 'status':
-            page = html`<${StatusPage} devices=${devices} onDeviceSelect=${d => setSelectedDeviceId(d.client_id)} />`;
+        case 'devices':
+            page = html`<${DevicesPage} devices=${devices} onDeviceSelect=${d => setSelectedDeviceId(d.client_id)}
+                showToast=${showToast} refresh=${refresh} />`;
             break;
         case 'settings':
             page = html`<${SettingsPage} showToast=${showToast} showMidiBar=${showMidiBar} toggleMidiBar=${toggleMidiBar} />`;
@@ -1410,12 +1522,12 @@ function App() {
         <nav class="bottom-nav">
             <button class=${tab === 'routing' ? 'active' : ''} onclick=${() => setTab('routing')}>${IconRouting}<span>Routing</span></button>
             <button class=${tab === 'presets' ? 'active' : ''} onclick=${() => setTab('presets')}>${IconPreset}<span>Presets</span></button>
-            <button class=${tab === 'status' ? 'active' : ''} onclick=${() => setTab('status')}>${IconStatus}<span>Status</span></button>
+            <button class=${tab === 'devices' ? 'active' : ''} onclick=${() => setTab('devices')}>${IconStatus}<span>Devices</span></button>
             <button class=${tab === 'settings' ? 'active' : ''} onclick=${() => setTab('settings')}>${IconSettings}<span>Settings</span></button>
         </nav>
         ${selectedDevice && html`<${DeviceDetailPanel} key=${selectedDeviceId} device=${selectedDevice}
             onClose=${() => { setSelectedDeviceId(null); refresh(); }}
-            showToast=${showToast} />`}
+            showToast=${showToast} refresh=${refresh} />`}
         <${Toast} message=${toast} />
     `;
 }

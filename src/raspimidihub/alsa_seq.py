@@ -316,7 +316,7 @@ class AlsaSeq:
         )
         check(self._output_port, "Failed to create output port")
 
-        # Track send subscriptions per instance
+        # Track send subscriptions per destination
         self._send_subscriptions: set = set()
 
         # Subscribe to system announcements
@@ -346,9 +346,15 @@ class AlsaSeq:
         fd = struct.unpack_from("i", buf, 0)[0]
         return fd
 
-    def scan_devices(self) -> list[MidiDevice]:
-        """Enumerate all MIDI clients and ports, filtering system/self."""
+    def scan_devices(self, include_user_clients: set[int] | None = None) -> list[MidiDevice]:
+        """Enumerate all MIDI clients and ports, filtering system/self.
+
+        Args:
+            include_user_clients: Set of user-space client IDs to include
+                (e.g. plugin virtual devices). Other user clients are still skipped.
+        """
         devices = []
+        include_user_clients = include_user_clients or set()
 
         cinfo = SndSeqClientInfoPtr()
         check(snd_seq_client_info_malloc(byref(cinfo)), "malloc client_info")
@@ -360,13 +366,13 @@ class AlsaSeq:
             while snd_seq_query_next_client(self._handle, cinfo) >= 0:
                 client_id = snd_seq_client_info_get_client(cinfo)
 
-                # Skip System, Midi Through, ourselves, and other user-space clients
+                # Skip System, Midi Through, ourselves
                 if client_id in (SND_SEQ_CLIENT_SYSTEM, MIDI_THROUGH_CLIENT_ID, self._client_id):
                     continue
 
                 client_type = snd_seq_client_info_get_type(cinfo)
-                if client_type == SND_SEQ_USER_CLIENT:
-                    continue  # Only connect hardware (kernel) MIDI devices
+                if client_type == SND_SEQ_USER_CLIENT and client_id not in include_user_clients:
+                    continue  # Only connect hardware (kernel) MIDI devices + whitelisted plugins
 
                 name_raw = snd_seq_client_info_get_name(cinfo)
                 client_name = name_raw.decode("utf-8", errors="replace") if name_raw else f"Client {client_id}"
@@ -453,14 +459,14 @@ class AlsaSeq:
 
     def send_event(self, ev: SndSeqEvent, dest_client: int, dest_port: int) -> None:
         """Send a MIDI event to a specific destination."""
-        # Ensure we have a subscription to the destination
+        # Ensure subscription exists (ALSA requires a route for delivery)
         key = (dest_client, dest_port)
         if key not in self._send_subscriptions:
             try:
                 self.subscribe(self._client_id, self._output_port, dest_client, dest_port)
                 self._send_subscriptions.add(key)
             except OSError:
-                pass  # already connected or other issue
+                pass
 
         ev.source.client = self._client_id
         ev.source.port = self._output_port

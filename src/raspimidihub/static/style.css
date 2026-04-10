@@ -664,3 +664,151 @@ body {
     .main { max-width: 900px; margin: 0 auto; }
     .stat-grid { grid-template-columns: repeat(4, 1fr); }
 }
+
+/* === Plugin Control Styles === */
+
+/* Wheel */
+.wheel-group { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+.wheel-label { font-size: 13px; color: var(--text-dim); min-width: 70px; }
+.wheel-value { font-size: 15px; font-weight: 600; min-width: 40px; text-align: right; font-variant-numeric: tabular-nums; }
+.wheel-container {
+    width: 100px; height: 60px; overflow: hidden; border-radius: 10px;
+    position: relative; touch-action: none; cursor: grab;
+    background: linear-gradient(180deg, #080810 0%, #141420 8%, #1c1c30 20%, #222238 50%, #1c1c30 80%, #141420 92%, #080810 100%);
+    border: 1px solid rgba(255,255,255,0.04);
+    box-shadow: inset 0 3px 10px rgba(0,0,0,0.8), inset 0 -3px 10px rgba(0,0,0,0.8), 0 1px 2px rgba(255,255,255,0.03);
+}
+.wheel-container:active { cursor: grabbing; }
+.wheel-inner { position: absolute; width: 100%; left: 0; will-change: transform; }
+.wheel-tick {
+    height: 20px; display: flex; align-items: center; justify-content: center;
+    font-size: 11px; color: rgba(255,255,255,0.25); position: relative;
+    font-variant-numeric: tabular-nums; user-select: none;
+}
+.wheel-tick::before { content: ''; position: absolute; left: 12px; right: 12px; top: 0; height: 1px; background: rgba(255,255,255,0.04); }
+.wheel-tick.active { color: #fff; font-weight: 700; font-size: 13px; text-shadow: 0 0 10px rgba(233,69,96,0.6); }
+.wheel-tick.near { color: rgba(255,255,255,0.45); font-size: 11px; }
+.wheel-container::after {
+    content: ''; position: absolute; top: 50%; left: 0; width: 4px; height: 2px; margin-top: -1px;
+    background: var(--accent); border-radius: 0 1px 1px 0; pointer-events: none; z-index: 2;
+}
+.wheel-container::before {
+    content: ''; position: absolute; inset: 0;
+    background: radial-gradient(ellipse 160% 50% at 50% 50%, transparent 30%, rgba(0,0,0,0.85) 100%);
+    pointer-events: none; z-index: 1;
+}
+
+/* Fader */
+.fader-group { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+.fader-group.vertical { flex-direction: column; align-items: center; gap: 8px; width: 50px; display: inline-flex; margin-right: 16px; }
+.fader-label { font-size: 13px; color: var(--text-dim); min-width: 70px; }
+.fader-group.vertical .fader-label { min-width: unset; font-size: 11px; text-align: center; }
+.fader-value { font-size: 14px; font-weight: 600; min-width: 36px; text-align: right; font-variant-numeric: tabular-nums; }
+.fader-group.vertical .fader-value { min-width: unset; text-align: center; font-size: 13px; }
+.fader-track {
+    position: relative; height: 36px; flex: 1; max-width: 200px; border-radius: 4px;
+    background: linear-gradient(180deg, #0a0a12 0%, #12121e 40%, #181828 60%, #0e0e18 100%);
+    box-shadow: inset 0 1px 4px rgba(0,0,0,0.7), 0 1px 1px rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.05); touch-action: none; cursor: pointer; overflow: hidden;
+}
+.fader-track::before {
+    content: ''; position: absolute; top: 50%; left: 8px; right: 8px; height: 2px; margin-top: -1px;
+    background: rgba(255,255,255,0.06); border-radius: 1px;
+}
+.fader-track::after {
+    content: ''; position: absolute; top: 14px; bottom: 14px; left: 8px; right: 8px;
+    background: repeating-linear-gradient(90deg, rgba(255,255,255,0.06) 0px, rgba(255,255,255,0.06) 1px, transparent 1px, transparent 10%);
+}
+.fader-thumb {
+    position: absolute; top: 3px; width: 14px; height: 28px; border-radius: 3px;
+    background: linear-gradient(180deg, #999 0%, #bbb 15%, #aaa 35%, #888 55%, #999 75%, #777 100%);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.6), inset 0 1px 1px rgba(255,255,255,0.4);
+    z-index: 1;
+}
+.fader-thumb::before {
+    content: ''; position: absolute; top: 50%; left: 3px; right: 3px; height: 1px; margin-top: -1px;
+    background: rgba(0,0,0,0.3); box-shadow: 0 1px 0 rgba(255,255,255,0.2);
+}
+.fader-fill {
+    position: absolute; top: 50%; left: 8px; height: 3px; margin-top: -1.5px;
+    background: var(--accent); opacity: 0.5; border-radius: 1.5px; pointer-events: none;
+}
+.fader-track.vertical { width: 36px; height: 150px; flex: none; max-width: unset; }
+.fader-track.vertical::before { top: 8px; bottom: 8px; left: 50%; width: 2px; height: auto; right: auto; margin-left: -1px; margin-top: 0; }
+.fader-track.vertical .fader-thumb { top: auto; left: 3px; width: 28px; height: 14px; }
+.fader-track.vertical .fader-fill { left: 50%; bottom: 8px; width: 3px; height: auto; top: auto; margin-left: -1.5px; margin-top: 0; }
+
+/* Toggle (metal switch) */
+.toggle-group { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; }
+.toggle-label { font-size: 13px; color: var(--text-dim); min-width: 70px; }
+.metal-toggle {
+    width: 56px; height: 30px; border-radius: 4px;
+    background: linear-gradient(180deg, #2a2a2a 0%, #1a1a1a 40%, #0f0f0f 100%);
+    box-shadow: inset 0 1px 3px rgba(0,0,0,0.8), 0 1px 2px rgba(255,255,255,0.05);
+    position: relative; cursor: pointer; border: 1px solid #333; overflow: hidden; touch-action: none;
+}
+.metal-toggle::before {
+    content: ''; position: absolute; top: 2px; width: 22px; height: 24px; border-radius: 3px;
+    background: linear-gradient(180deg, #888 0%, #aaa 20%, #999 40%, #777 60%, #888 80%, #666 100%);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.6), inset 0 1px 1px rgba(255,255,255,0.4);
+    transition: left 0.15s cubic-bezier(0.4, 0, 0.2, 1); left: 3px;
+}
+.metal-toggle.on::before { left: 29px; }
+.metal-toggle .slot {
+    position: absolute; top: 3px; bottom: 3px; left: 6px; right: 6px; border-radius: 2px;
+    background: linear-gradient(180deg, #0a0a0a 0%, #1a1a1a 100%);
+    box-shadow: inset 0 1px 3px rgba(0,0,0,0.9);
+}
+.metal-toggle .indicator {
+    position: absolute; top: 11px; width: 6px; height: 6px; border-radius: 50%;
+    transition: opacity 0.15s, background 0.15s;
+}
+.metal-toggle .indicator.off-dot { left: 10px; background: #333; }
+.metal-toggle .indicator.on-dot { right: 10px; background: #333; }
+.metal-toggle.on .indicator.on-dot { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
+.toggle-state { font-size: 13px; font-weight: 500; min-width: 30px; }
+.toggle-state.on { color: var(--accent); }
+.toggle-state.off { color: var(--text-dim); }
+
+/* Radio group */
+.radio-group { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 16px; }
+.radio-group .radio-label { font-size: 13px; color: var(--text-dim); min-width: 70px; padding-top: 6px; }
+.radio-options { display: flex; flex-wrap: wrap; gap: 6px; }
+.radio-opt {
+    padding: 7px 14px; background: var(--bg); border: 1px solid var(--surface2); border-radius: 6px;
+    color: var(--text-dim); font-size: 13px; cursor: pointer; transition: all 0.15s; user-select: none;
+}
+.radio-opt.active { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 500; }
+
+/* Step editor */
+.step-editor { padding-bottom: 4px; }
+.step-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 3px; }
+.step-cell {
+    border-radius: 5px; background: var(--bg); border: 1px solid rgba(255,255,255,0.06);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 6px 0; position: relative; min-height: 70px;
+}
+.step-cell.on { background: rgba(233,69,96,0.15); border-color: var(--accent); }
+.step-cell.on.beat { border-color: #ff6b82; }
+.step-head { width: 100%; height: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; user-select: none; }
+.step-head::after { content: ''; width: 8px; height: 8px; border-radius: 50%; background: rgba(255,255,255,0.1); }
+.step-cell.on .step-head::after { background: var(--accent); box-shadow: 0 0 6px rgba(233,69,96,0.5); }
+.mini-wheel {
+    width: 38px; height: 40px; overflow: hidden; border-radius: 4px;
+    background: linear-gradient(180deg, #080810 0%, #181828 50%, #080810 100%);
+    box-shadow: inset 0 1px 4px rgba(0,0,0,0.6); position: relative;
+    touch-action: none; cursor: grab; border: 1px solid rgba(255,255,255,0.04); margin: 1px 0;
+}
+
+/* Curve editor */
+.curve-group { margin-bottom: 16px; }
+.curve-canvas-wrap {
+    position: relative; width: 100%; max-width: 280px; aspect-ratio: 1;
+    margin: 8px auto; background: var(--bg); border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 8px; overflow: hidden; touch-action: none; cursor: crosshair;
+}
+.curve-canvas-wrap canvas { width: 100%; height: 100%; }
+.curve-presets { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; justify-content: center; }
+
+/* Device list offline dot */
+.dot.offline { background: #555 !important; }

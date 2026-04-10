@@ -28,6 +28,7 @@ class StableDeviceInfo:
     card_num: int  # ALSA card number
     display_name: str  # User-facing name (custom or default)
     custom_name: str = ""  # User-assigned name (empty = use default)
+    is_plugin: bool = False  # True for virtual instrument plugins
 
     @property
     def name(self) -> str:
@@ -244,6 +245,30 @@ class DeviceRegistry:
 
     def get_custom_names(self) -> dict[str, str]:
         return dict(self._custom_names)
+
+    def register_plugin(self, client_id: int, instance_id: str, display_name: str) -> StableDeviceInfo:
+        """Register a plugin virtual device (no sysfs card, stable ID = plugin-{id})."""
+        stable_id = f"plugin-{instance_id}"
+        info = StableDeviceInfo(
+            stable_id=stable_id,
+            vid="", pid="", usb_path="",
+            card_num=-1,
+            display_name=display_name,
+            is_plugin=True,
+        )
+        if stable_id in self._custom_names:
+            info.custom_name = self._custom_names[stable_id]
+        self._by_client[client_id] = info
+        self._by_stable_id[stable_id] = info
+        return info
+
+    def unregister_plugin(self, instance_id: str) -> None:
+        """Remove a plugin device from the registry."""
+        stable_id = f"plugin-{instance_id}"
+        self._by_stable_id.pop(stable_id, None)
+        to_remove = [cid for cid, info in self._by_client.items() if info.stable_id == stable_id]
+        for cid in to_remove:
+            del self._by_client[cid]
 
     def all_devices(self) -> list[StableDeviceInfo]:
         return list(self._by_client.values())

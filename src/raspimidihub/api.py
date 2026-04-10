@@ -225,7 +225,17 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
                 entry["vid"] = info.vid
                 entry["pid"] = info.pid
                 entry["usb_path"] = info.usb_path
+                entry["is_plugin"] = info.is_plugin
             entry["online"] = True
+            # Add plugin instance info if this is a virtual device
+            if info and info.is_plugin and engine._plugin_host:
+                # stable_id is "plugin-{instance_id}"
+                inst_id = info.stable_id.removeprefix("plugin-")
+                inst_data = engine._plugin_host.get_instance_data(inst_id)
+                if inst_data:
+                    entry["plugin_type"] = inst_data["type"]
+                    entry["plugin_instance_id"] = inst_id
+                    entry["plugin_type_name"] = inst_data.get("name", inst_data["type"])
             result.append(entry)
 
         # Add offline devices from saved config
@@ -917,6 +927,10 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
                 names[info.stable_id] = info.name
         config.data["device_names"] = names
 
+        # Save plugin instances
+        if engine._plugin_host:
+            config.data["plugins"] = engine._plugin_host.serialize_instances()
+
         if config.save():
             return Response.json({"status": "saved"})
         return Response.error("Failed to save config", 500)
@@ -939,26 +953,68 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
     async def api_update_check(req: Request) -> Response:
         import urllib.request
         import json as _json
+        from packaging.version import Version, InvalidVersion
 
         loop = asyncio.get_event_loop()
 
+        def _parse_ver(s):
+            """Parse version string for comparison. Returns tuple for sorting."""
+            s = s.lstrip("v")
+            # Handle pre-release: "2.0.0-alpha1" → lower than "2.0.0"
+            parts = s.replace("-", ".").split(".")
+            nums = []
+            pre = ""
+            for p in parts:
+                try:
+                    nums.append(int(p))
+                except ValueError:
+                    pre = p
+                    break
+            while len(nums) < 3:
+                nums.append(0)
+            # Pre-release sorts before release: (2,0,0,'') > (2,0,0,'alpha1')
+            return tuple(nums) + (pre or "~",)  # '~' sorts after alpha/beta
+
         def _check():
-            url = "https://api.github.com/repos/wamdam/raspimidihub/releases/latest"
+            url = "https://api.github.com/repos/wamdam/raspimidihub/releases?per_page=20"
             rq = urllib.request.Request(url, headers={"Accept": "application/vnd.github+json"})
             with urllib.request.urlopen(rq, timeout=10) as resp:
-                data = _json.loads(resp.read())
-            tag = data.get("tag_name", "")
-            latest = tag.lstrip("v")
-            body = data.get("body", "")
-            # Find the .deb asset URL
-            deb_url = ""
-            for asset in data.get("assets", []):
-                name = asset.get("name", "")
-                if name.startswith("raspimidihub_") and name.endswith("_all.deb"):
-                    deb_url = asset.get("browser_download_url", "")
-                    break
-            return {"current": __version__, "latest": latest, "changelog": body,
-                    "deb_url": deb_url, "update_available": latest != __version__}
+                releases = _json.loads(resp.read())
+
+            current_ver = _parse_ver(__version__)
+
+            # Build list of all releases with .deb assets
+            all_versions = []
+            latest_upgrade = None
+            for rel in releases:
+                if rel.get("draft"):
+                    continue
+                tag = rel.get("tag_name", "")
+                ver_str = tag.lstrip("v")
+                ver = _parse_ver(ver_str)
+                deb_url = ""
+                for asset in rel.get("assets", []):
+                    name = asset.get("name", "")
+                    if name.startswith("raspimidihub_") and name.endswith("_all.deb"):
+                        deb_url = asset.get("browser_download_url", "")
+                        break
+                if not deb_url:
+                    continue
+                entry = {"version": ver_str, "changelog": rel.get("body", ""),
+                         "deb_url": deb_url, "prerelease": rel.get("prerelease", False)}
+                all_versions.append(entry)
+                # Track newest upgrade (strictly newer than current)
+                if ver > current_ver and latest_upgrade is None:
+                    latest_upgrade = entry
+
+            return {
+                "current": __version__,
+                "latest": latest_upgrade["version"] if latest_upgrade else __version__,
+                "changelog": latest_upgrade["changelog"] if latest_upgrade else "",
+                "deb_url": latest_upgrade["deb_url"] if latest_upgrade else "",
+                "update_available": latest_upgrade is not None,
+                "all_versions": all_versions,
+            }
 
         try:
             result = await loop.run_in_executor(None, _check)
@@ -967,7 +1023,8 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
             log.warning("Update check failed: %s", e)
             return Response.json({"current": __version__, "latest": __version__,
                                   "changelog": "", "deb_url": "",
-                                  "update_available": False, "offline": True})
+                                  "update_available": False, "all_versions": [],
+                                  "offline": True})
 
     # ================================================================
     # POST /api/system/update — download and install latest .deb
@@ -1075,6 +1132,14 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         if device_names:
             engine.device_registry.load_custom_names(device_names)
 
+        # Restore plugin instances from imported config
+        if engine._plugin_host:
+            engine._plugin_host.stop_all()
+            saved_plugins = config.data.get("plugins", [])
+            if saved_plugins:
+                engine._plugin_host.restore_instances(saved_plugins)
+                engine._schedule_rescan()
+
         await server.send_sse("connection-changed", {"action": "config-loaded"})
         return Response.json({"status": "imported"})
 
@@ -1181,3 +1246,97 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         loop = asyncio.get_event_loop()
         networks = await loop.run_in_executor(None, wifi.scan_networks)
         return Response.json(networks)
+
+    # ================================================================
+    # PLUGINS — Virtual Instruments
+    # ================================================================
+
+    @server.route("GET", "/api/plugins")
+    async def api_plugins_list(req: Request) -> Response:
+        """List available plugin types."""
+        if not engine._plugin_host:
+            return Response.json({})
+        return Response.json(engine._plugin_host.list_types())
+
+    @server.route("GET", "/api/plugins/instances")
+    async def api_plugins_instances(req: Request) -> Response:
+        """List running plugin instances."""
+        if not engine._plugin_host:
+            return Response.json([])
+        instances = []
+        for inst in engine._plugin_host.get_instances():
+            data = engine._plugin_host.get_instance_data(inst.id)
+            if data:
+                instances.append(data)
+        return Response.json(instances)
+
+    @server.route("POST", "/api/plugins/instances")
+    async def api_plugins_create(req: Request) -> Response:
+        """Create a new plugin instance. Body: {type, name?}"""
+        if not engine._plugin_host:
+            return Response.error("Plugin host not available", 503)
+        body = req.json
+        plugin_type = body.get("type", "")
+        name = body.get("name", "")
+        try:
+            loop = asyncio.get_event_loop()
+            instance = await loop.run_in_executor(
+                None, engine._plugin_host.create_instance, plugin_type, name)
+        except ValueError as e:
+            return Response.error(str(e), 400)
+        except Exception as e:
+            return Response.error(f"Failed to create instance: {e}", 500)
+
+        # Trigger device rescan so the new ALSA client appears in the matrix
+        engine._schedule_rescan()
+
+        data = engine._plugin_host.get_instance_data(instance.id)
+        return Response.json(data, status=201)
+
+    @server.route("GET", "/api/plugins/instances/", exact=False)
+    async def api_plugins_instance_get(req: Request) -> Response:
+        """Get a single plugin instance config + params."""
+        if not engine._plugin_host:
+            return Response.error("Plugin host not available", 503)
+        instance_id = req.path.split("/api/plugins/instances/")[1].rstrip("/")
+        data = engine._plugin_host.get_instance_data(instance_id)
+        if data is None:
+            return Response.error("Instance not found", 404)
+        return Response.json(data)
+
+    @server.route("PATCH", "/api/plugins/instances/", exact=False)
+    async def api_plugins_instance_patch(req: Request) -> Response:
+        """Update plugin params or name. Body: {params?, name?}"""
+        if not engine._plugin_host:
+            return Response.error("Plugin host not available", 503)
+        instance_id = req.path.split("/api/plugins/instances/")[1].rstrip("/")
+        instance = engine._plugin_host.get_instance(instance_id)
+        if instance is None:
+            return Response.error("Instance not found", 404)
+
+        body = req.json
+        if "name" in body:
+            engine._plugin_host.rename_instance(instance_id, body["name"])
+        if "params" in body:
+            engine._plugin_host.set_params(instance_id, body["params"])
+
+        data = engine._plugin_host.get_instance_data(instance_id)
+        return Response.json(data)
+
+    @server.route("DELETE", "/api/plugins/instances/", exact=False)
+    async def api_plugins_instance_delete(req: Request) -> Response:
+        """Stop and remove a plugin instance."""
+        if not engine._plugin_host:
+            return Response.error("Plugin host not available", 503)
+        instance_id = req.path.split("/api/plugins/instances/")[1].rstrip("/")
+        instance = engine._plugin_host.get_instance(instance_id)
+        if instance is None:
+            return Response.error("Instance not found", 404)
+
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, engine._plugin_host.stop_instance, instance_id)
+
+        # Trigger device rescan so the removed ALSA client disappears from the matrix
+        engine._schedule_rescan()
+
+        return Response.json({"status": "deleted"})

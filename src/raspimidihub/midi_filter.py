@@ -6,6 +6,7 @@ latency but enables per-channel filtering and MIDI mapping.
 """
 
 import asyncio
+import ctypes
 import logging
 from dataclasses import dataclass, field
 from enum import Enum
@@ -176,6 +177,7 @@ class FilteredConnection:
     _toggle_state: dict = field(default_factory=dict)  # mapping index -> bool
     # Our internal port IDs for this connection
     _read_port: int = -1
+    _write_port: int = -1
 
     @property
     def conn_id(self) -> str:
@@ -221,12 +223,21 @@ class FilterEngine:
 
         # Create a read port and subscribe to the source
         self._port_counter += 1
-        port_name = f"filter:{self._port_counter}"
-        read_port = self._seq.create_port(port_name, writable=True)
+        read_name = f"filter:{self._port_counter}"
+        read_port = self._seq.create_port(read_name, writable=True)
+
+        # Create a write port dedicated to this connection's destination
+        self._port_counter += 1
+        write_name = f"fout:{self._port_counter}"
+        write_port = self._seq.create_port(write_name, readable=True)
 
         # Subscribe: source -> our read port
         self._seq.subscribe(src_client, src_port,
                             self._seq.client_id, read_port)
+
+        # Subscribe: our write port -> destination
+        self._seq.subscribe(self._seq.client_id, write_port,
+                            dst_client, dst_port)
 
         fc = FilteredConnection(
             src_client=src_client,
@@ -235,6 +246,7 @@ class FilterEngine:
             dst_port=dst_port,
             filter=midi_filter,
             _read_port=read_port,
+            _write_port=write_port,
         )
         self._filtered[conn_id] = fc
         log.info("Added filter on %s: channels=0x%04x types=%s",
@@ -247,12 +259,19 @@ class FilterEngine:
         if fc is None:
             return False
 
-        # Unsubscribe source from our port
+        # Unsubscribe source from our read port
         try:
             self._seq.unsubscribe(fc.src_client, fc.src_port,
                                   self._seq.client_id, fc._read_port)
         except OSError:
             pass
+        # Unsubscribe our write port from destination
+        if fc._write_port >= 0:
+            try:
+                self._seq.unsubscribe(self._seq.client_id, fc._write_port,
+                                      fc.dst_client, fc.dst_port)
+            except OSError:
+                pass
 
         log.info("Removed filter on %s", conn_id)
         return True
@@ -332,8 +351,32 @@ class FilterEngine:
                 if consumed:
                     continue
 
-            # Forward original event (possibly channel-remapped)
-            self._seq.send_event(ev, fc.dst_client, fc.dst_port)
+            # Forward original event via dedicated write port
+            self._forward_event(ev, fc)
+
+    def _forward_event(self, ev: SndSeqEvent, fc: FilteredConnection) -> None:
+        """Forward an event via the connection's dedicated write port."""
+        from .alsa_seq import (
+            snd_seq_event_output_direct, SndSeqAddr,
+            SND_SEQ_ADDRESS_SUBSCRIBERS, SND_SEQ_QUEUE_DIRECT,
+        )
+        ev.source.client = self._seq.client_id
+        ev.source.port = fc._write_port
+        ev.dest.client = SND_SEQ_ADDRESS_SUBSCRIBERS
+        ev.dest.port = 0
+        ev.queue = SND_SEQ_QUEUE_DIRECT
+        ev.flags = 0
+        snd_seq_event_output_direct(self._seq.handle, ctypes.pointer(ev))
+
+    def _forward_cc(self, fc: FilteredConnection, channel: int, cc: int, value: int) -> None:
+        """Send a CC event via the connection's dedicated write port."""
+        from .alsa_seq import SndSeqEvent, MidiEventType
+        ev = SndSeqEvent()
+        ev.type = MidiEventType.CONTROLLER
+        ev.data.control.channel = channel
+        ev.data.control.param = cc
+        ev.data.control.value = value
+        self._forward_event(ev, fc)
 
     def _apply_mappings(self, ev: SndSeqEvent, fc: FilteredConnection) -> bool:
         """Apply mappings to an event. Returns True if the event was consumed."""
@@ -355,7 +398,7 @@ class FilterEngine:
                     is_on = (ev_type == MidiEventType.NOTEON and ev.data.note.velocity > 0)
                     val = mapping.cc_on_value if is_on else mapping.cc_off_value
                     ch = mapping.dst_channel if mapping.dst_channel is not None else ev.channel
-                    self._seq.send_cc(fc.dst_client, fc.dst_port, ch, mapping.dst_cc, val)
+                    self._forward_cc(fc, ch, mapping.dst_cc, val)
                     if not mapping.pass_through:
                         consumed = True
 
@@ -370,7 +413,7 @@ class FilterEngine:
                         fc._toggle_state[idx] = toggled
                         val = mapping.cc_on_value if toggled else mapping.cc_off_value
                         ch = mapping.dst_channel if mapping.dst_channel is not None else ev.channel
-                        self._seq.send_cc(fc.dst_client, fc.dst_port, ch, mapping.dst_cc, val)
+                        self._forward_cc(fc, ch, mapping.dst_cc, val)
                         if not mapping.pass_through:
                             consumed = True
                     elif is_note_off:
@@ -383,7 +426,7 @@ class FilterEngine:
                     out_cc = mapping.dst_cc_num if mapping.dst_cc_num is not None else mapping.src_cc
                     out_val = mapping._scale_value(ev.data.control.value)
                     ch = mapping.dst_channel if mapping.dst_channel is not None else ev.channel
-                    self._seq.send_cc(fc.dst_client, fc.dst_port, ch, out_cc, out_val)
+                    self._forward_cc(fc, ch, out_cc, out_val)
                     if not mapping.pass_through:
                         consumed = True
 
