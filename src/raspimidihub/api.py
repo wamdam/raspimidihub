@@ -986,7 +986,6 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
     async def api_update_check(req: Request) -> Response:
         import urllib.request
         import json as _json
-        from packaging.version import Version, InvalidVersion
 
         loop = asyncio.get_event_loop()
 
