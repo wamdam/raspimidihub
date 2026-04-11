@@ -5,7 +5,7 @@ import threading
 import time
 
 from raspimidihub.plugin_api import (
-    PluginBase, Group, Radio, Wheel, Toggle, Fader, Display, Param,
+    PluginBase, Group, Radio, Wheel, Toggle, Fader,
 )
 
 
@@ -20,15 +20,19 @@ class Arpeggiator(PluginBase):
 Turns held notes into a rhythmic pattern, cycling through them in order.
 
 Sync modes:
-  Free = internal BPM, ignores external clock
-  Tempo = syncs speed to external clock but runs continuously
-  Transport = syncs to clock AND resets on Start/Stop
+  Free = uses its own internal BPM. No external clock needed.
+  Tempo = follows external clock speed but keeps running even when
+    the sequencer stops. Good for jamming without strict transport.
+  Transport = follows external clock AND resets to step 1 when the
+    sequencer sends Start. Stops when the sequencer sends Stop.
+    Use this for tight sync with a drum machine or DAW.
 
 Gate % = how long each note sounds (100=legato, 10=staccato).
-As-played pattern cycles notes in the order you pressed them.
+As-played = cycles notes in the order you pressed them.
 
-Example: Hold a C minor chord and the arpeggiator plays C-Eb-G
-in tempo. Set Transport mode for tight sync with a drum machine."""
+Example: Hold a C minor chord, set Transport mode and 1/8 rate.
+Press Play on your sequencer and the arp plays C-Eb-G in tempo,
+perfectly aligned to beat 1."""
 
     params = [
         Group("Pattern", [
@@ -39,14 +43,9 @@ in tempo. Set Transport mode for tight sync with a drum machine."""
         Group("Controls", [
             Wheel("gate", "Gate %", min=10, max=100, default=80),
             Wheel("octaves", "Octaves", min=1, max=4, default=1),
-            Radio("sync_mode", "Sync", ["free", "tempo", "transport"], default="tempo"),
+            Radio("sync_mode", "Sync", ["free", "tempo", "transport"], default="transport"),
             Wheel("bpm", "BPM", min=40, max=300, default=120, visible_when=("sync_mode", "free")),
-            Display("_beat", "Beat", display_name="beat"),
         ]),
-    ]
-
-    display_outputs = [
-        {"name": "beat", "type": "meter", "label": "Beat", "min": 0, "max": 3},
     ]
 
     cc_inputs = {74: "rate", 75: "gate"}
@@ -67,7 +66,6 @@ in tempo. Set Transport mode for tight sync with a drum machine."""
         self._free_thread = None
         self._free_running = False
         self._transport_playing = False  # transport mode: waiting for Start
-        self._beat_count = 0
 
     def on_stop(self):
         self._free_running = False
@@ -81,8 +79,6 @@ in tempo. Set Transport mode for tight sync with a drum machine."""
             self._direction = 1
             self._note_off_current()
             self._transport_playing = True
-            self._beat_count = 0
-            self.set_display("beat", 0)
 
     def on_transport_stop(self):
         """MIDI Stop received — stop if in transport mode."""
@@ -127,14 +123,9 @@ in tempo. Set Transport mode for tight sync with a drum machine."""
             self._transport_playing = True
             self._step = 0
             self._direction = 1
-            self._beat_count = 0
 
         rate = self.get_param("rate") or "1/8"
         if division != rate:
-            # Track beats for indicator (count 1/4 ticks)
-            if division == "1/4":
-                self._beat_count = (self._beat_count + 1) % 4
-                self.set_display("beat", self._beat_count)
             return
 
         self._advance_step()

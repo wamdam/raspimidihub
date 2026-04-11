@@ -355,6 +355,23 @@ function PluginToggle({ name, label, value, onChange }) {
 }
 
 // =======================================================================
+// BUTTON — rubber push button with LED
+// =======================================================================
+function PluginButton({ name, label, value, color, onChange }) {
+    const press = () => {
+        tickFeedback();
+        onChange(name, !value);
+    };
+    return html`<div class="btn-group-param">
+        <span style="font-size:12px;color:var(--text-dim)">${label}</span>
+        <button class="rubber-btn ${value ? 'active' : ''}" onclick=${press}>
+            <div class="btn-led ${color || 'green'}"></div>
+            <span class="btn-text">${value ? 'On' : 'Off'}</span>
+        </button>
+    </div>`;
+}
+
+// =======================================================================
 // STEP EDITOR — grid with on/off dots and mini-wheel offsets
 // =======================================================================
 function PluginStepEditor({ name, label, value, onChange, lengthParam, allValues }) {
@@ -675,6 +692,10 @@ function renderParam(param, values, onChange, allValues, displayCtx) {
         case 'toggle':
             return html`<${PluginToggle} name=${param.name} label=${param.label}
                 value=${val != null ? val : param.default} onChange=${onChange} />`;
+        case 'button':
+            return html`<${PluginButton} name=${param.name} label=${param.label}
+                value=${val != null ? val : param.default} color=${param.color}
+                onChange=${onChange} />`;
         case 'stepeditor':
             return html`<${PluginStepEditor} name=${param.name} label=${param.label}
                 value=${val || []} onChange=${onChange}
@@ -702,7 +723,7 @@ function renderParam(param, values, onChange, allValues, displayCtx) {
     }
 }
 
-const INLINE_TYPES = new Set(['wheel', 'fader', 'noteselect', 'channelselect', 'toggle', 'display']);
+const INLINE_TYPES = new Set(['wheel', 'fader', 'noteselect', 'channelselect', 'toggle', 'button', 'display']);
 
 function renderParamGroup(items, values, onChange, displayCtx) {
     const result = [];
@@ -854,7 +875,7 @@ function PluginConfigPanel({ instanceId, paramsSchema, params, onParamChange, in
 }
 
 export {
-    PluginWheel, PluginFader, PluginRadio, PluginToggle,
+    PluginWheel, PluginFader, PluginRadio, PluginToggle, PluginButton,
     PluginStepEditor, PluginCurveEditor, PluginNoteSelect, PluginChannelSelect,
     PluginGroup, PluginConfigPanel, renderParamList,
     tickFeedback, thudFeedback,

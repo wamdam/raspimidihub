@@ -822,6 +822,8 @@ Plugin instances and all their parameter values are saved in `config.json`. They
 
 - **Arpeggiator step editor** — add StepEditor param with 8/16/32-step pattern, per-step note offset, linked to Rate radio. The arp currently cycles held notes; step editor would add programmable patterns.
 - **Step 1.4b continued** — channel selection in filter panel could use wheels
+- **ALSA transport from user-space** — MIDI Start/Stop/Continue events sent from user-space ALSA clients (plugins) don't get converted to raw MIDI bytes (0xFA/0xFC) by some USB MIDI kernel drivers (confirmed on Novation LCXL3 DIN Out). Clock (0xF8) works fine. Need to investigate: rawmidi write as workaround, or kernel module patch. Affects Master Clock and any plugin sending transport.
+- **Arpeggiator step editor** — add StepEditor param with 8/16/32-step pattern, per-step note offset, linked to Rate radio. The arp currently cycles held notes; step editor would add programmable patterns.
 - **Plugin sandbox enforcement** — restricted __builtins__ and import validation not yet implemented (plugins currently have full Python access). Should also include:
   - Thread CPU monitoring: track per-plugin thread CPU time, warn/kill if a plugin consumes >50% for >5 seconds
   - Event output throttling: already rate-limited to 1000/sec per plugin, but should also detect infinite loops in callbacks (watchdog timer per callback invocation, kill thread if callback doesn't return within 1 second)

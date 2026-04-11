@@ -159,6 +159,18 @@ class ChannelSelect(Param):
 
 
 @dataclass
+class Button(Param):
+    """Rubber push button with LED indicator. Sends True on press, False on release."""
+    default: bool = False
+    color: str = "green"  # LED color: green, yellow, red, blue
+
+    def to_dict(self) -> dict:
+        d = super().to_dict()
+        d.update({"default": self.default, "color": self.color})
+        return d
+
+
+@dataclass
 class Display(Param):
     """Inline display output placeholder — references a display_output by name."""
     display_name: str = ""  # name of the display_output to render here
