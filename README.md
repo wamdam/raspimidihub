@@ -30,13 +30,15 @@ See all screenshots in [docs/screenshots/](docs/screenshots/) and the full [UI G
 ### MIDI Routing Matrix
 - **Automatic all-to-all routing** between USB MIDI devices out of the box
 - **Tap-to-connect matrix** with device icons and live rate meters
-- **Hot-plug support** -- add or remove devices at any time
+- **Hot-plug support** -- add or remove devices at any time, live state preserved
 - **Offline connections** -- configure routing for unplugged devices
 - **Loop prevention** -- self-connections excluded automatically
 - **Multi-port devices** fully supported
+- **Global clock/transport bridge** -- MIDI clock and transport (Start/Stop/Continue) are forwarded to all devices automatically, with loop prevention for devices that echo clock back
 
 ### Virtual Instruments and Plugins
 - **12 built-in plugins** that appear as routable MIDI devices
+- **Plugins start unconnected** -- route them manually for precise control
 - **Custom UI controls** -- wheels, faders, toggles, step editors, curve editors, scopes
 - **MIDI clock sync** -- plugins can sync to external clock or generate their own
 - **CC automation** -- map hardware knobs to plugin parameters

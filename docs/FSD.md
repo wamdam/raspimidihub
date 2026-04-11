@@ -45,9 +45,10 @@ RaspiMIDIHub turns a Raspberry Pi into a dedicated, appliance-like USB MIDI hub.
 - Every MIDI input port connected to every output port of every other device (all-to-all).
 - Self-connections excluded to prevent feedback loops.
 - System client (0) and Midi Through excluded.
-- Hotplug detection via ALSA sequencer announce events with 500ms debounce.
+- Hotplug detection via ALSA sequencer announce events with 500ms debounce. Live state (connections, filters, mappings) is snapshotted before teardown and restored after rescan.
 - Multi-port devices fully supported (all ports enumerated and connected).
-- Configurable default routing: "all-to-all" (default) or "none" (manual) for new devices.
+- Configurable default routing: "all-to-all" (default) or "none" (manual) for new hardware devices. Plugins always start unconnected.
+- Global clock/transport bridge: clock (24 PPQ) and transport (Start/Stop/Continue) from any source are forwarded to all devices automatically. Loop prevention excludes devices that are themselves sending clock (2-second tracking window).
 
 ### 3.2 Read-Only Root Filesystem
 

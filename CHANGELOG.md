@@ -4,6 +4,24 @@ All notable changes to RaspiMIDIHub will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [2.0.1] - 2026-04-11
+
+### Added
+- **Global clock/transport bridge**: MIDI clock and transport events (Start, Stop,
+  Continue) are automatically forwarded from any source to all connected devices.
+  No matrix connection needed. Loop prevention tracks which devices are sending
+  clock and excludes them from receiving it back (prevents echo loops from devices
+  like the Arturia KeyStep).
+
+### Changed
+- **Hotplug preserves live state**: filters, mappings, and connection state survive
+  device hotplug without needing to save config first. The engine snapshots all live
+  state before teardown and restores it after rescan.
+- **Plugins start unconnected**: new virtual instrument instances no longer auto-connect
+  to all devices. Users route them manually for precise control.
+- **Duplicate device handling**: two identical USB devices (same VID:PID) now get
+  unique stable IDs, so renaming one no longer affects the other.
+
 ## [2.0.0] - 2026-04-11
 
 Massive release introducing the virtual instrument / plugin system.
