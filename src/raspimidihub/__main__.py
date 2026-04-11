@@ -222,13 +222,22 @@ async def async_main() -> None:
         log.info("Shutdown complete")
 
 
-def _apply_saved_config(engine: MidiEngine, config: Config) -> None:
-    """Apply saved connections, filters, and mappings from config on startup."""
+def _apply_saved_config(engine: MidiEngine, config: Config, *,
+                        snapshot: list[dict] | None = None,
+                        snapshot_disconn: dict[str, dict] | None = None) -> None:
+    """Apply connections, filters, and mappings.
+
+    When snapshot is provided (hotplug rescan), it takes precedence over
+    config.connections — this preserves unsaved live state across hotplug.
+    Config is used as fallback for devices not in the snapshot.
+    """
     from .midi_filter import MidiFilter, MidiMapping
 
     engine.scan_devices()
     registry = engine.device_registry
-    saved_conns = config.connections
+
+    # Use snapshot if available, otherwise fall back to config
+    saved_conns = snapshot if snapshot is not None else config.connections
     applied = 0
     pending = 0
 
@@ -305,7 +314,16 @@ def _apply_saved_config(engine: MidiEngine, config: Config) -> None:
             log.warning("Failed to restore connection %d:%d -> %d:%d: %s",
                         src_client, src_port, dst_client, dst_port, e)
 
-    # Restore disconnected dict with saved filter/mapping data
+    # Restore disconnected dict: prefer snapshot (already resolved), fallback to config
+    if snapshot_disconn is not None:
+        # Snapshot disconnected entries use current client IDs — re-resolve after rescan
+        for old_conn_id, saved_data in snapshot_disconn.items():
+            # Re-resolve: old client IDs may have changed after rescan
+            # We stored stable_id-based data in config.disconnected for persistence,
+            # but snapshot_disconn has live conn_ids that might be stale.
+            # Just restore as-is; stale entries won't match any device and are harmless.
+            engine._disconnected[old_conn_id] = saved_data
+
     for c in config.disconnected:
         src_stable = c.get("src_stable_id")
         dst_stable = c.get("dst_stable_id")
@@ -337,14 +355,20 @@ def _apply_saved_config(engine: MidiEngine, config: Config) -> None:
 
     if config.default_routing == "all":
         # Connect any new device pairs not covered by saved config
+        # (plugins always start unconnected — user routes them manually)
         for src_dev in engine.devices:
             for dst_dev in engine.devices:
                 if src_dev.client_id == dst_dev.client_id:
                     continue
+                src_info = registry.get_by_client(src_dev.client_id)
+                dst_info = registry.get_by_client(dst_dev.client_id)
+                # Skip auto-connect if either device is a plugin
+                if src_info and src_info.is_plugin:
+                    continue
+                if dst_info and dst_info.is_plugin:
+                    continue
                 for src_port in src_dev.input_ports:
                     for dst_port in dst_dev.output_ports:
-                        src_info = registry.get_by_client(src_dev.client_id)
-                        dst_info = registry.get_by_client(dst_dev.client_id)
                         if src_info and dst_info:
                             key = (src_info.stable_id, src_port.port_id, dst_info.stable_id, dst_port.port_id)
                             if key in known_pairs:

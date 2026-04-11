@@ -203,18 +203,90 @@ class MidiEngine:
                 except OSError:
                     pass
 
+    def _forward_clock_to_all(self, ev: 'SndSeqEvent') -> None:
+        """Forward a clock/transport event to all devices that aren't sending clock.
+
+        Tracks which clients are producing clock events (within a 2-second window)
+        and excludes them from receiving forwarded clock — this prevents loops
+        from devices like the KeyStep that echo clock back out.
+        """
+        import time
+        src_client = ev.source.client
+        now = time.monotonic()
+
+        # Track clock sources (clients that have sent clock recently)
+        if not hasattr(self, '_clock_sources'):
+            self._clock_sources: dict[int, float] = {}  # client_id -> last_seen
+        self._clock_sources[src_client] = now
+
+        # Expire stale sources (not seen for 2 seconds)
+        stale = [c for c, t in self._clock_sources.items() if now - t > 2.0]
+        for c in stale:
+            del self._clock_sources[c]
+
+        for dev in self._devices:
+            if dev.client_id == self._seq.client_id:
+                continue  # skip our own client
+            if dev.client_id in self._clock_sources:
+                continue  # skip devices that are sending clock (prevents loops)
+            for port in dev.output_ports:
+                try:
+                    self._seq.send_event(ev, dev.client_id, port.port_id)
+                except OSError:
+                    pass
+
+    def _snapshot_live_state(self) -> tuple[list[dict], dict[str, dict]]:
+        """Capture current connections + filters/mappings before teardown."""
+        snapshot_conns = []
+        registry = self._device_registry
+        fe = self._filter_engine
+
+        for conn in self._connections:
+            conn_id = f"{conn.src_client}:{conn.src_port}-{conn.dst_client}:{conn.dst_port}"
+            entry = {
+                "src_client": conn.src_client, "src_port": conn.src_port,
+                "dst_client": conn.dst_client, "dst_port": conn.dst_port,
+            }
+            src_info = registry.get_by_client(conn.src_client) if registry else None
+            dst_info = registry.get_by_client(conn.dst_client) if registry else None
+            if src_info:
+                entry["src_stable_id"] = src_info.stable_id
+            if dst_info:
+                entry["dst_stable_id"] = dst_info.stable_id
+            # Capture filter + mappings
+            if fe:
+                f = fe.get_filter(conn_id)
+                if f:
+                    entry["filter"] = f.to_dict()
+                mappings = fe.get_mappings(conn_id)
+                if mappings:
+                    entry["mappings"] = [m.to_dict() for m in mappings]
+            snapshot_conns.append(entry)
+
+        snapshot_disconn = dict(self._disconnected)
+        return snapshot_conns, snapshot_disconn
+
     def _scan_and_connect(self) -> None:
-        """Full state reconstruction: scan devices, apply saved config or connect all."""
+        """Rescan devices and restore connections from live state snapshot.
+
+        Snapshots all connections + filters/mappings before teardown, then
+        restores from the snapshot after rescan. This preserves unsaved
+        changes across hotplug events.
+        """
+        # Snapshot live state BEFORE teardown
+        snapshot_conns, snapshot_disconn = self._snapshot_live_state()
+        has_live_state = bool(snapshot_conns) or bool(snapshot_disconn)
+
         self.disconnect_all()
         self.scan_devices()
 
-        restored = False
-        if self._config and self._config.mode == "custom":
-            from .__main__ import _apply_saved_config
-            _apply_saved_config(self, self._config)
-            restored = True
+        from .__main__ import _apply_saved_config
 
-        if not restored:
+        if has_live_state or (self._config and self._config.mode == "custom"):
+            _apply_saved_config(self, self._config,
+                                snapshot=snapshot_conns,
+                                snapshot_disconn=snapshot_disconn)
+        else:
             default_routing = "all"
             if self._config:
                 default_routing = self._config.default_routing
@@ -298,19 +370,24 @@ class MidiEngine:
                         except Exception:
                             pass
 
-                # Forward clock events to plugin clock bus (deduplicate: only process
-                # once per source client, since monitor + filter ports both receive copies)
-                if self._plugin_host:
-                    from .alsa_seq import MidiEventType
-                    if ev.type == MidiEventType.CLOCK:
-                        if ev.dest.port == self._monitor_port:
-                            self._plugin_host.clock_bus.on_clock_tick()
-                    elif ev.type == MidiEventType.START:
-                        self._plugin_host.clock_bus.on_start()
-                    elif ev.type == MidiEventType.CONTINUE:
-                        self._plugin_host.clock_bus.on_continue()
-                    elif ev.type == MidiEventType.STOP:
-                        self._plugin_host.clock_bus.on_stop()
+                # Forward clock events to plugin clock bus and all devices
+                # (deduplicate: only process on monitor port)
+                from .alsa_seq import MidiEventType
+                if ev.type in (MidiEventType.CLOCK, MidiEventType.START,
+                               MidiEventType.CONTINUE, MidiEventType.STOP):
+                    if ev.dest.port == self._monitor_port:
+                        # Plugin clock bus
+                        if self._plugin_host:
+                            if ev.type == MidiEventType.CLOCK:
+                                self._plugin_host.clock_bus.on_clock_tick()
+                            elif ev.type == MidiEventType.START:
+                                self._plugin_host.clock_bus.on_start()
+                            elif ev.type == MidiEventType.CONTINUE:
+                                self._plugin_host.clock_bus.on_continue()
+                            elif ev.type == MidiEventType.STOP:
+                                self._plugin_host.clock_bus.on_stop()
+                        # Global clock bridge: forward to all devices
+                        self._forward_clock_to_all(ev)
 
                 # Process filtered MIDI events
                 if self._filter_engine:
