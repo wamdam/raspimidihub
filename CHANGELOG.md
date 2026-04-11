@@ -4,7 +4,7 @@ All notable changes to RaspiMIDIHub will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
-## [2.0.0-alpha] - unreleased
+## [2.0.0] - 2026-04-11
 
 Massive release introducing the virtual instrument / plugin system.
 
