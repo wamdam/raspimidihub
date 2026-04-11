@@ -177,6 +177,8 @@ class PluginInstance:
     running: bool = False
     crashed: bool = False
     crash_error: str = ""
+    _tick_queue: object = None  # queue.Queue for clock ticks from bus
+    _tick_pipe: tuple = None   # (read_fd, write_fd) for waking select on tick
 
 
 # ---------------------------------------------------------------------------
@@ -216,9 +218,12 @@ class ClockBus:
             self._subscribers = [(i, d) for i, d in self._subscribers if i is not instance]
 
     def on_clock_tick(self) -> None:
-        """Called by the engine for each MIDI Clock message (24 PPQ)."""
+        """Called by the engine for each MIDI Clock message (24 PPQ).
+
+        Queues tick divisions for plugin threads instead of calling
+        on_tick directly — avoids blocking the asyncio event loop.
+        """
         if not self._running:
-            # Auto-start: many devices send continuous clock without explicit Start
             self._running = True
             self._tick_count = 0
             log.info("Clock bus: auto-started on first clock tick")
@@ -230,10 +235,20 @@ class ClockBus:
                 for div in divisions:
                     ticks = DIVISION_TICKS.get(div, 0)
                     if ticks and self._tick_count % ticks == 0:
-                        try:
-                            instance.plugin.on_tick(div)
-                        except Exception as e:
-                            log.warning("Plugin %s on_tick error: %s", instance.name, e)
+                        # Queue for the plugin thread via its tick queue
+                        q = getattr(instance, '_tick_queue', None)
+                        if q is not None:
+                            try:
+                                q.put_nowait(div)
+                                # Wake the plugin thread's select() immediately
+                                pipe = getattr(instance, '_tick_pipe', None)
+                                if pipe:
+                                    try:
+                                        os.write(pipe[1], b'\x01')
+                                    except OSError:
+                                        pass
+                            except Exception:
+                                pass
 
     def on_start(self) -> None:
         """MIDI Start received."""
@@ -426,6 +441,11 @@ class PluginHost:
 
         # Subscribe to clock if requested
         if instance.plugin.clock_divisions:
+            import queue
+            instance._tick_queue = queue.Queue(maxsize=64)
+            instance._tick_pipe = os.pipe()
+            os.set_blocking(instance._tick_pipe[0], False)
+            os.set_blocking(instance._tick_pipe[1], False)
             self.clock_bus.subscribe(instance, instance.plugin.clock_divisions)
 
         # Start plugin thread
@@ -455,26 +475,45 @@ class PluginHost:
 
         fd = alsa_client.fileno()
         _logged_types = set()
+        tick_queue = instance._tick_queue
+        tick_pipe_r = instance._tick_pipe[0] if instance._tick_pipe else None
+        watch_fds = [fd] + ([tick_pipe_r] if tick_pipe_r else [])
 
-        import select
+        import select as _select
         while instance.running:
             try:
-                # Wait for events with timeout (so we can check running flag)
-                readable, _, _ = select.select([fd], [], [], 0.1)
-                if not readable:
-                    continue
+                readable, _, _ = _select.select(watch_fds, [], [], 0.1)
 
-                # Drain events
-                for _ in range(64):
-                    ev = alsa_client.read_event()
-                    if ev is None:
-                        break
-                    # Log first occurrence of each event type
-                    if ev.type not in _logged_types:
-                        _logged_types.add(ev.type)
-                        log.info("Plugin %s first event type=%d from %d:%d",
-                                 instance.name, ev.type, ev.source.client, ev.source.port)
-                    self._dispatch_event(instance, ev, MidiEventType)
+                # Drain tick pipe bytes (just wake-up signals)
+                if tick_pipe_r and tick_pipe_r in readable:
+                    try:
+                        os.read(tick_pipe_r, 64)
+                    except OSError:
+                        pass
+
+                # Drain ALSA events FIRST — get latest notes before tick advances
+                if fd in readable:
+                    for _ in range(64):
+                        ev = alsa_client.read_event()
+                        if ev is None:
+                            break
+                        if ev.type not in _logged_types:
+                            _logged_types.add(ev.type)
+                            log.info("Plugin %s first event type=%d from %d:%d",
+                                     instance.name, ev.type, ev.source.client, ev.source.port)
+                        self._dispatch_event(instance, ev, MidiEventType)
+
+                # Process queued clock ticks AFTER ALSA events (latest note state)
+                if tick_queue:
+                    while True:
+                        try:
+                            div = tick_queue.get_nowait()
+                            try:
+                                plugin.on_tick(div)
+                            except Exception as e:
+                                log.warning("Plugin %s on_tick error: %s", instance.name, e)
+                        except Exception:
+                            break
 
             except Exception as e:
                 log.error("Plugin %s thread error: %s", instance.name, e)
