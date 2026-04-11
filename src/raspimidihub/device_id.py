@@ -206,7 +206,10 @@ class DeviceRegistry:
         self._by_client.clear()
         self._by_stable_id.clear()
 
-        for client_id in alsa_client_ids:
+        # Track how many times each base stable_id appears to disambiguate
+        seen_ids: dict[str, int] = {}
+
+        for client_id in sorted(alsa_client_ids):
             card_num = alsa_client_to_card(client_id)
             if card_num is None:
                 continue
@@ -214,6 +217,15 @@ class DeviceRegistry:
             info = get_card_stable_id(card_num)
             if info is None:
                 continue
+
+            # Disambiguate duplicate stable IDs (e.g. two identical USB devices)
+            base_id = info.stable_id
+            count = seen_ids.get(base_id, 0) + 1
+            seen_ids[base_id] = count
+            if count > 1:
+                info.stable_id = f"{base_id}#{count}"
+                log.info("Duplicate device %s, disambiguated to %s",
+                         base_id, info.stable_id)
 
             # Apply custom name if set
             if info.stable_id in self._custom_names:
