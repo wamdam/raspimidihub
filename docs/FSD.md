@@ -1,8 +1,8 @@
 # RaspiMIDIHub — Functional Specification Document
 
-**Version:** 2.0
-**Date:** 2026-04-07
-**Status:** All phases implemented
+**Version:** 2.1
+**Date:** 2026-04-11
+**Status:** All phases implemented + Plugin System (v2.0)
 
 ---
 
@@ -16,11 +16,11 @@ RaspiMIDIHub turns a Raspberry Pi into a dedicated, appliance-like USB MIDI hub.
 - **Appliance reliability:** Read-only filesystem, no SD card wear, survives power cuts.
 - **Easy installation:** Single `.deb` package transforms a stock Raspberry Pi OS into a MIDI hub.
 - **Web UI:** Browser-based interface for custom MIDI routing, filtering, mapping, and device management.
+- **Virtual instruments:** Plugin system for MIDI processing (arpeggiator, LFO, delay, etc.) that appear as devices in the routing matrix.
 
 ### 1.2 Non-Goals
 
 - Not a DAW or audio interface.
-- Not a general-purpose MIDI processor (no scripting/plugin system).
 - Not a wireless MIDI bridge (USB only).
 
 ---
@@ -76,7 +76,9 @@ Delivered as a separate package (`raspimidihub-rosetup`):
 - Custom async HTTP server (stdlib `asyncio`, no framework dependencies).
 - REST API for all MIDI routing operations.
 - SPA frontend with Preact + htm (no build step, no npm).
-- Real-time updates via Server-Sent Events (SSE).
+- Real-time updates via Server-Sent Events (SSE) with 5s drain timeout.
+- 3-tab navigation: Routing, Presets, Settings.
+- Progressive Web App (PWA) with manifest + service worker for home screen install.
 - Accessible at `http://raspimidihub.local` (mDNS) on port 80.
 
 ### 4.2 Connection Matrix
@@ -87,7 +89,10 @@ Delivered as a separate package (`raspimidihub-rosetup`):
 - Purple cells indicate connections with active filters or mappings.
 - Offline devices shown grayed out with dimmed checkboxes for saved connections.
 - Clock indicator: pulsing play icon on devices sending MIDI clock, orange warning for multiple sources.
-- Device labels show custom names, tap for full name toast with original ALSA name.
+- Device icons: DIN MIDI connector for hardware, plugin-specific turquoise SVG for virtual devices.
+- Per-port MIDI rate meters (linear, green/yellow/red against 1000 msg/s DIN limit).
+- Tap device label to open device detail panel; long-press/right-click for name toast.
+- "Add" button at bottom of FROM list opens plugin browser.
 
 ### 4.3 MIDI Filtering (per-connection)
 
@@ -117,7 +122,8 @@ Delivered as a separate package (`raspimidihub-rosetup`):
 
 - Save/load named routing configurations.
 - Export/import presets as JSON files.
-- Presets include stable device IDs, filters, and mappings.
+- Presets include stable device IDs, filters, mappings, and plugin instances with params.
+- Overwrite confirmation dialog for existing presets.
 
 ### 4.7 Configuration Persistence
 
@@ -134,6 +140,27 @@ Delivered as a separate package (`raspimidihub-rosetup`):
 - Clock events filtered out (shown as matrix indicator instead).
 - Auto-expire: entries vanish after 2 seconds of inactivity.
 - Toggleable in Settings.
+
+### 4.9 Virtual Instruments (Plugin System)
+
+- Plugins are Python classes inheriting from `PluginBase`, discovered at startup from `plugins/` directory.
+- Each plugin instance runs in its own thread with a dedicated ALSA sequencer client (IN + OUT ports).
+- Plugins appear as devices in the routing matrix with turquoise icons.
+- Declarative UI: plugins declare params, framework renders Wheel, Fader, Radio, Toggle, StepEditor, CurveEditor, Button, NoteSelect, ChannelSelect, Group, Display (scope/meter).
+- CC automation: `cc_inputs` maps hardware CCs to plugin params; changes push to UI via SSE.
+- Clock bus: 24 PPQ counting with musical divisions (1/1 through 1/32 + triplets), auto-start, transport forwarding via tick queue + pipe wake-up.
+- Plugin sandbox: import validation (allowlist), callback watchdog (1s timeout), output rate limit (1000 events/sec).
+- Display outputs: plugins can push live values (oscilloscope, meter) via `set_display()`, rendered inline in config panel.
+- Transport API: `send_clock()`, `send_start()`, `send_stop()`, `send_continue()` + rawmidi fallback for DIN outputs.
+- Config persistence: plugin instances saved in config.json, included in presets and config export/import.
+- 12 built-in plugins: Arpeggiator (step sequencer + accents + transport sync), CC LFO, CC Smoother, Chord Generator, Master Clock, MIDI Delay, Note Splitter, Note Transpose, Panic Button, Scale Remapper, Velocity Curve, Velocity Equalizer.
+- Plugin developer conventions: `icon.svg` (20x20, currentColor), `HELP` text, `display_outputs`.
+
+### 4.10 Progressive Web App
+
+- Web app manifest + service worker for "Add to Home Screen" install.
+- Standalone display mode (no browser chrome).
+- Reload button in Settings for PWA mode.
 
 ---
 
@@ -196,7 +223,9 @@ Delivered as a separate package (`raspimidihub-rosetup`):
 |  |  |                 |<-|                    |  |  |
 |  |  |  - ALSA ctypes  |  |  - REST API        |  |  |
 |  |  |  - Filter engine|  |  - Static SPA      |  |  |
-|  |  |  - Hotplug      |  |  - SSE stream      |  |  |
+|  |  |  - Plugin host  |  |  - SSE stream      |  |  |
+|  |  |  - Clock bus    |  |  - Plugin API      |  |  |
+|  |  |  - Hotplug      |  |                    |  |  |
 |  |  |  - LED control  |  |                    |  |  |
 |  |  +---------+-------+  +--------------------+  |  |
 |  +------------+----------------------------------+  |
@@ -245,6 +274,13 @@ POST   /api/wifi/client               # Switch to client mode
 GET    /api/wifi/scan                  # Scan WiFi networks
 POST   /api/system/reboot             # Reboot
 GET    /api/events                     # SSE stream
+GET    /api/plugins                    # List available plugin types
+GET    /api/plugins/instances          # List running instances
+POST   /api/plugins/instances          # Create instance
+GET    /api/plugins/instances/{id}     # Instance config + params
+PATCH  /api/plugins/instances/{id}     # Update params
+DELETE /api/plugins/instances/{id}     # Stop and remove
+GET    /api/plugins/icon/{type}        # Plugin icon SVG
 ```
 
 ---
@@ -255,7 +291,7 @@ Two Debian packages:
 
 | Package | Purpose |
 |---------|---------|
-| `raspimidihub` | MIDI routing service + web UI + WiFi AP |
+| `raspimidihub` | MIDI routing service + plugin host + web UI + WiFi AP |
 | `raspimidihub-rosetup` | Read-only filesystem hardening (optional but recommended) |
 
 Dependencies: `libasound2`, `hostapd`, `dnsmasq`, `avahi-daemon`, `ntpsec`.
