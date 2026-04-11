@@ -6,6 +6,7 @@ for all architectures. We only bind the subset we need.
 
 import ctypes
 import ctypes.util
+import os
 from ctypes import (
     POINTER,
     Structure,
@@ -22,10 +23,25 @@ from enum import IntEnum, IntFlag
 
 # --- Load libasound ---
 
-_lib_path = ctypes.util.find_library("asound")
-if _lib_path is None:
-    raise ImportError("libasound2 not found. Install with: sudo apt install libasound2-dev")
-_lib = ctypes.CDLL(_lib_path)
+if os.environ.get("RASPIMIDIHUB_TEST_MODE"):
+    # Test mode: provide a mock lib so structs/enums are importable without libasound
+    class _MockFunc:
+        """Mock ALSA function that accepts any attribute assignment and returns 0."""
+        def __init__(self):
+            self.restype = None
+            self.argtypes = None
+        def __call__(self, *args, **kwargs):
+            return 0
+    class _MockLib:
+        """Mock libasound that returns mock functions for all attribute access."""
+        def __getattr__(self, name):
+            return _MockFunc()
+    _lib = _MockLib()
+else:
+    _lib_path = ctypes.util.find_library("asound")
+    if _lib_path is None:
+        raise ImportError("libasound2 not found. Install with: sudo apt install libasound2-dev")
+    _lib = ctypes.CDLL(_lib_path)
 
 # --- Constants ---
 

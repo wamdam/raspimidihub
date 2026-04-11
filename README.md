@@ -213,6 +213,23 @@ sudo reboot
 
 ---
 
+## Testing
+
+```bash
+make test
+```
+
+This creates a Python venv, installs test dependencies, and runs 77+ unit and integration tests covering:
+
+- **MIDI filter logic** -- channel masks, message type filtering, serialization
+- **Mapping pipeline** -- CC-to-CC scaling, Note-to-CC, toggle, channel remap, pass-through
+- **All 12 plugins** -- note transpose, chord generator, scale remapper, velocity curve, arpeggiator, and more
+- **Filter engine** -- end-to-end mapping with captured output verification
+
+Tests run without ALSA hardware (`RASPIMIDIHUB_TEST_MODE=1`). No Raspberry Pi required.
+
+---
+
 ## Supported Hardware
 
 | Raspberry Pi Model | USB Ports | Recommended Max Devices | Notes |

@@ -11,8 +11,20 @@ license = {text = "MIT"}
 requires-python = ">=3.9"
 dependencies = []
 
+[project.optional-dependencies]
+test = ["pytest>=7.0", "pytest-asyncio>=0.21"]
+
 [project.scripts]
 raspimidihub = "raspimidihub.__main__:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests", "plugins"]
+asyncio_mode = "auto"
+markers = [
+    "alsa: requires ALSA (snd-virmidi or real hardware)",
+    "e2e: end-to-end UI tests requiring Playwright",
+    "slow: tests that take >5s",
+]

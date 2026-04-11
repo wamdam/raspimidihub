@@ -12,7 +12,7 @@ ROSETUP_DEB_FILE = dist/$(ROSETUP_DEB_NAME).deb
 
 PI_HOST = user@10.1.1.2
 
-.PHONY: all clean deb deb-rosetup deploy deploy-rosetup install uninstall test run
+.PHONY: all clean deb deb-rosetup deploy deploy-rosetup install uninstall test test-pi run
 
 all: deb deb-rosetup
 
@@ -136,7 +136,11 @@ uninstall-rosetup:
 deploy-src:
 	rsync -av --delete --exclude='__pycache__' src/raspimidihub/ $(PI_HOST):/tmp/raspimidihub/
 
-test: deploy-src
+test:
+	@if [ ! -d .venv ]; then python3 -m venv .venv && .venv/bin/pip install -e ".[test]"; fi
+	RASPIMIDIHUB_TEST_MODE=1 .venv/bin/pytest tests/ plugins/ -v -m "not alsa and not e2e"
+
+test-pi: deploy-src
 	ssh $(PI_HOST) 'cd /tmp && PYTHONPATH=/tmp python3 -c "\
 		from raspimidihub.alsa_seq import AlsaSeq; \
 		seq = AlsaSeq(); \

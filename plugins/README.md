@@ -431,6 +431,53 @@ Keep plugins focused on MIDI processing. All persistence (parameter values,
 presets) is handled by the framework.
 
 
+## Testing Your Plugin
+
+Each plugin can have a `test_plugin.py` alongside its `__init__.py`. Tests use
+the `make_plugin` helper from `tests/helpers.py` which:
+
+1. Instantiates your plugin with default param values
+2. Calls `on_start()` to initialize internal state
+3. Wires all `send_*` callbacks to a collector so you can inspect output
+
+Example `plugins/my_plugin/test_plugin.py`:
+
+```python
+from helpers import make_plugin
+from my_plugin import MyPlugin
+
+
+def test_note_passthrough():
+    plugin, harness = make_plugin(MyPlugin)
+    plugin.on_note_on(0, 60, 100)
+    assert harness.note_ons == [(0, 60, 100)]
+
+
+def test_transpose():
+    plugin, harness = make_plugin(MyPlugin)
+    plugin._param_values["semitones"] = 12
+    plugin.on_note_on(0, 60, 100)
+    assert harness.note_ons == [(0, 72, 100)]
+```
+
+The harness provides convenience accessors:
+
+- `harness.sent` -- all output as `(type, ...)` tuples
+- `harness.note_ons` -- list of `(channel, note, velocity)`
+- `harness.note_offs` -- list of `(channel, note)`
+- `harness.ccs` -- list of `(channel, cc, value)`
+- `harness.clear()` -- reset the collector
+
+Run all tests (from the project root):
+
+```bash
+make test
+```
+
+This creates a Python venv if needed, installs test dependencies, and runs all
+tests including plugin tests. No ALSA hardware or Raspberry Pi required.
+
+
 ## Full Example: Arpeggiator
 
 For a comprehensive example showing Groups, Radio, Wheel, Toggle, cc_inputs,
