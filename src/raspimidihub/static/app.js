@@ -43,7 +43,6 @@ function useSSE(onEvent, onConnChange) {
 // --- Icons (inline SVG) ---
 const IconRouting = html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h4l4 6-4 6H4"/><path d="M20 6h-4l-4 6 4 6h4"/></svg>`;
 const IconPreset = html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>`;
-const IconStatus = html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4m0 12v4m-8-10H2m20 0h-2m-2.93-6.07l-1.41 1.41m-7.32 7.32l-1.41 1.41m12.14 0l-1.41-1.41M6.34 6.34L4.93 4.93"/><circle cx="12" cy="12" r="4"/></svg>`;
 const IconSettings = html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v2m0 18v2m-9-11h2m16 0h2m-3.64-6.36l-1.42 1.42M6.06 17.94l-1.42 1.42m0-12.72l1.42 1.42m11.88 11.88l1.42 1.42"/></svg>`;
 
 // DIN MIDI connector icon (5-pin) for hardware devices
@@ -1208,70 +1207,6 @@ function DeviceDetailPanel({ device, onClose, showToast, refresh, pluginDisplays
 }
 
 // --- Devices Page ---
-function DevicesPage({ devices, onDeviceSelect, showToast, refresh }) {
-    const [pluginTypes, setPluginTypes] = useState({});
-    const [showAddSheet, setShowAddSheet] = useState(false);
-
-    useEffect(() => {
-        api('/plugins').then(setPluginTypes).catch(() => {});
-    }, []);
-
-    const addPlugin = async (typeName) => {
-        try {
-            await api('/plugins/instances', {
-                method: 'POST',
-                body: JSON.stringify({ type: typeName }),
-            });
-            showToast('Virtual device created');
-            setShowAddSheet(false);
-            refresh();
-        } catch (e) {
-            showToast('Failed to create plugin');
-        }
-    };
-
-    const sorted = [...devices].sort((a, b) => (!!b.is_plugin - !!a.is_plugin) || a.name.localeCompare(b.name));
-
-    return html`
-        <div class="card">
-            <h3>Devices (${devices.length})</h3>
-            ${sorted.map(d => html`
-                <div class="device" style="cursor:pointer;display:flex;align-items:center;gap:8px" onclick=${() => onDeviceSelect(d)}>
-                    <${DeviceIcon} device=${d} />
-                    <span class="name ${d.is_plugin ? 'dev-name-plugin' : ''}" style="flex:1">${d.name}</span>
-                    <span class="ports">${d.is_plugin ? (d.plugin_type_name || d.plugin_type || '') : `${d.ports.length} port${d.ports.length !== 1 ? 's' : ''}`} \u203a</span>
-                </div>
-            `)}
-            ${devices.length === 0 && html`<p style="color:var(--text-dim)">No devices connected</p>`}
-        </div>
-        <button class="btn btn-primary btn-block" style="margin-top:12px" onclick=${() => setShowAddSheet(true)}>+ Add Virtual Device</button>
-
-        ${showAddSheet && html`
-            <div class="filter-overlay" onclick=${(e) => e.target.className === 'filter-overlay' && setShowAddSheet(false)}>
-                <div class="filter-panel" style="max-height:70vh">
-                    <div class="panel-header">
-                        <div class="panel-handle"></div>
-                    </div>
-                    <div class="panel-header">
-                        <h3>Add Virtual Device</h3>
-                        <button class="panel-close" onclick=${() => setShowAddSheet(false)}>\u2715</button>
-                    </div>
-                    ${Object.entries(pluginTypes).filter(([t]) => !t.startsWith('_')).map(([type, info]) => html`
-                        <div class="device" style="cursor:pointer;padding:12px 0;display:flex;align-items:center;gap:10px" onclick=${() => addPlugin(type)}>
-                            <${PluginIcon} type=${type} />
-                            <div style="flex:1">
-                                <div style="font-weight:600;margin-bottom:2px;color:#4dd9c0">${info.name}</div>
-                                <div style="font-size:12px;color:var(--text-dim)">${info.description}</div>
-                            </div>
-                            <span style="color:var(--accent);font-size:13px;font-weight:600">Add</span>
-                        </div>
-                    `)}
-                    ${Object.keys(pluginTypes).length === 0 && html`<p style="color:var(--text-dim);padding:16px">No plugins available</p>`}
-                </div>
-            </div>
-        `}
-    `;
-}
 
 // --- Network Interface Config ---
 function NetworkCard({ iface, showToast }) {
@@ -1745,10 +1680,6 @@ function App() {
         case 'presets':
             page = html`<${PresetsPage} refresh=${refresh} showToast=${showToast} />`;
             break;
-        case 'devices':
-            page = html`<${DevicesPage} devices=${devices} onDeviceSelect=${d => setSelectedDeviceId(d.client_id)}
-                showToast=${showToast} refresh=${refresh} />`;
-            break;
         case 'settings':
             page = html`<${SettingsPage} showToast=${showToast} showMidiBar=${showMidiBar} toggleMidiBar=${toggleMidiBar} />`;
             break;
@@ -1764,7 +1695,6 @@ function App() {
         ${showMidiBar && html`<${MidiBar} events=${midiEvents} />`}
         <nav class="bottom-nav">
             <button class=${tab === 'routing' ? 'active' : ''} onclick=${() => setTab('routing')}>${IconRouting}<span>Routing</span></button>
-            <button class=${tab === 'devices' ? 'active' : ''} onclick=${() => setTab('devices')}>${IconStatus}<span>Devices</span></button>
             <button class=${tab === 'presets' ? 'active' : ''} onclick=${() => setTab('presets')}>${IconPreset}<span>Presets</span></button>
             <button class=${tab === 'settings' ? 'active' : ''} onclick=${() => setTab('settings')}>${IconSettings}<span>Settings</span></button>
         </nav>
