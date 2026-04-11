@@ -94,7 +94,7 @@ See all screenshots in [docs/screenshots/](docs/screenshots/) and the full [UI G
 ### Requirements
 
 - Raspberry Pi 3B+, 4B, 5, or Zero 2 W
-- **Fresh** Raspberry Pi OS **Lite** (Trixie/Bookworm or later)
+- **Fresh** [Raspberry Pi OS **Lite**](https://www.raspberrypi.com/software/operating-systems/) (Trixie/Bookworm or later)
 - microSD card (4 GB+)
 - USB MIDI devices
 - **Internet connection** during installation

@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RaspiMIDIHub - Turn your Raspberry Pi into a USB MIDI Hub</title>
+  <meta name="description" content="Open-source plug-and-play USB MIDI hub for Raspberry Pi with virtual instruments, routing matrix, and mobile browser control. No app needed.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎹</text></svg>">
+</head>
+<body>
+
+<!-- Hero -->
+<section class="hero">
+  <div class="container">
+    <div class="hero-badge">Open Source &middot; No App Required</div>
+    <h1>Raspi<span class="accent">MIDI</span>Hub</h1>
+    <p class="hero-subtitle">Turn your Raspberry Pi into a plug-and-play USB MIDI hub with virtual instruments. Control everything from your phone's browser.</p>
+    <div class="hero-buttons">
+      <a href="https://github.com/wamdam/raspimidihub#installation" class="btn btn-primary">Get Started</a>
+      <a href="https://github.com/wamdam/raspimidihub" class="btn btn-secondary">
+        <svg class="gh-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        GitHub
+      </a>
+    </div>
+    <div class="hero-phones">
+      <div class="phone">
+        <div class="phone-notch"></div>
+        <img src="screenshots/01-routing.png" alt="Routing Matrix" loading="lazy">
+      </div>
+      <div class="phone phone-front">
+        <div class="phone-notch"></div>
+        <img src="screenshots/09-plugin-arpeggiator.png" alt="Arpeggiator Plugin" loading="lazy">
+      </div>
+      <div class="phone">
+        <div class="phone-notch"></div>
+        <img src="screenshots/10-plugin-cc-lfo.png" alt="CC LFO Plugin" loading="lazy">
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- How it works -->
+<section class="how-it-works">
+  <div class="container">
+    <h2>How It Works</h2>
+    <div class="steps">
+      <div class="step">
+        <div class="step-number">1</div>
+        <h3>Flash & Boot</h3>
+        <p>Install on any Raspberry Pi with a single command. The Pi creates its own WiFi network automatically.</p>
+      </div>
+      <div class="step">
+        <div class="step-number">2</div>
+        <h3>Plug In Your Gear</h3>
+        <p>Connect USB MIDI devices -- keyboards, synths, drum machines, controllers. They're all routed to each other instantly.</p>
+      </div>
+      <div class="step">
+        <div class="step-number">3</div>
+        <h3>Open Your Phone</h3>
+        <p>Connect to the Pi's WiFi and open the browser. No app to install -- the full interface runs in any mobile browser.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Features -->
+<section class="features">
+  <div class="container">
+    <h2>Everything You Need on Stage</h2>
+
+    <div class="feature-row">
+      <div class="feature-text">
+        <h3>Routing Matrix</h3>
+        <p>See all your MIDI devices in a clean matrix. Tap to connect, long-press for per-connection filters and mappings. Live rate meters show MIDI activity. Add virtual instruments with one tap.</p>
+        <ul class="feature-list">
+          <li>Automatic all-to-all routing out of the box</li>
+          <li>Hot-plug -- add or remove devices at any time</li>
+          <li>Offline connections for unplugged devices</li>
+          <li>Loop prevention built in</li>
+        </ul>
+      </div>
+      <div class="feature-phone">
+        <div class="phone">
+          <div class="phone-notch"></div>
+          <img src="screenshots/01-routing.png" alt="Routing Matrix" loading="lazy">
+        </div>
+      </div>
+    </div>
+
+    <div class="feature-row reverse">
+      <div class="feature-text">
+        <h3>Per-Connection Filtering</h3>
+        <p>Filter MIDI messages on every connection individually. Block specific channels, message types, or set up complex CC-to-CC mappings with range scaling and inversion.</p>
+        <ul class="feature-list">
+          <li>16-channel bitmask per connection</li>
+          <li>Message type filtering (notes, CC, program change, ...)</li>
+          <li>MIDI Learn for instant mapping setup</li>
+          <li>Note-to-CC, CC-to-CC, channel remapping</li>
+        </ul>
+      </div>
+      <div class="feature-phone">
+        <div class="phone">
+          <div class="phone-notch"></div>
+          <img src="screenshots/05-filter-panel.png" alt="Filter Panel" loading="lazy">
+        </div>
+      </div>
+    </div>
+
+    <div class="feature-row">
+      <div class="feature-text">
+        <h3>12 Built-in Plugins</h3>
+        <p>Virtual instruments and effects that appear as real MIDI devices in the routing matrix. Each plugin has its own custom interface with wheels, faders, toggles, step sequencers, and live scopes.</p>
+        <ul class="feature-list">
+          <li>Arpeggiator with step sequencer and accents</li>
+          <li>CC LFO, Smoother, Chord Generator</li>
+          <li>Master Clock with transport controls</li>
+          <li>Scale Remapper, Velocity Curve, and more</li>
+        </ul>
+      </div>
+      <div class="feature-phone">
+        <div class="phone">
+          <div class="phone-notch"></div>
+          <img src="screenshots/12-plugin-chord-generator.png" alt="Chord Generator Plugin" loading="lazy">
+        </div>
+      </div>
+    </div>
+
+    <div class="feature-row reverse">
+      <div class="feature-text">
+        <h3>Test & Monitor</h3>
+        <p>Every device gets a detail panel with a scrollable piano keyboard, CC slider, and live MIDI monitor. Test your setup without touching your gear.</p>
+        <ul class="feature-list">
+          <li>Multitouch piano with adjustable octaves</li>
+          <li>CC test sender with channel selection</li>
+          <li>Real-time MIDI monitor per device</li>
+          <li>Save & load presets including all plugin configurations</li>
+        </ul>
+      </div>
+      <div class="feature-phone">
+        <div class="phone">
+          <div class="phone-notch"></div>
+          <img src="screenshots/06-device-detail.png" alt="Device Detail Panel" loading="lazy">
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Plugin showcase -->
+<section class="plugins">
+  <div class="container">
+    <h2>Plugin Showcase</h2>
+    <p class="section-subtitle">Every plugin runs in its own thread, syncs to MIDI clock, and can be automated via hardware CCs.</p>
+    <div class="plugin-grid">
+      <div class="plugin-card">
+        <h4>Arpeggiator</h4>
+        <p>Pattern player with step sequencer, accents, gate control, and transport sync. Creates polyrhythmic melodies.</p>
+      </div>
+      <div class="plugin-card">
+        <h4>CC LFO</h4>
+        <p>Waveform generator with sine, triangle, square, saw, and sample-and-hold. Live oscilloscope output.</p>
+      </div>
+      <div class="plugin-card">
+        <h4>Chord Generator</h4>
+        <p>Play a single note, hear a full chord. 11 chord types with inversions and velocity scaling.</p>
+      </div>
+      <div class="plugin-card">
+        <h4>Master Clock</h4>
+        <p>Internal BPM clock with start/stop transport. Drives all your synced gear from one place.</p>
+      </div>
+      <div class="plugin-card">
+        <h4>MIDI Delay</h4>
+        <p>Note delay with feedback repeats and velocity decay. Circular buffer architecture for rock-solid timing.</p>
+      </div>
+      <div class="plugin-card">
+        <h4>Scale Remapper</h4>
+        <p>Quantize notes to musical scales -- major, minor, pentatonic, blues, and more. Never hit a wrong note.</p>
+      </div>
+      <div class="plugin-card">
+        <h4>CC Smoother</h4>
+        <p>Remove jitter from noisy knobs with configurable smoothing. Dual scopes show before and after.</p>
+      </div>
+      <div class="plugin-card">
+        <h4>Velocity Curve</h4>
+        <p>Draw a custom 128-point velocity response curve. Presets for soft, hard, exponential, S-curve.</p>
+      </div>
+      <div class="plugin-card">
+        <h4>Note Splitter</h4>
+        <p>Split your keyboard at any note into two MIDI channels with independent transpose per zone.</p>
+      </div>
+      <div class="plugin-card">
+        <h4>Note Transpose</h4>
+        <p>Shift all notes up or down by semitones. Simple, instant, automatable via CC.</p>
+      </div>
+      <div class="plugin-card">
+        <h4>Velocity Equalizer</h4>
+        <p>Normalize velocity to a fixed value or compress the range. Tame those dynamics.</p>
+      </div>
+      <div class="plugin-card">
+        <h4>Panic Button</h4>
+        <p>All Notes Off + All Sound Off on all 16 channels. The emergency stop you always need on stage.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Built for stage -->
+<section class="stage">
+  <div class="container">
+    <h2>Built for the Stage</h2>
+    <p class="section-subtitle">RaspiMIDIHub was born from real live performance needs. Built by <a href="https://www.youtube.com/2ndinterval" target="_blank" rel="noopener">2ndinterval</a> -- a musician who performs live with synths and controllers.</p>
+    <div class="stage-grid">
+      <div class="stage-card">
+        <div class="stage-icon">&#9889;</div>
+        <h4>Power-Safe</h4>
+        <p>Read-only filesystem means you can pull the power at any time. No SD card corruption, ever.</p>
+      </div>
+      <div class="stage-card">
+        <div class="stage-icon">&#128225;</div>
+        <h4>Own WiFi Network</h4>
+        <p>Creates its own access point. No venue WiFi needed. Works anywhere, even outdoors.</p>
+      </div>
+      <div class="stage-card">
+        <div class="stage-icon">&#128241;</div>
+        <h4>No App Required</h4>
+        <p>Full interface in any mobile browser. iOS, Android, desktop -- just connect and open the page.</p>
+      </div>
+      <div class="stage-card">
+        <div class="stage-icon">&#128268;</div>
+        <h4>Hot-Plug</h4>
+        <p>Add or remove USB MIDI devices at any time. The hub adapts instantly.</p>
+      </div>
+      <div class="stage-card">
+        <div class="stage-icon">&#127926;</div>
+        <h4>Sub-ms Timing</h4>
+        <p>Each plugin runs in its own thread with pipe-based wake-up for tight clock sync.</p>
+      </div>
+      <div class="stage-card">
+        <div class="stage-icon">&#128275;</div>
+        <h4>Open Source</h4>
+        <p>LGPL licensed. Inspect the code, write your own plugins, contribute back.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section class="cta">
+  <div class="container">
+    <h2>Get Started in Minutes</h2>
+    <div class="install-block">
+      <p>One-line install on any Raspberry Pi:</p>
+      <div class="code-box">
+        <code>curl -sL https://github.com/wamdam/raspimidihub/releases/latest/download/install.sh | bash</code>
+      </div>
+    </div>
+    <div class="hero-buttons">
+      <a href="https://github.com/wamdam/raspimidihub#installation" class="btn btn-primary">Installation Guide</a>
+      <a href="https://github.com/wamdam/raspimidihub" class="btn btn-secondary">
+        <svg class="gh-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        View on GitHub
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- Footer -->
+<footer>
+  <div class="container footer-inner">
+    <div class="footer-left">
+      <span class="footer-brand">RaspiMIDIHub</span>
+      <span class="footer-sep">&middot;</span>
+      <span>Built by <a href="https://www.youtube.com/2ndinterval" target="_blank" rel="noopener">2ndinterval</a></span>
+    </div>
+    <div class="footer-right">
+      <a href="https://github.com/wamdam/raspimidihub" target="_blank" rel="noopener">GitHub</a>
+      <a href="#imprint" onclick="document.getElementById('imprint').showModal()">Imprint</a>
+    </div>
+  </div>
+</footer>
+
+<!-- Imprint Dialog -->
+<dialog id="imprint">
+  <div class="dialog-content">
+    <h2>Imprint</h2>
+    <p>
+      Eselsbergsteige 131<br>
+      89075 Ulm
+    </p>
+    <p>
+      Daniel Kraft<br>
+      Inhaltlich Verantwortlicher gem. &sect;10 Abs. 3 MDStV: Daniel Kraft
+    </p>
+    <p>
+      Mail: statler at statlergrooves.com
+    </p>
+    <button class="btn btn-secondary" onclick="this.closest('dialog').close()">Close</button>
+  </div>
+</dialog>
+
+</body>
+</html>
