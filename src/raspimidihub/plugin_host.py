@@ -251,9 +251,22 @@ class ClockBus:
                                 pass
 
     def on_start(self) -> None:
-        """MIDI Start received."""
+        """MIDI Start received. Per MIDI spec, the first clock tick
+        after Start is beat 1. We reset tick_count to 0 so that the
+        first on_clock_tick increments to 1, and divisions fire cleanly."""
         self._tick_count = 0
         self._running = True
+        # Flush stale ticks from plugin queues before sending transport
+        with self._lock:
+            for instance, _ in self._subscribers:
+                q = getattr(instance, '_tick_queue', None)
+                if q:
+                    while not q.empty():
+                        try:
+                            q.get_nowait()
+                        except Exception:
+                            break
+        self._notify_transport("_start")
 
     def on_continue(self) -> None:
         """MIDI Continue received."""
@@ -262,6 +275,26 @@ class ClockBus:
     def on_stop(self) -> None:
         """MIDI Stop received."""
         self._running = False
+        self._notify_transport("_stop")
+
+    def _notify_transport(self, event: str) -> None:
+        """Queue a transport event to all subscribed plugin threads."""
+        with self._lock:
+            for instance, _ in self._subscribers:
+                if not instance.running:
+                    continue
+                q = getattr(instance, '_tick_queue', None)
+                if q is not None:
+                    try:
+                        q.put_nowait(event)
+                        pipe = getattr(instance, '_tick_pipe', None)
+                        if pipe:
+                            try:
+                                os.write(pipe[1], b'\x01')
+                            except OSError:
+                                pass
+                    except Exception:
+                        pass
 
 
 # ---------------------------------------------------------------------------
@@ -503,15 +536,20 @@ class PluginHost:
                                      instance.name, ev.type, ev.source.client, ev.source.port)
                         self._dispatch_event(instance, ev, MidiEventType)
 
-                # Process queued clock ticks AFTER ALSA events (latest note state)
+                # Process queued clock ticks + transport events
                 if tick_queue:
                     while True:
                         try:
-                            div = tick_queue.get_nowait()
+                            msg = tick_queue.get_nowait()
                             try:
-                                plugin.on_tick(div)
+                                if msg == "_start":
+                                    plugin.on_transport_start()
+                                elif msg == "_stop":
+                                    plugin.on_transport_stop()
+                                else:
+                                    plugin.on_tick(msg)
                             except Exception as e:
-                                log.warning("Plugin %s on_tick error: %s", instance.name, e)
+                                log.warning("Plugin %s tick/transport error: %s", instance.name, e)
                         except Exception:
                             break
 

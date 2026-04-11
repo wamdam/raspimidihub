@@ -84,8 +84,8 @@ async def async_main() -> None:
     _EVENT_NAMES = {
         6: "Note On", 7: "Note Off", 8: "Key Pressure",
         10: "CC", 11: "Program Change", 12: "Channel Pressure",
-        13: "Pitch Bend", 36: "Clock", 37: "Start", 38: "Continue",
-        39: "Stop", 130: "SysEx",
+        13: "Pitch Bend", 36: "Clock", 30: "Start", 31: "Continue",
+        32: "Stop", 130: "SysEx",
     }
 
     def on_midi_event(ev):

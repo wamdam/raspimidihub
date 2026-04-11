@@ -63,6 +63,20 @@ echoes that fade out on a lead synth line."""
     def on_stop(self):
         self._running = False
 
+    def on_transport_start(self):
+        """Clear delay buffers on MIDI Start."""
+        with self._lock:
+            self._buffer = [dict() for _ in range(self._buf_size)]
+            self._buf_pos = 0
+            self._pending.clear()
+            self._note_offs.clear()
+
+    def on_transport_stop(self):
+        """Clear pending echoes on MIDI Stop."""
+        with self._lock:
+            self._pending.clear()
+            self._note_offs.clear()
+
     def on_note_on(self, channel, note, velocity):
         # Pass through immediately
         self.send_note_on(channel, note, velocity)

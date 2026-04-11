@@ -113,13 +113,13 @@ class MidiEventType(IntEnum):
     PITCHBEND = 13
     # System messages
     SYSEX = 130
-    # Realtime / Clock
-    CLOCK = 36          # MIDI Clock (0xF8)
-    START = 37          # 0xFA
-    CONTINUE = 38       # 0xFB
-    STOP = 39           # 0xFC
-    SENSING = 42        # Active sensing 0xFE
-    TICK = 35           # MIDI Tick
+    # Realtime / Clock (ALSA seq event types, NOT raw MIDI bytes)
+    CLOCK = 36          # SND_SEQ_EVENT_CLOCK
+    START = 30          # SND_SEQ_EVENT_START
+    CONTINUE = 31       # SND_SEQ_EVENT_CONTINUE
+    STOP = 32           # SND_SEQ_EVENT_STOP
+    TICK = 33           # SND_SEQ_EVENT_TICK
+    SENSING = 35        # SND_SEQ_EVENT_SENSING
 
 
 # Message type groups for filtering UI

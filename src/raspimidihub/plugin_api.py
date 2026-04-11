@@ -299,6 +299,14 @@ class PluginBase:
     def on_cc(self, channel: int, cc: int, value: int) -> None:
         pass
 
+    def on_transport_start(self) -> None:
+        """MIDI Start received — reset to beginning."""
+        pass
+
+    def on_transport_stop(self) -> None:
+        """MIDI Stop received."""
+        pass
+
     def on_tick(self, division: str) -> None:
         pass
 
