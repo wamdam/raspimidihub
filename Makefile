@@ -95,7 +95,7 @@ clean:
 # Usage: make release NOTES="changelog text here"
 # This builds the deb, tags, pushes, and creates a GitHub release with all required assets.
 
-release: $(DEB_FILE)
+release: $(DEB_FILE) $(ROSETUP_DEB_FILE)
 	@if git diff --quiet && git diff --cached --quiet; then \
 		echo "Working tree clean, proceeding..."; \
 	else \
@@ -106,6 +106,7 @@ release: $(DEB_FILE)
 	git push origin HEAD --tags
 	gh release create v$(VERSION) \
 		$(DEB_FILE) \
+		$(ROSETUP_DEB_FILE) \
 		scripts/install.sh \
 		--title "v$(VERSION)" \
 		--notes "$${NOTES:-Release v$(VERSION)}"
