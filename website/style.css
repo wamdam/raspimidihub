@@ -143,11 +143,32 @@ a:hover { text-decoration: underline; }
   margin-bottom: 60px;
 }
 .hero-phones {
+  position: relative;
   display: flex;
   justify-content: center;
   gap: 24px;
   align-items: flex-end;
   padding-bottom: 20px;
+}
+.hero-phones::before {
+  content: '';
+  position: absolute;
+  top: -100px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 140%;
+  max-width: 1200px;
+  height: calc(100% + 200px);
+  background:
+    radial-gradient(ellipse 40% 45% at 50% 50%, rgba(233,69,96,0.5) 0%, transparent 100%),
+    radial-gradient(ellipse 60% 55% at 50% 50%, rgba(233,69,96,0.2) 0%, transparent 100%),
+    radial-gradient(ellipse 90% 70% at 50% 50%, rgba(100,20,50,0.15) 0%, transparent 100%);
+  pointer-events: none;
+  z-index: 0;
+}
+.hero-phones .phone {
+  position: relative;
+  z-index: 1;
 }
 .hero-phones .phone { width: 200px; opacity: 0.85; transform: scale(0.92); }
 .hero-phones .phone-front { opacity: 1; transform: scale(1.05); width: 230px; z-index: 2; box-shadow: 0 30px 80px rgba(233,69,96,0.15), 0 20px 60px rgba(0,0,0,0.5), inset 0 0 0 2px rgba(255,255,255,0.08); }
