@@ -140,6 +140,17 @@ async def async_main() -> None:
             )
         plugin_host._on_display_callback = _on_plugin_display
 
+        # Wire plugin param changes to SSE (for CC automation UI)
+        def _on_plugin_param_change(instance_id, name, value):
+            log.info("CC automation: %s.%s = %s", instance_id, name, value)
+            _loop.call_soon_threadsafe(
+                asyncio.ensure_future,
+                server.send_sse("plugin-param", {
+                    "instance_id": instance_id, "name": name, "value": value,
+                })
+            )
+        plugin_host._on_param_change_callback = _on_plugin_param_change
+
         engine.start()
 
         # Load custom device names from config

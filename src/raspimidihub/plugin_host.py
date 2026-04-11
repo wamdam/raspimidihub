@@ -320,6 +320,7 @@ class PluginHost:
         self._lock = threading.Lock()
         self.clock_bus = ClockBus()
         self._on_display_callback = None  # (instance_id, name, value) -> None
+        self._on_param_change_callback = None  # (instance_id, name, value) -> None
 
     # --- Discovery ---
 
@@ -352,8 +353,29 @@ class PluginHost:
 
         return self.list_types()
 
+    # Imports allowed for plugins (sandbox)
+    _ALLOWED_IMPORTS = frozenset({
+        "math", "random", "collections", "dataclasses", "enum",
+        "threading", "time", "queue",
+        "raspimidihub.plugin_api",
+    })
+
     def _load_plugin_class(self, type_name: str, init_file: Path) -> type[PluginBase] | None:
         """Import a plugin module and find the PluginBase subclass."""
+        # Validate imports before loading
+        source = init_file.read_text()
+        for line in source.splitlines():
+            stripped = line.strip()
+            if stripped.startswith("import ") or stripped.startswith("from "):
+                # Extract module name
+                if stripped.startswith("from "):
+                    mod = stripped.split()[1].split(".")[0]
+                else:
+                    mod = stripped.split()[1].split(".")[0].split(",")[0]
+                if mod not in self._ALLOWED_IMPORTS and not mod.startswith("raspimidihub"):
+                    log.warning("Plugin %s uses disallowed import: %s", type_name, mod)
+                    return None
+
         module_name = f"raspimidihub_plugin_{type_name}"
         spec = importlib.util.spec_from_file_location(module_name, init_file)
         if spec is None or spec.loader is None:
@@ -456,9 +478,22 @@ class PluginHost:
         instance.plugin._send_program_change = lambda ch, prog: alsa_client.send_event(
             MidiEventType.PGMCHANGE, channel=ch, value=prog)
         instance.plugin._send_clock = lambda: alsa_client.send_event(MidiEventType.CLOCK)
-        instance.plugin._send_start = lambda: alsa_client.send_event(MidiEventType.START)
-        instance.plugin._send_stop = lambda: alsa_client.send_event(MidiEventType.STOP)
-        instance.plugin._send_continue = lambda: alsa_client.send_event(MidiEventType.CONTINUE)
+
+        # Transport: send ALSA seq event + raw MIDI bytes to hardware outputs
+        # (workaround for ALSA not converting user-space transport to raw MIDI)
+        from .rawmidi import send_raw_transport, get_subscribed_destinations, MIDI_START, MIDI_STOP, MIDI_CONTINUE
+        def _send_transport(ev_type, raw_byte):
+            alsa_client.send_event(ev_type)
+            try:
+                dests = get_subscribed_destinations(
+                    alsa_client._handle, alsa_client.client_id, alsa_client.out_port)
+                for dc, dp in dests:
+                    send_raw_transport(dc, dp, raw_byte)
+            except Exception:
+                pass
+        instance.plugin._send_start = lambda: _send_transport(MidiEventType.START, MIDI_START)
+        instance.plugin._send_stop = lambda: _send_transport(MidiEventType.STOP, MIDI_STOP)
+        instance.plugin._send_continue = lambda: _send_transport(MidiEventType.CONTINUE, MIDI_CONTINUE)
 
         # Wire display output callback (throttled — plugins may call this rapidly)
         import time as _time
@@ -471,6 +506,17 @@ class PluginHost:
             if self._on_display_callback:
                 self._on_display_callback(instance.id, name, value)
         instance.plugin._notify_display = _on_display
+
+        # Wire param change callback for CC automation UI updates
+        _last_param = {}
+        def _on_param_change(inst_id, name, value):
+            now = _time.monotonic()
+            if now - _last_param.get(name, 0) < 0.05:
+                return
+            _last_param[name] = now
+            if self._on_param_change_callback:
+                self._on_param_change_callback(inst_id, name, value)
+        instance.plugin._notify_param_change = _on_param_change
 
         # Subscribe to clock if requested
         if instance.plugin.clock_divisions:
@@ -565,9 +611,12 @@ class PluginHost:
         except Exception:
             pass
 
+    _CALLBACK_TIMEOUT = 1.0  # seconds — flag plugin as crashed if callback exceeds this
+
     def _dispatch_event(self, instance: PluginInstance, ev, MidiEventType) -> None:
         """Dispatch an incoming ALSA event to plugin callbacks."""
         plugin = instance.plugin
+        _start = time.monotonic()
 
         try:
             if ev.type == MidiEventType.NOTEON:
@@ -599,6 +648,15 @@ class PluginHost:
                 pass
         except Exception as e:
             log.warning("Plugin %s event handler error: %s", instance.name, e)
+
+        # Watchdog: flag as crashed if callback took too long
+        elapsed = time.monotonic() - _start
+        if elapsed > self._CALLBACK_TIMEOUT:
+            log.error("Plugin %s callback took %.1fs (limit %.1fs) — marking as crashed",
+                      instance.name, elapsed, self._CALLBACK_TIMEOUT)
+            instance.crashed = True
+            instance.crash_error = f"Callback timeout ({elapsed:.1f}s)"
+            instance.running = False
 
     def _cc_to_param(self, instance: PluginInstance, param_name: str, cc_value: int) -> None:
         """Map a CC value (0-127) to a param's range and update it."""

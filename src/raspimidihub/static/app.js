@@ -31,7 +31,7 @@ function useSSE(onEvent, onConnChange) {
             try { onEvent(type, JSON.parse(e.data)); }
             catch {}
         };
-        for (const ev of ['device-connected','device-disconnected','connection-changed','midi-activity','midi-rates','plugin-display']) {
+        for (const ev of ['device-connected','device-disconnected','connection-changed','midi-activity','midi-rates','plugin-display','plugin-param']) {
             es.addEventListener(ev, handler(ev));
         }
         es.onopen = () => onConnChange(true);
@@ -967,10 +967,15 @@ function DeviceDetailPanel({ device, onClose, showToast, refresh, pluginDisplays
     const swipe = useSwipeDismiss(close);
 
     const [editName, setEditName] = useState(device.name);
-    const [sendChannel, setSendChannel] = useState(0);
+    // Persist test sender settings per device
+    const sid = device.stable_id || device.client_id;
+    const _saved = useRef(JSON.parse(localStorage.getItem(`sender_${sid}`) || '{}'));
+    const [sendChannel, _setSendChannel] = useState(_saved.current.ch || 0);
     const [sendPort, setSendPort] = useState(0);
-    const [ccNum, setCcNum] = useState(1);
+    const [ccNum, _setCcNum] = useState(_saved.current.cc != null ? _saved.current.cc : 1);
     const [ccVal, setCcVal] = useState(64);
+    const setSendChannel = (v) => { _setSendChannel(v); _saved.current.ch = v; localStorage.setItem(`sender_${sid}`, JSON.stringify(_saved.current)); };
+    const setCcNum = (v) => { _setCcNum(v); _saved.current.cc = v; localStorage.setItem(`sender_${sid}`, JSON.stringify(_saved.current)); };
     const [heldNotes, setHeldNotes] = useState(new Set());
     const maxEvents = 50;
 
@@ -989,6 +994,20 @@ function DeviceDetailPanel({ device, onClose, showToast, refresh, pluginDisplays
 
     // Display values come from SSE via pluginDisplays prop
     const displayValues = (pluginDisplays && device.plugin_instance_id) ? pluginDisplays[device.plugin_instance_id] || {} : {};
+
+    // Merge CC automation param updates from SSE into local pluginParams
+    const sseParamsKey = pluginDisplays && device.plugin_instance_id ? '_params_' + device.plugin_instance_id : null;
+    const sseParams = sseParamsKey ? pluginDisplays[sseParamsKey] : null;
+    const sseParamsRef = useRef(null);
+    if (sseParams && sseParams !== sseParamsRef.current) {
+        sseParamsRef.current = sseParams;
+        // Directly update state during render (safe for derived state)
+        Object.entries(sseParams).forEach(([k, v]) => {
+            if (pluginParams[k] !== v) {
+                setTimeout(() => setPluginParams(prev => ({ ...prev, ...sseParams })), 0);
+            }
+        });
+    }
 
     const onPluginParamChange = useCallback((name, value) => {
         setPluginParams(prev => ({ ...prev, [name]: value }));
@@ -1688,6 +1707,12 @@ function App() {
         }
         if (type === 'midi-rates') {
             setMidiRates(data);
+        }
+        if (type === 'plugin-param') {
+            setPluginDisplays(prev => ({
+                ...prev,
+                ['_params_' + data.instance_id]: { ...(prev['_params_' + data.instance_id] || {}), [data.name]: data.value },
+            }));
         }
         if (type === 'plugin-display') {
             setPluginDisplays(prev => ({

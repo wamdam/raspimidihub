@@ -119,12 +119,14 @@ class Toggle(Param):
 @dataclass
 class StepEditor(Param):
     """Grid of steps with on/off dots and mini-wheel note offsets."""
-    length_param: str = ""  # Radio param name that controls step count
+    length_param: str = ""  # Wheel/Radio param name that controls step count
     default_length: int = 16
+    default_on: bool = False  # default on/off state for new steps
 
     def to_dict(self) -> dict:
         d = super().to_dict()
-        d.update({"length_param": self.length_param, "default_length": self.default_length})
+        d.update({"length_param": self.length_param, "default_length": self.default_length,
+                  "default_on": self.default_on})
         return d
 
 
@@ -221,7 +223,7 @@ def get_defaults(params: list) -> dict[str, Any]:
     for p in get_all_params(params):
         if isinstance(p, StepEditor):
             length = p.default_length
-            defaults[p.name] = [{"on": False, "offset": 0} for _ in range(length)]
+            defaults[p.name] = [{"on": p.default_on, "offset": 0} for _ in range(length)]
         elif isinstance(p, CurveEditor):
             defaults[p.name] = list(range(128))  # linear by default
         elif hasattr(p, "default"):

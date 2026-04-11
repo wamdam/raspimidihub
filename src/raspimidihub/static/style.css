@@ -844,7 +844,8 @@ body {
 .step-cell.on.beat { border-color: #ff6b82; }
 .step-head { width: 100%; height: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; user-select: none; }
 .step-head::after { content: ''; width: 8px; height: 8px; border-radius: 50%; background: rgba(255,255,255,0.1); }
-.step-cell.on .step-head::after { background: var(--accent); box-shadow: 0 0 6px rgba(233,69,96,0.5); }
+.step-cell.on .step-head::after { background: var(--accent); box-shadow: 0 0 4px rgba(233,69,96,0.3); opacity: 0.6; }
+.step-cell.on.accent .step-head::after { background: #ff6b82; box-shadow: 0 0 8px rgba(255,107,130,0.8); opacity: 1; }
 .mini-wheel {
     width: 38px; height: 40px; overflow: hidden; border-radius: 4px;
     background: linear-gradient(180deg, #080810 0%, #181828 50%, #080810 100%);

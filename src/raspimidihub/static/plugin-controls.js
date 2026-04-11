@@ -374,18 +374,30 @@ function PluginButton({ name, label, value, color, onChange }) {
 // =======================================================================
 // STEP EDITOR — grid with on/off dots and mini-wheel offsets
 // =======================================================================
-function PluginStepEditor({ name, label, value, onChange, lengthParam, allValues }) {
+function PluginStepEditor({ name, label, value, onChange, lengthParam, allValues, defaultOn }) {
     // value is array of {on, offset}
     const steps = value || [];
     const length = (lengthParam && allValues && allValues[lengthParam])
         ? parseInt(allValues[lengthParam]) || 16 : steps.length || 16;
-    const displaySteps = steps.slice(0, length);
+    // Extend array if step count increased
+    const displaySteps = [];
+    for (let i = 0; i < length; i++) {
+        displaySteps.push(steps[i] || { on: !!defaultOn, offset: 0 });
+    }
 
     const toggleStep = (i) => {
         tickFeedback();
         const newSteps = [...steps];
-        while (newSteps.length <= i) newSteps.push({ on: false, offset: 0 });
-        newSteps[i] = { ...newSteps[i], on: !newSteps[i].on };
+        while (newSteps.length <= i) newSteps.push({ on: !!defaultOn, offset: 0 });
+        const s = newSteps[i];
+        // Cycle: off → on → accent → off
+        if (!s.on) {
+            newSteps[i] = { ...s, on: true, accent: false };
+        } else if (!s.accent) {
+            newSteps[i] = { ...s, accent: true };
+        } else {
+            newSteps[i] = { ...s, on: false, accent: false };
+        }
         onChange(name, newSteps);
     };
 
@@ -400,7 +412,7 @@ function PluginStepEditor({ name, label, value, onChange, lengthParam, allValues
         <div style="font-size:13px;color:var(--text-dim);margin-bottom:8px">${label}</div>
         <div class="step-grid">
             ${displaySteps.map((step, i) => html`
-                <div class="step-cell ${step.on ? 'on' : ''} ${i % 4 === 0 ? 'beat' : ''}" key=${i}>
+                <div class="step-cell ${step.on ? (step.accent ? 'on accent' : 'on') : ''} ${i % 4 === 0 ? 'beat' : ''}" key=${i}>
                     <div class="step-head" onclick=${() => toggleStep(i)}></div>
                     <${MiniWheel} value=${step.offset || 0}
                         onChange=${(v) => { tickFeedback(); setOffset(i, v); }} />
@@ -412,33 +424,59 @@ function PluginStepEditor({ name, label, value, onChange, lengthParam, allValues
 
 function MiniWheel({ value, onChange }) {
     const containerRef = useRef(null);
-    const stateRef = useRef({ value, dragging: false, startY: 0, startVal: 0 });
+    const s = useRef({ value, dragging: false, startY: 0, startVal: 0 });
 
-    useEffect(() => { stateRef.current.value = value; }, [value]);
+    useEffect(() => { s.current.value = value; }, [value]);
 
-    const onTouchStart = (e) => {
-        e.preventDefault(); e.stopPropagation();
-        stateRef.current.dragging = true;
-        stateRef.current.startY = e.touches[0].clientY;
-        stateRef.current.startVal = stateRef.current.value;
-    };
-    const onTouchMove = (e) => {
-        e.preventDefault(); e.stopPropagation();
-        if (!stateRef.current.dragging) return;
-        const dy = stateRef.current.startY - e.touches[0].clientY;
-        const newVal = Math.max(-24, Math.min(24, Math.round(stateRef.current.startVal + dy / 8)));
-        if (newVal !== stateRef.current.value) {
-            stateRef.current.value = newVal;
-            onChange(newVal);
+    // Native event listeners for both touch and mouse
+    useEffect(() => {
+        const el = containerRef.current;
+        if (!el) return;
+        function onStart(e) {
+            e.preventDefault(); e.stopPropagation();
+            const pt = e.touches ? e.touches[0] : e;
+            s.current.dragging = true;
+            s.current.startY = pt.clientY;
+            s.current.startVal = s.current.value;
+            if (e.touches) {
+                el.addEventListener('touchmove', onMove, { passive: false });
+                window.addEventListener('touchend', onEnd);
+            } else {
+                window.addEventListener('mousemove', onMove);
+                window.addEventListener('mouseup', onEnd);
+            }
         }
-    };
-    const onTouchEnd = () => { stateRef.current.dragging = false; };
+        function onMove(e) {
+            e.preventDefault();
+            if (!s.current.dragging) return;
+            const pt = e.touches ? e.touches[0] : e;
+            const dy = s.current.startY - pt.clientY;
+            const nv = Math.max(-24, Math.min(24, Math.round(s.current.startVal + dy / 8)));
+            if (nv !== s.current.value) { s.current.value = nv; onChange(nv); }
+        }
+        function onEnd() {
+            s.current.dragging = false;
+            el.removeEventListener('touchmove', onMove);
+            window.removeEventListener('touchend', onEnd);
+            window.removeEventListener('mousemove', onMove);
+            window.removeEventListener('mouseup', onEnd);
+        }
+        function onWheel(e) {
+            e.preventDefault(); e.stopPropagation();
+            const delta = e.deltaY > 0 ? -1 : 1;
+            const nv = Math.max(-24, Math.min(24, s.current.value + delta));
+            if (nv !== s.current.value) { s.current.value = nv; onChange(nv); tickFeedback(); }
+        }
+        el.addEventListener('touchstart', onStart, { passive: false });
+        el.addEventListener('mousedown', onStart);
+        el.addEventListener('wheel', onWheel, { passive: false });
+        return () => { el.removeEventListener('touchstart', onStart); el.removeEventListener('mousedown', onStart); el.removeEventListener('wheel', onWheel); };
+    }, []);
 
     const display = value > 0 ? `+${value}` : `${value}`;
-    return html`<div class="mini-wheel" ref=${containerRef}
-        onTouchStart=${onTouchStart} onTouchMove=${onTouchMove} onTouchEnd=${onTouchEnd}>
+    return html`<div class="mini-wheel" ref=${containerRef}>
         <div class="mini-wheel-inner" style="display:flex;align-items:center;justify-content:center;height:100%">
-            <span style="font-size:9px;color:${value === 0 ? 'rgba(255,255,255,0.3)' : '#fff'}">${display}</span>
+            <span style="font-size:9px;color:${value === 0 ? 'rgba(255,255,255,0.3)' : '#fff'};font-weight:${value !== 0 ? '700' : '400'}">${display}</span>
         </div>
     </div>`;
 }
@@ -699,7 +737,8 @@ function renderParam(param, values, onChange, allValues, displayCtx) {
         case 'stepeditor':
             return html`<${PluginStepEditor} name=${param.name} label=${param.label}
                 value=${val || []} onChange=${onChange}
-                lengthParam=${param.length_param} allValues=${allValues} />`;
+                lengthParam=${param.length_param} allValues=${allValues}
+                defaultOn=${param.default_on} />`;
         case 'curveeditor':
             return html`<${PluginCurveEditor} name=${param.name} label=${param.label}
                 value=${val} onChange=${onChange} />`;

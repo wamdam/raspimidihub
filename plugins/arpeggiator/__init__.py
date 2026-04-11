@@ -1,44 +1,45 @@
-"""Arpeggiator — plays held notes as a pattern synced to clock or free BPM."""
+"""Arpeggiator — plays held notes through a step pattern with note offsets."""
 
 import random
 import threading
 import time
 
 from raspimidihub.plugin_api import (
-    PluginBase, Group, Radio, Wheel, Toggle, Fader,
+    PluginBase, Group, Radio, Wheel, Toggle, Fader, StepEditor,
 )
 
 
 class Arpeggiator(PluginBase):
-    """Plays held notes back as a rhythmic pattern."""
+    """Plays held notes back as a rhythmic pattern through a step sequencer."""
 
     NAME = "Arpeggiator"
-    DESCRIPTION = "Plays held notes as a pattern (up, down, up-down, random)"
+    DESCRIPTION = "Plays held notes as a pattern with step sequencer"
     AUTHOR = "RaspiMIDIHub"
     VERSION = "1.0"
     HELP = """\
-Turns held notes into a rhythmic pattern, cycling through them in order.
+Combines arpeggiator patterns with a step sequencer. Hold notes and
+the arp cycles through them in the selected pattern (up/down/etc).
+Each step can be on/off and has a note offset (semitones from the
+current arp note). Only active steps play — inactive steps are rests.
 
-Sync modes:
-  Free = uses its own internal BPM. No external clock needed.
-  Tempo = follows external clock speed but keeps running even when
-    the sequencer stops. Good for jamming without strict transport.
-  Transport = follows external clock AND resets to step 1 when the
-    sequencer sends Start. Stops when the sequencer sends Stop.
-    Use this for tight sync with a drum machine or DAW.
+Default: all steps on, zero offset = classic arpeggiator.
+Set offsets to create melodic variations on each step.
+Set some steps off to create rhythmic gaps.
 
-Gate % = how long each note sounds (100=legato, 10=staccato).
-As-played = cycles notes in the order you pressed them.
-
-Example: Hold a C minor chord, set Transport mode and 1/8 rate.
-Press Play on your sequencer and the arp plays C-Eb-G in tempo,
-perfectly aligned to beat 1."""
+Sync: Free=internal BPM, Tempo=external clock, Transport=clock+Start/Stop.
+Gate % = note length (100=legato, 10=staccato)."""
 
     params = [
         Group("Pattern", [
             Radio("pattern", "Pattern", ["up", "down", "up-down", "random", "as-played"],
                   default="up"),
             Radio("rate", "Rate", ["1/4", "1/8", "1/16", "1/32", "1/8T"], default="1/8"),
+        ]),
+        Group("Steps", [
+            Wheel("step_count", "Steps", min=1, max=32, default=8),
+            Wheel("accent_vel", "Accent Vel.", min=0, max=127, default=30),
+            StepEditor("steps", "Pattern", length_param="step_count",
+                       default_length=8, default_on=True),
         ]),
         Group("Controls", [
             Wheel("gate", "Gate %", min=10, max=100, default=80),
@@ -59,29 +60,29 @@ perfectly aligned to beat 1."""
     def on_start(self):
         self._held_notes = []
         self._sorted_notes = []
-        self._step = 0
+        self._arp_step = 0       # position in the arp note sequence
+        self._seq_step = 0       # position in the step editor
         self._direction = 1
         self._playing_note = None
         self._lock = threading.Lock()
         self._free_thread = None
         self._free_running = False
-        self._transport_playing = False  # transport mode: waiting for Start
+        self._transport_playing = False
 
     def on_stop(self):
         self._free_running = False
         self._note_off_current()
 
     def on_transport_start(self):
-        """MIDI Start received — reset if in transport mode."""
         mode = self.get_param("sync_mode") or "tempo"
         if mode == "transport":
-            self._step = 0
+            self._arp_step = 0
+            self._seq_step = 0
             self._direction = 1
             self._note_off_current()
             self._transport_playing = True
 
     def on_transport_stop(self):
-        """MIDI Stop received — stop if in transport mode."""
         mode = self.get_param("sync_mode") or "tempo"
         if mode == "transport":
             self._transport_playing = False
@@ -92,7 +93,8 @@ perfectly aligned to beat 1."""
             self._held_notes.append((note, velocity, channel))
             self._sorted_notes = sorted(self._held_notes, key=lambda x: x[0])
             if len(self._held_notes) == 1:
-                self._step = 0
+                self._arp_step = 0
+                self._seq_step = 0
                 self._direction = 1
                 mode = self.get_param("sync_mode") or "tempo"
                 if mode == "free":
@@ -116,51 +118,43 @@ perfectly aligned to beat 1."""
         mode = self.get_param("sync_mode") or "tempo"
         if mode == "free":
             return
-
-        # Transport mode: auto-start on first tick if no Start was received
-        # (sequencer might already be playing when plugin is created)
         if mode == "transport" and not self._transport_playing:
             self._transport_playing = True
-            self._step = 0
+            self._arp_step = 0
+            self._seq_step = 0
             self._direction = 1
 
         rate = self.get_param("rate") or "1/8"
         if division != rate:
             return
-
-        self._advance_step()
+        self._advance()
 
     def on_param_change(self, name, value):
         if name == "sync_mode":
             if value == "free":
-                self._free_running = False  # stop old free runner
+                self._free_running = False
                 if self._held_notes:
                     self._start_free_runner()
             else:
                 self._free_running = False
                 if value == "transport":
-                    self._transport_playing = False  # wait for Start
+                    self._transport_playing = False
 
     def _start_free_runner(self):
         self._free_running = True
-
         def _run():
             while self._free_running:
                 bpm = self.get_param("bpm") or 120
                 rate = self.get_param("rate") or "1/8"
                 beats_per_sec = bpm / 60.0
-                rate_map = {
-                    "1/4": 1, "1/8": 0.5, "1/16": 0.25, "1/32": 0.125,
-                    "1/8T": 1/3,
-                }
+                rate_map = {"1/4": 1, "1/8": 0.5, "1/16": 0.25, "1/32": 0.125, "1/8T": 1/3}
                 interval = rate_map.get(rate, 0.5) / beats_per_sec
-                self._advance_step()
+                self._advance()
                 time.sleep(interval)
-
         t = threading.Thread(target=_run, daemon=True)
         t.start()
 
-    def _advance_step(self):
+    def _advance(self):
         with self._lock:
             if not self._sorted_notes:
                 return
@@ -168,7 +162,10 @@ perfectly aligned to beat 1."""
             pattern = self.get_param("pattern") or "up"
             octaves = self.get_param("octaves") or 1
             gate_pct = (self.get_param("gate") or 80) / 100.0
+            steps = self.get_param("steps") or []
+            step_count = self.get_param("step_count") or 8
 
+            # Build arp note sequence
             if pattern == "as-played":
                 base_notes = list(self._held_notes)
             else:
@@ -184,38 +181,62 @@ perfectly aligned to beat 1."""
 
             if pattern == "down":
                 notes.reverse()
-            elif pattern == "random":
-                idx = random.randint(0, len(notes) - 1)
-                note, vel, ch = notes[idx]
-                self._play_note(ch, note, vel, gate_pct)
+
+            # Get current step from step editor
+            active_steps = steps[:step_count] if steps else []
+            if not active_steps:
+                # No steps defined — default all on, zero offset
+                active_steps = [{"on": True, "offset": 0}] * step_count
+
+            # Current step
+            seq_idx = self._seq_step % len(active_steps)
+            step = active_steps[seq_idx]
+
+            # Always advance seq step
+            self._seq_step += 1
+
+            # Note off previous
+            self._note_off_current()
+
+            # Only play if step is active
+            if not step.get("on", True):
                 return
+
+            # Get the arp note
+            if pattern == "random":
+                arp_idx = random.randint(0, len(notes) - 1)
             elif pattern == "up-down":
                 if len(notes) <= 1:
-                    pass
+                    arp_idx = 0
                 else:
-                    if self._step >= len(notes):
+                    if self._arp_step >= len(notes):
                         self._direction = -1
-                        self._step = len(notes) - 2
-                    elif self._step < 0:
+                        self._arp_step = len(notes) - 2
+                    elif self._arp_step < 0:
                         self._direction = 1
-                        self._step = 1
-
-            idx = self._step % len(notes)
-            note, vel, ch = notes[idx]
-
-            self._play_note(ch, note, vel, gate_pct)
-
-            if pattern == "up-down":
-                self._step += self._direction
+                        self._arp_step = 1
+                    arp_idx = self._arp_step
             else:
-                self._step += 1
+                arp_idx = self._arp_step % len(notes)
 
-    def _play_note(self, channel, note, velocity, gate_pct):
-        self._note_off_current()
-        if note < 0 or note > 127:
-            return
-        self.send_note_on(channel, note, velocity)
-        self._playing_note = (channel, note)
+            note, vel, ch = notes[arp_idx]
+
+            # Apply step offset and accent
+            offset = step.get("offset", 0)
+            note = note + offset
+            if step.get("accent"):
+                accent_add = self.get_param("accent_vel") or 0
+                vel = min(127, vel + accent_add)
+
+            if 0 <= note <= 127:
+                self.send_note_on(ch, note, vel)
+                self._playing_note = (ch, note)
+
+            # Advance arp position
+            if pattern == "up-down":
+                self._arp_step += self._direction
+            elif pattern != "random":
+                self._arp_step += 1
 
     def _note_off_current(self):
         if self._playing_note:
