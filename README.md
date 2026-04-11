@@ -12,9 +12,13 @@ The Raspberry Pi runs on a **read-only filesystem**, so you can pull the power a
 
 <p align="center">
   <img src="docs/screenshots/01-routing.png" width="200" alt="Routing Matrix" />
-  <img src="docs/screenshots/09-plugin-arpeggiator.png" width="200" alt="Arpeggiator Plugin" />
-  <img src="docs/screenshots/05-filter-panel.png" width="200" alt="Filter & Mapping Panel" />
+  <img src="docs/screenshots/09-plugin-arpeggiator.png" width="200" alt="Arpeggiator with Step Sequencer" />
+  <img src="docs/screenshots/10-plugin-cc-lfo.png" width="200" alt="CC LFO with Scope" />
+</p>
+<p align="center">
   <img src="docs/screenshots/04-settings.png" width="200" alt="Settings" />
+  <img src="docs/screenshots/07-mapping-note-to-cc.png" width="200" alt="Mapping Form" />
+  <img src="docs/screenshots/19-plugin-velocity-curve.png" width="200" alt="Velocity Curve" />
 </p>
 
 See all screenshots in [docs/screenshots/](docs/screenshots/) and the full [UI Guide](docs/UI_GUIDE.md).
@@ -123,7 +127,7 @@ After reboot, the Pi runs with a read-only filesystem and all connected MIDI dev
 2. Connect to `RaspiMIDIHub-XXXX` (default password: `midihub1`)
 3. The configuration page opens automatically (captive portal)
 4. Tap the matrix to route devices, long-press for filters and mappings
-5. Open the Devices tab to add plugins and configure them
+5. Tap the "+" button in the matrix to add plugins
 6. Hit **Save Config** to persist across reboots
 
 ---
@@ -134,14 +138,14 @@ See [docs/screenshots/](docs/screenshots/) for the full set. Highlights:
 
 | | | |
 |---|---|---|
-| ![Routing](docs/screenshots/01-routing.png) | ![Devices](docs/screenshots/03-devices.png) | ![Settings](docs/screenshots/04-settings.png) |
-| Routing Matrix | Devices (USB + Virtual) | Settings |
-| ![Filter](docs/screenshots/05-filter-panel.png) | ![Mapping](docs/screenshots/07-mapping-note-to-cc.png) | ![Device](docs/screenshots/06-device-detail.png) |
-| Filter Panel | Mapping (Note to CC) | Device Detail |
-| ![Arp](docs/screenshots/09-plugin-arpeggiator.png) | ![LFO](docs/screenshots/10-plugin-cc-lfo.png) | ![Curve](docs/screenshots/19-plugin-velocity-curve.png) |
-| Arpeggiator | CC LFO with Scope | Velocity Curve |
-| ![Splitter](docs/screenshots/15-plugin-note-splitter.png) | ![Delay](docs/screenshots/14-plugin-midi-delay.png) | ![Chord](docs/screenshots/12-plugin-chord-generator.png) |
-| Note Splitter | MIDI Delay | Chord Generator |
+| ![Routing](docs/screenshots/01-routing.png) | ![Settings](docs/screenshots/04-settings.png) | ![Filter](docs/screenshots/05-filter-panel.png) |
+| Routing Matrix | Settings | Filter Panel |
+| ![Mapping](docs/screenshots/07-mapping-note-to-cc.png) | ![Device](docs/screenshots/06-device-detail.png) | ![Arp](docs/screenshots/09-plugin-arpeggiator.png) |
+| Mapping (Note to CC) | Device Detail | Arpeggiator |
+| ![LFO](docs/screenshots/10-plugin-cc-lfo.png) | ![Curve](docs/screenshots/19-plugin-velocity-curve.png) | ![Splitter](docs/screenshots/15-plugin-note-splitter.png) |
+| CC LFO with Scope | Velocity Curve | Note Splitter |
+| ![Delay](docs/screenshots/14-plugin-midi-delay.png) | ![Chord](docs/screenshots/12-plugin-chord-generator.png) | ![Smoother](docs/screenshots/11-plugin-cc-smoother.png) |
+| MIDI Delay | Chord Generator | CC Smoother |
 
 ---
 
@@ -225,7 +229,7 @@ sudo reboot
 - [UI Guide](docs/UI_GUIDE.md) -- Walkthrough of every screen
 - [Plugin Developer Guide](plugins/README.md) -- Creating custom plugins
 - [Building from Source](docs/BUILDING.md) -- How to build the .deb packages
-- [Changelog](docs/CHANGELOG.md) -- Release history
+- [Changelog](CHANGELOG.md) -- Release history
 - [Functional Specification](docs/FSD.md)
 
 ---

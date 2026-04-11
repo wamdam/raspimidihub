@@ -2,6 +2,8 @@
 
 This guide walks through every screen of the RaspiMIDIHub web interface.
 
+The UI has **3 tabs**: Routing, Presets, and Settings.
+
 ---
 
 ## Routing Page
@@ -79,21 +81,9 @@ Note: After loading a preset, tap **Save Config** on the Routing page to make it
 
 ---
 
-## Devices Page
-
-The Devices tab shows all connected MIDI devices and active plugin instances in a unified list. Virtual instruments (plugins) are sorted first, shown with turquoise icons. Hardware devices show a DIN MIDI connector icon.
-
-- **Tap any device** to open its detail/config panel
-- **"+ Add Virtual Device"** button opens the plugin browser with icons and descriptions
-- **Online/offline status** shown via green/gray dot
-
-![Devices Page](screenshots/03-devices.png)
-
----
-
 ## Device Detail Panel
 
-Tap a device on the Devices page or tap a device label in the routing matrix to open the detail panel (slides up).
+Tap a device label in the routing matrix to open the detail panel (slides up).
 
 ### For USB MIDI devices:
 
@@ -109,10 +99,12 @@ Tap a device on the Devices page or tap a device label in the routing matrix to 
   - **Faders** -- horizontal or vertical mixer-style sliders with optional scaled display (e.g., "0.5 Hz" on the CC LFO)
   - **Radio buttons** -- pill-style tap-to-select (e.g., waveform shape, scale type)
   - **Toggles** -- metal switches with LED indicators (e.g., clock sync on/off)
-  - **Step Editor** -- step sequencer grid with on/off dots and per-step note offsets (arpeggiator)
+  - **Step Editor** -- step sequencer grid with on/off dots, per-step note offsets, and accent steps (arpeggiator). Supports transport sync modes (internal, external clock).
   - **Curve Editor** -- drawable 128-point curve canvas (velocity curve)
   - **Scope** -- real-time waveform display showing plugin output (CC LFO, CC Smoother)
   - **Meter** -- segmented beat/level indicator (Master Clock)
+  - **Button** -- momentary action trigger (e.g., Master Clock start/stop)
+- **CC automation:** hardware CCs mapped to plugin parameters update the UI controls in real time via SSE -- turn a knob on your controller and watch the on-screen wheel/fader animate.
 - **Help button:** "?" icon shows the plugin's extended HELP text with usage examples.
 - **Port list:** Input and output ports with connection info.
 
