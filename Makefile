@@ -49,7 +49,7 @@ $(DEB_FILE): src/raspimidihub/*.py src/raspimidihub/static/* plugins/*/*.py plug
 	@echo "Version: $(VERSION)-1" >> $(BUILD_DIR)/DEBIAN/control
 	@echo "Architecture: all" >> $(BUILD_DIR)/DEBIAN/control
 	@echo "Maintainer: Daniel Kraft <wam@poplr.de>" >> $(BUILD_DIR)/DEBIAN/control
-	@echo "Depends: python3 (>= 3.9), libasound2t64 | libasound2, alsa-utils, avahi-daemon, hostapd, dnsmasq" >> $(BUILD_DIR)/DEBIAN/control
+	@echo "Depends: python3 (>= 3.9), libasound2t64 | libasound2, alsa-utils, avahi-daemon, hostapd, dnsmasq, python3-dbus-next" >> $(BUILD_DIR)/DEBIAN/control
 	@echo "Recommends: raspimidihub-rosetup" >> $(BUILD_DIR)/DEBIAN/control
 	@echo "Section: sound" >> $(BUILD_DIR)/DEBIAN/control
 	@echo "Priority: optional" >> $(BUILD_DIR)/DEBIAN/control

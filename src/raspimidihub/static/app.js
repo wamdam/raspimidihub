@@ -577,13 +577,55 @@ function ConnectionMatrix({ devices, connections, onToggle, onFilterOpen, onRemo
 // --- Routing Page ---
 function RoutingPage({ devices, connections, refresh, showToast, clockSources, midiRates, onDeviceOpen }) {
     const [filterConnId, setFilterConnId] = useState(null);
-    const [showAddPlugin, setShowAddPlugin] = useState(false);
+    const [showAddPanel, setShowAddPanel] = useState(false);
     const [pluginTypes, setPluginTypes] = useState({});
     const loadPluginTypes = () => { api('/plugins').then(setPluginTypes).catch(() => {}); };
     const addPlugin = async (typeName) => {
         await api('/plugins/instances', { method: 'POST', body: JSON.stringify({ type: typeName }) });
         showToast('Virtual device created');
-        setShowAddPlugin(false);
+        setShowAddPanel(false);
+        refresh();
+    };
+    // Bluetooth state
+    const [btAvailable, setBtAvailable] = useState(false);
+    const [btDevices, setBtDevices] = useState([]);
+    const [btScanning, setBtScanning] = useState(false);
+    const [btConnecting, setBtConnecting] = useState(null); // address being connected
+    const loadBt = () => { api('/bluetooth').then(r => { setBtAvailable(r.available); setBtDevices(r.devices || []); }).catch(() => {}); };
+    const btScan = async () => {
+        setBtScanning(true);
+        try {
+            const found = await api('/bluetooth/scan', { method: 'POST' });
+            setBtDevices(prev => {
+                const known = new Set(prev.map(d => d.address));
+                const merged = [...prev];
+                for (const d of found) { if (!known.has(d.address)) merged.push(d); }
+                return merged;
+            });
+        } catch (e) { showToast('BT scan failed'); }
+        setBtScanning(false);
+    };
+    const btConnect = async (address) => {
+        setBtConnecting(address);
+        try {
+            await api('/bluetooth/pair', { method: 'POST', body: JSON.stringify({ address }) });
+            await api('/bluetooth/connect', { method: 'POST', body: JSON.stringify({ address }) });
+            showToast('Bluetooth device connected');
+            setShowAddPanel(false);
+            refresh();
+        } catch (e) { showToast('BT connect failed'); }
+        setBtConnecting(null);
+    };
+    const btDisconnect = async (address) => {
+        await api('/bluetooth/disconnect', { method: 'POST', body: JSON.stringify({ address }) });
+        showToast('Bluetooth device disconnected');
+        loadBt();
+        refresh();
+    };
+    const btForget = async (address) => {
+        await api('/bluetooth/' + encodeURIComponent(address), { method: 'DELETE' });
+        showToast('Bluetooth device removed');
+        loadBt();
         refresh();
     };
     const filterConn = filterConnId ? connections.find(c => c.id === filterConnId) || null : null;
@@ -677,7 +719,7 @@ function RoutingPage({ devices, connections, refresh, showToast, clockSources, m
         <${ConnectionMatrix} devices=${devices} connections=${connections} onToggle=${onToggle} onFilterOpen=${(conn) => setFilterConnId(conn.id)}
             onRemoveDevice=${async (sid) => { await api('/devices/' + encodeURIComponent(sid), { method: 'DELETE' }); refresh(); }}
             showToast=${showToast} clockSources=${clockSources} midiRates=${midiRates}
-            onDeviceOpen=${onDeviceOpen} onAddPlugin=${() => { loadPluginTypes(); setShowAddPlugin(true); }} />
+            onDeviceOpen=${onDeviceOpen} onAddPlugin=${() => { loadPluginTypes(); loadBt(); setShowAddPanel(true); }} />
         <div class="btn-group">
             <button class="btn btn-primary" onclick=${saveConfig} disabled=${saving || loading}>${saving ? 'Saving...' : 'Save Config'}</button>
             <button class="btn btn-secondary" onclick=${loadConfig} disabled=${saving || loading}>${loading ? 'Loading...' : 'Load Config'}</button>
@@ -691,14 +733,15 @@ function RoutingPage({ devices, connections, refresh, showToast, clockSources, m
                 inp.click();
             }}>Import Config</button>
         </div>
-        ${showAddPlugin && html`
-            <div class="filter-overlay" onclick=${(e) => e.target.className === 'filter-overlay' && setShowAddPlugin(false)}>
-                <div class="filter-panel" style="max-height:70vh">
+        ${showAddPanel && html`
+            <div class="filter-overlay" onclick=${(e) => e.target.className === 'filter-overlay' && setShowAddPanel(false)}>
+                <div class="filter-panel" style="max-height:80vh;overflow-y:auto">
                     <div class="panel-header"><div class="panel-handle"></div></div>
                     <div class="panel-header">
-                        <h3>Add Virtual Device</h3>
-                        <button class="panel-close" onclick=${() => setShowAddPlugin(false)}>\u2715</button>
+                        <h3>Add Device</h3>
+                        <button class="panel-close" onclick=${() => setShowAddPanel(false)}>\u2715</button>
                     </div>
+                    <div style="font-size:11px;text-transform:uppercase;color:var(--text-dim);letter-spacing:1px;margin:12px 0 8px;font-weight:600">Virtual Instruments</div>
                     ${Object.entries(pluginTypes).filter(([t]) => !t.startsWith('_')).map(([type, info]) => html`
                         <div class="device" style="cursor:pointer;padding:12px 0;display:flex;align-items:center;gap:10px" onclick=${() => addPlugin(type)}>
                             <${PluginIcon} type=${type} />
@@ -709,6 +752,36 @@ function RoutingPage({ devices, connections, refresh, showToast, clockSources, m
                             <span style="color:var(--accent);font-size:13px;font-weight:600">Add</span>
                         </div>
                     `)}
+                    ${btAvailable && html`
+                        <div style="font-size:11px;text-transform:uppercase;color:var(--text-dim);letter-spacing:1px;margin:20px 0 8px;font-weight:600;border-top:1px solid var(--border);padding-top:16px">Bluetooth MIDI</div>
+                        <button class="btn btn-secondary btn-block" style="margin-bottom:12px;font-size:13px"
+                            onclick=${btScan} disabled=${btScanning}>
+                            ${btScanning ? 'Scanning...' : 'Scan for BLE-MIDI Devices'}
+                        </button>
+                        ${btDevices.length === 0 && !btScanning && html`
+                            <div style="font-size:13px;color:var(--text-dim);text-align:center;padding:8px 0">No Bluetooth MIDI devices found</div>
+                        `}
+                        ${btDevices.map(d => html`
+                            <div class="device" style="padding:10px 0;display:flex;align-items:center;gap:10px">
+                                <span style="font-size:18px;color:#4488ff">\u1D12</span>
+                                <div style="flex:1">
+                                    <div style="font-weight:600;margin-bottom:2px;color:#4488ff">${d.name || d.address}</div>
+                                    <div style="font-size:11px;color:var(--text-dim)">${d.address}${d.midi ? ' \u2022 MIDI' : ''}${d.paired ? ' \u2022 paired' : ''}${d.connected ? ' \u2022 connected' : ''}</div>
+                                </div>
+                                ${d.connected ? html`
+                                    <button style="background:none;border:1px solid var(--text-dim);color:var(--text-dim);border-radius:4px;padding:4px 10px;font-size:12px;cursor:pointer"
+                                        onclick=${() => btDisconnect(d.address)}>Disconnect</button>
+                                    <button style="background:none;border:1px solid var(--accent);color:var(--accent);border-radius:4px;padding:4px 10px;font-size:12px;cursor:pointer"
+                                        onclick=${() => { if (confirm('Forget ' + (d.name || d.address) + '?')) btForget(d.address); }}>Forget</button>
+                                ` : html`
+                                    <button style="background:var(--accent);color:#fff;border:none;border-radius:4px;padding:5px 12px;font-size:12px;font-weight:600;cursor:pointer"
+                                        onclick=${() => btConnect(d.address)} disabled=${btConnecting === d.address}>
+                                        ${btConnecting === d.address ? 'Connecting...' : 'Connect'}
+                                    </button>
+                                `}
+                            </div>
+                        `)}
+                    `}
                 </div>
             </div>
         `}

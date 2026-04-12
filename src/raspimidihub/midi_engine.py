@@ -107,13 +107,19 @@ class MidiEngine:
         """Scan for MIDI devices and return them."""
         if not self._seq:
             return []
-        # Include plugin ALSA client IDs so they're discovered as devices
-        plugin_clients = set()
+        # Include plugin and BLE bridge ALSA client IDs so they're discovered
+        user_clients = set()
         if self._plugin_host:
-            plugin_clients = self._plugin_host.get_plugin_client_ids()
-        self._devices = self._seq.scan_devices(include_user_clients=plugin_clients)
+            user_clients = self._plugin_host.get_plugin_client_ids()
+        ble_bridge = getattr(self, '_ble_bridge', None)
+        ble_client_ids = set()
+        if ble_bridge:
+            ble_client_ids = set(ble_bridge.get_alsa_client_ids())
+            user_clients |= ble_client_ids
+        self._devices = self._seq.scan_devices(include_user_clients=user_clients)
         # Update device registry with stable IDs (hardware devices via sysfs)
-        hw_client_ids = [d.client_id for d in self._devices if d.client_id not in plugin_clients]
+        hw_client_ids = [d.client_id for d in self._devices
+                         if d.client_id not in user_clients]
         self._device_registry.scan(hw_client_ids)
         # Register plugin devices in the registry
         if self._plugin_host:
@@ -121,6 +127,15 @@ class MidiEngine:
                 if inst.alsa_client:
                     self._device_registry.register_plugin(
                         inst.alsa_client.client_id, inst.id, inst.name)
+        # Register BLE-MIDI devices in the registry
+        if ble_bridge:
+            for b in ble_bridge.get_bridges():
+                cid = b["alsa_client_id"]
+                if cid and cid in ble_client_ids:
+                    info = self._device_registry.register_plugin(
+                        cid, f"ble-{b['address']}", b["name"])
+                    info.is_plugin = False
+                    info.is_bluetooth = True
         return self._devices
 
     def connect_all(self) -> set[Connection]:

@@ -31,6 +31,19 @@ class BluetoothMidi:
 
     def __init__(self):
         self._scanning = False
+        self.ble_bridge = None  # Set externally: BleMidiBridge instance
+
+    @staticmethod
+    def _get_device_name(address: str) -> str:
+        """Get device name from bluetoothctl info."""
+        try:
+            info = _btctl("info", address, timeout=5)
+            for line in info.splitlines():
+                if "Name:" in line:
+                    return line.split("Name:", 1)[1].strip()
+        except Exception:
+            pass
+        return address
 
     @staticmethod
     def is_available() -> bool:
@@ -59,13 +72,18 @@ class BluetoothMidi:
             self._scanning = False
 
     def _scan_sync(self, timeout: int) -> list[dict]:
-        """Synchronous BLE scan filtered for MIDI devices."""
+        """Synchronous BLE scan. Shows all BLE devices (not just MIDI).
+
+        We can't reliably filter by MIDI UUID during scan because some devices
+        (like the Teenage Engineering TX-6) don't advertise the standard
+        BLE-MIDI UUID until after connection.
+        """
         # Clear previous scan results
         _btctl("scan", "off", timeout=3)
 
-        # Start scanning with BLE transport filter
+        # Scan using BLE (Low Energy) transport
         proc = subprocess.Popen(
-            ["bluetoothctl", "--timeout", str(timeout), "scan", "on"],
+            ["bluetoothctl", "--timeout", str(timeout), "scan", "le"],
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
         )
         try:
@@ -84,13 +102,10 @@ class BluetoothMidi:
             if name == address or not name.strip():
                 continue  # Skip unnamed devices
 
-            # Check if this device has the BLE-MIDI service UUID
             info = _btctl("info", address, timeout=5)
-            if MIDI_SERVICE_UUID not in info.lower():
-                continue
-
             paired = "Paired: yes" in info
             connected = "Connected: yes" in info
+            has_midi = MIDI_SERVICE_UUID in info.lower()
             rssi = 0
             rssi_match = re.search(r"RSSI:\s*(-?\d+)", info)
             if rssi_match:
@@ -102,14 +117,19 @@ class BluetoothMidi:
                 "rssi": rssi,
                 "paired": paired,
                 "connected": connected,
+                "midi": has_midi,
             })
 
-        return sorted(devices, key=lambda d: d["rssi"], reverse=True)
+        return sorted(devices, key=lambda d: (d["midi"], d["rssi"]), reverse=True)
 
     async def pair(self, address: str) -> bool:
         """Pair, trust, and connect a BLE-MIDI device."""
         loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(None, self._pair_sync, address)
+        ok = await loop.run_in_executor(None, self._pair_sync, address)
+        if ok and self.ble_bridge:
+            name = self._get_device_name(address)
+            await self.ble_bridge.start_bridge(address, name)
+        return ok
 
     def _pair_sync(self, address: str) -> bool:
         try:
@@ -139,7 +159,17 @@ class BluetoothMidi:
             return False
 
     async def connect(self, address: str) -> bool:
-        """Reconnect an already-paired device."""
+        """Reconnect an already-paired device via BLE-MIDI bridge.
+
+        The bridge handles the D-Bus connection (keeps it alive) and
+        GATT service discovery. We don't use bluetoothctl connect because
+        it drops the connection when the process exits.
+        """
+        if self.ble_bridge:
+            name = self._get_device_name(address)
+            ok = await self.ble_bridge.start_bridge(address, name)
+            return ok
+        # Fallback if no bridge
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(None, self._connect_sync, address)
 
@@ -155,6 +185,8 @@ class BluetoothMidi:
 
     async def disconnect(self, address: str) -> bool:
         """Disconnect a device (keeps pairing)."""
+        if self.ble_bridge:
+            await self.ble_bridge.stop_bridge(address)
         loop = asyncio.get_event_loop()
 
         def _do():
@@ -168,6 +200,8 @@ class BluetoothMidi:
 
     async def forget(self, address: str) -> bool:
         """Remove pairing for a device."""
+        if self.ble_bridge:
+            await self.ble_bridge.stop_bridge(address)
         loop = asyncio.get_event_loop()
 
         def _do():
@@ -188,7 +222,7 @@ class BluetoothMidi:
         return await loop.run_in_executor(None, self._get_paired_sync)
 
     def _get_paired_sync(self) -> list[dict]:
-        output = _btctl("paired-devices", timeout=5)
+        output = _btctl("devices", "Paired", timeout=5)
         devices = []
         for line in output.splitlines():
             m = re.match(r"^Device\s+([0-9A-Fa-f:]{17})\s+(.+)$", line)

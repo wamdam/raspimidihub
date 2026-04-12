@@ -74,6 +74,12 @@ async def async_main() -> None:
         pass
     bt = BluetoothMidi()
 
+    # Initialize BLE-MIDI bridge
+    from .ble_midi_bridge import BleMidiBridge
+    ble_bridge = BleMidiBridge()
+    bt.ble_bridge = ble_bridge
+    engine._ble_bridge = ble_bridge  # for device scan whitelist
+
     # Register API routes
     register_api(server, engine, config, wifi, bt)
 
