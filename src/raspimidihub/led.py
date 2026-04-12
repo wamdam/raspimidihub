@@ -120,7 +120,7 @@ class LedController:
             pass
 
     def midi_blink(self) -> None:
-        """Brief green LED flicker on MIDI activity. Throttled to max ~20/sec."""
+        """Brief green LED flicker on note/CC activity. Throttled to max ~20/sec."""
         if self._state != LedState.STEADY:
             return
         now = time.monotonic()
@@ -131,10 +131,33 @@ class LedController:
             return
         self._midi_task = asyncio.ensure_future(self._midi_blink_cycle())
 
+    def clock_pulse(self) -> None:
+        """Gentle heartbeat on MIDI clock — one pulse per beat (every 24 ticks)."""
+        if self._state != LedState.STEADY:
+            return
+        self._clock_tick_count = getattr(self, '_clock_tick_count', 0) + 1
+        if self._clock_tick_count < 24:
+            return
+        self._clock_tick_count = 0
+        # Dim briefly on the beat (softer than midi_blink)
+        if self._midi_task and not self._midi_task.done():
+            return
+        self._midi_task = asyncio.ensure_future(self._clock_pulse_cycle())
+
     async def _midi_blink_cycle(self) -> None:
         try:
             self._write("none", "0")
             await asyncio.sleep(0.03)
+            if self._state == LedState.STEADY:
+                self._write("none", "1")
+        except asyncio.CancelledError:
+            pass
+
+    async def _clock_pulse_cycle(self) -> None:
+        """Longer, gentler off-on for clock beat — looks like breathing."""
+        try:
+            self._write("none", "0")
+            await asyncio.sleep(0.08)
             if self._state == LedState.STEADY:
                 self._write("none", "1")
         except asyncio.CancelledError:

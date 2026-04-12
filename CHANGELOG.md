@@ -4,6 +4,15 @@ All notable changes to RaspiMIDIHub will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [2.0.2] - 2026-04-12
+
+### Fixed
+- Swipe-dismiss no longer triggers when interacting with wheels/faders in panels.
+  Dual protection: ignore list for interactive controls + horizontal movement check.
+- Update checker crash on Pi (unused `packaging` module import removed).
+- LED no longer flickers constantly on MIDI clock. Clock: gentle heartbeat per beat.
+  Notes/CC: sharp blink as before.
+
 ## [2.0.1] - 2026-04-11
 
 ### Added

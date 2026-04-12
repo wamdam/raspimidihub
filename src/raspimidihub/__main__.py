@@ -92,7 +92,11 @@ async def async_main() -> None:
         # Only process known MIDI events, not system/subscription events
         if ev.type not in _EVENT_NAMES:
             return
-        led.midi_blink()
+        # Clock: gentle heartbeat per beat; other MIDI: sharp blink
+        if ev.type == 36:  # CLOCK
+            led.clock_pulse()
+        else:
+            led.midi_blink()
         key = f"{ev.source.client}:{ev.source.port}"
         now = _time.monotonic()
         if now - _last_activity.get(key, 0) < _ACTIVITY_THROTTLE:

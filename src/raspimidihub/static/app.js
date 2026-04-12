@@ -108,18 +108,23 @@ function animateClose(panelEl, onDone) {
 }
 
 // --- Swipe-down dismiss hook ---
-const _swipeIgnore = '.wheel-container, .fader-track, .metal-toggle, .piano, .piano-key, .mini-wheel, .curve-canvas-wrap, .step-head';
-function useSwipeDismiss(onDismiss) {
-    const [s] = useState(() => ({ startY: 0, el: null, ignore: false }));
+// Returns props to spread on the panel element.
+// Checks both target element AND movement direction to avoid false triggers.
+const _swipeIgnore = '.wheel-group, .wheel-container, .wheel-label, .fader-track, .fader-group, .metal-toggle, .toggle-group, .piano, .piano-key, .mini-wheel, .curve-canvas-wrap, .step-head, .note-select';
+function useSwipeDismiss(onDismiss, panelRef) {
+    const [s] = useState(() => ({ startY: 0, startX: 0, ignore: false }));
     const onTouchStart = (e) => {
         s.startY = e.touches[0].clientY;
-        s.el = e.currentTarget;
-        s.ignore = !!e.target.closest(_swipeIgnore);
+        s.startX = e.touches[0].clientX;
+        s.ignore = !!(e.target && e.target.closest && e.target.closest(_swipeIgnore));
     };
     const onTouchEnd = (e) => {
         if (s.ignore) return;
         const dy = e.changedTouches[0].clientY - s.startY;
-        if (dy > 80 && s.el && s.el.scrollTop <= 0) onDismiss();
+        const dx = Math.abs(e.changedTouches[0].clientX - s.startX);
+        const el = panelRef && panelRef.current;
+        // Must be clearly downward, mostly vertical, and panel scrolled to top
+        if (dy > 80 && dx < 50 && (!el || el.scrollTop <= 0)) onDismiss();
     };
     return { onTouchStart, onTouchEnd };
 }
@@ -181,8 +186,7 @@ function MappingFormOverlay({ onSubmit, onClose, editing, srcClientId }) {
     }, [learning]);
 
     useEscapeClose(close);
-
-    const swipe = useSwipeDismiss(close);
+    const swipe = useSwipeDismiss(close, panelRef);
 
     const onSrcChannelChange = (val) => {
         setSrcChannel(val);
@@ -298,7 +302,7 @@ function FilterPanel({ connId, filter, mappings, onClose, onApply, onMappingAdd,
         return () => window.removeEventListener('keydown', handler);
     }, [mappingForm]);
 
-    const swipe = useSwipeDismiss(close);
+    const swipe = useSwipeDismiss(close, panelRef);
 
     const applyFilter = (mask, types) => onApply(connId, mask, [...types]);
 
@@ -963,7 +967,7 @@ function ScrollablePiano({ heldNotes, onNoteDown, onNoteUp, pianoKeys }) {
 function DeviceDetailPanel({ device, onClose, showToast, refresh, pluginDisplays }) {
     const panelRef = { current: null };
     const close = () => animateClose(panelRef.current, onClose);
-    const swipe = useSwipeDismiss(close);
+    const swipe = useSwipeDismiss(close, panelRef);
 
     const [editName, setEditName] = useState(device.name);
     // Persist test sender settings per device
