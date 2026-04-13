@@ -4,6 +4,15 @@ All notable changes to RaspiMIDIHub will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [2.0.3] - 2026-04-13
+
+### Fixed
+- **rosetup**: install now works on fresh Pi OS Trixie (64-bit). Previously
+  failed because `/etc/os-release` no longer contains "Raspberry Pi" (it's
+  pure Debian now), and `/boot/firmware` is mounted ro by default.
+  Detection now uses `/sys/firmware/devicetree/base/model`, and setup remounts
+  boot rw as needed.
+
 ## [2.0.2] - 2026-04-12
 
 ### Fixed

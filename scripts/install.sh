@@ -23,7 +23,7 @@ wget -q --show-progress -O "$TMPDIR/raspimidihub.deb" "$BASE/raspimidihub_${TAG#
 
 PACKAGES="$TMPDIR/raspimidihub.deb"
 
-if wget -q --show-progress -O "$TMPDIR/raspimidihub-rosetup.deb" "$BASE/raspimidihub-rosetup_1.0.0-1_all.deb" 2>/dev/null; then
+if wget -q --show-progress -O "$TMPDIR/raspimidihub-rosetup.deb" "$BASE/raspimidihub-rosetup_1.0.1-1_all.deb" 2>/dev/null; then
     PACKAGES="$PACKAGES $TMPDIR/raspimidihub-rosetup.deb"
 else
     echo "Note: Read-only filesystem package not found in release, skipping."
