@@ -73,12 +73,13 @@ if [ "$(id -u)" -ne 0 ] && ! $DRY_RUN; then
     die "Must be run as root (or use --dry-run)"
 fi
 
-if ! file_contains "raspb" /etc/os-release && ! file_contains "Raspberry" /etc/os-release; then
-    die "This does not appear to be Raspberry Pi OS (/etc/os-release)"
-fi
-
 if [ ! -f /boot/firmware/cmdline.txt ]; then
     die "/boot/firmware/cmdline.txt not found — is this Raspberry Pi OS?"
+fi
+
+if [ ! -f /sys/firmware/devicetree/base/model ] || \
+   ! grep -qi "raspberry pi" /sys/firmware/devicetree/base/model; then
+    die "This does not appear to be a Raspberry Pi (checked /sys/firmware/devicetree/base/model)"
 fi
 
 if [ ! -f /etc/fstab ]; then
@@ -89,6 +90,14 @@ log "Preconditions OK"
 
 if $DRY_RUN; then
     log "=== DRY RUN MODE — no changes will be made ==="
+fi
+
+# Ensure /boot/firmware is writable during setup (newer Pi OS mounts it ro)
+BOOT_WAS_RO=false
+if ! $DRY_RUN && mount | grep -q "on /boot/firmware type vfat (ro"; then
+    log "Remounting /boot/firmware read-write for setup..."
+    mount -o remount,rw /boot/firmware
+    BOOT_WAS_RO=true
 fi
 
 # Create backup directory
