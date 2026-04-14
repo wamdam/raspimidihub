@@ -24,13 +24,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [2.0.1] - 2026-04-11
 
-### Added
-- **Global clock/transport bridge**: MIDI clock and transport events (Start, Stop,
-  Continue) are automatically forwarded from any source to all connected devices.
-  No matrix connection needed. Loop prevention tracks which devices are sending
-  clock and excludes them from receiving it back (prevents echo loops from devices
-  like the Arturia KeyStep).
-
 ### Changed
 - **Hotplug preserves live state**: filters, mappings, and connection state survive
   device hotplug without needing to save config first. The engine snapshots all live

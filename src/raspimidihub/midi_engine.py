@@ -203,38 +203,6 @@ class MidiEngine:
                 except OSError:
                     pass
 
-    def _forward_clock_to_all(self, ev: 'SndSeqEvent') -> None:
-        """Forward a clock/transport event to all devices that aren't sending clock.
-
-        Tracks which clients are producing clock events (within a 2-second window)
-        and excludes them from receiving forwarded clock — this prevents loops
-        from devices like the KeyStep that echo clock back out.
-        """
-        import time
-        src_client = ev.source.client
-        now = time.monotonic()
-
-        # Track clock sources (clients that have sent clock recently)
-        if not hasattr(self, '_clock_sources'):
-            self._clock_sources: dict[int, float] = {}  # client_id -> last_seen
-        self._clock_sources[src_client] = now
-
-        # Expire stale sources (not seen for 2 seconds)
-        stale = [c for c, t in self._clock_sources.items() if now - t > 2.0]
-        for c in stale:
-            del self._clock_sources[c]
-
-        for dev in self._devices:
-            if dev.client_id == self._seq.client_id:
-                continue  # skip our own client
-            if dev.client_id in self._clock_sources:
-                continue  # skip devices that are sending clock (prevents loops)
-            for port in dev.output_ports:
-                try:
-                    self._seq.send_event(ev, dev.client_id, port.port_id)
-                except OSError:
-                    pass
-
     def _snapshot_live_state(self) -> tuple[list[dict], dict[str, dict]]:
         """Capture current connections + filters/mappings before teardown."""
         snapshot_conns = []
@@ -370,24 +338,19 @@ class MidiEngine:
                         except Exception:
                             pass
 
-                # Forward clock events to plugin clock bus and all devices
+                # Forward clock events to plugin clock bus
                 # (deduplicate: only process on monitor port)
-                from .alsa_seq import MidiEventType
-                if ev.type in (MidiEventType.CLOCK, MidiEventType.START,
-                               MidiEventType.CONTINUE, MidiEventType.STOP):
-                    if ev.dest.port == self._monitor_port:
-                        # Plugin clock bus
-                        if self._plugin_host:
-                            if ev.type == MidiEventType.CLOCK:
-                                self._plugin_host.clock_bus.on_clock_tick()
-                            elif ev.type == MidiEventType.START:
-                                self._plugin_host.clock_bus.on_start()
-                            elif ev.type == MidiEventType.CONTINUE:
-                                self._plugin_host.clock_bus.on_continue()
-                            elif ev.type == MidiEventType.STOP:
-                                self._plugin_host.clock_bus.on_stop()
-                        # Global clock bridge: forward to all devices
-                        self._forward_clock_to_all(ev)
+                if self._plugin_host:
+                    from .alsa_seq import MidiEventType
+                    if ev.type == MidiEventType.CLOCK:
+                        if ev.dest.port == self._monitor_port:
+                            self._plugin_host.clock_bus.on_clock_tick()
+                    elif ev.type == MidiEventType.START:
+                        self._plugin_host.clock_bus.on_start()
+                    elif ev.type == MidiEventType.CONTINUE:
+                        self._plugin_host.clock_bus.on_continue()
+                    elif ev.type == MidiEventType.STOP:
+                        self._plugin_host.clock_bus.on_stop()
 
                 # Process filtered MIDI events
                 if self._filter_engine:

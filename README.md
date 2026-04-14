@@ -34,7 +34,6 @@ See all screenshots in [docs/screenshots/](docs/screenshots/) and the full [UI G
 - **Offline connections** -- configure routing for unplugged devices
 - **Loop prevention** -- self-connections excluded automatically
 - **Multi-port devices** fully supported
-- **Global clock/transport bridge** -- MIDI clock and transport (Start/Stop/Continue) are forwarded to all devices automatically, with loop prevention for devices that echo clock back
 
 ### Virtual Instruments and Plugins
 - **12 built-in plugins** that appear as routable MIDI devices
