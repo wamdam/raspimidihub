@@ -4,6 +4,14 @@ All notable changes to RaspiMIDIHub will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [2.0.4] - 2026-04-15
+
+### Changed
+- Removed global clock/transport bridge introduced in 2.0.1. Clock now flows
+  only through explicit matrix connections (use the per-connection Clock/RT
+  filter toggle to enable/disable). The bridge caused duplicate clock when
+  devices were also connected in the matrix.
+
 ## [2.0.3] - 2026-04-13
 
 ### Fixed
