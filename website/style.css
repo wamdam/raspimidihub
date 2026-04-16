@@ -225,6 +225,44 @@ a:hover { text-decoration: underline; }
 .step h3 { font-size: 1.2rem; margin-bottom: 8px; }
 .step p { color: var(--text-muted); font-size: 0.95rem; }
 
+/* === Video === */
+.video { padding: 80px 0; }
+.video-link {
+  display: block;
+  position: relative;
+  max-width: 800px;
+  margin: 32px auto 0;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+  transition: box-shadow 0.2s;
+}
+.video-link:hover {
+  box-shadow: 0 20px 60px rgba(233, 69, 96, 0.25);
+  text-decoration: none;
+}
+.video-link img {
+  width: 100%;
+  display: block;
+}
+.video-play {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 68px;
+  height: 48px;
+  transition: transform 0.2s;
+}
+.video-link:hover .video-play {
+  transform: translate(-50%, -50%) scale(1.1);
+}
+.video-play svg {
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 4px 12px rgba(0,0,0,0.4));
+}
+
 /* === Features === */
 .features { padding: 80px 0; }
 
