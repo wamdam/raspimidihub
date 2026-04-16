@@ -112,6 +112,14 @@ release: $(DEB_FILE) $(ROSETUP_DEB_FILE)
 		--notes "$${NOTES:-Release v$(VERSION)}"
 	@echo "=== Released: https://github.com/wamdam/raspimidihub/releases/tag/v$(VERSION) ==="
 
+# --- Website deployment ---
+
+WEBHOST = user@statlergrooves.com
+WEBROOT = /home/user/webhosting/raspimidihub.com
+
+deploy-website:
+	rsync -av --delete website/ $(WEBHOST):$(WEBROOT)/
+
 # --- Pi deployment ---
 
 deploy: $(DEB_FILE)
