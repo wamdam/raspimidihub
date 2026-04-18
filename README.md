@@ -10,6 +10,12 @@ The Raspberry Pi runs on a **read-only filesystem**, so you can pull the power a
 
 ![License](https://img.shields.io/badge/license-LGPL-blue.svg)
 
+## Watch the Demo
+
+[![RaspiMIDIHub video walkthrough](website/screenshots/video-thumbnail.jpg)](https://www.youtube.com/watch?v=q2tct0SiazU)
+
+A full walkthrough of the routing matrix, MIDI mapping, and virtual instruments in a live setup with Digitone, Roland S1, Launch Control XL, and a keyboard.
+
 <p align="center">
   <img src="docs/screenshots/01-routing.png" width="200" alt="Routing Matrix" />
   <img src="docs/screenshots/09-plugin-arpeggiator.png" width="200" alt="Arpeggiator with Step Sequencer" />
