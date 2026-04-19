@@ -13,7 +13,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   the configured release-note to silence the chord (the note itself is never
   forwarded) or press any other note to release the previous chord and start
   a new one. Release-note can be disabled if you only want the
-  new-note-replaces behaviour.
+  new-note-replaces behaviour. Released on MIDI Stop.
+- **Panic button** (red, bottom of the matrix page). Sends CC 123
+  (All Notes Off) + CC 120 (All Sound Off) on every channel to every outbound
+  destination in the live routing graph, and invokes `plugin.panic()` on every
+  instance so stateful plugins release their internal note tracking. Transport
+  is left alone so panic doesn't derail whatever's playing.
+- **MIDI Learn button** under every `NoteSelect` wheel. Tap it and the next
+  note you play on any connected source becomes the value. Applies to Hold's
+  release-note, Note Splitter's split-point, etc. Opt out with
+  `NoteSelect(..., learnable=False)`.
+- **Channel-remap fan-out**: a single incoming channel can be layered to
+  multiple destination channels (e.g. bass on ch 1 + strings on ch 6) by
+  adding one channel-map mapping per target. Previously the second mapping
+  was rejected as a duplicate, and even if accepted would have silently
+  overwritten the first because the engine rewrote the event in-place. Each
+  matching channel map now emits its own copy.
+- **`panic()` hook** on `PluginBase` (default no-op). Override in plugins
+  that hold note state to silence any sustaining output when the Panic
+  button fires. Implemented on Hold, Arpeggiator, Chord Generator,
+  MIDI Delay.
+- Transport Start/Stop now reach every plugin, not just clock-tick
+  subscribers (the tick queue is always created now).
 
 ### Fixed
 - Saved config was not loaded at boot when running headless. `_scan_and_connect`
@@ -21,12 +42,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   treated `[]` as "nothing to apply" instead of falling back to
   `config.connections`. Devices were left unconnected until the user hit
   "Load config" in the web UI. Boot now restores saved routing correctly.
-- Channel remap fan-out is now allowed: a single incoming channel can be
-  layered to multiple destination channels (e.g. bass on ch 1 + strings on
-  ch 6) by adding one channel-map mapping per target. Previously the second
-  mapping was rejected as a duplicate, and even if accepted would have
-  silently overwritten the first because the engine rewrote the event
-  in-place. Each matching channel map now emits its own copy.
+- Plugin-referencing connections (hw↔plugin, plugin↔plugin) were dropped at
+  boot. `engine.start()` used to run the initial scan *before* plugins were
+  restored, so their ALSA clients didn't exist yet when saved connections
+  were applied. Initial scan now runs after plugin restore.
+- Hold got wedged in a stuck state if you changed `release_note` (via wheel
+  or Learn) to a note that was already tracked in `_physical`. The paired
+  note-off was swallowed and the plugin could never reach LOCKED again, so
+  every subsequent note stacked without replacement. `on_note_off` now
+  always clears `_physical`, independent of the release-note guard.
 
 ## [2.0.4] - 2026-04-15
 
