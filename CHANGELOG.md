@@ -4,6 +4,15 @@ All notable changes to RaspiMIDIHub will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [2.0.5] - 2026-04-19
+
+### Fixed
+- Saved config was not loaded at boot when running headless. `_scan_and_connect`
+  always passed an empty live-state snapshot to `_apply_saved_config`, which
+  treated `[]` as "nothing to apply" instead of falling back to
+  `config.connections`. Devices were left unconnected until the user hit
+  "Load config" in the web UI. Boot now restores saved routing correctly.
+
 ## [2.0.4] - 2026-04-15
 
 ### Changed

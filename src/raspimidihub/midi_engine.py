@@ -250,10 +250,12 @@ class MidiEngine:
 
         from .__main__ import _apply_saved_config
 
-        if has_live_state or (self._config and self._config.mode == "custom"):
+        if has_live_state:
             _apply_saved_config(self, self._config,
                                 snapshot=snapshot_conns,
                                 snapshot_disconn=snapshot_disconn)
+        elif self._config and self._config.mode == "custom":
+            _apply_saved_config(self, self._config)
         else:
             default_routing = "all"
             if self._config:
