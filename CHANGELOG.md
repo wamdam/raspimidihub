@@ -4,6 +4,30 @@ All notable changes to RaspiMIDIHub will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [2.0.6] - 2026-04-19
+
+### Added
+- **Arpeggiator**: slow rates plus their triplet variants. Full list, ordered
+  by length: `4/1, 4/1T, 2/1, 2/1T, 1/1, 1/1T, 1/2, 1/2T, 1/4, 1/4T, 1/8,
+  1/8T, 1/16, 1/16T, 1/32`. Lets the arp step at bar-scale for slow evolving
+  patches. All three sync modes (Free, Tempo, Transport) honour the new rates.
+
+### Fixed
+- **Mapping fan-out rejected as "duplicate"**. Duplicate detection for CC→CC
+  and Note→CC ignored `dst_channel`, so legit mappings like
+  `ch9,cc1 → ch1,cc10` + `ch9,cc1 → ch2,cc10` got rejected. The pointless-check
+  also rejected same-ch/same-CC mappings with non-identity scaling (a
+  legitimate value-shaper use case). Rules are now:
+  - REJECT only an exact all-fields-identical duplicate (including scaling
+    ranges, pass-through flag, on/off velocities).
+  - REJECT a CC→CC with same src+dst and identity `0..127 → 0..127` scaling.
+  - REJECT a channel-map with `src_channel == dst_channel`.
+  - ALLOW everything else, including fan-out to multiple destination channels
+    and same-src-dst variants with different scaling curves.
+
+  The validation logic was extracted into `validate_new_mapping` in
+  `midi_filter.py` and is covered by a 30-row parametrized test matrix.
+
 ## [2.0.5] - 2026-04-19
 
 ### Added
