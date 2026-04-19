@@ -210,6 +210,24 @@ class TestChannelMap:
         assert len(fwd_ev) == 2
         assert {e.data.note.channel for e in fwd_ev} == {0, 5}
 
+    def test_fan_out_note_off(self):
+        """Note-off also fans out to all mapped channels."""
+        mappings = [
+            MidiMapping(type=MappingType.CHANNEL_MAP, src_channel=None, dst_channel=0),
+            MidiMapping(type=MappingType.CHANNEL_MAP, src_channel=None, dst_channel=5),
+        ]
+        engine, fc, fwd_cc, fwd_ev = _make_engine_and_conn(mappings)
+
+        ev = make_event(
+            MidiEventType.NOTEOFF, channel=2, note=60, velocity=0,
+            src_client=1, src_port=0, dst_client=128, dst_port=10,
+        )
+        engine.process_event(ev)
+
+        assert len(fwd_ev) == 2
+        assert {e.data.note.channel for e in fwd_ev} == {0, 5}
+        assert all(e.type == MidiEventType.NOTEOFF for e in fwd_ev)
+
 
 class TestChannelMismatch:
     def test_src_channel_mismatch_skips(self):

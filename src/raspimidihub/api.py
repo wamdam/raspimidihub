@@ -971,6 +971,16 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         return Response.error("Failed to save config", 500)
 
     # ================================================================
+    # POST /api/panic — silence all notes across every destination
+    # ================================================================
+
+    @server.route("POST", "/api/panic")
+    async def api_panic(req: Request) -> Response:
+        engine.panic()
+        await server.send_sse("panic", {})
+        return Response.json({"status": "panic"})
+
+    # ================================================================
     # POST /api/system/reboot — reboot the Pi
     # ================================================================
 

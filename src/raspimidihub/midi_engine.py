@@ -360,6 +360,50 @@ class MidiEngine:
             if hotplug:
                 self._schedule_rescan()
 
+    def panic(self) -> None:
+        """Silence all sounding notes across every outbound destination.
+
+        Sends CC 123 (All Notes Off) + CC 120 (All Sound Off) on all 16
+        channels to every unique destination that has active connections,
+        then asks each plugin to release its internal note state.
+        """
+        if not self._seq:
+            return
+
+        import ctypes
+        from .alsa_seq import (
+            SndSeqEvent, MidiEventType,
+            snd_seq_event_output_direct,
+            SND_SEQ_QUEUE_DIRECT,
+        )
+
+        panic_port = self._monitor_port if self._monitor_port >= 0 else 0
+        dests = {(c.dst_client, c.dst_port) for c in self._connections}
+
+        for dst_client, dst_port in dests:
+            for ch in range(16):
+                for cc in (123, 120):  # All Notes Off, All Sound Off
+                    ev = SndSeqEvent()
+                    ev.type = int(MidiEventType.CONTROLLER)
+                    ev.data.control.channel = ch
+                    ev.data.control.param = cc
+                    ev.data.control.value = 0
+                    ev.source.client = self._seq.client_id
+                    ev.source.port = panic_port
+                    ev.dest.client = dst_client
+                    ev.dest.port = dst_port
+                    ev.queue = SND_SEQ_QUEUE_DIRECT
+                    ev.flags = 0
+                    snd_seq_event_output_direct(self._seq.handle, ctypes.pointer(ev))
+
+        if self._plugin_host:
+            try:
+                self._plugin_host.panic_all()
+            except Exception:
+                log.exception("panic_all failed")
+
+        log.info("Panic: sent All Notes Off to %d destinations", len(dests))
+
     def snapshot_rates(self) -> dict[str, int]:
         """Snapshot per-port message rates (msgs/sec) and reset counters."""
         rates = dict(self._port_msg_counts)

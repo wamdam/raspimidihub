@@ -84,6 +84,12 @@ Example: Set type=minor, play C3, and get C-Eb-G simultaneously."""
         for ch, n in notes:
             self.send_note_off(ch, n)
 
+    def panic(self):
+        for _root, notes in list(self._active.items()):
+            for ch, n in notes:
+                self.send_note_off(ch, n)
+        self._active.clear()
+
     def on_cc(self, channel, cc, value):
         self.send_cc(channel, cc, value)
 

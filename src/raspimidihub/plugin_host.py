@@ -518,14 +518,14 @@ class PluginHost:
                 self._on_param_change_callback(inst_id, name, value)
         instance.plugin._notify_param_change = _on_param_change
 
-        # Subscribe to clock if requested
-        if instance.plugin.clock_divisions:
-            import queue
-            instance._tick_queue = queue.Queue(maxsize=64)
-            instance._tick_pipe = os.pipe()
-            os.set_blocking(instance._tick_pipe[0], False)
-            os.set_blocking(instance._tick_pipe[1], False)
-            self.clock_bus.subscribe(instance, instance.plugin.clock_divisions)
+        # Every instance gets a tick/transport queue so on_transport_start/stop
+        # reaches all plugins, not just those subscribed to clock ticks.
+        import queue
+        instance._tick_queue = queue.Queue(maxsize=64)
+        instance._tick_pipe = os.pipe()
+        os.set_blocking(instance._tick_pipe[0], False)
+        os.set_blocking(instance._tick_pipe[1], False)
+        self.clock_bus.subscribe(instance, instance.plugin.clock_divisions)
 
         # Start plugin thread
         instance.running = True
@@ -839,3 +839,13 @@ class PluginHost:
         """Stop all plugin instances."""
         for instance_id in list(self._instances.keys()):
             self.stop_instance(instance_id)
+
+    def panic_all(self) -> None:
+        """Tell every live plugin to release its internal note state."""
+        for instance in list(self._instances.values()):
+            if not instance.running:
+                continue
+            try:
+                instance.plugin.panic()
+            except Exception:
+                log.exception("Plugin %s panic() failed", instance.id)

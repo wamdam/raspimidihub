@@ -344,6 +344,16 @@ class PluginBase:
     def on_stop(self) -> None:
         pass
 
+    def panic(self) -> None:
+        """Release all internal state so the plugin stops producing notes.
+
+        Called by the global Panic action. Override in plugins that hold
+        internal note state (Hold, Arp, Chord Generator, Note-to-CC toggle)
+        to silence any sustaining output. Default is a no-op — stateless
+        plugins (Transpose, CC LFO, etc.) don't need to do anything.
+        """
+        pass
+
     # --- Output methods (call from handlers to send MIDI out) ---
 
     def send_note_on(self, channel: int, note: int, velocity: int) -> None:

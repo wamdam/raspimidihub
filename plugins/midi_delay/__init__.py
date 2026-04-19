@@ -77,6 +77,15 @@ echoes that fade out on a lead synth line."""
             self._pending.clear()
             self._note_offs.clear()
 
+    def panic(self):
+        with self._lock:
+            for slot in self._buffer:
+                slot.clear()
+            self._pending.clear()
+            for _t, ch, note in list(self._note_offs):
+                self.send_note_off(ch, note)
+            self._note_offs.clear()
+
     def on_note_on(self, channel, note, velocity):
         # Pass through immediately
         self.send_note_on(channel, note, velocity)

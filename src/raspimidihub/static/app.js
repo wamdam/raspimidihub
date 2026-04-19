@@ -661,6 +661,12 @@ function RoutingPage({ devices, connections, refresh, showToast, clockSources, m
         refresh();
         showToast('Configuration loaded');
     };
+    const [panicing, setPanicing] = useState(false);
+    const panic = async () => {
+        setPanicing(true);
+        try { await api('/panic', { method: 'POST' }); showToast('Panic — all notes off'); }
+        finally { setTimeout(() => setPanicing(false), 400); }
+    };
 
     return html`
         ${filterConn && html`<${FilterPanel}
@@ -689,6 +695,9 @@ function RoutingPage({ devices, connections, refresh, showToast, clockSources, m
                     await api('/config/import', { method: 'POST', body: JSON.stringify(data) }); refresh(); showToast('Config imported'); };
                 inp.click();
             }}>Import Config</button>
+        </div>
+        <div class="btn-group" style="margin-top:4px">
+            <button class="btn btn-panic ${panicing ? 'btn-held' : ''}" onclick=${panic}>Panic — All Notes Off</button>
         </div>
         ${showAddPlugin && html`
             <div class="filter-overlay" onclick=${(e) => e.target.className === 'filter-overlay' && setShowAddPlugin(false)}>

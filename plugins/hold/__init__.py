@@ -76,9 +76,11 @@ if you only want the "play a new note to replace" behaviour."""
         self.send_note_on(channel, note, velocity)
 
     def on_note_off(self, channel, note):
-        if self._is_release_note(note):
-            return  # swallow paired note-off
-
+        # Always clear physical state, even for the release-note key — if the
+        # user pressed a key as a "normal" note and then Learn changed the
+        # release-note to that same note, the paired note-off would otherwise
+        # leave (channel, note) wedged in _physical forever and the plugin
+        # would never reach LOCKED again.
         self._physical.discard((channel, note))
         if not self._physical and self._held:
             self._locked = True
@@ -95,6 +97,15 @@ if you only want the "play a new note to replace" behaviour."""
     def on_program_change(self, channel, program):
         self.send_program_change(channel, program)
 
+    def on_transport_stop(self):
+        self._release_all()
+        self._physical.clear()
+
+    def panic(self):
+        self._release_all()
+        self._physical.clear()
+
     def on_stop(self):
+        # Plugin shutdown — clean up any sounding notes.
         self._release_all()
         self._physical.clear()

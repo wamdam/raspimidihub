@@ -73,6 +73,13 @@ Gate % = note length (100=legato, 10=staccato)."""
         self._free_running = False
         self._note_off_current()
 
+    def panic(self):
+        with self._lock:
+            self._free_running = False
+            self._held_notes = []
+            self._sorted_notes = []
+            self._note_off_current()
+
     def on_transport_start(self):
         mode = self.get_param("sync_mode") or "tempo"
         if mode == "transport":

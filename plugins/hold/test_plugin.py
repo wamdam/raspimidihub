@@ -108,3 +108,38 @@ class TestHold:
         p, h = _setup()
         p.on_cc(0, 74, 64)
         assert h.ccs == [(0, 74, 64)]
+
+    def test_release_note_learned_mid_press_clears_physical(self):
+        """If release_note changes to a note whose note_on was already tracked,
+        the paired note_off must still clean up _physical so LOCKED can fire.
+        """
+        p, h = _setup()
+        # Press note 60 as a regular note (release_note is 108).
+        p.on_note_on(0, 60, 100)
+        # User clicks Learn, release_note param becomes 60.
+        p._param_values["release_note"] = 60
+        # Release that note — must empty _physical so next fresh press replaces.
+        p.on_note_off(0, 60)
+        h.clear()
+        # New note: previous chord (containing 60) should release, 64 should play.
+        p.on_note_on(0, 64, 80)
+        assert (0, 60) in h.note_offs
+        assert h.note_ons == [(0, 64, 80)]
+
+    def test_transport_stop_releases(self):
+        p, h = _setup()
+        p.on_note_on(0, 60, 100)
+        p.on_note_on(0, 64, 100)
+        p.on_note_off(0, 60)
+        p.on_note_off(0, 64)
+        h.clear()
+        p.on_transport_stop()
+        assert sorted(n for _, n in h.note_offs) == [60, 64]
+
+    def test_panic_releases(self):
+        p, h = _setup()
+        p.on_note_on(0, 60, 100)
+        p.on_note_off(0, 60)
+        h.clear()
+        p.panic()
+        assert h.note_offs == [(0, 60)]

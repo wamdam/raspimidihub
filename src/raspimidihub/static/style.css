@@ -122,6 +122,11 @@ body {
 .btn:active { opacity: 0.7; }
 .btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .btn-primary { background: var(--accent); color: #fff; }
+.btn-panic {
+    flex: 1; background: #7a1b1b; color: #fff; font-weight: 600;
+    border: 1px solid #a02424;
+}
+.btn-panic:active { background: #5a0e0e; }
 .btn-secondary { background: var(--surface2); color: var(--text); }
 .btn-danger { background: var(--error); color: #fff; }
 .btn-success { background: var(--success); color: #fff; }
