@@ -33,7 +33,10 @@ Gate % = note length (100=legato, 10=staccato)."""
         Group("Pattern", [
             Radio("pattern", "Pattern", ["up", "down", "up-down", "random", "as-played"],
                   default="up"),
-            Radio("rate", "Rate", ["1/4", "1/8", "1/16", "1/32", "1/8T"], default="1/8"),
+            Radio("rate", "Rate",
+                  ["4/1", "2/1", "1/1", "1/2", "1/4", "1/8", "1/16", "1/32",
+                   "4/1T", "2/1T", "1/1T", "1/2T", "1/4T", "1/8T", "1/16T"],
+                  default="1/8"),
         ]),
         Group("Steps", [
             Wheel("step_count", "Steps", min=1, max=32, default=8),
@@ -55,7 +58,10 @@ Gate % = note length (100=legato, 10=staccato)."""
     inputs = ["Notes", "CC#74 (rate)", "CC#75 (gate)", "Clock", "Aftertouch", "Pitch Bend"]
     outputs = ["Notes (arpeggiated)", "Aftertouch (pass-through)", "Pitch Bend (pass-through)"]
 
-    clock_divisions = ["1/4", "1/8", "1/16", "1/32", "1/4T", "1/8T", "1/16T"]
+    clock_divisions = [
+        "4/1", "2/1", "1/1", "1/2", "1/4", "1/8", "1/16", "1/32",
+        "4/1T", "2/1T", "1/1T", "1/2T", "1/4T", "1/8T", "1/16T",
+    ]
 
     def on_start(self):
         self._held_notes = []
@@ -154,7 +160,12 @@ Gate % = note length (100=legato, 10=staccato)."""
                 bpm = self.get_param("bpm") or 120
                 rate = self.get_param("rate") or "1/8"
                 beats_per_sec = bpm / 60.0
-                rate_map = {"1/4": 1, "1/8": 0.5, "1/16": 0.25, "1/32": 0.125, "1/8T": 1/3}
+                rate_map = {
+                    "4/1": 16, "2/1": 8, "1/1": 4, "1/2": 2,
+                    "1/4": 1, "1/8": 0.5, "1/16": 0.25, "1/32": 0.125,
+                    "4/1T": 32/3, "2/1T": 16/3, "1/1T": 8/3, "1/2T": 4/3,
+                    "1/4T": 2/3, "1/8T": 1/3, "1/16T": 1/6,
+                }
                 interval = rate_map.get(rate, 0.5) / beats_per_sec
                 self._advance()
                 time.sleep(interval)

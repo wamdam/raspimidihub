@@ -188,15 +188,21 @@ class PluginInstance:
 # Division: (numerator, denominator) expressed as ticks per division at 24 PPQ
 # 24 PPQ means 24 ticks per quarter note
 DIVISION_TICKS = {
-    "1/1": 96,    # 4 quarter notes
-    "1/2": 48,    # 2 quarter notes
-    "1/4": 24,    # 1 quarter note
+    "4/1": 384,   # 4 bars
+    "2/1": 192,   # 2 bars
+    "1/1": 96,    # 1 bar / whole note
+    "1/2": 48,
+    "1/4": 24,
     "1/8": 12,
     "1/16": 6,
     "1/32": 3,
-    "1/4T": 16,   # triplet: 24/1.5
-    "1/8T": 8,    # triplet: 12/1.5
-    "1/16T": 4,   # triplet: 6/1.5
+    "4/1T": 256,  # 3 in the space of 2 × 4-bar
+    "2/1T": 128,
+    "1/1T": 64,
+    "1/2T": 32,
+    "1/4T": 16,
+    "1/8T": 8,
+    "1/16T": 4,
 }
 
 
