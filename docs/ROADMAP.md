@@ -218,6 +218,171 @@ the boot-partition save path.
 
 ---
 
+## 3. Matrix Context Menu + Copy / Paste
+
+### Goal
+
+Replace the current "long-press a connection → jump straight into the
+filter panel" shortcut with a small popover that offers **Edit**,
+**Copy**, **Paste**. Same menu for plugin (instrument) headers with
+item-type-appropriate entries. Clipboard carries all the settings so
+you can move a filter + mapping stack between connections, or clone a
+configured plugin into a new instance.
+
+### User stories
+- "I set up three CC→CC mappings on `Keyboard → Arp` and now I want
+  the same stack on `Keyboard → Hold`. Long-press the original, Copy;
+  long-press the other cell, Paste."
+- "I got the Arpeggiator exactly how I want it. Right-click the Arp
+  row header, Copy; press the Add Plugin button, Paste — a new Arp
+  appears with all params identical."
+- "I want to tweak the second mapping on `Keyboard → Synth` — Edit
+  does what long-press does today."
+
+### Menu triggers
+
+- Mobile: **long-press** a matrix cell (connection) or row/column header
+  (device / plugin) → popover at touch point. Long-press on empty cells
+  shows only an "Add connection" item.
+- Desktop: **right-click** same targets. Escape / outside-tap closes.
+
+### Menu items
+
+| Target | Items |
+|--------|-------|
+| Connection cell (active) | Edit · Copy · Paste (if compat) · Remove |
+| Connection cell (empty)  | Paste (if compat) · Add connection |
+| Plugin row/column header | Edit · Copy · Paste-as-new · Delete |
+| Hardware row/column header | Rename · (no copy — hardware is physical) |
+
+**Edit** on a connection cell is today's long-press behaviour (opens
+the filter/mapping panel). **Edit** on a plugin header opens the
+plugin config panel (same as tap).
+
+### Clipboard shape
+
+One slot, type-tagged. Keeps the UX simple — Paste is enabled only
+when the target can accept the clipboard's type.
+
+```js
+clipboard = {
+  kind: "connection",   // or "plugin"
+  payload: { /* type-specific */ }
+}
+```
+
+- **kind: "connection"** — `payload = { filter: {...}|null, mappings: [...] }`.
+  Paste target: any connection cell (existing or empty). Empty target
+  first creates the connection via the normal route, then applies the
+  filter/mappings.
+- **kind: "plugin"** — `payload = { type: "arpeggiator", params: {...} }`.
+  Paste target: the "+ Add Plugin" button (create new with these
+  params) **or** another plugin row of the same type (replace its
+  params). Name is NOT copied — the new instance gets an auto-name so
+  two clones don't collide.
+
+Clipboard lives in client state (Preact). Shared across devices via the
+existing SSE bus — **out of scope for MVP**; single-browser clipboard only.
+
+### API surface
+
+No new server routes for MVP: the client reads the source
+filter/mappings via `GET /api/mappings/:conn_id` + the connection's
+filter payload (already returned), then on Paste calls the existing
+`PUT /api/filters/:conn_id` + `POST /api/mappings/:conn_id` sequence.
+
+Plugin clipboard uses `POST /api/plugins/instances` to create a clone,
+then `PATCH /api/plugins/instances/:id` to set params — all existing
+endpoints.
+
+### Open questions
+
+1. **Paste replaces vs merges.** Replace wins for simplicity (mirrors
+   what the user sees on the source). Add a "Paste mappings only" /
+   "Paste filter only" submenu later if needed.
+2. **Cross-source paste safety.** Mappings carry `src_channel` with no
+   explicit source-device binding — copying a "ch 1 only" mapping to a
+   connection whose source is already filtered to ch 2 will silently
+   never fire. Flag this in the toast?
+3. **Plugin paste onto different plugin type.** Refuse (types differ) —
+   show a toast explaining.
+
+---
+
+## 4. Matrix Undo / Redo
+
+### Goal
+
+Ctrl+Z (and a visible Undo/Redo pair on the matrix toolbar) that
+reverses the last action, with history up to ~100 steps. Each entry
+has a human label so the toast on Undo/Redo tells you **what** just
+got reversed ("Undid: Added mapping CC1 → CC10 on `Keyboard → Synth`").
+
+### Scope — what's undoable
+
+- Connect / disconnect a pair in the matrix
+- Add / remove / edit a mapping
+- Edit a connection filter
+- Create / delete a plugin instance
+- Rename a device / plugin
+- Paste (undoes the whole paste atomically)
+
+### Scope — what's NOT undoable (MVP)
+
+- Plugin param changes (the user fiddles wheels constantly — infinite
+  history noise). Plugins already expose Edit/Revert at the instance
+  level.
+- Live MIDI routing state changes from hotplug.
+- Config Save / Load / Import / Export — these are the explicit escape
+  hatch.
+
+### Where the stack lives
+
+**Client side.** Every user-initiated action that goes through the API
+wraps into a `Command` object:
+
+```js
+class Command {
+  label: string;          // "Added mapping CC1 → CC10 on Keyboard → Synth"
+  do():   Promise<void>;  // idempotent on a clean state
+  undo(): Promise<void>;  // restores the state before do()
+}
+```
+
+Stack = `[ undoStack: Command[], redoStack: Command[] ]`. Cap at 100;
+drop oldest. Redo clears on any non-undo action.
+
+Persistence: **not persisted** — restart = empty history. Matches
+typical DAW behaviour and avoids needing a disk log.
+
+Server-side state is authoritative. Commands call the existing REST
+endpoints in both `do()` and `undo()`. SSE broadcasts reconcile any
+out-of-band changes; if an undo's target (e.g. the connection) no
+longer exists, the command is dropped from history with a toast.
+
+### UI
+
+- Two buttons on the matrix toolbar: `↶ Undo` / `↷ Redo`, disabled when
+  their stack is empty.
+- Hover title shows the next label.
+- Toast on action: "Undid: …" or "Redid: …".
+- Keyboard: Ctrl+Z (Cmd+Z on macOS), Ctrl+Shift+Z for redo.
+
+### Open questions
+
+1. **Coalescing.** Rapid sequential actions of the same kind (e.g.
+   three connect-toggles in 1 second) — coalesce into one undo step?
+   MVP: no, keep each atomic.
+2. **Stacking Paste.** Paste of a connection performs multiple server
+   calls (filter + N mappings). Treat as one atomic command (single
+   undo step).
+3. **Redo after external change.** If SSE tells us a connection
+   disappeared (another client deleted it), do we drop just the
+   affected redo entries or the whole redo stack? MVP: whole redo
+   stack on any external change.
+
+---
+
 ## Shared concerns
 
 - **New param types.** Both plugins need UI components that don't exist
@@ -243,19 +408,27 @@ the boot-partition save path.
 
 ## Phased rollout
 
-1. **Phase 1 — Rhythm Sequencer MVP**
-   - Python plugin + `DrumGrid` + `GenreTemplatePicker` params.
-   - 5 genres × 5 templates to start (Techno, House, DnB, Hip-Hop, Trap).
-   - Genre profiles for Randomize on those 5.
-2. **Phase 2 — Rhythm Sequencer genre expansion**
-   - Round out to the full 21 genres and their ≥5 templates.
-3. **Phase 3 — Tracker MVP**
-   - Python plugin + `TrackerGrid` param.
-   - Steps, play, record, overdub, clear.
-4. **Phase 4 — Tracker polish**
-   - Copy/paste bars, transpose, paginator, live pass-through toggle.
+Features ship independently — these are proposed orderings, not
+dependencies.
 
-Each phase ships independently behind its own plugin; no flag days.
+**Sequencer track**
+1. Rhythm Sequencer MVP — plugin + `DrumGrid` + `GenreTemplatePicker`,
+   5 genres × 5 templates (Techno, House, DnB, Hip-Hop, Trap),
+   profiles for Randomize on those 5.
+2. Rhythm Sequencer genre expansion — full 21 genres × ≥5 templates.
+3. Tracker MVP — plugin + `TrackerGrid`, steps, play, record, overdub,
+   clear.
+4. Tracker polish — copy/paste bars, transpose, paginator, live
+   pass-through toggle.
+
+**Workflow track** (independent of the sequencer track, can slot in
+first if preferred)
+1. Matrix Context Menu — Edit / Copy / Paste / Remove scaffolding and
+   the popover itself.
+2. Clipboard for connections — filter + mappings stack.
+3. Clipboard for plugins — paste-as-new + paste-over-instance.
+4. Undo / Redo — client-side `Command` stack, toolbar buttons,
+   keyboard shortcuts, labelled toasts.
 
 ---
 
