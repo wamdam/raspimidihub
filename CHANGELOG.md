@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [2.0.5] - 2026-04-19
 
+### Added
+- **Hold plugin**: latch notes without a sustain pedal. Press any combination of
+  keys, lift your fingers, and the chord sustains. While at least one key is
+  still held, new presses add to the chord. Once all keys are released, press
+  the configured release-note to silence the chord (the note itself is never
+  forwarded) or press any other note to release the previous chord and start
+  a new one. Release-note can be disabled if you only want the
+  new-note-replaces behaviour.
+
 ### Fixed
 - Saved config was not loaded at boot when running headless. `_scan_and_connect`
   always passed an empty live-state snapshot to `_apply_saved_config`, which

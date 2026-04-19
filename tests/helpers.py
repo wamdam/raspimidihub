@@ -70,15 +70,15 @@ class PluginHarness:
 
     @property
     def note_ons(self) -> list[tuple]:
-        return [(ch, n, v) for t, ch, n, v in self.sent if t == "note_on"]
+        return [e[1:] for e in self.sent if e[0] == "note_on"]
 
     @property
     def note_offs(self) -> list[tuple]:
-        return [(ch, n) for t, ch, n in self.sent if t == "note_off"]
+        return [e[1:] for e in self.sent if e[0] == "note_off"]
 
     @property
     def ccs(self) -> list[tuple]:
-        return [(ch, cc, v) for t, ch, cc, v in self.sent if t == "cc"]
+        return [e[1:] for e in self.sent if e[0] == "cc"]
 
 
 def make_plugin(plugin_class):
