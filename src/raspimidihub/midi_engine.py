@@ -86,14 +86,13 @@ class MidiEngine:
         return self._device_registry
 
     def start(self) -> None:
-        """Open ALSA sequencer and perform initial scan + connect."""
+        """Open ALSA sequencer. Caller must run _scan_and_connect after plugins load."""
         self._seq = AlsaSeq("RaspiMIDIHub")
         self._filter_engine = FilterEngine(self._seq)
         # Create a monitor port to receive copies of MIDI events for the UI
         self._monitor_port = self._seq.create_port("monitor", writable=True)
         log.info("ALSA sequencer opened, client ID %d, monitor port %d",
                  self._seq.client_id, self._monitor_port)
-        self._scan_and_connect()
 
     def stop(self) -> None:
         """Disconnect all and close ALSA sequencer."""

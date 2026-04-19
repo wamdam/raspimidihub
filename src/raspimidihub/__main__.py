@@ -162,12 +162,15 @@ async def async_main() -> None:
         if device_names:
             engine.device_registry.load_custom_names(device_names)
 
-        # Restore plugin instances from config
+        # Restore plugin instances from config BEFORE the initial scan so plugin
+        # ALSA clients are visible when saved connections are applied.
         saved_plugins = config.data.get("plugins", [])
         if saved_plugins:
             plugin_host.restore_instances(saved_plugins)
-            # Rescan so plugin ALSA clients appear in the matrix
-            engine._schedule_rescan()
+
+        # Initial device scan + apply saved config (connections, filters, mappings).
+        # Runs here (not in engine.start) so plugins are already registered.
+        engine._scan_and_connect()
 
         if not config_ok:
             led.set_fast_blink()
