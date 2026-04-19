@@ -599,7 +599,7 @@ function PluginCurveEditor({ name, label, value, onChange }) {
 // =======================================================================
 // NOTE SELECT — PluginWheel with note name labels instead of numbers
 // =======================================================================
-function PluginNoteSelect({ name, label, value, onChange }) {
+function PluginNoteSelect({ name, label, value, onChange, learnable }) {
     // Reuse PluginWheel with a custom suffix that shows note names
     // We override the tick rendering by using noteName labels
     const containerRef = useRef(null);
@@ -664,10 +664,31 @@ function PluginNoteSelect({ name, label, value, onChange }) {
         return () => { el.removeEventListener('touchstart', onStart); el.removeEventListener('mousedown', onStart); el.removeEventListener('wheel', onWheel); };
     }, [name]);
 
+    const [learning, setLearning] = useState(false);
+    useEffect(() => {
+        if (!learning) return;
+        const es = new EventSource('/api/events');
+        const onMidi = (e) => {
+            try {
+                const d = JSON.parse(e.data);
+                if (d.note != null) {
+                    onChange(name, d.note);
+                    setLearning(false);
+                }
+            } catch {}
+        };
+        es.addEventListener('midi-activity', onMidi);
+        const t = setTimeout(() => setLearning(false), 10000);
+        return () => { es.close(); clearTimeout(t); };
+    }, [learning]);
+
     const ticks = []; for (let i = 0; i <= 127; i++) ticks.push(html`<div class="wheel-tick" key=${i}>${noteName(i)}</div>`);
     return html`<div class="wheel-group">
         <span class="wheel-label">${label}</span>
         <div class="wheel-container" ref=${containerRef}><div class="wheel-inner" ref=${innerRef}>${ticks}</div></div>
+        ${learnable && html`<button class="btn-learn-inline ${learning ? 'btn-held' : ''}" onclick=${() => setLearning(l => !l)}>
+            ${learning ? 'Listening\u2026' : 'Learn'}
+        </button>`}
     </div>`;
 }
 
@@ -744,7 +765,8 @@ function renderParam(param, values, onChange, allValues, displayCtx) {
                 value=${val} onChange=${onChange} />`;
         case 'noteselect':
             return html`<${PluginNoteSelect} name=${param.name} label=${param.label}
-                value=${val != null ? val : param.default || 60} onChange=${onChange} />`;
+                value=${val != null ? val : param.default || 60} onChange=${onChange}
+                learnable=${param.learnable !== false} />`;
         case 'channelselect':
             return html`<${PluginChannelSelect} name=${param.name} label=${param.label}
                 value=${val != null ? val : param.default || 1} onChange=${onChange} />`;

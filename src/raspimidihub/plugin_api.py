@@ -142,10 +142,12 @@ class CurveEditor(Param):
 class NoteSelect(Param):
     """Wheel with MIDI note names (C-2 to G8)."""
     default: int = 60  # Middle C
+    learnable: bool = True  # show a MIDI Learn button below the wheel
 
     def to_dict(self) -> dict:
         d = super().to_dict()
         d["default"] = self.default
+        d["learnable"] = self.learnable
         return d
 
 
