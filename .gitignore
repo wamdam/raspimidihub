@@ -36,6 +36,9 @@ Thumbs.db
 # Old scripts (kept locally for reference, not in repo)
 _old/
 
+# Local-only helper scripts
+nat.sh
+
 # Temporary / runtime
 *.log
 *.pid

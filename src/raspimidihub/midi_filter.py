@@ -108,6 +108,99 @@ class MidiMapping:
         return max(0, min(127, int(round(scaled))))
 
 
+def validate_new_mapping(existing: list["MidiMapping"],
+                         new: "MidiMapping") -> str | None:
+    """Return an error string if `new` shouldn't be added, else None.
+
+    Two rejection categories:
+      1. Pointless — the new mapping on its own has no audible effect.
+      2. Exact duplicate — every behavior-affecting field matches an existing
+         mapping of the same type on the same connection. (Different scaling,
+         different dst channel, different pass-through, etc. are all allowed
+         and represent legitimate fan-out / re-shape use cases.)
+
+    Anything else is allowed. Callers are expected to have pre-validated the
+    shape of `new` (e.g. via MidiMapping.from_dict).
+    """
+    # --- Pointless check (type-specific) ---
+    if new.type == MappingType.CC_TO_CC:
+        eff_dst_ch = new.dst_channel if new.dst_channel is not None else new.src_channel
+        eff_dst_cc = new.dst_cc_num if new.dst_cc_num is not None else new.src_cc
+        identity_scaling = (
+            new.in_range_min == 0 and new.in_range_max == 127
+            and new.out_range_min == 0 and new.out_range_max == 127
+        )
+        if (new.src_channel == eff_dst_ch and new.src_cc == eff_dst_cc
+                and identity_scaling):
+            return "Same channel, same CC, identity scaling — mapping has no effect"
+
+    if new.type == MappingType.CHANNEL_MAP:
+        if new.src_channel is not None and new.src_channel == new.dst_channel:
+            return "Channel remap to the same channel — mapping has no effect"
+
+    # --- Duplicate check against each existing mapping ---
+    for exist in existing:
+        if exist.type != new.type:
+            continue
+        if _mappings_equivalent(exist, new):
+            return _duplicate_error_message(new)
+
+    return None
+
+
+def _mappings_equivalent(a: "MidiMapping", b: "MidiMapping") -> bool:
+    """Two mappings are equivalent iff every behavior-affecting field matches.
+
+    Uses `effective` values so that `dst_channel=None` (fall back to event's
+    channel, i.e. src_channel) is treated the same as explicitly setting
+    dst_channel to src_channel.
+    """
+    if a.type != b.type:
+        return False
+    if a.src_channel != b.src_channel:
+        return False
+    if a.pass_through != b.pass_through:
+        return False
+
+    def eff_dst_ch(m):
+        return m.dst_channel if m.dst_channel is not None else m.src_channel
+
+    if eff_dst_ch(a) != eff_dst_ch(b):
+        return False
+
+    if a.type in (MappingType.NOTE_TO_CC, MappingType.NOTE_TO_CC_TOGGLE):
+        return (a.src_note == b.src_note
+                and a.dst_cc == b.dst_cc
+                and a.cc_on_value == b.cc_on_value
+                and a.cc_off_value == b.cc_off_value)
+
+    if a.type == MappingType.CC_TO_CC:
+        def eff_dst_cc(m):
+            return m.dst_cc_num if m.dst_cc_num is not None else m.src_cc
+        return (a.src_cc == b.src_cc
+                and eff_dst_cc(a) == eff_dst_cc(b)
+                and a.in_range_min == b.in_range_min
+                and a.in_range_max == b.in_range_max
+                and a.out_range_min == b.out_range_min
+                and a.out_range_max == b.out_range_max)
+
+    if a.type == MappingType.CHANNEL_MAP:
+        return True  # src_channel + dst_channel already compared above
+
+    return False
+
+
+def _duplicate_error_message(new: "MidiMapping") -> str:
+    if new.type == MappingType.CC_TO_CC:
+        dst_cc = new.dst_cc_num if new.dst_cc_num is not None else new.src_cc
+        return f"A CC mapping for CC{new.src_cc} -> CC{dst_cc} already exists with the same settings"
+    if new.type in (MappingType.NOTE_TO_CC, MappingType.NOTE_TO_CC_TOGGLE):
+        return f"A note mapping for note {new.src_note} -> CC{new.dst_cc} already exists with the same settings"
+    if new.type == MappingType.CHANNEL_MAP:
+        return "A channel remap with the same settings already exists"
+    return "Duplicate mapping"
+
+
 @dataclass
 class MidiFilter:
     """Filter configuration for a single connection."""

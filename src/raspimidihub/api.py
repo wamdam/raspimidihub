@@ -12,7 +12,10 @@ from pathlib import Path
 from . import __version__
 from .config import Config
 from .midi_engine import MidiEngine, Connection
-from .midi_filter import MidiFilter, MidiMapping, MappingType, ALL_CHANNELS, ALL_MSG_TYPES
+from .midi_filter import (
+    MidiFilter, MidiMapping, MappingType, ALL_CHANNELS, ALL_MSG_TYPES,
+    validate_new_mapping,
+)
 from .web import Request, Response, WebServer
 from .wifi import WifiManager
 
@@ -710,33 +713,9 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         except (ValueError, KeyError) as e:
             return Response.error(f"Invalid mapping: {e}")
 
-        # Validate: CC→CC with same channel and same CC number is pointless
-        if mapping.type == MappingType.CC_TO_CC:
-            dst_ch = mapping.dst_channel if mapping.dst_channel is not None else mapping.src_channel
-            dst_cc = mapping.dst_cc_num if mapping.dst_cc_num is not None else mapping.src_cc
-            if mapping.src_channel == dst_ch and mapping.src_cc == dst_cc:
-                return Response.error("Same channel and CC number — mapping has no effect")
-
-        # Check for conflicting mappings (exact duplicate detection)
-        for existing in fe.get_mappings(conn_id):
-            if existing.type != mapping.type:
-                continue
-            if existing.src_channel != mapping.src_channel:
-                continue
-            if mapping.type in (MappingType.CC_TO_CC,):
-                # Same src CC AND same dst CC = duplicate. Different dst CC = fan-out (allowed)
-                existing_dst = existing.dst_cc_num if existing.dst_cc_num is not None else existing.src_cc
-                new_dst = mapping.dst_cc_num if mapping.dst_cc_num is not None else mapping.src_cc
-                if existing.src_cc == mapping.src_cc and existing_dst == new_dst:
-                    return Response.error(f"A CC mapping for CC{mapping.src_cc} -> CC{new_dst} on this channel already exists")
-            if mapping.type in (MappingType.NOTE_TO_CC, MappingType.NOTE_TO_CC_TOGGLE):
-                # Same src note AND same dst CC = duplicate
-                if existing.src_note == mapping.src_note and existing.dst_cc == mapping.dst_cc:
-                    return Response.error(f"A note mapping for this note -> CC{mapping.dst_cc} on this channel already exists")
-            if mapping.type == MappingType.CHANNEL_MAP:
-                # Same src AND same dst = duplicate. Different dst = fan-out (allowed).
-                if existing.dst_channel == mapping.dst_channel:
-                    return Response.error("A channel remap to this same channel already exists")
+        err = validate_new_mapping(fe.get_mappings(conn_id), mapping)
+        if err:
+            return Response.error(err)
 
         # Ensure connection is in userspace mode
         if not fe.has_filter(conn_id):
