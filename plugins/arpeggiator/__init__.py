@@ -34,8 +34,9 @@ Gate % = note length (100=legato, 10=staccato)."""
             Radio("pattern", "Pattern", ["up", "down", "up-down", "random", "as-played"],
                   default="up"),
             Radio("rate", "Rate",
-                  ["4/1", "2/1", "1/1", "1/2", "1/4", "1/8", "1/16", "1/32",
-                   "4/1T", "2/1T", "1/1T", "1/2T", "1/4T", "1/8T", "1/16T"],
+                  ["4/1", "4/1T", "2/1", "2/1T", "1/1", "1/1T",
+                   "1/2", "1/2T", "1/4", "1/4T", "1/8", "1/8T",
+                   "1/16", "1/16T", "1/32"],
                   default="1/8"),
         ]),
         Group("Steps", [
@@ -59,8 +60,9 @@ Gate % = note length (100=legato, 10=staccato)."""
     outputs = ["Notes (arpeggiated)", "Aftertouch (pass-through)", "Pitch Bend (pass-through)"]
 
     clock_divisions = [
-        "4/1", "2/1", "1/1", "1/2", "1/4", "1/8", "1/16", "1/32",
-        "4/1T", "2/1T", "1/1T", "1/2T", "1/4T", "1/8T", "1/16T",
+        "4/1", "4/1T", "2/1", "2/1T", "1/1", "1/1T",
+        "1/2", "1/2T", "1/4", "1/4T", "1/8", "1/8T",
+        "1/16", "1/16T", "1/32",
     ]
 
     def on_start(self):
