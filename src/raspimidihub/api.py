@@ -734,7 +734,9 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
                 if existing.src_note == mapping.src_note and existing.dst_cc == mapping.dst_cc:
                     return Response.error(f"A note mapping for this note -> CC{mapping.dst_cc} on this channel already exists")
             if mapping.type == MappingType.CHANNEL_MAP:
-                return Response.error("A channel remap for this channel already exists")
+                # Same src AND same dst = duplicate. Different dst = fan-out (allowed).
+                if existing.dst_channel == mapping.dst_channel:
+                    return Response.error("A channel remap to this same channel already exists")
 
         # Ensure connection is in userspace mode
         if not fe.has_filter(conn_id):

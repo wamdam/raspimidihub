@@ -189,9 +189,26 @@ class TestChannelMap:
         )
         engine.process_event(ev)
 
-        # Channel map modifies in-place and does NOT consume
+        # One copy forwarded on the remapped channel; original consumed.
         assert len(fwd_ev) == 1
-        assert ev.data.note.channel == 5
+        assert fwd_ev[0].data.note.channel == 5
+
+    def test_fan_out_two_channels(self):
+        """Two channel maps on same src (bass + strings) -> two copies forwarded."""
+        mappings = [
+            MidiMapping(type=MappingType.CHANNEL_MAP, src_channel=None, dst_channel=0),
+            MidiMapping(type=MappingType.CHANNEL_MAP, src_channel=None, dst_channel=5),
+        ]
+        engine, fc, fwd_cc, fwd_ev = _make_engine_and_conn(mappings)
+
+        ev = make_event(
+            MidiEventType.NOTEON, channel=2, note=60, velocity=100,
+            src_client=1, src_port=0, dst_client=128, dst_port=10,
+        )
+        engine.process_event(ev)
+
+        assert len(fwd_ev) == 2
+        assert {e.data.note.channel for e in fwd_ev} == {0, 5}
 
 
 class TestChannelMismatch:

@@ -12,6 +12,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   treated `[]` as "nothing to apply" instead of falling back to
   `config.connections`. Devices were left unconnected until the user hit
   "Load config" in the web UI. Boot now restores saved routing correctly.
+- Channel remap fan-out is now allowed: a single incoming channel can be
+  layered to multiple destination channels (e.g. bass on ch 1 + strings on
+  ch 6) by adding one channel-map mapping per target. Previously the second
+  mapping was rejected as a duplicate, and even if accepted would have
+  silently overwritten the first because the engine rewrote the event
+  in-place. Each matching channel map now emits its own copy.
 
 ## [2.0.4] - 2026-04-15
 

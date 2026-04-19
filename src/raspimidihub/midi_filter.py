@@ -432,8 +432,12 @@ class FilterEngine:
 
             elif mapping.type == MappingType.CHANNEL_MAP:
                 if mapping.dst_channel is not None:
-                    # Modify the event's channel in-place before forwarding
-                    ev.data.note.channel = mapping.dst_channel
-                    # Don't consume — let the modified event be forwarded normally
+                    # Fan-out: forward a copy with the remapped channel. Multiple
+                    # channel maps produce multiple copies (e.g. layering a bass
+                    # on ch 1 with strings on ch 6 from a single keyboard).
+                    new_ev = SndSeqEvent.from_buffer_copy(ev)
+                    new_ev.data.note.channel = mapping.dst_channel
+                    self._forward_event(new_ev, fc)
+                    consumed = True
 
         return consumed
