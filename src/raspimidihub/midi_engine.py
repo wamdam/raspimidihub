@@ -238,21 +238,40 @@ class MidiEngine:
 
         Snapshots all connections + filters/mappings before teardown, then
         restores from the snapshot after rescan. This preserves unsaved
-        changes across hotplug events.
+        changes across hotplug events. For devices that just appeared
+        (weren't in the previous scan), also merges their saved
+        connections from config so e.g. hot-plugging a keyboard brings
+        back its routing without needing a "Load Config" press.
         """
         # Snapshot live state BEFORE teardown
         snapshot_conns, snapshot_disconn = self._snapshot_live_state()
         has_live_state = bool(snapshot_conns) or bool(snapshot_disconn)
 
+        # Remember which stable IDs were present before the rescan so we
+        # can identify newly-appeared devices afterwards.
+        prev_stable_ids: set[str] = set()
+        for d in self._devices:
+            info = self._device_registry.get_by_client(d.client_id)
+            if info:
+                prev_stable_ids.add(info.stable_id)
+
         self.disconnect_all()
         self.scan_devices()
+
+        new_stable_ids: set[str] = set()
+        for d in self._devices:
+            info = self._device_registry.get_by_client(d.client_id)
+            if info:
+                new_stable_ids.add(info.stable_id)
+        appeared = new_stable_ids - prev_stable_ids
 
         from .__main__ import _apply_saved_config
 
         if has_live_state:
             _apply_saved_config(self, self._config,
                                 snapshot=snapshot_conns,
-                                snapshot_disconn=snapshot_disconn)
+                                snapshot_disconn=snapshot_disconn,
+                                newly_present_stable_ids=appeared)
         elif self._config and self._config.mode == "custom":
             _apply_saved_config(self, self._config)
         else:

@@ -231,20 +231,55 @@ async def async_main() -> None:
 
 def _apply_saved_config(engine: MidiEngine, config: Config, *,
                         snapshot: list[dict] | None = None,
-                        snapshot_disconn: dict[str, dict] | None = None) -> None:
+                        snapshot_disconn: dict[str, dict] | None = None,
+                        newly_present_stable_ids: set[str] | None = None) -> None:
     """Apply connections, filters, and mappings.
 
-    When snapshot is provided (hotplug rescan), it takes precedence over
-    config.connections — this preserves unsaved live state across hotplug.
-    Config is used as fallback for devices not in the snapshot.
+    When snapshot is provided (hotplug rescan), live state is preserved —
+    user edits that weren't saved yet survive the rescan. Saved connections
+    from config are additionally restored for any device that just appeared
+    (wasn't present in the previous scan), so hot-plugging a keyboard brings
+    back its routing without the user having to hit "Load Config". Disabled
+    (disconnected) cells in config are honored regardless.
     """
     from .midi_filter import MidiFilter, MidiMapping
 
     engine.scan_devices()
     registry = engine.device_registry
 
-    # Use snapshot if available, otherwise fall back to config
-    saved_conns = snapshot if snapshot is not None else config.connections
+    if snapshot is not None:
+        saved_conns = list(snapshot)
+        # Signatures of pairs already in snapshot or explicitly disabled.
+        snapshot_sigs = {
+            (c.get("src_stable_id"), c.get("src_port"),
+             c.get("dst_stable_id"), c.get("dst_port"))
+            for c in snapshot
+            if c.get("src_stable_id") and c.get("dst_stable_id")
+        }
+        disabled_sigs = {
+            (c.get("src_stable_id"), c.get("src_port", 0),
+             c.get("dst_stable_id"), c.get("dst_port", 0))
+            for c in config.disconnected
+            if c.get("src_stable_id") and c.get("dst_stable_id")
+        }
+        appeared = newly_present_stable_ids or set()
+        for c in config.connections:
+            ssid = c.get("src_stable_id")
+            dsid = c.get("dst_stable_id")
+            if not ssid or not dsid:
+                continue
+            # Only merge when at least one endpoint just appeared — devices
+            # that were already present before the rescan shouldn't have
+            # their user-deleted connections resurrected.
+            if ssid not in appeared and dsid not in appeared:
+                continue
+            sig = (ssid, c.get("src_port", 0), dsid, c.get("dst_port", 0))
+            if sig in snapshot_sigs or sig in disabled_sigs:
+                continue
+            saved_conns.append(c)
+    else:
+        saved_conns = config.connections
+
     applied = 0
     pending = 0
 
