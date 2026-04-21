@@ -74,6 +74,59 @@ class WifiManager:
             pass
         return ""
 
+    def survey_ap_channel(self) -> int:
+        """Pick the least-busy of {1, 6, 11} from a quick 2.4 GHz scan.
+
+        Runs `iwlist wlan0 scan` and weighs each detected AP's signal power
+        against the three non-overlapping channels (bleed ±2 channels because
+        2.4 GHz channels are 22 MHz wide on a 5 MHz grid). Returns 11 on any
+        failure — rare empty scan, tool missing, etc. Called once at AP start;
+        scan takes about 2-3 seconds.
+        """
+        try:
+            # Scan needs wlan0 up in managed mode. On boot this is the default;
+            # if a previous AP session left it in master mode, force it back.
+            _run(["ip", "link", "set", WLAN_IFACE, "up"], check=False, timeout=3)
+            result = _run(["iwlist", WLAN_IFACE, "scan"],
+                          check=False, timeout=8)
+        except (subprocess.TimeoutExpired, FileNotFoundError) as e:
+            log.warning("channel survey: scan failed (%s), defaulting to 11", e)
+            return 11
+
+        if result.returncode != 0 or not result.stdout:
+            log.warning("channel survey: empty scan, defaulting to 11")
+            return 11
+
+        # Parse Channel: + Signal level per cell. Sum linear-power weight per
+        # target channel, with ±2 channel bleed.
+        scores = {1: 0.0, 6: 0.0, 11: 0.0}
+        ch = None
+        ap_count = 0
+        for line in result.stdout.splitlines():
+            m = re.search(r"Channel\s*[:=]\s*(\d+)", line)
+            if m:
+                ch = int(m.group(1))
+                continue
+            m = re.search(r"Signal level\s*=\s*(-?\d+)\s*dBm", line)
+            if m and ch is not None:
+                signal_dbm = int(m.group(1))
+                power = 10 ** (signal_dbm / 10.0)  # linear scale
+                for target in scores:
+                    dist = abs(ch - target)
+                    if dist <= 2:
+                        scores[target] += power / (1 + dist)
+                ap_count += 1
+                ch = None
+
+        if ap_count == 0:
+            log.info("channel survey: no APs detected, defaulting to 11")
+            return 11
+
+        best = min(scores, key=scores.get)
+        log.info("channel survey: %d APs, scores=%s, picked %d",
+                 ap_count, {k: f"{v:.2e}" for k, v in scores.items()}, best)
+        return best
+
     def write_hostapd_conf(self, ssid: str, password: str, channel: int = 7):
         """Write hostapd configuration to tmpfs."""
         HOSTAPD_CONF.parent.mkdir(parents=True, exist_ok=True)
@@ -118,6 +171,10 @@ no-hosts
 
         self._ssid = ssid
 
+        # Scan 2.4 GHz for the least-busy non-overlapping channel. Must run
+        # while wlan0 is still in managed mode, before we claim it for AP.
+        channel = self.survey_ap_channel()
+
         # Tell NetworkManager to leave wlan0 alone
         _run(["nmcli", "device", "set", WLAN_IFACE, "managed", "no"], check=False)
 
@@ -127,7 +184,7 @@ no-hosts
         _run(["ip", "link", "set", WLAN_IFACE, "up"], check=False)
 
         # Write configs
-        self.write_hostapd_conf(ssid, password)
+        self.write_hostapd_conf(ssid, password, channel=channel)
         self.write_dnsmasq_conf()
 
         # Stop system services (we run our own instances)
