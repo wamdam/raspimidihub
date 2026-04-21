@@ -4,6 +4,34 @@ All notable changes to RaspiMIDIHub will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [2.0.7] - 2026-04-21
+
+### Added
+- **WiFi channel auto-survey**: at AP start, the service does a quick
+  2.4 GHz scan via `iwlist` and picks the least-busy of the three
+  non-overlapping channels (1, 6, 11) instead of the hardcoded 7.
+  Weights each detected AP's signal linearly (dBm → power) with a
+  ±2-channel bleed. Dramatically improves throughput in noisy RF
+  environments. Falls back to channel 11 if the scan fails.
+
+### Fixed
+- **Saved connections for hot-plugged devices were not restored.**
+  Hotplug re-scans replayed only the live-state snapshot and ignored
+  `config.connections` entirely, so re-plugging a USB device left its
+  saved routing disconnected while its disabled cells correctly
+  reappeared (because `config.disconnected` is always re-read).
+  The engine now tracks which stable IDs were present before each
+  rescan and, for any device that just appeared, merges in matching
+  saved connections — unless the pair is in `config.disconnected`.
+  User edits that hadn't been saved yet are still respected for
+  devices already present.
+- **PWA install prompt missing.** Recent Chromium versions require the
+  service worker to actually handle fetches (an empty listener no
+  longer qualifies). `sw.js` now does a real pass-through with a 503
+  fallback when offline. `manifest.json` also gained `id`, `scope`,
+  `description`, `orientation`, and explicit `purpose: "any"` on both
+  icons.
+
 ## [2.0.6] - 2026-04-19
 
 ### Added
