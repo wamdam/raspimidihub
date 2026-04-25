@@ -383,6 +383,306 @@ longer exists, the command is dropped from history with a toast.
 
 ---
 
+## 5. Controller plugin
+
+### Goal
+
+A virtual MIDI device whose value is its **on-screen control surface**.
+Drop a `Controller` instance into the matrix, fill it with knobs / faders
+/ toggles / XY pads bound to `(channel, cc)` targets, and use them as a
+fast remote for the rest of your rig — on a tablet, on stage, in
+fullscreen, with a built-in drop pad for snapshot / build-up / drop
+performance moves.
+
+### User stories
+- "I want a 4×4 knob page on my tablet to ride filter, reverb, delay
+  feedback and master volume — twist them in real time, no menus."
+- "I want one button (the Drop pad) that captures the current state of
+  every control on this page; later I tap it and the whole page snaps
+  back to that snapshot — instant build-up + drop."
+- "I want the drop to fire exactly on the next bar so it lands clean."
+- "I want the controller's knobs to mirror what my synth sends, so I
+  can twist either side and stay in sync."
+- "I want a Mixer page, an FX page and a Pads page, and swipe between
+  them in fullscreen during the gig."
+
+### Layout
+
+```
+┌───────────────────────────────────────────────┐
+│ [ DROP ]  autodrop:[Off ▼]   ✓ captured       │  always-there pad row
+├───────────────────────────────────────────────┤
+│ [Knob][Knob][Knob][Knob]                      │
+│ [XY pad 2×2]   [Fader][Fader][Toggle]         │
+└───────────────────────────────────────────────┘
+```
+
+- One `Controller` instance = one page. Multiple instances = multiple
+  pages.
+- A `LayoutGrid` param type holds the page's `cols × rows` and the cell
+  list. Cell types in v1: **Knob**, **Fader**, **Toggle**, **XY pad**.
+  Each cell stores a name, color, and one or two `(channel, cc)`
+  bindings (XY pad has two — one per axis).
+- The drop-pad row is hard-coded above the user grid and not editable
+  away — it's a property of the Controller, not a cell type.
+
+### Drop pad
+
+Built-in, always-there, single-per-instance.
+
+- **Short press** → fire the stored snapshot. The MIDI for every cell
+  is emitted on the OUT port, and the on-screen controls snap to the
+  captured values.
+- **Long press** (≥500 ms with progress ring on the pad) → capture the
+  current value of every control on this Controller. No CC list
+  configuration needed — the pad is implicitly scoped to its parent.
+- **Autodrop** dropdown next to the pad: `Off` (default — fire
+  immediately), `Next 1/4`, `Next 1/2`, `Next bar`, `Next 2 bars`,
+  `Next 4 bars`, `Next 8 bars`. Uses the existing `ClockBus`. If
+  transport is stopped, the pad fires immediately regardless.
+- **Preview mode** toggle: when on, every control renders a faint ghost
+  indicator at the snapshot value, so the user can see "where I'll be
+  after the drop" while tweaking around.
+- **Tap a pending pad again** → cancel the autodrop schedule.
+
+### MIDI I/O — IN and OUT ports
+
+Each Controller exposes two ALSA ports:
+
+- **OUT** — emits CC when the user touches a control in the UI. Routed
+  through the matrix to wherever the user wires it.
+- **IN** — receives CC, used for two things:
+  1. **MIDI Learn**: tap "Learn" on a knob/fader/toggle (or "Learn X"
+     / "Learn Y" on an XY pad), then twist the source synth's knob.
+     The next incoming CC binds that cell to its `(channel, cc)`.
+  2. **Bidirectional sync**: any incoming CC matching a cell's
+     binding silently updates the on-screen value. **Does not
+     re-emit on OUT** — only user-driven UI moves emit. So wiring
+     `Synth OUT → Controller IN` and `Controller OUT → Synth IN`
+     keeps both sides in sync without feedback loops.
+
+### Fullscreen play mode
+
+A new top-level navigation entry, second from the left:
+
+```
+[ Routing ]  [ Controller ]  [ Presets ]  [ Settings ]
+```
+
+Tap behaviour:
+- **0 instances** → empty state with `[ + Create Controller ]` button;
+  tapping creates one and drops the user into fullscreen edit mode.
+- **1+ instances** → opens the **last-viewed** Controller in
+  fullscreen play mode immediately.
+
+Fullscreen layout:
+```
+┌──────────────────────────────────────────────┐
+│ ←   Mixer page   →     ✎ config       ✕      │  thin top bar
+├──────────────────────────────────────────────┤
+│  …drop pad row + grid of controls…           │
+└──────────────────────────────────────────────┘
+```
+
+- `←` / `→` and **horizontal swipe** cycle between Controller
+  instances in **creation order** (matches how plugins already sort
+  in the matrix). Other plugin types are skipped.
+- `✎ config` opens this Controller's edit panel inline (the existing
+  plugin config UI) — overlays without leaving fullscreen.
+- `✕` returns to whichever page the user came from (typically
+  Routing).
+- Layout is **fixed-grid** (no scrolling). Cells autosize to the
+  device's actual viewport.
+
+### Last-viewed persistence
+
+`localStorage["raspimidihub:lastController"]` stores the instance id
+last shown in fullscreen. Reasons for client-side over server-side:
+- Each device (phone, laptop) has its own preferred view.
+- Survives reload without backend round-trip.
+- Auto-falls-back to the first Controller if the stored id no longer
+  exists.
+
+### Engine plumbing
+
+- **CC observatory**: the engine already monitors all device output
+  via the monitor port. Add a `last_value: dict[(client, port, ch,
+  cc), int]` cache populated as events flow. The Controller's IN
+  handler consumes from the per-port stream as today; the cache is
+  exposed via SSE (`cc-snapshot` events) for the UI to redraw cells
+  out-of-band when external sources move them.
+- **Drop pad capture**: at long-press time, the UI just iterates its
+  own cell values (already in client state) and snapshots them — no
+  observatory round-trip needed for capture; observatory is only
+  required for the bidirectional sync side.
+- **Drop pad fire**: client emits `set_param(name, value)` for each
+  cell (which already broadcasts via SSE), then the plugin emits the
+  matching CC on OUT. Same path the user's manual touches use.
+
+### New UI param types
+
+- **`LayoutGrid`** — Python dataclass + JS renderer. Edit mode shows a
+  cell-placement editor (drag to fill, tap a cell to configure, tap
+  empty cell to add). Play mode shows live, fixed-size, big-target
+  controls.
+- **`PluginXYPad`** — JS only; a square cell with a draggable dot and
+  axis-tick rendering. Two MIDI Learn buttons (X / Y) in its config
+  popup.
+
+### Persistence
+
+Standard `serialize_instances` path. The cell list is one big list
+inside `_param_values["layout"]`; the drop pad's snapshot is
+`_param_values["pad_snapshot"]` (dict of cell-id → value).
+Preview-mode toggle is `_param_values["preview"]`.
+
+### Open questions
+
+1. **Empty state of the drop pad**: before the first long-press, the
+   pad has no snapshot. Short-press = no-op + toast "long-press to
+   capture", or short-press silently does nothing? I'd toast.
+2. **XY pad value range** — full 0..127 each axis for v1. Sub-range
+   per axis (e.g. cutoff 30..120) is a v2 nice-to-have.
+3. **Autodrop reference**: assume 4/4. Adding a meter selector later
+   is a 2-line change.
+4. **Should fullscreen survive a refresh?** localStorage covers that
+   automatically — re-entering the page restores the same instance.
+
+---
+
+## 6. Preset switch smoothness
+
+### Goal
+
+Loading a preset (matrix preset, future Preset Trigger plugin, manual
+"Load Config" button — anything that swaps the routing graph) currently
+rips down every subscription and rebuilds. That causes:
+
+1. **Hung notes** on destinations whose only inbound edge was removed
+   (their note-offs never arrive).
+2. **A ~tens-of-milliseconds gap** in MIDI forwarding that desyncs
+   downstream sequencers, glitches delay/reverb tails, and pauses
+   clock/transport mid-bar.
+
+Both make preset changes during a live take feel surgical and unsafe.
+This pass makes them feel like nothing happened, except where the
+graph actually changed.
+
+### User stories
+- "I press a Preset Trigger note mid-bar to swap to the chorus
+  routing — the verse's reverb tail keeps ringing through the
+  switch and the drum machine doesn't lose a clock pulse."
+- "Whatever notes were sounding when I switched get a clean note-off,
+  not a stuck drone."
+- "If I just want emergency-stop, the existing Panic button still
+  shuts everything up immediately."
+
+### Approach: incremental edge-diff instead of teardown
+
+Replace the current `disconnect_all()` + `_apply_saved_config()` pair
+with a diff-and-apply algorithm:
+
+1. Compute current edge set: `(src_stable, src_port, dst_stable,
+   dst_port, filter_dict, mapping_list)` for every active subscription.
+2. Compute target edge set from the new preset.
+3. **Removed edges** = current − target.
+4. **Added edges** = target − current.
+5. **Changed edges** (same endpoints, different filter/mappings) =
+   intersection where filter or mappings differ.
+6. **Untouched edges** = the rest. Leave alone.
+
+For each *removed* edge, in this order:
+   a. Look up notes currently in flight on this edge (engine tracks
+      `(channel, note)` reference counts per edge — see below).
+   b. Send a `note_off` for each tracked active note.
+   c. Send `CC 123` (All Notes Off) on each channel that had any
+      activity on this edge in the last second.
+   d. Unsubscribe.
+
+For each *added* edge: subscribe + install filter/mappings.
+
+For each *changed* edge: update filter/mappings in-place; if the
+change requires switching between direct ALSA subscription and
+userspace forwarding, do an unsubscribe/resubscribe in that
+sub-step only.
+
+For *untouched* edges: do nothing. Crucially, this means clock,
+transport, delay/reverb feeds, and any unrelated routing keep flowing
+without interruption.
+
+### Engine plumbing — per-edge note tracking
+
+A small refcount table inside `MidiEngine`:
+
+```python
+_active_notes: dict[edge_id, dict[(channel, note), int]]
+```
+
+Incremented on note-on (when forwarding through the edge),
+decremented on note-off, evicted when reaching zero. Cheap — only
+note-on / note-off events touch it; no overhead for CCs / clock.
+
+Resolves a current bug independently: if a sender disappears
+mid-note (USB unplug, plugin delete) the destination today is left
+with a stuck note. With the table the engine can flush every edge
+that disappears.
+
+### Soft vs hard panic
+
+The current Panic button does CC 123 + CC 120 + plugin `panic()` on
+every destination. That's correct for the "rescue me from a stuck
+drone" case but it cuts delay/reverb tails too. Split:
+
+- **Soft panic** (default tap on the Panic button)
+  - For each edge: emit `note_off` for tracked active notes.
+  - `CC 123` (All Notes Off) on each used channel.
+  - Plugins still get `panic()` so internal state (Hold, Arp) clears.
+  - **Does not send `CC 120`** (All Sound Off) — delay / reverb tails
+    keep ringing.
+- **Hard panic** (long-press the button — or a separate "Sound Off"
+  control)
+  - Soft panic + `CC 120` on every channel of every destination.
+  - For when the rig is genuinely stuck and you don't care about
+    tails.
+
+### Where this plugs in
+
+- `MidiEngine.apply_edge_diff(target_edges)` — the new core operation.
+- `MidiEngine.panic(hard=False)` — replaces the current `panic()`,
+  gains the `hard` flag.
+- `api.api_load_config` and the (future) Preset Trigger plugin call
+  `apply_edge_diff` instead of disconnecting first.
+- `api.api_panic` POST body gains `{"hard": bool}` (default False).
+
+### Testing
+
+- Synthetic edge-diff tests over hand-crafted before/after edge sets,
+  covering: removed-only, added-only, both, changed-filter,
+  changed-mappings, untouched.
+- Refcount tests: note-on increments, note-off decrements, edge
+  removal flushes the right note-offs.
+- An end-to-end Pi test that loads a preset while a synthesised note
+  is sounding on a soon-to-be-removed edge, asserts the destination
+  receives the note-off, and asserts the destinations of unchanged
+  edges receive no extra messages.
+
+### Open questions
+
+1. **Soft vs hard panic surface**. Long-press for hard, or two
+   buttons? I'd default to long-press to keep the matrix toolbar
+   tidy, with a tooltip on the existing button explaining both
+   behaviours.
+2. **Delay/reverb tail responsibility**. Soft panic relies on the
+   downstream FX device honouring CC 123 (note-off-style behaviour)
+   and not interpreting it as CC 120. Most synths do the right
+   thing; document the exception list as we encounter it.
+3. **Preset Trigger plugin interaction**. With smooth presets,
+   panic-before-load becomes unnecessary in normal cases. The
+   Preset Trigger plugin can default to "no panic, smooth diff" and
+   leave hard panic as a manual user action.
+
+---
+
 ## Shared concerns
 
 - **New param types.** Both plugins need UI components that don't exist
@@ -430,7 +730,52 @@ first if preferred)
 4. Undo / Redo — client-side `Command` stack, toolbar buttons,
    keyboard shortcuts, labelled toasts.
 
+**Surface track** (new; depends on the CC observatory)
+1. CC observatory in the engine — track last value per
+   `(client, port, ch, cc)`, expose via SSE.
+2. `LayoutGrid` + `PluginXYPad` UI param types.
+3. Controller plugin MVP — Knob / Fader / Toggle / XY pad cells, OUT
+   port emit, IN port for MIDI Learn + bidirectional sync, drop pad
+   with long-press capture and short-press fire (no autodrop yet).
+4. Controller fullscreen mode + top-nav entry, last-viewed
+   localStorage persistence.
+5. Autodrop — bar-quantized fire scheduling.
+6. Preview mode — ghost indicators on cells.
+
+**Engine track** (new; can slot in any time)
+1. Per-edge note refcount table.
+2. Edge-diff `apply_edge_diff(target_edges)` replacing
+   teardown-and-rebuild in `api_load_config`.
+3. Soft vs hard panic split (long-press = hard).
+
 ---
+
+## Pending design — sketched, not yet specified
+
+These have been discussed at idea-level but need another design pass
+before implementation.
+
+- **LFO improvements** on the existing `cc_lfo` plugin:
+  - `min` / `max` value bounds (replacing or supplementing
+    `depth/offset`).
+  - **Per-cycle gate pattern** (e.g. `0111` mutes one cycle in four —
+    ducking-style). Pattern length 1–32, default empty (always on).
+- **Drawable LFO** — new plugin or mode that walks a 128-point curve
+  from the existing `CurveEditor` param at the configured rate.
+- **CC Sequencer** — step-based plugin emitting up to 4
+  `(channel, cc, value)` per step, with arm-and-record from the CC
+  observatory. Step grid UI shared with the Tracker.
+- **Clock Divider** plugin — forward every Nth Clock tick, pass
+  Start/Stop/Continue intact. ~30 lines.
+- **Preset Trigger** plugin — `(channel, note) → preset_name`. Calls
+  the matrix preset-load API on note-on. Behaviour around hung notes
+  during the swap is now mostly handled by the Engine track's
+  edge-diff work; the remaining question is whether a dedicated
+  panic-before-load toggle is still needed.
+- **USB Network gadget** (lives in `raspimidihub-rosetup`, not the
+  app) — Pi exposes a USB ethernet interface via `dwc2` + `g_ether`,
+  serves DHCP on `10.55.0.0/24`. Runs in parallel with the AP.
+  Settings → Network toggle.
 
 ## Not planned right now (but noted for later)
 
