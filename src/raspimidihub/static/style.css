@@ -743,6 +743,21 @@ body {
     pointer-events: none; z-index: 1;
 }
 
+/* Knob — round body, indicator mark, LED arc */
+.knob-group { display: flex; flex-direction: column; align-items: center; gap: 2px; margin-bottom: 12px; min-width: 0; }
+.knob-label { font-size: 12px; color: var(--text-dim); align-self: flex-start; }
+.knob-container {
+    position: relative; width: 100%; aspect-ratio: 1; max-width: 72px;
+    touch-action: none; cursor: grab; user-select: none;
+}
+.knob-container:active { cursor: grabbing; }
+.knob-container svg { width: 100%; height: 100%; display: block; }
+.knob-value {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 700; color: #fff; font-variant-numeric: tabular-nums;
+    pointer-events: none; text-shadow: 0 0 6px rgba(0,0,0,0.6);
+}
+
 /* Fader */
 /* Fader — mixer strip style */
 .fader-group { display: flex; flex-direction: column; align-items: stretch; gap: 4px; margin-bottom: 12px; width: 80px; }

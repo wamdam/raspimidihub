@@ -18,6 +18,7 @@ from raspimidihub.plugin_api import (
     Display,
     Fader,
     Group,
+    Knob,
     NoteSelect,
     PluginBase,
     Radio,
@@ -46,6 +47,16 @@ internal logic at ~20 Hz so you can verify plugin -> SSE -> UI
 updates are flowing."""
 
     params = [
+        Group("Knobs", [
+            Knob("knob_basic", "Cutoff", min=0, max=127, default=80),
+            Knob("knob_freq", "Freq",
+                 min=1, max=200, default=50,
+                 display_factor=0.1, unit=" Hz"),
+            Knob("knob_q", "Reso", min=0, max=127, default=20),
+            Knob("knob_mode", "Mode",
+                 min=0, max=3, default=1,
+                 labels=["LP", "BP", "HP", "Notch"]),
+        ]),
         Group("Wheels", [
             Wheel("wheel_basic", "Basic", min=0, max=127, default=64),
             Wheel("wheel_freq", "Freq",

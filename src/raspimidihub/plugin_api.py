@@ -77,6 +77,29 @@ class Wheel(Param):
 
 
 @dataclass
+class Knob(Param):
+    """Round knob with value text in the middle, indicator mark on the body,
+    and an LED arc around it that lights up to the current value's angle."""
+    min: int = 0
+    max: int = 127
+    default: int = 0
+    display_factor: float = 0
+    unit: str = ""
+    labels: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict:
+        d = super().to_dict()
+        d.update({"min": self.min, "max": self.max, "default": self.default})
+        if self.labels:
+            d["labels"] = self.labels
+        if self.display_factor:
+            d["display_factor"] = self.display_factor
+        if self.unit:
+            d["unit"] = self.unit
+        return d
+
+
+@dataclass
 class Fader(Param):
     """Mixer-strip fader with metallic thumb and tick feedback."""
     min: int = 0

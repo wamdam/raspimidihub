@@ -4,6 +4,7 @@
 
 import { html } from './common.js';
 import { PluginWheel } from './wheel.js';
+import { PluginKnob } from './knob.js';
 import { PluginFader } from './fader.js';
 import { PluginRadio } from './radio.js';
 import { PluginToggle } from './toggle.js';
@@ -44,6 +45,11 @@ export function renderParam(param, values, onChange, allValues, displayCtx) {
                 min=${param.min} max=${param.max} value=${val != null ? val : param.default}
                 onChange=${onChange} tickLabel=${tl} />`;
         }
+        case 'knob':
+            return html`<${PluginKnob} name=${param.name} label=${param.label}
+                min=${param.min} max=${param.max} value=${val != null ? val : param.default}
+                displayFactor=${param.display_factor} unit=${param.unit} labels=${param.labels}
+                onChange=${onChange} />`;
         case 'fader':
             return html`<${PluginFader} name=${param.name} label=${param.label}
                 min=${param.min} max=${param.max} value=${val != null ? val : param.default}
@@ -89,7 +95,7 @@ export function renderParam(param, values, onChange, allValues, displayCtx) {
     }
 }
 
-export const INLINE_TYPES = new Set(['wheel', 'fader', 'noteselect', 'channelselect', 'toggle', 'button', 'display']);
+export const INLINE_TYPES = new Set(['wheel', 'knob', 'fader', 'noteselect', 'channelselect', 'toggle', 'button', 'display']);
 
 // Wrap a rendered inline param with a grid-column-span container if
 // the param schema declares a span > 1. Single-cell params render as-is.
