@@ -55,10 +55,15 @@ export function animateClose(panelEl, onDone) {
 // --- Swipe-down dismiss hook ---
 // Checks both target element AND movement direction to avoid false triggers
 // on plugin controls that handle their own touch.
+//
+// `onTouchStart` is returned as `onTouchStartCapture` so it ALWAYS runs —
+// otherwise the wheel/fader's own stopPropagation in the bubble phase
+// prevents this handler from firing, leaving `s.ignore` stale, and the
+// panel dismisses when the user drags a wheel downwards.
 const _swipeIgnore = '.wheel-group, .wheel-container, .wheel-label, .fader-track, .fader-group, .metal-toggle, .toggle-group, .piano, .piano-key, .mini-wheel, .curve-canvas-wrap, .step-head, .note-select';
 export function useSwipeDismiss(onDismiss, panelRef) {
     const [s] = useState(() => ({ startY: 0, startX: 0, ignore: false }));
-    const onTouchStart = (e) => {
+    const onTouchStartCapture = (e) => {
         s.startY = e.touches[0].clientY;
         s.startX = e.touches[0].clientX;
         s.ignore = !!(e.target && e.target.closest && e.target.closest(_swipeIgnore));
@@ -70,7 +75,7 @@ export function useSwipeDismiss(onDismiss, panelRef) {
         const el = panelRef && panelRef.current;
         if (dy > 80 && dx < 50 && (!el || el.scrollTop <= 0)) onDismiss();
     };
-    return { onTouchStart, onTouchEnd };
+    return { onTouchStartCapture, onTouchEnd };
 }
 
 // --- Toast ---
