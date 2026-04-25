@@ -1117,8 +1117,34 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
             engine._update_monitor_subscriptions()
             config.set_mode("all-to-all")
         else:
-            engine.disconnect_all()
-            engine.apply_saved_config()
+            # Smooth switch: diff current routing against the saved set,
+            # only touch the edges that actually changed. Untouched edges
+            # (clock, transport, anything still in the saved config) keep
+            # flowing without a millisecond of interruption.
+            engine._disconnected.clear()
+            engine.apply_edge_diff(config.connections)
+            # Mirror saved disconnected edges into the engine's tracking
+            # dict so hotplug-restore still re-applies them when the
+            # devices come back online.
+            registry = engine._device_registry
+            for c in config.disconnected:
+                src_stable = c.get("src_stable_id")
+                dst_stable = c.get("dst_stable_id")
+                src_client = (registry.client_for_stable_id(src_stable)
+                              if src_stable else None)
+                dst_client = (registry.client_for_stable_id(dst_stable)
+                              if dst_stable else None)
+                if src_client is None or dst_client is None:
+                    continue
+                sp = c.get("src_port", 0)
+                dp = c.get("dst_port", 0)
+                conn_id = f"{src_client}:{sp}-{dst_client}:{dp}"
+                saved_data = {}
+                if "filter" in c:
+                    saved_data["filter"] = c["filter"]
+                if "mappings" in c:
+                    saved_data["mappings"] = c["mappings"]
+                engine._disconnected[conn_id] = saved_data
             engine._update_monitor_subscriptions()
 
         await server.send_sse("connection-changed", {"action": "config-loaded"})
