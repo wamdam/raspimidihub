@@ -27,17 +27,18 @@ drum tracks without rebuilding the whole beat.
   snare, clap, closed hat, open hat, tom, ride, perc).
 - **Steps**: 16, 32, or 64 selectable; default 16.
 - **Per-track state**:
-  - `name` (display only)
+  - `name` (display only — also the key for the per-instrument
+    pattern library)
   - `channel` (1-16), `note` (0-127), `velocity` (default, 1-127)
   - `mute` toggle
-  - `pattern`: list of booleans of length `steps`, optional per-step
-    velocity/accent
-  - `randomize` button
+  - `pattern`: list of step cells (`.` / `X` / `A`)
+  - `randomize` button — picks a different named pattern from the
+    current genre's library for this instrument (see below)
 - **Per-pattern state**:
   - `genre` (Radio): Techno, House, Tech-House, Minimal, Trance, Acid,
     DnB, Jungle, Breakbeat, Dubstep, Trap, Hip-Hop, Lo-Fi, Boom-Bap,
     Reggaeton, Afrobeats, Amapiano, Funk, Disco, Garage, Footwork.
-  - `template` (Radio): templates for the current genre (≥5 each).
+  - `preset` (Radio): named presets for the current genre (≥5 each).
   - `swing` (Wheel, 0-75%).
   - `rate` (Radio): same set as the arp (1/4 … 1/32 + triplets).
   - `sync_mode`: Free / Tempo / Transport (identical to Arpeggiator).
@@ -46,96 +47,154 @@ drum tracks without rebuilding the whole beat.
 - **Output**: note on + matching note off (short gate ~30ms, configurable).
   Uses `send_note_on/off` — no aftertouch or CC yet.
 - **Randomize**: replaces the pattern of a single instrument with a
-  fresh pattern drawn from **that instrument's probability profile for
-  the currently selected genre** (see below), so a "randomized kick in
-  Techno" still feels like Techno. User-invoked only (no live
-  auto-randomization).
+  different pattern picked at random from the genre's library for
+  that instrument. Doesn't mutate the existing pattern — swaps it for
+  a different hand-authored variant. So "randomize the kick in Techno"
+  still produces a Techno-flavoured kick because every file in
+  `templates/techno/kick/` was authored to fit the genre. User-invoked
+  only.
 
 ### Template format
 
-Templates are JSON files under `plugins/rhythm_sequencer/templates/<genre>/<name>.json`.
-Plain data only — no code — so they're sandbox-safe and editable by hand.
+Two file kinds, both human-readable text under
+`plugins/rhythm_sequencer/templates/`:
 
-```json
-{
-  "name": "4-on-the-floor + rumble",
-  "genre": "techno",
-  "bpm_hint": 128,
-  "steps": 16,
-  "tracks": [
-    { "name": "Kick",     "ch": 10, "note": 36, "velocity": 120,
-      "pattern": [1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0] },
-    { "name": "Sub",      "ch": 10, "note": 35, "velocity": 90,
-      "pattern": [0,0,1,0, 0,0,1,0, 0,0,1,0, 0,0,1,0] },
-    { "name": "Clap",     "ch": 10, "note": 39, "velocity": 110,
-      "pattern": [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0] },
-    { "name": "CH",       "ch": 10, "note": 42, "velocity": 80,
-      "pattern": [0,0,1,0, 0,0,1,0, 0,0,1,0, 0,0,1,0] },
-    { "name": "OH",       "ch": 10, "note": 46, "velocity": 90,
-      "pattern": [0,0,0,0, 0,1,0,0, 0,0,0,0, 0,1,0,0] },
-    { "name": "Perc",     "ch": 10, "note": 40, "velocity": 70,
-      "pattern": [0,0,0,0, 0,0,0,1, 0,0,0,0, 0,0,0,1] }
-  ]
-}
+- **Pattern files** — single 16-step row, one per file. Tiny.
+- **Preset files** — recipe combining one pattern per instrument
+  with channel/note/velocity bindings. The thing the
+  GenreTemplatePicker shows.
+
+Tree:
+
+```
+plugins/rhythm_sequencer/templates/
+  techno/
+    kick/
+      4-on-the-floor.grv
+      rumble.grv
+      broken.grv
+    snare/
+      backbeat.grv
+      half-time.grv
+      …
+    clap/   …
+    ch/     …
+    oh/     …
+    perc/   …
+    presets/
+      classic.grv
+      rumbling.grv
+      broken.grv
+      …
+  house/
+    …
 ```
 
-Per-step velocity is optional — a step can be an object `{"on": 1, "v": 127}`
-instead of a bare `0/1`, matching our StepEditor's existing shape. Default
-velocity comes from the track.
+**Pattern file** (e.g. `techno/kick/4-on-the-floor.grv`):
 
-### Genre probability profiles (for Randomize)
-
-Each genre has, per drum role, a **per-step probability vector** (length
-16). Randomize rolls `random() < p[step]` with a minimum density floor to
-avoid totally empty tracks.
-
-Stored in `plugins/rhythm_sequencer/templates/_profiles.json`:
-
-```json
-{
-  "techno": {
-    "kick":  [1.00, 0.05, 0.05, 0.05,  1.00, 0.05, 0.05, 0.05,
-              1.00, 0.05, 0.05, 0.05,  1.00, 0.05, 0.05, 0.05],
-    "ch":    [0.10, 0.10, 0.90, 0.10,  0.10, 0.10, 0.90, 0.10, ...],
-    "clap":  [0.00, 0.00, 0.00, 0.00,  0.95, 0.00, 0.00, 0.00, ...]
-  },
-  ...
-}
+```
+# 4-on-the-floor
+X . . .  X . . .  X . . .  X . . .
 ```
 
-Rule: the template's **track name** determines which profile to use. If
-no profile is defined for a given name, Randomize falls back to a bland
-25%-per-step probability (flagged in the UI as "Generic").
+- One line of 16 cells (or 32, 64) — must match the preset's `steps`.
+- `.` = off, `X` = on at track default velocity, `A` = on with
+  accent (uses preset's `accent_vel`).
+- Whitespace between cells is ignored; two-space gaps every 4 cells
+  by convention (countable beats).
+- Optional `# Display name` first comment line — defaults to the
+  filename slug if absent.
+
+**Preset file** (e.g. `techno/presets/classic.grv`):
+
+```
+# Techno · Classic
+bpm: 128
+steps: 16
+accent_vel: 30
+
+# instrument  ch  note  vel  pattern
+Kick          10  36    120  4-on-the-floor
+Sub           10  35     90  off-beat
+Clap          10  39    110  classic
+CH            10  42     80  classic-off-beat
+OH            10  46     90  open-on-eighth
+Perc          10  40     70  sparse
+```
+
+- `key: value` lines for header (`bpm`, `steps`, `accent_vel`,
+  `swing`).
+- Then one line per instrument row: `instrument` is the directory
+  name under the genre (lowercased — file system convention),
+  `pattern` is the basename of the .grv file in
+  `<genre>/<instrument>/`. Channel/note/vel are the runtime defaults
+  for that instrument when this preset loads.
+- Comments start with `#` at line start.
+
+Filenames map to display names by reversing slug rules
+(`4-on-the-floor.grv` → "4 on the floor"); the optional `#` comment
+inside the file overrides that.
+
+### Library coverage requirement
+
+Each genre ships **at least 3 pattern variants per instrument** so
+randomize always has something to swap to. Hard floor; nothing
+prevents shipping more (Techno kicks could easily justify 8+).
+
+If an instrument folder has only 1 pattern file, the Randomize
+button on that row is disabled with a tooltip "no other variants
+in this genre" — predictable, not a no-op surprise.
+
+### Pattern UI
+
+The on-screen DrumGrid shows the same three cell states as the
+file format:
+
+| state | file char | UI cell |
+|-------|-----------|---------|
+| off   | `.` | empty |
+| on    | `X` | filled (track colour) |
+| accent| `A` | filled + brighter highlight |
+
+Tap a cell to cycle off → on → accent → off. Long-press to clear a
+whole row. No per-step velocity numbers in the UI — three states is
+enough; per-track default velocity covers the rest.
 
 ### UI (new param types we'll need)
 
-- **`DrumGrid` param** — 8 rows × N steps toggle grid with:
-  - per-row label + (ch, note) mini-editor
-  - per-cell click-to-toggle (with optional accent via long-press)
-  - per-row Mute and Randomize buttons
-- **`GenreTemplatePicker` param** — two-level Radio: genre → template.
-  Selecting a template rewrites the whole `DrumGrid`.
+- **`DrumGrid` param** — 8 rows × N steps cell grid with:
+  - per-row label + (ch, note) mini-editor + default-velocity wheel
+  - per-cell tap to cycle off → on → accent → off
+  - per-row long-press to clear the row
+  - per-row **Randomize** button (greyed out if the current genre's
+    instrument library has only 1 variant)
+  - per-row Mute toggle
+- **`GenreTemplatePicker` param** — two-level Radio: genre → preset.
+  Selecting a preset rewrites the whole `DrumGrid` (every row's
+  pattern + ch/note/vel).
 
-These live in `src/raspimidihub/static/plugin-controls.js` next to
-`PluginStepEditor`.
+Both live under `static/components/` per §11.
 
 ### Persistence
 
-`serialize_instances` already dumps `_param_values`. As long as the full
-`DrumGrid` state (tracks + patterns + per-track velocities) is a single
-dict/list param, it round-trips with existing config save/load.
+`serialize_instances` already dumps `_param_values`. The full
+`DrumGrid` state (tracks + patterns) is a single nested list inside
+`_param_values["grid"]`. The currently-selected `genre` and
+`preset` names are also persisted — useful for the Randomize button
+to know which instrument library to pick from on next load.
 
 ### Open questions
 
-1. **Accents**: boolean accent flag per step + flat accent-velocity
-   (like the Arp), OR per-step 0-127 velocity (richer but more UI)?
-2. **Shuffle/swing implementation**: delay every odd 16th by X ticks, or
+1. **Shuffle/swing implementation**: delay every odd 16th by X ticks, or
    only odd 8ths?
-3. **Fill / break**: should "break each 16 steps" be a template, or a
-   mode flag on top of any template? Simpler: ship both shapes as
-   separate templates.
-4. **Gate length**: fixed ~30ms, or per-track configurable? Default
+2. **Fill / break**: should "break each 16 steps" be a preset, or a
+   mode flag on top of any preset? Simpler: ship both shapes as
+   separate presets.
+3. **Gate length**: fixed ~30ms, or per-track configurable? Default
    fixed, promote to param later if needed.
+4. **Pattern length mismatch**: what if a pattern file has 16 cells
+   but the preset's `steps` is 32? Loop the pattern, error, or pad
+   with zeros? Simplest: error during load, ship matched lengths.
 
 ---
 
@@ -1107,11 +1166,11 @@ working — no changes outside this directory.
   clock ticks via the existing pipe/queue mechanism. 24 PPQ means each
   tick is ~20ms at 128 BPM — well within the current path's budget.
 - **Testing.**
-  - Rhythm Sequencer: parametrized tests over every genre template (JSON
-    schema validation, pattern length == `steps`, notes/channels in
-    range). Randomize: test that probability profiles cover the
-    instrument names used in their genre's templates; snapshot a seeded
-    randomize result.
+  - Rhythm Sequencer: parametrized tests over every shipped pattern
+    and preset file (lex/parse, pattern-length matches preset
+    `steps`, channels 1–16, notes 0–127, vel 1–127). Coverage:
+    every genre has ≥3 patterns per used instrument so Randomize
+    has something to do; snapshot a seeded randomize result.
   - Tracker: recorded-note placement (quantize / overdub / replace),
     playback emits note-on then note-off within gate window, tie
     extends the previous note.
@@ -1127,9 +1186,10 @@ dependencies.
 
 **Sequencer track**
 1. Rhythm Sequencer MVP — plugin + `DrumGrid` + `GenreTemplatePicker`,
-   5 genres × 5 templates (Techno, House, DnB, Hip-Hop, Trap),
-   profiles for Randomize on those 5.
-2. Rhythm Sequencer genre expansion — full 21 genres × ≥5 templates.
+   5 genres (Techno, House, DnB, Hip-Hop, Trap) × ≥5 presets each ×
+   ≥3 patterns per instrument per genre.
+2. Rhythm Sequencer genre expansion — full 21 genres, same coverage
+   floor.
 3. Tracker MVP — plugin + `TrackerGrid`, steps, play, record, overdub,
    clear.
 4. Tracker polish — copy/paste bars, transpose, paginator, live
@@ -1283,8 +1343,10 @@ Creative, niche, no other dependencies.
 The biggest pieces but the lowest live-performance urgency. Most
 users will use Arp + Hold for sequencing while these mature.
 
-1. **Rhythm Sequencer MVP** (§1). 5 genres × 5 templates,
-   probability profiles for those 5.
+1. **Rhythm Sequencer MVP** (§1). 5 genres (Techno, House, DnB,
+   Hip-Hop, Trap), ≥5 presets per genre, ≥3 pattern variants per
+   instrument per genre. Patterns + presets ship as `.grv` text
+   files under `plugins/rhythm_sequencer/templates/`.
 2. **Tracker MVP** (§2).
 3. **Generalize step grid**. Pull common code out of `DrumGrid` /
    `TrackerGrid` into a reusable component.
