@@ -1316,35 +1316,44 @@ are tracked as follow-ups, not part of Phase 2:
 After this, Preset Trigger is essentially a 30-line plugin —
 stays in pending until requested.
 
-### Phase 3 — Foundation for Controllers (≈ 0.5 sprint)
+### Phase 3 — Foundation for Controllers (≈ 0.5 sprint) ✓ Done (2026-04-25)
 
 Foundation work the Controller MVP depends on. Nothing user-visible
 ships in this phase alone, but everything in 4 builds on it.
 
-1. **UI controls refactor** (§11). Split `plugin-controls.js` into
-   `components/*.js`. Acceptance: every existing plugin renders
-   identically.
-2. **UI sizing rules** (§9) baked into `plugin_api.py` param
-   dataclasses (`size_w`, `size_h` defaults per type) + the
-   renderer reads them.
-3. **UI Demo plugin** (§10). Lands now so subsequent Knob / Fader /
-   XY pad work has a live target to render into.
-4. **CC observatory** (§5 engine plumbing). Cache last-seen value
-   per `(client, port, ch, cc)`; broadcast on change via SSE
-   `cc-snapshot`. Useful side-benefit: matrix can later show live
-   CC values on cells.
+1. ✓ **UI controls refactor** (§11) — shipped in `8c31e5c` /
+   `a400bcf`. `plugin-controls.js` is now a thin shim that
+   re-exports the per-component files in `static/components/`.
+2. ✓ **UI sizing rules** (§9) — shipped on the `ui/grid-sizing`
+   branch (merged in `19b9c73`). The actual implementation went
+   with a CSS `repeat(4, minmax(0, 1fr))` grid + a `span`
+   attribute on the param schema, instead of fixed `size_w` /
+   `size_h` pixel sizes baked into the dataclasses. The grid is
+   responsive (4 cells across at any viewport ≥ ~320 px) and any
+   control can declare it occupies 1, 2, 3 or 4 cells.
+3. ✓ **UI Demo plugin** (§10) — shipped in `d229b7c` and extended
+   with knobs, vertical-fader rows, and span demos.
+4. ✓ **CC observatory** (§5 engine plumbing) — shipped in
+   `566bd43`. Cache last-seen value per `(client, port, ch, cc)`,
+   broadcast on change via SSE `cc-snapshot`.
+
+Knob control (a §5 Phase 4 item) actually landed during Phase 3
+since it was needed to validate the grid sizing — 1 of the 3
+Phase 4 §5 controls is therefore done early. **TODO: LayoutGrid
+and PluginXYPad** still remain for Phase 4.
 
 ### Phase 4 — Controller MVP (≈ 1 sprint)
 
 Biggest user-visible win for performance.
 
-1. `LayoutGrid` + `PluginXYPad` UI param types (§5).
-2. Controller plugin: Knob / Fader / Toggle / XY pad cells, OUT port
-   emit, IN port for MIDI Learn + bidirectional sync. Drop pad with
-   short-press fire / long-press capture **only** — autodrop and
-   preview deferred to 5.
-3. Top-nav "Controller" entry, fullscreen mode, `localStorage`
-   last-viewed persistence.
+1. **TODO:** `LayoutGrid` + `PluginXYPad` UI param types (§5).
+   Knob already shipped in Phase 3.
+2. **TODO:** Controller plugin — Knob / Fader / Toggle / XY pad
+   cells, OUT port emit, IN port for MIDI Learn + bidirectional
+   sync. Drop pad with short-press fire / long-press capture
+   **only** — autodrop and preview deferred to Phase 5.
+3. **TODO:** Top-nav "Controller" entry, fullscreen mode,
+   `localStorage` last-viewed persistence.
 
 ### Phase 5 — Controller polish (≈ 0.5 sprint)
 
