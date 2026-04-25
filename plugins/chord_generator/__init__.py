@@ -1,7 +1,10 @@
 """Chord Generator — input note triggers a full chord."""
 
 from raspimidihub.plugin_api import (
-    PluginBase, Group, Radio, Wheel, ChannelSelect,
+    Group,
+    PluginBase,
+    Radio,
+    Wheel,
 )
 
 # Intervals in semitones from root

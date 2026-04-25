@@ -3,7 +3,7 @@
 import threading
 import time
 
-from raspimidihub.plugin_api import PluginBase, Wheel, Button
+from raspimidihub.plugin_api import Button, PluginBase, Wheel
 
 
 class MasterClock(PluginBase):

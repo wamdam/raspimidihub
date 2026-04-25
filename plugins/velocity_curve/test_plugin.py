@@ -1,6 +1,7 @@
 """Tests for VelocityCurve plugin."""
 
 from helpers import make_plugin
+
 from velocity_curve import VelocityCurve
 
 

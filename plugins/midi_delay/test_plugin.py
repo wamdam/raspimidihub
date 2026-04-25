@@ -1,6 +1,7 @@
 """Tests for MidiDelay plugin (non-threaded aspects)."""
 
 from helpers import make_plugin
+
 from midi_delay import MidiDelay
 
 

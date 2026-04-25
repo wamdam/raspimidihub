@@ -1,6 +1,7 @@
 """Tests for ScaleRemapper plugin."""
 
 from helpers import make_plugin
+
 from scale_remapper import ScaleRemapper
 
 

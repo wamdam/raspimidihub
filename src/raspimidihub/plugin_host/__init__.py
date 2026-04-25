@@ -7,7 +7,7 @@ package.
 """
 
 from .alsa_client import PluginAlsaClient
-from .clock_bus import ClockBus, DIVISION_TICKS
+from .clock_bus import DIVISION_TICKS, ClockBus
 from .host import PluginHost
 from .instance import PluginInstance
 

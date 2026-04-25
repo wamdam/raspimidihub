@@ -12,7 +12,7 @@ ROSETUP_DEB_FILE = dist/$(ROSETUP_DEB_NAME).deb
 
 PI_HOST = user@10.1.1.2
 
-.PHONY: all clean deb deb-rosetup deploy deploy-rosetup install uninstall test test-pi run
+.PHONY: all clean deb deb-rosetup deploy deploy-rosetup install uninstall test test-pi run lint fmt fmt-check
 
 all: deb deb-rosetup
 
@@ -154,6 +154,19 @@ deploy-src:
 test:
 	@if [ ! -d .venv ]; then python3 -m venv .venv && .venv/bin/pip install -e ".[test]"; fi
 	RASPIMIDIHUB_TEST_MODE=1 .venv/bin/pytest tests/ plugins/ -v -m "not alsa and not e2e"
+
+lint:
+	@if [ ! -x .venv/bin/ruff ]; then python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"; fi
+	.venv/bin/ruff check src plugins
+
+fmt-check:
+	@if [ ! -x .venv/bin/ruff ]; then python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"; fi
+	.venv/bin/ruff format --check src plugins
+
+fmt:
+	@if [ ! -x .venv/bin/ruff ]; then python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"; fi
+	.venv/bin/ruff format src plugins
+	.venv/bin/ruff check src plugins --fix
 
 test-pi: deploy-src
 	ssh $(PI_HOST) 'cd /tmp && PYTHONPATH=/tmp python3 -c "\

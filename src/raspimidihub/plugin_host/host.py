@@ -6,7 +6,6 @@ import importlib
 import importlib.util
 import logging
 import os
-import re
 import sys
 import threading
 import time
@@ -14,8 +13,10 @@ from pathlib import Path
 from typing import Any
 
 from ..plugin_api import (
-    PluginBase, Param, Group, StepEditor, CurveEditor,
-    get_all_params, get_defaults, params_to_dicts,
+    PluginBase,
+    get_all_params,
+    get_defaults,
+    params_to_dicts,
 )
 from .alsa_client import PluginAlsaClient
 from .clock_bus import ClockBus
@@ -212,7 +213,13 @@ class PluginHost:
 
         # Transport: send ALSA seq event + raw MIDI bytes to hardware outputs
         # (workaround for ALSA not converting user-space transport to raw MIDI)
-        from ..rawmidi import send_raw_transport, get_subscribed_destinations, MIDI_START, MIDI_STOP, MIDI_CONTINUE
+        from ..rawmidi import (
+            MIDI_CONTINUE,
+            MIDI_START,
+            MIDI_STOP,
+            get_subscribed_destinations,
+            send_raw_transport,
+        )
         def _send_transport(ev_type, raw_byte):
             alsa_client.send_event(ev_type)
             try:

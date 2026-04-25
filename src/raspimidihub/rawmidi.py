@@ -7,7 +7,6 @@ events to raw MIDI bytes (0xFA/0xFC/0xFB) on some USB MIDI drivers.
 import ctypes
 import ctypes.util
 import logging
-import os
 import re
 from pathlib import Path
 
@@ -77,11 +76,15 @@ def send_raw_transport(dest_client: int, dest_port: int, raw_byte: bytes) -> boo
 def get_subscribed_destinations(alsa_seq_handle, client_id: int, port_id: int) -> list[tuple[int, int]]:
     """Get all destination (client, port) pairs subscribed to a source port."""
     from .alsa_seq import (
-        SndSeqQuerySubscribePtr, SndSeqAddr,
-        snd_seq_query_subscribe_malloc, snd_seq_query_subscribe_free,
-        snd_seq_query_subscribe_set_root, snd_seq_query_subscribe_set_type,
-        snd_seq_query_subscribe_set_index, snd_seq_query_subscribe_get_addr,
+        SndSeqAddr,
+        SndSeqQuerySubscribePtr,
         snd_seq_query_port_subscribers,
+        snd_seq_query_subscribe_free,
+        snd_seq_query_subscribe_get_addr,
+        snd_seq_query_subscribe_malloc,
+        snd_seq_query_subscribe_set_index,
+        snd_seq_query_subscribe_set_root,
+        snd_seq_query_subscribe_set_type,
     )
 
     subs = []

@@ -1,6 +1,7 @@
 """Tests for ChordGenerator plugin."""
 
 from helpers import make_plugin
+
 from chord_generator import ChordGenerator
 
 

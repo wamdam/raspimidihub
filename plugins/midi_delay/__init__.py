@@ -4,7 +4,12 @@ import threading
 import time
 
 from raspimidihub.plugin_api import (
-    PluginBase, Group, Wheel, Fader, Toggle, Radio,
+    Fader,
+    Group,
+    PluginBase,
+    Radio,
+    Toggle,
+    Wheel,
 )
 
 

@@ -5,7 +5,11 @@ import threading
 import time
 
 from raspimidihub.plugin_api import (
-    PluginBase, Group, Radio, Wheel, Toggle, Fader, StepEditor,
+    Group,
+    PluginBase,
+    Radio,
+    StepEditor,
+    Wheel,
 )
 
 
@@ -181,7 +185,7 @@ Gate % = note length (100=legato, 10=staccato)."""
 
             pattern = self.get_param("pattern") or "up"
             octaves = self.get_param("octaves") or 1
-            gate_pct = (self.get_param("gate") or 80) / 100.0
+            (self.get_param("gate") or 80) / 100.0
             steps = self.get_param("steps") or []
             step_count = self.get_param("step_count") or 8
 

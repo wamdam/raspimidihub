@@ -1,6 +1,7 @@
 """Tests for CcSmoother plugin (non-threaded aspects)."""
 
 from helpers import make_plugin
+
 from cc_smoother import CcSmoother
 
 

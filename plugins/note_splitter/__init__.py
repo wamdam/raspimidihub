@@ -1,7 +1,11 @@
 """Note Splitter — split keyboard at a note, route to two channels."""
 
 from raspimidihub.plugin_api import (
-    PluginBase, Group, NoteSelect, ChannelSelect, Toggle, Wheel,
+    ChannelSelect,
+    Group,
+    NoteSelect,
+    PluginBase,
+    Wheel,
 )
 
 

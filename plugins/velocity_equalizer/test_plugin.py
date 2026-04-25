@@ -1,6 +1,7 @@
 """Tests for VelocityEqualizer plugin."""
 
 from helpers import make_plugin
+
 from velocity_equalizer import VelocityEqualizer
 
 

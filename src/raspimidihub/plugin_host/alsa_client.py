@@ -33,12 +33,12 @@ class PluginAlsaClient:
 
     def __init__(self, client_name: str):
         from ..alsa_seq import (
-            SndSeqPtr, SndSeqEvent, SndSeqAddr, SndSeqEventPtr,
-            snd_seq_open, snd_seq_close, snd_seq_set_client_name,
-            snd_seq_client_id, snd_seq_create_simple_port,
-            snd_seq_event_input, snd_seq_event_output_direct,
-            snd_seq_poll_descriptors_count, snd_seq_poll_descriptors,
-            check, MidiEventType,
+            SndSeqPtr,
+            check,
+            snd_seq_client_id,
+            snd_seq_create_simple_port,
+            snd_seq_open,
+            snd_seq_set_client_name,
         )
         self._alsa = sys.modules["raspimidihub.alsa_seq"]
 
@@ -123,13 +123,7 @@ class PluginAlsaClient:
             ev.data.control.channel = kwargs.get("channel", 0)
             ev.data.control.param = kwargs.get("cc", 0)
             ev.data.control.value = kwargs.get("value", 0)
-        elif ev_type == MidiEventType.PITCHBEND:
-            ev.data.control.channel = kwargs.get("channel", 0)
-            ev.data.control.value = kwargs.get("value", 0)
-        elif ev_type == MidiEventType.CHANPRESS:
-            ev.data.control.channel = kwargs.get("channel", 0)
-            ev.data.control.value = kwargs.get("value", 0)
-        elif ev_type == MidiEventType.PGMCHANGE:
+        elif ev_type == MidiEventType.PITCHBEND or ev_type == MidiEventType.CHANPRESS or ev_type == MidiEventType.PGMCHANGE:
             ev.data.control.channel = kwargs.get("channel", 0)
             ev.data.control.value = kwargs.get("value", 0)
 

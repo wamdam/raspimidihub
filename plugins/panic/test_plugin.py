@@ -1,6 +1,7 @@
 """Tests for Panic plugin."""
 
 from helpers import make_plugin
+
 from panic import Panic
 
 

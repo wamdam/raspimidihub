@@ -1,8 +1,8 @@
 """Tests for Hold plugin."""
 
 from helpers import make_plugin
-from hold import Hold
 
+from hold import Hold
 
 RELEASE_NOTE = 108
 

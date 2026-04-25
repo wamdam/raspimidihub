@@ -1,6 +1,7 @@
 """Tests for NoteSplitter plugin."""
 
 from helpers import make_plugin
+
 from note_splitter import NoteSplitter
 
 

@@ -11,7 +11,6 @@ For non-USB ALSA devices (built-in audio, HDMI), we use:
 """
 
 import logging
-import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -134,12 +133,11 @@ def alsa_client_to_card(client_id: int) -> int | None:
     try:
         with open("/proc/asound/seq/clients") as f:
             current_client = None
-            current_name = None
             for line in f:
                 m = re.match(r'^Client\s+(\d+)\s*:\s*"(.+?)"', line)
                 if m:
                     current_client = int(m.group(1))
-                    current_name = m.group(2)
+                    m.group(2)
                     continue
                 if current_client == client_id:
                     cm = re.search(r'\[.*card\s*=\s*(\d+)', line)

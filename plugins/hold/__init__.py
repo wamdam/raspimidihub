@@ -1,7 +1,10 @@
 """Hold — latches pressed notes until a release-note or a new note is played."""
 
 from raspimidihub.plugin_api import (
-    PluginBase, Group, NoteSelect, Toggle,
+    Group,
+    NoteSelect,
+    PluginBase,
+    Toggle,
 )
 
 

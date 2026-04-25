@@ -1,6 +1,7 @@
 """Tests for MasterClock plugin."""
 
 from helpers import make_plugin
+
 from master_clock import MasterClock
 
 

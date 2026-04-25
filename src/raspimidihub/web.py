@@ -8,11 +8,10 @@ import asyncio
 import json
 import logging
 import mimetypes
-import os
 import time
 import urllib.parse
 from collections import defaultdict
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 log = logging.getLogger(__name__)
@@ -269,7 +268,7 @@ class WebServer:
                     resp = await handler(request)
                 except json.JSONDecodeError:
                     resp = Response.error("Invalid JSON", 400)
-                except Exception as e:
+                except Exception:
                     log.exception("Handler error for %s %s", method, path)
                     resp = Response.error("Internal server error", 500)
             elif method == "GET":

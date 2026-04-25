@@ -1,6 +1,7 @@
 """Tests for Arpeggiator plugin (non-threaded aspects)."""
 
 from helpers import make_plugin
+
 from arpeggiator import Arpeggiator
 
 

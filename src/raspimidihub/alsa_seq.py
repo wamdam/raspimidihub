@@ -19,7 +19,7 @@ from ctypes import (
     pointer,
 )
 from dataclasses import dataclass, field
-from enum import IntEnum, IntFlag
+from enum import IntEnum
 
 # --- Load libasound ---
 
@@ -399,7 +399,7 @@ class AlsaSeq:
                 snd_seq_port_info_set_port(pinfo, -1)
                 while snd_seq_query_next_port(self._handle, pinfo) >= 0:
                     cap = snd_seq_port_info_get_capability(pinfo)
-                    port_type = snd_seq_port_info_get_type(pinfo)
+                    snd_seq_port_info_get_type(pinfo)
 
                     # Skip ports that don't allow subscription or are no-export
                     if cap & SND_SEQ_PORT_CAP_NO_EXPORT:

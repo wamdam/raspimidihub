@@ -1,6 +1,6 @@
 """Velocity Curve — remap note velocity through a drawable curve."""
 
-from raspimidihub.plugin_api import PluginBase, CurveEditor
+from raspimidihub.plugin_api import CurveEditor, PluginBase
 
 
 class VelocityCurve(PluginBase):

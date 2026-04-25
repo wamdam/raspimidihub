@@ -1,6 +1,7 @@
 """Tests for CcLfo plugin (non-threaded aspects)."""
 
 from helpers import make_plugin
+
 from cc_lfo import CcLfo
 
 

@@ -306,7 +306,7 @@ no-hosts
 
         # Activate the connection
         try:
-            result = _run(
+            _run(
                 ["nmcli", "connection", "up", ssid, "ifname", WLAN_IFACE],
                 check=True, timeout=CLIENT_TIMEOUT,
             )

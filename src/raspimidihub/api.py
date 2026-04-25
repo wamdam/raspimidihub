@@ -11,9 +11,12 @@ from pathlib import Path
 
 from . import __version__
 from .config import Config
-from .midi_engine import MidiEngine, Connection
+from .midi_engine import Connection, MidiEngine
 from .midi_filter import (
-    MidiFilter, MidiMapping, MappingType, ALL_CHANNELS, ALL_MSG_TYPES,
+    ALL_CHANNELS,
+    ALL_MSG_TYPES,
+    MidiFilter,
+    MidiMapping,
     validate_new_mapping,
 )
 from .web import Request, Response, WebServer
@@ -409,7 +412,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
             elif msg_type == "cc":
                 cc = data.get("cc", 1)
                 value = data.get("value", 0)
-                from .alsa_seq import SndSeqEvent, MidiEventType
+                from .alsa_seq import MidiEventType, SndSeqEvent
                 ev = SndSeqEvent()
                 ev.type = MidiEventType.CONTROLLER
                 ev.data.control.channel = channel
@@ -984,8 +987,8 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
 
     @server.route("GET", "/api/system/update-check")
     async def api_update_check(req: Request) -> Response:
-        import urllib.request
         import json as _json
+        import urllib.request
 
         loop = asyncio.get_event_loop()
 
@@ -1174,7 +1177,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
     # Network API
     # ================================================================
 
-    from .wifi import get_all_interfaces, configure_interface
+    from .wifi import configure_interface, get_all_interfaces
 
     @server.route("GET", "/api/network")
     async def api_network(req: Request) -> Response:

@@ -5,15 +5,16 @@ through userspace instead of direct ALSA kernel subscriptions. This adds ~1-3ms
 latency but enables per-channel filtering and MIDI mapping.
 """
 
-import asyncio
 import ctypes
 import logging
 from dataclasses import dataclass, field
 from enum import Enum
 
 from .alsa_seq import (
-    AlsaSeq, MidiEventType, MSG_FILTER_GROUPS, SndSeqEvent, SndSeqEventData,
-    SeqEventType,
+    MSG_FILTER_GROUPS,
+    AlsaSeq,
+    MidiEventType,
+    SndSeqEvent,
 )
 
 log = logging.getLogger(__name__)
@@ -450,8 +451,9 @@ class FilterEngine:
     def _forward_event(self, ev: SndSeqEvent, fc: FilteredConnection) -> None:
         """Forward an event via the connection's dedicated write port."""
         from .alsa_seq import (
-            snd_seq_event_output_direct, SndSeqAddr,
-            SND_SEQ_ADDRESS_SUBSCRIBERS, SND_SEQ_QUEUE_DIRECT,
+            SND_SEQ_ADDRESS_SUBSCRIBERS,
+            SND_SEQ_QUEUE_DIRECT,
+            snd_seq_event_output_direct,
         )
         ev.source.client = self._seq.client_id
         ev.source.port = fc._write_port
@@ -463,7 +465,7 @@ class FilterEngine:
 
     def _forward_cc(self, fc: FilteredConnection, channel: int, cc: int, value: int) -> None:
         """Send a CC event via the connection's dedicated write port."""
-        from .alsa_seq import SndSeqEvent, MidiEventType
+        from .alsa_seq import MidiEventType, SndSeqEvent
         ev = SndSeqEvent()
         ev.type = MidiEventType.CONTROLLER
         ev.data.control.channel = channel

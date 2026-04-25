@@ -6,7 +6,7 @@ using the ALSA sequencer API.
 
 import asyncio
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from .alsa_seq import AlsaSeq, MidiDevice, MidiEventType, SeqEventType
 from .device_id import DeviceRegistry
@@ -577,9 +577,9 @@ class MidiEngine:
             # Wait for the fd to become readable
             future = loop.create_future()
 
-            def _on_readable():
-                if not future.done():
-                    future.set_result(None)
+            def _on_readable(fut=future):
+                if not fut.done():
+                    fut.set_result(None)
 
             loop.add_reader(fd, _on_readable)
             try:
@@ -649,7 +649,6 @@ class MidiEngine:
                 # Forward clock events to plugin clock bus
                 # (deduplicate: only process on monitor port)
                 if self._plugin_host:
-                    from .alsa_seq import MidiEventType
                     if ev.type == MidiEventType.CLOCK:
                         if ev.dest.port == self._monitor_port:
                             self._plugin_host.clock_bus.on_clock_tick()
@@ -678,10 +677,12 @@ class MidiEngine:
             return
 
         import ctypes
+
         from .alsa_seq import (
-            SndSeqEvent, MidiEventType,
-            snd_seq_event_output_direct,
             SND_SEQ_QUEUE_DIRECT,
+            MidiEventType,
+            SndSeqEvent,
+            snd_seq_event_output_direct,
         )
 
         panic_port = self._monitor_port if self._monitor_port >= 0 else 0

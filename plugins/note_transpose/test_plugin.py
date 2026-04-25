@@ -1,6 +1,7 @@
 """Tests for NoteTranspose plugin."""
 
 from helpers import make_plugin
+
 from note_transpose import NoteTranspose
 
 

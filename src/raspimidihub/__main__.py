@@ -14,8 +14,8 @@ from .api import register_api
 from .config import Config
 from .led import LedController
 from .midi_engine import MidiEngine
-from .runtime.loops import rate_meter, watchdog_ping, wifi_watchdog
 from .plugin_host import PluginHost
+from .runtime.loops import rate_meter, watchdog_ping, wifi_watchdog
 from .web import WebServer
 from .wifi import WifiManager
 
@@ -185,7 +185,7 @@ async def async_main() -> None:
         wifi_cfg = config.wifi
         if wifi_cfg.get("mode") == "client" and wifi_cfg.get("client_ssid"):
             log.info("WiFi: starting client mode")
-            loop = asyncio.get_event_loop()
+            asyncio.get_event_loop()
             await wifi.start_client_with_fallback(
                 wifi_cfg["client_ssid"], wifi_cfg.get("client_password", ""),
                 wifi_cfg.get("ap_ssid", ""), wifi_cfg.get("ap_password", "midihub1"),

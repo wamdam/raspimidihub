@@ -1,6 +1,6 @@
 """Velocity Equalizer — normalize note velocities to a fixed value or compressed range."""
 
-from raspimidihub.plugin_api import PluginBase, Group, Radio, Wheel, Fader
+from raspimidihub.plugin_api import Group, PluginBase, Radio, Wheel
 
 
 class VelocityEqualizer(PluginBase):

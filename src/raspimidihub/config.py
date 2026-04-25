@@ -6,10 +6,8 @@ Save flow: write tmpfs temp -> validate -> remount rw -> copy -> sync -> remount
 
 import json
 import logging
-import os
 import shutil
 import subprocess
-import tempfile
 from pathlib import Path
 
 log = logging.getLogger(__name__)

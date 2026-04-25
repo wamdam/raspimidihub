@@ -1,7 +1,9 @@
 """Panic Button — sends All Notes Off + All Sound Off on all channels."""
 
 from raspimidihub.plugin_api import (
-    PluginBase, Toggle, Wheel,
+    PluginBase,
+    Toggle,
+    Wheel,
 )
 
 # CC numbers for panic messages
