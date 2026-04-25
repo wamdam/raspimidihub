@@ -328,10 +328,13 @@ For **mapping rows** specifically:
 - Paste is **not** in the row's menu. Instead, when the clipboard
   holds a `kind: "mapping"` payload, a `[ + Paste Mapping ]` button
   appears next to the existing `[ + Add Mapping ]` button at the
-  bottom of the mapping list. Paste always **appends a new mapping**
-  with one destination field auto-bumped (see Clipboard shape
-  below). Avoids the ambiguous "does paste replace this row or
-  insert?" question that Paste-on-row would raise.
+  bottom of the mapping list. Paste **appends a new mapping** as-is
+  if it fits (e.g. pasted to a different instrument where the dst CC
+  is free) and **only auto-bumps when there's a real conflict** —
+  scanning forward through the destination field's range until a
+  free slot is found (see Clipboard shape below). Avoids the
+  ambiguous "does paste replace this row or insert?" question that
+  Paste-on-row would raise.
 
 The current inline **Edit** and **Delete** buttons on each mapping
 row are **removed**. Edit is single-tap; Delete becomes Remove in
@@ -360,14 +363,17 @@ clipboard = {
   two clones don't collide.
 - **kind: "mapping"** — `payload = <full mapping dict>`. Paste target:
   the same connection's mapping list, **or any other connection's
-  mapping list**. On paste, **one destination field is auto-bumped
-  by +1** so the new mapping doesn't trip duplicate detection:
-  - **CC→CC**: `dst_cc_num` += 1 (clamped 0..127)
-  - **Note→CC / Note→CC-toggle**: `dst_cc` += 1
-  - **Channel Map**: `dst_channel` += 1 (mod 16)
-  If the bumped value still collides (same src + already-existing
-  bumped dst), the validator throws and the user adjusts manually —
-  no auto-search for a free slot, that would be surprising.
+  mapping list**. The mapping is pasted as-is when it doesn't conflict
+  (e.g. pasted onto a different instrument where the same dst CC is
+  free). When the duplicate-check rejects it, the paste retries with
+  the relevant destination field bumped by +1, then +2, …, up to the
+  field's range, until a free slot is found:
+  - **CC→CC**: bump `dst_cc_num` (search 0..127, clamped)
+  - **Note→CC / Note→CC-toggle**: bump `dst_cc` (search 0..127)
+  - **Channel Map**: bump `dst_channel` (search 0..15, modulo 16)
+  If every value collides (the user has saturated the entire field
+  range with mappings — vanishingly rare in practice), the paste
+  fails with a toast asking the user to adjust manually.
 
 Clipboard lives in client state (Preact). Shared across devices via the
 existing SSE bus — **out of scope for MVP**; single-browser clipboard only.
@@ -1324,8 +1330,9 @@ Quality-of-life, not blocking anything live.
 2. **Connection clipboard**. Copy filter + mappings; paste onto
    another connection.
 3. **Plugin clipboard**. Paste-as-new + paste-over-instance.
-4. **Mapping clipboard with auto-bump**. Append-with-bumped-dst
-   semantics from §3.
+4. **Mapping clipboard**. Append-as-is when free; bump-on-conflict
+   with a forward search through the destination field's range
+   (semantics from §3).
 5. **Undo / Redo**. Client-side `Command` stack, labelled toasts,
    Ctrl+Z + toolbar buttons.
 
