@@ -322,6 +322,10 @@ class PluginBase:
         """MIDI Stop received."""
         pass
 
+    def on_transport_continue(self) -> None:
+        """MIDI Continue received — resume without resetting position."""
+        pass
+
     def on_tick(self, division: str) -> None:
         pass
 

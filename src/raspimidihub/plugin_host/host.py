@@ -330,6 +330,8 @@ class PluginHost:
                                     plugin.on_transport_start()
                                 elif msg == "_stop":
                                     plugin.on_transport_stop()
+                                elif msg == "_continue":
+                                    plugin.on_transport_continue()
                                 else:
                                     plugin.on_tick(msg)
                             except Exception as e:

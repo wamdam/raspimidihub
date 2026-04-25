@@ -16,6 +16,7 @@ log = logging.getLogger(__name__)
 
 # Division name → ticks per division at 24 PPQ (1 PPQ = 1/24 of a quarter).
 DIVISION_TICKS = {
+    "tick": 1,    # raw 24 PPQ — every incoming MIDI Clock
     "4/1": 384,   # 4 bars
     "2/1": 192,   # 2 bars
     "1/1": 96,    # 1 bar / whole note
@@ -103,8 +104,10 @@ class ClockBus:
         self._notify_transport("_start")
 
     def on_continue(self) -> None:
-        """MIDI Continue received."""
+        """MIDI Continue received — resumes from current position without
+        resetting the tick counter (unlike Start)."""
         self._running = True
+        self._notify_transport("_continue")
 
     def on_stop(self) -> None:
         """MIDI Stop received."""
