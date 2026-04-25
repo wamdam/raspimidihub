@@ -957,16 +957,64 @@ a fixed pixel count**. Two contexts:
 - **Config panels in matrix view**: `1u` defaults to ~80 px on
   desktop, ~64 px on phone. Picked to make a 4-column control row
   feel right on both.
-- **Controller fullscreen play mode**: `1u = min(viewport_w / cols,
-  viewport_h / rows)` over the LayoutGrid's declared `cols × rows`.
-  No scrolling — the grid fits. Big tablets get big knobs.
+- **Controller fullscreen play mode**: the grid is **logical, not
+  physical**. The user picks `cols × rows` once when building the
+  Controller, and that pair is fixed regardless of device. At render
+  time:
+
+  ```
+  1u = min( viewport_w / cols ,  viewport_h / rows )
+  ```
+
+  No scrolling — the grid always fits. A `4 × 3` Controller on a
+  phone gets ~125 px cells; the same layout on an iPad Pro gets
+  ~280 px cells. **Designed once, scales naturally — bigger devices
+  get bigger knobs, not more knobs.**
+
+### `1u` cap
+
+Without an upper bound, a small grid on a huge display produces
+comically large controls. `1u` is capped at **200 px**; when the
+cap is hit the grid centres with margin around it.
+
+### Phone preview in edit mode
+
+When configuring a Controller on a tablet or desktop, a small
+**Phone preview** toggle in the edit panel constrains the preview
+viewport to a phone-sized box (390 × 844 by default). Avoids the
+"looks great on my desktop, tiny on my phone" trap before the
+layout ships.
+
+### Recommended `cols × rows` picks
+
+| Picks | Cells | Use case |
+|-------|-------|----------|
+| `4 × 2` | 8 | Compact mixer page |
+| `4 × 3` | 12 | Standard "all your knobs" page — the sweet spot |
+| `3 × 3` | 9 | Drum-pad style (drop pad row above) |
+| `6 × 3` | 18 | Tablet-optimised — phone users get tinier touch targets |
+| `2 × 2` (XY pad) | 1 | Single big XY pad for touch performance |
+
+The renderer doesn't enforce these — it'll scale anything — but
+`4 × 3` is the layout that feels right on a phone and luxurious on
+a tablet.
+
+### Orientation behaviour
+
+If the user designs a landscape-flavoured layout (e.g. `4 × 2`) and
+rotates the phone to portrait, the grid **stays exact** — the same
+`cols × rows`, the same cell positions, the renderer just leaves
+margins above/below. The expectation is that performance use is in
+landscape; portrait is a fallback that shouldn't surprise the user
+by re-arranging cells.
 
 ### Open questions
 
-1. **Per-device override**. Should the user be able to nudge the base
-   unit up/down in Settings? Probably v2.
-2. **Density**. A high-resolution phone in landscape can fit a lot.
-   Cap `1u` at some maximum (~140 px) so things stay touch-sized?
+1. **Per-device override**. Should the user be able to nudge the
+   base unit up/down in Settings? Probably v2.
+2. **Phone preview viewport size**. 390 × 844 (iPhone-ish) is
+   default; a small dropdown for `iPhone SE`, `Pixel 7`, etc. would
+   be a nice-to-have if multiple users compare designs.
 
 ---
 
