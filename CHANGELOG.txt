@@ -6,18 +6,28 @@ hashes. Tags: Added, Improved, Fix, Changed, Removed.
 
 Unreleased
 
+- Added: Knob control - round body with rotating indicator, LED arc that lights up to the current value, value text in the centre; drag sensitivity scales with the value range so labelled / few-step knobs aren't twitchy
 - Added: Clock Divider plugin - emits one MIDI Clock for every N received (2..32); passes notes / CC / etc. through unchanged
 - Added: UI Demo plugin - drop-in showcase of every UI control type, makes no MIDI
 - Added: Panic - second tap upgrades to "All Sound Off" (Elektron-style); first tap leaves delay / reverb tails ringing
 - Added: Matrix clock indicator - pulses in time with the source's quarter notes instead of running a generic loop
-- Improved: Plugin controls - drag and scroll feel smoother; the wheel / fader thumb no longer jitters back to a stale value mid-move
+- Added: Param span - any wheel / knob / fader / toggle / button can declare it occupies 1, 2, 3 or 4 cells of the row (e.g. a fat "Master" fader spanning the row)
+- Improved: Plugin panel - 4-column responsive grid that fits even on a 360 px phone; controls share a uniform 1u footprint so a row of mixed wheels, faders, knobs, toggles, buttons all line up
+- Improved: Plugin panel - cards have a brushed-metal gradient that reads as raised housings against the matrix-coloured panel background
+- Improved: Meter display - now a read-only green-LED knob instead of a flat bar
+- Improved: Toggles + buttons - slimmer 44 px height to match the wheel / fader visual weight
+- Improved: Plugin controls - drag and scroll feel smoother; the wheel / fader / knob thumb no longer jitters back to a stale value mid-move
+- Improved: Plugin controls - param values now stay in sync across all open browsers / phones via a self-healing watchdog (handles fast drags, rate limits, and dropped events)
 - Improved: MIDI Delay - Delay (ms) is now a Fader; sync rate covers 4 bars down to 1/16 with triplets
 - Improved: Disconnect - destinations get a clean Note Off when a connection is removed mid-note, so notes don't stick
 - Improved: Load Config - reapplies only the connections that actually changed; unrelated routing keeps flowing without interruption
 - Improved: CC LFO - slow clock-sync rates added (up to 8 bars)
+- Improved: Multi-tab support - several phones / browsers can be open at once without the SSE connection cap pushing one of them out
 - Fix: Clock Divider - silent when nothing is wired to it (was ticking from any clock the system happened to see)
 - Fix: Clock Divider - dividing by 4 or higher now actually divides correctly
-- Fix: Plugin panel - turning a wheel no longer slides the panel away
+- Fix: Plugin panel - turning a wheel / knob no longer slides the panel away
+- Fix: Radio buttons - the active pill no longer shifts its neighbours by 1 px when toggled
+- Fix: Note wheel - active value now centred on the indicator
 
 
 2026-04-25 - Version 2.0.9
