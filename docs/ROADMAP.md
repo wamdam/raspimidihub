@@ -1271,20 +1271,32 @@ things and de-risks the bigger Engine changes in Phase 2.
    auto-decays after 600 ms, incoming MIDI Start resets to idle via
    the new `transport-start` SSE event).
 
-### Phase 2 — Engine smoothness (≈ 1 sprint)
+### Phase 2 — Engine smoothness (≈ 1 sprint) ✓ Done (2026-04-25)
 
 The big invasive Engine change. **Highest test coverage of any
 phase** — it touches the live MIDI hot path.
 
-1. `MidiEngine.apply_edge_diff(target_edges)`. Replace the
-   `disconnect_all() + _apply_saved_config()` pair in
-   `api_load_config` with the diff-and-apply algorithm from §6.
-2. Synthetic edge-diff tests covering all permutations
-   (removed-only, added-only, both, changed-filter, changed-mappings,
-   untouched).
-3. End-to-end Pi test: load a preset while a synthesised note is
-   sounding on a soon-to-be-removed edge → assert clean note-off,
-   assert untouched edges receive nothing extra.
+1. ✓ `MidiEngine.apply_edge_diff(target_edges)` shipped in
+   `7b67a29`. Diff-and-apply core with helpers `_remove_edge_smoothly`,
+   `_add_edge`, `_send_all_notes_off`. Removed edges flush tracked
+   NoteOffs and emit CC 123 on used channels; in-place
+   userspace-mode updates avoid resubscribe; mode switches
+   tear down + rebuild cleanly.
+2. ✓ Synthetic edge-diff tests in `tests/test_edge_diff.py`
+   covering added-only, removed-only, both, untouched, in-place
+   changed-mappings, mode-switch, NoteOff + CC 123 emission, and
+   unresolved-stable-id skipping (9 tests).
+3. ✓ Wired into `POST /api/config/load` (`c119351`). Live verified
+   on the Pi: reload-with-no-changes touched 0 of 8 edges.
+4. End-to-end Pi test with a sounding note across a removed edge:
+   relies on user-side reproduction; skipped as automated test
+   (no MIDI test rig in CI).
+
+`api_preset_action` and the hotplug rescan path still use the
+old `disconnect_all + apply_saved_config` pair — preset activation
+involves plugin instance teardown that invalidates cached client
+IDs, and the hotplug path has its own snapshot-merge logic. Both
+are tracked as follow-ups, not part of Phase 2.
 
 After this, Preset Trigger is essentially a 30-line plugin —
 stays in pending until requested.
