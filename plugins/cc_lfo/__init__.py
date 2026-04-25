@@ -39,7 +39,9 @@ vibrato to a synth pad without touching a physical controller."""
         ]),
         Group("Timing", [
             Toggle("sync", "Sync to Clock", default=False),
-            Radio("rate", "Rate", ["1/1", "1/2", "1/4", "1/8", "1/16"], default="1/4",
+            Radio("rate", "Rate",
+                  ["8/1", "4/1", "2/1", "1/1", "1/2", "1/4", "1/8", "1/16"],
+                  default="1/4",
                   visible_when=("sync", True)),
             Fader("freq", "Frequency", min=1, max=200, default=5,
                   display_factor=0.1, display_format=" Hz",
@@ -67,9 +69,11 @@ vibrato to a synth pad without touching a physical controller."""
     # Subscribe to all divisions — we use the finest (1/16) for smooth synced LFO
     clock_divisions = ["1/16"]
 
-    # Ticks per cycle for each synced rate (at 1/16 resolution):
-    # 1/1 = 16 sixteenths, 1/2 = 8, 1/4 = 4, 1/8 = 2, 1/16 = 1
-    _RATE_TICKS = {"1/1": 16, "1/2": 8, "1/4": 4, "1/8": 2, "1/16": 1}
+    # Ticks per cycle for each synced rate (at 1/16 resolution).
+    # 8/1 = 8 bars × 16 sixteenths = 128, 4/1 = 64, 2/1 = 32,
+    # 1/1 = 16, 1/2 = 8, 1/4 = 4, 1/8 = 2, 1/16 = 1.
+    _RATE_TICKS = {"8/1": 128, "4/1": 64, "2/1": 32,
+                   "1/1": 16, "1/2": 8, "1/4": 4, "1/8": 2, "1/16": 1}
 
     # Cap the free-runner emit rate. Above this we'd just be flooding ALSA
     # with redundant CC traffic — 60 Hz is plenty for smooth modulation
