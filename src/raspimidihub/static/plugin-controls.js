@@ -8,6 +8,7 @@
 
 export { tickFeedback, thudFeedback, noteName } from './components/common.js';
 export { PluginWheel } from './components/wheel.js';
+export { PluginKnob } from './components/knob.js';
 export { PluginFader } from './components/fader.js';
 export { PluginRadio } from './components/radio.js';
 export { PluginToggle } from './components/toggle.js';

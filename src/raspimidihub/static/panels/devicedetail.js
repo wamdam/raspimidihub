@@ -191,26 +191,72 @@ export function DeviceDetailPanel({ device, onClose, showToast, refresh, pluginD
 
     const displayValues = (pluginDisplays && device.plugin_instance_id) ? pluginDisplays[device.plugin_instance_id] || {} : {};
 
-    // Param updates are rAF-coalesced and the SSE echo is suppressed for
-    // params the user is actively dragging — otherwise the server-side
-    // broadcast races the next move and snaps the thumb backwards.
+    // Param updates are rAF-coalesced AND serialized over the wire (only
+    // one PATCH in flight at a time). Without serialization the browser
+    // can multiplex onto multiple HTTP/1.1 connections and a fast drag's
+    // PATCHes land at the server out of order — the user releases the
+    // knob at max but the server sees an earlier intermediate value as
+    // its final state, and that's what gets broadcast.
+    //
+    // The SSE echo is also suppressed for params the user is actively
+    // dragging on this client, so the server-side broadcast doesn't
+    // snap the thumb backwards mid-drag.
     const pendingPatchesRef = useRef(new Map());     // name -> latest value queued for PATCH
     const inFlightRef = useRef(new Map());           // name -> timeout id; presence = "user is dragging this"
     const rafIdRef = useRef(null);
+    const patchInFlightRef = useRef(false);          // a PATCH is currently on the wire
     const IN_FLIGHT_RELEASE_MS = 250;
+
+    // Refs that track the latest local + server view of params, so the
+    // settle-check below can compare them outside of a render closure.
+    const pluginParamsRef = useRef(pluginParams);
+    pluginParamsRef.current = pluginParams;
+    const pluginDisplaysRef = useRef(pluginDisplays);
+    pluginDisplaysRef.current = pluginDisplays;
 
     const flushPending = useCallback(() => {
         rafIdRef.current = null;
+        if (patchInFlightRef.current) return;        // queued; will fire after current PATCH finishes
         const map = pendingPatchesRef.current;
         if (map.size === 0) return;
+        if (!device.plugin_instance_id) return;
+
         const params = Object.fromEntries(map);
         map.clear();
-        if (device.plugin_instance_id) {
-            api(`/plugins/instances/${device.plugin_instance_id}`, {
-                method: 'PATCH',
-                body: JSON.stringify({ params }),
-            }).catch(() => {});
-        }
+        patchInFlightRef.current = true;
+        // Use fetch directly so we can detect 429 (rate limit) and re-queue
+        // the params instead of silently dropping them. api() resolves on
+        // 4xx because it just calls res.json() — the helpful path here is
+        // to inspect res.status ourselves.
+        fetch(`/api/plugins/instances/${device.plugin_instance_id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ params }),
+        }).then(res => {
+            if (!res.ok) {
+                // Re-queue values we tried to send (fresher onChanges already
+                // in pending take precedence — only restore keys that aren't
+                // already queued with a newer value).
+                for (const [k, v] of Object.entries(params)) {
+                    if (!pendingPatchesRef.current.has(k)) {
+                        pendingPatchesRef.current.set(k, v);
+                    }
+                }
+            }
+        }).catch(() => {
+            // Network error — same retry policy as a 4xx.
+            for (const [k, v] of Object.entries(params)) {
+                if (!pendingPatchesRef.current.has(k)) {
+                    pendingPatchesRef.current.set(k, v);
+                }
+            }
+        }).finally(() => {
+            patchInFlightRef.current = false;
+            if (pendingPatchesRef.current.size > 0) {
+                // Small backoff so a sustained 429 storm doesn't busy-loop.
+                setTimeout(flushPending, 30);
+            }
+        });
     }, [device.plugin_instance_id]);
 
     useEffect(() => () => {
@@ -248,6 +294,25 @@ export function DeviceDetailPanel({ device, onClose, showToast, refresh, pluginD
         if (existing) clearTimeout(existing);
         inFlightRef.current.set(name, setTimeout(() => {
             inFlightRef.current.delete(name);
+            // Eventually-consistent watchdog. After the user idles for
+            // IN_FLIGHT_RELEASE_MS, compare our optimistic local state
+            // for this param against the most recent server value seen
+            // via SSE. If they disagree the final PATCH didn't land —
+            // re-queue our local value as the authoritative one and
+            // flush. The retry-on-429 + serialised flush logic above
+            // takes it from there until SSE finally echoes back.
+            const ssp = pluginDisplaysRef.current
+                && pluginDisplaysRef.current['_params_' + device.plugin_instance_id];
+            const localVal = pluginParamsRef.current[name];
+            if (device.plugin_instance_id && ssp
+                    && ssp[name] !== undefined
+                    && ssp[name] !== localVal
+                    && pendingPatchesRef.current.get(name) !== localVal) {
+                pendingPatchesRef.current.set(name, localVal);
+                if (rafIdRef.current === null && !patchInFlightRef.current) {
+                    rafIdRef.current = requestAnimationFrame(flushPending);
+                }
+            }
         }, IN_FLIGHT_RELEASE_MS));
     }, [device.plugin_instance_id, flushPending]);
 

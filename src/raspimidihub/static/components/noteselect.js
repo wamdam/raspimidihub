@@ -14,7 +14,8 @@ export function PluginNoteSelect({ name, label, value, onChange, learnable }) {
     const containerRef = useRef(null);
     const innerRef = useRef(null);
     const TICK_H = 20;
-    const CENTER = 30 - TICK_H / 2;
+    // Wheel container is 52px tall (see .wheel-container).
+    const CENTER = 26 - TICK_H / 2;
     const s = useRef({
         value, offset: 0, startY: 0, startOffset: 0, lastY: 0, lastT: 0,
         velocity: 0, animId: null, atBoundary: false, lastWheel: 0,

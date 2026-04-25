@@ -14,7 +14,9 @@ export function PluginWheel({ name, label, min, max, value, onChange, suffix, ti
     const onChangeRef = useRef(onChange);
     onChangeRef.current = onChange;
     const TICK_H = 20;
-    const CENTER = 30 - TICK_H / 2;
+    // Wheel container is 52px tall (see .wheel-container). Center
+    // offset so the active tick lines up with the indicator at 50%.
+    const CENTER = 26 - TICK_H / 2;
     // Persistent state across renders (not React state — direct DOM manipulation)
     const s = useRef({
         value, offset: 0, startY: 0, startOffset: 0, lastY: 0, lastT: 0,

@@ -4,6 +4,7 @@
 
 import { html } from './common.js';
 import { PluginWheel } from './wheel.js';
+import { PluginKnob } from './knob.js';
 import { PluginFader } from './fader.js';
 import { PluginRadio } from './radio.js';
 import { PluginToggle } from './toggle.js';
@@ -44,6 +45,11 @@ export function renderParam(param, values, onChange, allValues, displayCtx) {
                 min=${param.min} max=${param.max} value=${val != null ? val : param.default}
                 onChange=${onChange} tickLabel=${tl} />`;
         }
+        case 'knob':
+            return html`<${PluginKnob} name=${param.name} label=${param.label}
+                min=${param.min} max=${param.max} value=${val != null ? val : param.default}
+                displayFactor=${param.display_factor} unit=${param.unit} labels=${param.labels}
+                onChange=${onChange} />`;
         case 'fader':
             return html`<${PluginFader} name=${param.name} label=${param.label}
                 min=${param.min} max=${param.max} value=${val != null ? val : param.default}
@@ -80,8 +86,8 @@ export function renderParam(param, values, onChange, allValues, displayCtx) {
             const dout = (displayCtx.outputs || []).find(d => d.name === param.display_name);
             if (!dout) return null;
             const dv = displayCtx.values && displayCtx.values[param.display_name];
-            if (dout.type === 'scope') return html`<div style="flex:1;min-width:80px"><${DisplayScope} label=${dout.label} value=${dv} min=${dout.min} max=${dout.max} duration=${dout.duration} /></div>`;
-            if (dout.type === 'meter') return html`<div style="flex:1;min-width:80px"><${DisplayMeter} label=${dout.label} value=${dv} min=${dout.min} max=${dout.max} /></div>`;
+            if (dout.type === 'scope') return html`<div class="display-scope-wrap" style="min-width:0"><${DisplayScope} label=${dout.label} value=${dv} min=${dout.min} max=${dout.max} duration=${dout.duration} /></div>`;
+            if (dout.type === 'meter') return html`<${DisplayMeter} label=${dout.label} value=${dv} min=${dout.min} max=${dout.max} />`;
             return null;
         }
         default:
@@ -89,7 +95,14 @@ export function renderParam(param, values, onChange, allValues, displayCtx) {
     }
 }
 
-export const INLINE_TYPES = new Set(['wheel', 'fader', 'noteselect', 'channelselect', 'toggle', 'button', 'display']);
+export const INLINE_TYPES = new Set(['wheel', 'knob', 'fader', 'noteselect', 'channelselect', 'toggle', 'button', 'display']);
+
+// Wrap a rendered inline param with a grid-column-span container if
+// the param schema declares a span > 1. Single-cell params render as-is.
+function applySpan(rendered, span) {
+    if (!span || span <= 1) return rendered;
+    return html`<div class="param-cell" style="grid-column: span ${span}">${rendered}</div>`;
+}
 
 export function renderParamGroup(items, values, onChange, displayCtx) {
     const result = [];
@@ -103,7 +116,7 @@ export function renderParamGroup(items, values, onChange, displayCtx) {
     for (const p of items) {
         const rendered = renderParam(p, values, onChange, values, displayCtx);
         if (!rendered) continue;
-        if (INLINE_TYPES.has(p.type)) inlineRun.push(rendered);
+        if (INLINE_TYPES.has(p.type)) inlineRun.push(applySpan(rendered, p.span));
         else { flushInline(); result.push(rendered); }
     }
     flushInline();

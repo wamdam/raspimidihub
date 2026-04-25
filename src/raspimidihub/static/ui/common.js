@@ -53,20 +53,32 @@ export function animateClose(panelEl, onDone) {
 }
 
 // --- Swipe-down dismiss hook ---
-// Checks both target element AND movement direction to avoid false triggers
-// on plugin controls that handle their own touch.
+//
+// Ignores any touch that lands on an element (or descendant of one) that
+// handles its own touch — i.e. anything with `touch-action: none`. Every
+// interactive plugin control already sets that to disable browser
+// gestures, so we don't need to maintain a class-name allowlist any more.
+// New controls automatically get the right behaviour.
 //
 // `onTouchStart` is returned as `onTouchStartCapture` so it ALWAYS runs —
-// otherwise the wheel/fader's own stopPropagation in the bubble phase
-// prevents this handler from firing, leaving `s.ignore` stale, and the
-// panel dismisses when the user drags a wheel downwards.
-const _swipeIgnore = '.wheel-group, .wheel-container, .wheel-label, .fader-track, .fader-group, .metal-toggle, .toggle-group, .piano, .piano-key, .mini-wheel, .curve-canvas-wrap, .step-head, .note-select';
+// otherwise the wheel/fader/knob's own stopPropagation in the bubble
+// phase prevents this handler from firing, leaving `s.ignore` stale, and
+// the panel dismisses when the user drags a control downwards.
+function _isOwnTouchHandler(node) {
+    let n = node;
+    while (n && n.nodeType === 1) {
+        const ta = (n.style && n.style.touchAction) || getComputedStyle(n).touchAction;
+        if (ta === 'none') return true;
+        n = n.parentNode;
+    }
+    return false;
+}
 export function useSwipeDismiss(onDismiss, panelRef) {
     const [s] = useState(() => ({ startY: 0, startX: 0, ignore: false }));
     const onTouchStartCapture = (e) => {
         s.startY = e.touches[0].clientY;
         s.startX = e.touches[0].clientX;
-        s.ignore = !!(e.target && e.target.closest && e.target.closest(_swipeIgnore));
+        s.ignore = _isOwnTouchHandler(e.target);
     };
     const onTouchEnd = (e) => {
         if (s.ignore) return;

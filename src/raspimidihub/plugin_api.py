@@ -41,11 +41,16 @@ class Param:
     name: str
     label: str
     visible_when: tuple | None = field(default=None, kw_only=True)  # (param_name, value_or_list)
+    # Grid-column footprint in the param-row. Default 1u; set to 2/3/4
+    # for wider controls (e.g. a fat horizontal fader spanning the row).
+    span: int = field(default=1, kw_only=True)
 
     def to_dict(self) -> dict:
         d = {"type": self.__class__.__name__.lower(), "name": self.name, "label": self.label}
         if self.visible_when:
             d["visible_when"] = {"param": self.visible_when[0], "value": self.visible_when[1]}
+        if self.span and self.span > 1:
+            d["span"] = self.span
         return d
 
 
@@ -58,6 +63,29 @@ class Wheel(Param):
     display_factor: float = 0  # if >0, display value*factor (e.g. 0.1 for Hz tenths)
     unit: str = ""  # suffix shown after value (e.g. "Hz", "%")
     labels: list[str] = field(default_factory=list)  # if set, show labels[value-min] instead of number
+
+    def to_dict(self) -> dict:
+        d = super().to_dict()
+        d.update({"min": self.min, "max": self.max, "default": self.default})
+        if self.labels:
+            d["labels"] = self.labels
+        if self.display_factor:
+            d["display_factor"] = self.display_factor
+        if self.unit:
+            d["unit"] = self.unit
+        return d
+
+
+@dataclass
+class Knob(Param):
+    """Round knob with value text in the middle, indicator mark on the body,
+    and an LED arc around it that lights up to the current value's angle."""
+    min: int = 0
+    max: int = 127
+    default: int = 0
+    display_factor: float = 0
+    unit: str = ""
+    labels: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         d = super().to_dict()

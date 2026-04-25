@@ -34,8 +34,8 @@ class TestUiDemo:
     def test_default_params_present(self):
         """Every declared param has a default value — schema is wired up."""
         p, h = make_plugin(UiDemo)
-        for key in ("wheel_basic", "fader_h", "toggle_a", "radio_short",
-                    "step_count", "steps", "curve", "note_pick", "ch_pick",
-                    "button_green"):
+        for key in ("knob_basic", "wheel_basic", "fader_h1", "fader_master",
+                    "toggle_a", "radio_short", "step_count", "steps",
+                    "curve", "note_pick", "ch_pick", "button_green"):
             assert key in p._param_values
         p.on_stop()

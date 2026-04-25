@@ -18,6 +18,7 @@ from raspimidihub.plugin_api import (
     Display,
     Fader,
     Group,
+    Knob,
     NoteSelect,
     PluginBase,
     Radio,
@@ -46,6 +47,16 @@ internal logic at ~20 Hz so you can verify plugin -> SSE -> UI
 updates are flowing."""
 
     params = [
+        Group("Knobs", [
+            Knob("knob_basic", "Cutoff", min=0, max=127, default=80),
+            Knob("knob_freq", "Freq",
+                 min=1, max=200, default=50,
+                 display_factor=0.1, unit=" Hz"),
+            Knob("knob_q", "Reso", min=0, max=127, default=20),
+            Knob("knob_mode", "Mode",
+                 min=0, max=3, default=1,
+                 labels=["LP", "BP", "HP", "Notch"]),
+        ]),
         Group("Wheels", [
             Wheel("wheel_basic", "Basic", min=0, max=127, default=64),
             Wheel("wheel_freq", "Freq",
@@ -58,11 +69,19 @@ updates are flowing."""
             ChannelSelect("ch_pick", "Channel", default=1),
         ]),
         Group("Faders", [
-            Fader("fader_h", "Horizontal", min=0, max=127, default=64),
-            Fader("fader_v", "Vertical", min=0, max=127, default=96, vertical=True),
+            # Row 1: a row of 4 vertical faders side by side (mixer feel).
+            Fader("fader_v1", "Kick",  min=0, max=127, default=96, vertical=True),
+            Fader("fader_v2", "Snare", min=0, max=127, default=80, vertical=True),
+            Fader("fader_v3", "Hat",   min=0, max=127, default=64, vertical=True),
+            Fader("fader_v4", "Perc",  min=0, max=127, default=48, vertical=True),
+            # Row 2: 1u horizontal + a 2u horizontal (showing span).
+            Fader("fader_h1", "Horizontal", min=0, max=127, default=64),
+            Fader("fader_h2", "Wide", min=0, max=127, default=80, span=2),
             Fader("fader_fmt", "Frequency",
                   min=1, max=200, default=20,
                   display_factor=0.1, display_format=" Hz"),
+            # Row 3: full-row span (master fader feel).
+            Fader("fader_master", "Master", min=0, max=127, default=100, span=4),
         ]),
         Group("Switches", [
             Toggle("toggle_a", "Toggle", default=False),

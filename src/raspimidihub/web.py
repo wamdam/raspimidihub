@@ -19,8 +19,17 @@ log = logging.getLogger(__name__)
 STATIC_DIR = Path(__file__).parent / "static"
 
 # Rate limiting
-MAX_MUTATING_PER_SEC = 10
-MAX_SSE_CONNECTIONS = 5
+# Rate limit for mutating requests. 120/sec is roughly 2x animation-frame
+# rate — covers a worst-case fast drag where every other rAF tick fits a
+# round-trip. The client also serialises one PATCH at a time, so on a
+# realistic LAN we won't actually hit this; it's the floor where
+# misbehaving clients start getting 429'd.
+MAX_MUTATING_PER_SEC = 120
+# SSE connections allowed across all clients. Each browser tab opens
+# several EventSources (global event bus + transport-start + device-detail
+# MIDI monitor + ...), so a single laptop with the matrix open and a
+# plugin panel open can use ~3-4 by itself. Headroom for several phones.
+MAX_SSE_CONNECTIONS = 30
 
 SECURITY_HEADERS = {
     "X-Content-Type-Options": "nosniff",
@@ -104,16 +113,29 @@ class WebServer:
         return decorator
 
     async def send_sse(self, event: str, data: dict):
-        """Broadcast an SSE event to all connected clients."""
+        """Broadcast an SSE event to all connected clients.
+
+        If a client's queue is full (slow / backgrounded tab), drop its
+        oldest queued event and try again. This keeps the client
+        subscribed instead of silently disconnecting it from broadcast
+        for the lifetime of the connection — which used to leave one
+        phone updating while the others sat stale until refresh.
+        """
         msg = f"event: {event}\ndata: {json.dumps(data)}\n\n"
-        dead = []
         for q in self._sse_queues:
             try:
                 q.put_nowait(msg)
             except asyncio.QueueFull:
-                dead.append(q)
-        for q in dead:
-            self._sse_queues.remove(q)
+                try:
+                    q.get_nowait()  # drop oldest so the freshest event wins
+                except asyncio.QueueEmpty:
+                    pass
+                try:
+                    q.put_nowait(msg)
+                except asyncio.QueueFull:
+                    # Still full somehow (race) — skip this event for this client
+                    # rather than dropping the client.
+                    pass
 
     def _check_rate_limit(self, client: str) -> bool:
         """Returns True if request should be rate-limited."""
