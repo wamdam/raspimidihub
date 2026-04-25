@@ -213,7 +213,13 @@ async def async_main() -> None:
         # MIDI rate meter — snapshot and broadcast every second
         asyncio.ensure_future(_rate_meter(engine, server))
 
-        await engine.run_event_loop()
+        try:
+            await engine.run_event_loop()
+        except asyncio.CancelledError:
+            # Consume the cancellation here so the cleanup awaits below
+            # don't immediately re-raise CancelledError. The task is still
+            # cancelled overall — runner() in main() catches that.
+            log.info("Shutdown signal received")
     except KeyboardInterrupt:
         log.info("Interrupted")
     except Exception:
@@ -221,7 +227,12 @@ async def async_main() -> None:
         led.set_fast_blink()
         raise
     finally:
-        await server.stop()
+        # Bound each cleanup step so a stuck await doesn't deadlock systemd
+        # past TERMTimeoutSec.
+        try:
+            await asyncio.wait_for(server.stop(), timeout=2.0)
+        except (asyncio.TimeoutError, asyncio.CancelledError):
+            log.warning("Web server stop timed out")
         plugin_host.stop_all()
         engine.stop()
         led.set_off()
@@ -477,18 +488,24 @@ async def _wifi_watchdog(wifi, config, server) -> None:
 def main() -> None:
     setup_logging()
 
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-
-    for sig in (signal.SIGTERM, signal.SIGINT):
-        loop.add_signal_handler(sig, lambda: loop.stop())
+    async def runner() -> None:
+        # Cancel the main task on SIGTERM/SIGINT so async_main's `finally`
+        # block runs cleanly. Replaces the older `loop.stop()` pattern,
+        # which raced background tasks and exited with a RuntimeError —
+        # which systemd then mis-treated as a crash and auto-restarted.
+        main_task = asyncio.current_task()
+        loop = asyncio.get_running_loop()
+        for sig in (signal.SIGTERM, signal.SIGINT):
+            loop.add_signal_handler(sig, main_task.cancel)
+        try:
+            await async_main()
+        except asyncio.CancelledError:
+            pass
 
     try:
-        loop.run_until_complete(async_main())
+        asyncio.run(runner())
     except KeyboardInterrupt:
         pass
-    finally:
-        loop.close()
 
 
 if __name__ == "__main__":

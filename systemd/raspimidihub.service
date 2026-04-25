@@ -11,6 +11,14 @@ RestartSec=2
 WatchdogSec=30
 NotifyAccess=main
 
+# KillMode=process so daemonized hostapd/dnsmasq survive a service
+# restart — wlan0 doesn't blink and connected clients stay associated.
+# start_ap is idempotent: if hostapd/dnsmasq are already running with a
+# matching config, the new instance leaves them alone. A crashed service
+# is replaced via Restart=always; the new instance reuses the existing
+# AP processes instead of tearing them down and re-spawning.
+KillMode=process
+
 # Run as root for ALSA sequencer, LED, hostapd, dnsmasq
 User=root
 

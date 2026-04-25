@@ -328,13 +328,21 @@ class WebServer:
         log.info("Web server listening on %s", addrs)
 
     async def stop(self):
-        """Stop the HTTP server."""
+        """Stop the HTTP server.
+
+        SSE connections must be signalled to close *before* awaiting
+        wait_closed(), otherwise wait_closed() hangs forever waiting for
+        the long-poll connections to drain.
+        """
+        # Tell every SSE handler to exit its read loop
+        for q in self._sse_queues:
+            try:
+                q.put_nowait(None)
+            except Exception:
+                pass
+        self._sse_queues.clear()
+
         if self._server:
             self._server.close()
             await self._server.wait_closed()
             log.info("Web server stopped")
-
-        # Close all SSE connections
-        for q in self._sse_queues:
-            q.put_nowait(None)
-        self._sse_queues.clear()

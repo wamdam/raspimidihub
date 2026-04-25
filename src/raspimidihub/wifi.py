@@ -127,10 +127,9 @@ class WifiManager:
                  ap_count, {k: f"{v:.2e}" for k, v in scores.items()}, best)
         return best
 
-    def write_hostapd_conf(self, ssid: str, password: str, channel: int = 7):
-        """Write hostapd configuration to tmpfs."""
-        HOSTAPD_CONF.parent.mkdir(parents=True, exist_ok=True)
-        conf = f"""interface={WLAN_IFACE}
+    def _render_hostapd_conf(self, ssid: str, password: str, channel: int) -> str:
+        """Build the hostapd config text without writing it."""
+        return f"""interface={WLAN_IFACE}
 driver=nl80211
 ssid={ssid}
 hw_mode=g
@@ -144,12 +143,10 @@ wpa_passphrase={password}
 wpa_key_mgmt=WPA-PSK
 rsn_pairwise=CCMP
 """
-        HOSTAPD_CONF.write_text(conf)
-        log.info("Wrote hostapd config: SSID=%s", ssid)
 
-    def write_dnsmasq_conf(self):
-        """Write dnsmasq configuration for AP mode (DHCP + DNS captive portal)."""
-        conf = f"""# RaspiMIDIHub AP mode
+    def _render_dnsmasq_conf(self) -> str:
+        """Build the dnsmasq AP config text without writing it."""
+        return f"""# RaspiMIDIHub AP mode
 interface={WLAN_IFACE}
 bind-interfaces
 dhcp-range={DHCP_RANGE}
@@ -160,48 +157,114 @@ address=/#/{AP_IP}
 no-resolv
 no-hosts
 """
+
+    def write_hostapd_conf(self, ssid: str, password: str, channel: int = 7):
+        """Write hostapd configuration to tmpfs."""
+        HOSTAPD_CONF.parent.mkdir(parents=True, exist_ok=True)
+        HOSTAPD_CONF.write_text(self._render_hostapd_conf(ssid, password, channel))
+        log.info("Wrote hostapd config: SSID=%s", ssid)
+
+    def write_dnsmasq_conf(self):
+        """Write dnsmasq configuration for AP mode (DHCP + DNS captive portal)."""
         DNSMASQ_AP_CONF.parent.mkdir(parents=True, exist_ok=True)
-        DNSMASQ_AP_CONF.write_text(conf)
+        DNSMASQ_AP_CONF.write_text(self._render_dnsmasq_conf())
         log.info("Wrote dnsmasq AP config")
 
+    @staticmethod
+    def _channel_from_conf(conf: str) -> int | None:
+        """Extract the channel= value from a hostapd config."""
+        for line in conf.splitlines():
+            if line.startswith("channel="):
+                try:
+                    return int(line.split("=", 1)[1].strip())
+                except ValueError:
+                    return None
+        return None
+
+    @staticmethod
+    def _process_running(pattern: str) -> bool:
+        """Check whether a process matching the pattern is alive."""
+        try:
+            r = subprocess.run(["pgrep", "-f", pattern],
+                               capture_output=True, timeout=2)
+            return r.returncode == 0
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            return False
+
     def start_ap(self, ssid: str = "", password: str = "midihub1"):
-        """Start WiFi access point mode."""
+        """Bring up WiFi AP mode. Idempotent.
+
+        If the candidate config matches the on-disk config and our hostapd
+        + dnsmasq are alive, returns without touching wlan0 — so a service
+        restart doesn't blink the SSID and confuse client devices.
+        Otherwise (re)writes the configs and (re)spawns whichever process
+        actually changed.
+        """
+        import time
+
         if not ssid:
             ssid = f"RaspiMIDIHub-{_get_mac_suffix()}"
-
         self._ssid = ssid
 
-        # Scan 2.4 GHz for the least-busy non-overlapping channel. Must run
-        # while wlan0 is still in managed mode, before we claim it for AP.
-        channel = self.survey_ap_channel()
+        # Re-use channel from the existing config if present. /run is tmpfs,
+        # so a real reboot clears it and the next survey runs naturally.
+        existing_hostapd = HOSTAPD_CONF.read_text() if HOSTAPD_CONF.is_file() else None
+        existing_dnsmasq = DNSMASQ_AP_CONF.read_text() if DNSMASQ_AP_CONF.is_file() else None
 
-        # Tell NetworkManager to leave wlan0 alone
-        _run(["nmcli", "device", "set", WLAN_IFACE, "managed", "no"], check=False)
+        if existing_hostapd:
+            channel = self._channel_from_conf(existing_hostapd) or 11
+            log.info("WiFi AP: re-using channel %d from prior config", channel)
+        else:
+            channel = self.survey_ap_channel()
 
-        # Configure static IP on wlan0
-        _run(["ip", "addr", "flush", "dev", WLAN_IFACE], check=False)
-        _run(["ip", "addr", "add", f"{AP_IP}/24", "dev", WLAN_IFACE], check=False)
-        _run(["ip", "link", "set", WLAN_IFACE, "up"], check=False)
+        candidate_hostapd = self._render_hostapd_conf(ssid, password, channel)
+        candidate_dnsmasq = self._render_dnsmasq_conf()
 
-        # Write configs
-        self.write_hostapd_conf(ssid, password, channel=channel)
-        self.write_dnsmasq_conf()
+        hostapd_ok = (existing_hostapd == candidate_hostapd
+                      and self._process_running("hostapd.*raspimidihub"))
+        dnsmasq_ok = (existing_dnsmasq == candidate_dnsmasq
+                      and self._process_running("dnsmasq.*raspimidihub"))
 
-        # Stop system services (we run our own instances)
-        _run(["systemctl", "stop", "hostapd"], check=False)
-        _run(["systemctl", "stop", "dnsmasq"], check=False)
+        if hostapd_ok and dnsmasq_ok:
+            self._mode = "ap"
+            log.info("WiFi AP already up and matching: SSID=%s, channel=%d — skipping restart",
+                     ssid, channel)
+            return
 
-        # Kill any previous instances we started
-        _run(["pkill", "-f", "hostapd.*raspimidihub"], check=False)
-        _run(["pkill", "-f", "dnsmasq.*raspimidihub"], check=False)
-        import time; time.sleep(0.5)
+        # Only touch wlan0's network layer when hostapd itself needs to be
+        # restarted. Replacing dnsmasq alone shouldn't blink the IP — that
+        # would make avahi withdraw + re-register and confuse clients.
+        if not hostapd_ok:
+            _run(["nmcli", "device", "set", WLAN_IFACE, "managed", "no"], check=False)
+            _run(["ip", "addr", "flush", "dev", WLAN_IFACE], check=False)
+            _run(["ip", "addr", "add", f"{AP_IP}/24", "dev", WLAN_IFACE], check=False)
+            _run(["ip", "link", "set", WLAN_IFACE, "up"], check=False)
 
-        # Start hostapd and dnsmasq directly with our config files
-        _run(["hostapd", "-B", str(HOSTAPD_CONF)], check=False)
-        _run(["dnsmasq", "--conf-file=" + str(DNSMASQ_AP_CONF), "--pid-file=/run/raspimidihub/dnsmasq.pid"], check=False)
+            HOSTAPD_CONF.parent.mkdir(parents=True, exist_ok=True)
+            HOSTAPD_CONF.write_text(candidate_hostapd)
+            log.info("Wrote hostapd config: SSID=%s, channel=%d", ssid, channel)
+
+            _run(["systemctl", "stop", "hostapd"], check=False)
+            _run(["pkill", "-f", "hostapd.*raspimidihub"], check=False)
+            time.sleep(0.5)
+            _run(["hostapd", "-B", str(HOSTAPD_CONF)], check=False)
+
+        if not dnsmasq_ok:
+            DNSMASQ_AP_CONF.parent.mkdir(parents=True, exist_ok=True)
+            DNSMASQ_AP_CONF.write_text(candidate_dnsmasq)
+            log.info("Wrote dnsmasq AP config")
+
+            _run(["systemctl", "stop", "dnsmasq"], check=False)
+            _run(["pkill", "-f", "dnsmasq.*raspimidihub"], check=False)
+            time.sleep(0.3)
+            _run(["dnsmasq", "--conf-file=" + str(DNSMASQ_AP_CONF),
+                  "--pid-file=/run/raspimidihub/dnsmasq.pid"], check=False)
 
         self._mode = "ap"
-        log.info("WiFi AP started: SSID=%s, IP=%s", ssid, AP_IP)
+        what = (["hostapd"] if not hostapd_ok else []) + \
+               (["dnsmasq"] if not dnsmasq_ok else [])
+        log.info("WiFi AP started: SSID=%s, IP=%s, channel=%d (restarted: %s)",
+                 ssid, AP_IP, channel, ",".join(what) or "none")
 
     def stop_ap(self):
         """Stop WiFi access point."""
