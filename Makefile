@@ -31,6 +31,12 @@ $(DEB_FILE): src/raspimidihub/*.py src/raspimidihub/static/* plugins/*/*.py plug
 	@mkdir -p $(BUILD_DIR)/usr/lib/raspimidihub
 	@mkdir -p $(BUILD_DIR)/usr/local/bin
 	cp src/raspimidihub/*.py $(BUILD_DIR)/usr/lib/python3/dist-packages/raspimidihub/
+	@for sub in plugin_host runtime; do \
+		if [ -d src/raspimidihub/$$sub ]; then \
+			mkdir -p $(BUILD_DIR)/usr/lib/python3/dist-packages/raspimidihub/$$sub; \
+			cp src/raspimidihub/$$sub/*.py $(BUILD_DIR)/usr/lib/python3/dist-packages/raspimidihub/$$sub/; \
+		fi; \
+	done
 	cp -r src/raspimidihub/static/* $(BUILD_DIR)/usr/lib/python3/dist-packages/raspimidihub/static/
 	@mkdir -p $(BUILD_DIR)/usr/lib/python3/dist-packages/raspimidihub/plugins
 	@for d in plugins/*/; do \
