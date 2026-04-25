@@ -176,6 +176,11 @@ class MidiEngine:
         if not self._seq:
             return
 
+        # Release any held notes on direct edges before tearing down
+        # subscriptions, so destinations don't end up with stuck notes.
+        for conn in list(self._active_notes):
+            self.release_edge_notes(conn)
+
         # Clear filtered connections first
         if self._filter_engine:
             self._filter_engine.clear_all()
@@ -287,11 +292,20 @@ class MidiEngine:
         # touched it. We don't need to issue any more ALSA syscalls —
         # we just prune our internal state to match.
 
+        # Release notes held on edges where the source was this client
+        # (destination is still alive — send NoteOff so it doesn't stick).
+        # For edges where the destination is gone, just drop the entry —
+        # the kernel already removed the subscription, the dst is dead.
+        for conn in list(self._active_notes):
+            if conn.dst_client == gone_client_id:
+                self._active_notes.pop(conn, None)
+            elif conn.src_client == gone_client_id:
+                self.release_edge_notes(conn)
+
         # Drop direct connections that referenced the gone client
         self._connections = {c for c in self._connections
                              if c.src_client != gone_client_id
                              and c.dst_client != gone_client_id}
-        self._purge_active_notes_for_client(gone_client_id)
         self._purge_cc_cache_for_client(gone_client_id)
 
         # Drop filtered-connection bookkeeping for the gone client
@@ -762,6 +776,52 @@ class MidiEngine:
         for conn in list(self._active_notes):
             if conn.src_client == client_id or conn.dst_client == client_id:
                 self._active_notes.pop(conn, None)
+
+    def release_edge_notes(self, conn: Connection) -> None:
+        """Send NoteOff for every note currently held on this edge.
+
+        Called before an edge is removed so the destination doesn't end
+        up with stuck notes. Sends events directly from the monitor port
+        — works even after the kernel subscription is gone (e.g. when a
+        plugin source client has just closed).
+
+        Multi-source caveat: if another edge to the same destination is
+        also holding the same (channel, note), this NoteOff will silence
+        it too. Accepted trade-off: a stuck note is worse than a
+        prematurely-released one, and the multi-source-same-note case
+        is rare.
+        """
+        if not self._seq:
+            return
+        held = self._active_notes.pop(conn, None)
+        if not held:
+            return
+
+        import ctypes
+
+        from .alsa_seq import (
+            SND_SEQ_QUEUE_DIRECT,
+            SndSeqEvent,
+            snd_seq_event_output_direct,
+        )
+
+        src_port = self._monitor_port if self._monitor_port >= 0 else 0
+        for (channel, note), _count in held.items():
+            ev = SndSeqEvent()
+            ev.type = int(MidiEventType.NOTEOFF)
+            ev.data.note.channel = channel
+            ev.data.note.note = note
+            ev.data.note.velocity = 0
+            ev.source.client = self._seq.client_id
+            ev.source.port = src_port
+            ev.dest.client = conn.dst_client
+            ev.dest.port = conn.dst_port
+            ev.queue = SND_SEQ_QUEUE_DIRECT
+            ev.flags = 0
+            try:
+                snd_seq_event_output_direct(self._seq.handle, ctypes.pointer(ev))
+            except OSError:
+                pass  # destination might already be gone
 
     # --- CC observatory ---
 

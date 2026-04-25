@@ -606,6 +606,10 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         if fe and fe.has_filter(conn_id):
             fe.remove_filter(conn_id)
 
+        # Release any held notes on this edge before tearing down the
+        # subscription so the destination doesn't end up with stuck notes.
+        engine.release_edge_notes(conn)
+
         try:
             engine._seq.unsubscribe(conn.src_client, conn.src_port,
                                     conn.dst_client, conn.dst_port)

@@ -405,6 +405,12 @@ endpoints.
 
 ## 4. Matrix Undo / Redo
 
+> **Deferred to the very end of the roadmap.** Section number kept
+> stable so existing cross-references don't break. Implement only
+> after every other section (sequencers included) has shipped — the
+> Command-stack approach below will need to wrap whatever final shape
+> the API ends up in, so we want the API to be settled first.
+
 ### Goal
 
 Ctrl+Z (and a visible Undo/Redo pair on the matrix toolbar) that
@@ -1333,8 +1339,6 @@ Quality-of-life, not blocking anything live.
 4. **Mapping clipboard**. Append-as-is when free; bump-on-conflict
    with a forward search through the destination field's range
    (semantics from §3).
-5. **Undo / Redo**. Client-side `Command` stack, labelled toasts,
-   Ctrl+Z + toolbar buttons.
 
 ### Phase 7 — Modulator (≈ 0.5–1 sprint)
 
@@ -1362,6 +1366,19 @@ users will use Arp + Hold for sequencing while these mature.
 5. **Rhythm Sequencer genre expansion**. Round out to 21 genres.
 6. **Tracker polish**. Copy/paste bars, transpose, paginator, live
    pass-through toggle.
+
+### Phase 9 — Undo / Redo (≈ 0.5–1 sprint)
+
+Last on purpose: the Command-stack abstraction (§4) wraps the REST
+API surface, so we want every other feature's endpoints to be
+finalised before we commit to wrapping them.
+
+1. Client-side `Command` class + dual-stack history (cap 100).
+2. Wrap every existing mutating call site (matrix toggle, mapping
+   add/remove/edit, plugin add/remove, rename, paste).
+3. Toolbar Undo/Redo buttons + Ctrl+Z / Ctrl+Shift+Z bindings.
+4. Labelled toasts ("Undid: …").
+5. SSE reconciliation: drop redo stack on any external change.
 
 ### What I'd start with right now
 
