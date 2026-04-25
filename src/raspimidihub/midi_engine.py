@@ -272,17 +272,17 @@ class MidiEngine:
             return
         self._cancel_pending_rescan()
 
-        # Drop direct connections touching the removed client
-        for conn in list(self._connections):
-            if conn.src_client == gone_client_id or conn.dst_client == gone_client_id:
-                try:
-                    self._seq.unsubscribe(conn.src_client, conn.src_port,
-                                          conn.dst_client, conn.dst_port)
-                except OSError:
-                    pass
-                self._connections.discard(conn)
+        # The plugin's alsa_client.close() already destroyed the seq
+        # client and the kernel removed every subscription / port that
+        # touched it. We don't need to issue any more ALSA syscalls —
+        # we just prune our internal state to match.
 
-        # Drop filtered connections touching the removed client
+        # Drop direct connections that referenced the gone client
+        self._connections = {c for c in self._connections
+                             if c.src_client != gone_client_id
+                             and c.dst_client != gone_client_id}
+
+        # Drop filtered-connection bookkeeping for the gone client
         if self._filter_engine:
             for conn_id in list(self._filter_engine.filtered_connections.keys()):
                 try:
@@ -290,13 +290,18 @@ class MidiEngine:
                 except (ValueError, IndexError):
                     continue
                 if sc == gone_client_id or dc == gone_client_id:
-                    self._filter_engine.remove_filter(conn_id)
+                    self._filter_engine.filtered_connections.pop(conn_id, None)
 
-        # Drop monitor subscription for the gone client
+        # Drop monitor subscription bookkeeping for the gone client
         self._monitored_clients.discard(gone_client_id)
 
-        self.scan_devices()
-        self._update_monitor_subscriptions()
+        # Surgically prune the device list — no full ALSA re-enumeration
+        self._devices = [d for d in self._devices if d.client_id != gone_client_id]
+        info = self._device_registry.get_by_client(gone_client_id)
+        if info:
+            self._device_registry._by_client.pop(gone_client_id, None)
+            self._device_registry._by_stable_id.pop(info.stable_id, None)
+
         self._notify_change()
 
     @staticmethod

@@ -703,6 +703,15 @@ class PluginHost:
 
         instance.running = False
 
+        # Wake the plugin thread's select() right now so thread.join
+        # returns in milliseconds instead of waiting for the next 100ms
+        # poll cycle.
+        if getattr(instance, "_tick_pipe", None):
+            try:
+                os.write(instance._tick_pipe[1], b"\x01")
+            except OSError:
+                pass
+
         # Unsubscribe from clock
         self.clock_bus.unsubscribe(instance)
 
