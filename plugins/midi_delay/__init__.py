@@ -12,6 +12,12 @@ from raspimidihub.plugin_api import (
     Wheel,
 )
 
+_DELAY_RATES = [
+    "4/1", "4/1T", "2/1", "2/1T", "1/1", "1/1T",
+    "1/2", "1/2T", "1/4", "1/4T", "1/8", "1/8T",
+    "1/16", "1/16T",
+]
+
 
 class MidiDelay(PluginBase):
     """Delays MIDI notes with configurable time, feedback, and velocity decay."""
@@ -32,9 +38,9 @@ echoes that fade out on a lead synth line."""
     params = [
         Group("Timing", [
             Toggle("sync", "Sync to Clock", default=False),
-            Wheel("delay_ms", "Delay (ms)", min=10, max=2000, default=250,
+            Fader("delay_ms", "Delay (ms)", min=10, max=2000, default=250,
                   visible_when=("sync", False)),
-            Radio("rate", "Rate", ["1/4", "1/8", "1/16", "1/8T"], default="1/8",
+            Radio("rate", "Rate", _DELAY_RATES, default="1/8",
                   visible_when=("sync", True)),
         ]),
         Group("Controls", [
@@ -48,7 +54,7 @@ echoes that fade out on a lead synth line."""
     inputs = ["Notes", "CC#74 (delay time)", "CC#75 (repeats)", "Clock"]
     outputs = ["Notes (original + delayed)"]
 
-    clock_divisions = ["1/4", "1/8", "1/16", "1/4T", "1/8T", "1/16T"]
+    clock_divisions = _DELAY_RATES
 
     def on_start(self):
         # Sync mode: circular buffer of 32 tick slots
