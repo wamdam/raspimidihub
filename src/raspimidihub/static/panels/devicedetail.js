@@ -191,26 +191,40 @@ export function DeviceDetailPanel({ device, onClose, showToast, refresh, pluginD
 
     const displayValues = (pluginDisplays && device.plugin_instance_id) ? pluginDisplays[device.plugin_instance_id] || {} : {};
 
-    // Param updates are rAF-coalesced and the SSE echo is suppressed for
-    // params the user is actively dragging — otherwise the server-side
-    // broadcast races the next move and snaps the thumb backwards.
+    // Param updates are rAF-coalesced AND serialized over the wire (only
+    // one PATCH in flight at a time). Without serialization the browser
+    // can multiplex onto multiple HTTP/1.1 connections and a fast drag's
+    // PATCHes land at the server out of order — the user releases the
+    // knob at max but the server sees an earlier intermediate value as
+    // its final state, and that's what gets broadcast.
+    //
+    // The SSE echo is also suppressed for params the user is actively
+    // dragging on this client, so the server-side broadcast doesn't
+    // snap the thumb backwards mid-drag.
     const pendingPatchesRef = useRef(new Map());     // name -> latest value queued for PATCH
     const inFlightRef = useRef(new Map());           // name -> timeout id; presence = "user is dragging this"
     const rafIdRef = useRef(null);
+    const patchInFlightRef = useRef(false);          // a PATCH is currently on the wire
     const IN_FLIGHT_RELEASE_MS = 250;
 
     const flushPending = useCallback(() => {
         rafIdRef.current = null;
+        if (patchInFlightRef.current) return;        // queued; will fire after current PATCH finishes
         const map = pendingPatchesRef.current;
         if (map.size === 0) return;
+        if (!device.plugin_instance_id) return;
+
         const params = Object.fromEntries(map);
         map.clear();
-        if (device.plugin_instance_id) {
-            api(`/plugins/instances/${device.plugin_instance_id}`, {
-                method: 'PATCH',
-                body: JSON.stringify({ params }),
-            }).catch(() => {});
-        }
+        patchInFlightRef.current = true;
+        api(`/plugins/instances/${device.plugin_instance_id}`, {
+            method: 'PATCH',
+            body: JSON.stringify({ params }),
+        }).catch(() => {}).finally(() => {
+            patchInFlightRef.current = false;
+            // Anything queued during the round-trip — flush now (latest value wins).
+            if (pendingPatchesRef.current.size > 0) flushPending();
+        });
     }, [device.plugin_instance_id]);
 
     useEffect(() => () => {

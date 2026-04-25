@@ -104,16 +104,29 @@ class WebServer:
         return decorator
 
     async def send_sse(self, event: str, data: dict):
-        """Broadcast an SSE event to all connected clients."""
+        """Broadcast an SSE event to all connected clients.
+
+        If a client's queue is full (slow / backgrounded tab), drop its
+        oldest queued event and try again. This keeps the client
+        subscribed instead of silently disconnecting it from broadcast
+        for the lifetime of the connection — which used to leave one
+        phone updating while the others sat stale until refresh.
+        """
         msg = f"event: {event}\ndata: {json.dumps(data)}\n\n"
-        dead = []
         for q in self._sse_queues:
             try:
                 q.put_nowait(msg)
             except asyncio.QueueFull:
-                dead.append(q)
-        for q in dead:
-            self._sse_queues.remove(q)
+                try:
+                    q.get_nowait()  # drop oldest so the freshest event wins
+                except asyncio.QueueEmpty:
+                    pass
+                try:
+                    q.put_nowait(msg)
+                except asyncio.QueueFull:
+                    # Still full somehow (race) — skip this event for this client
+                    # rather than dropping the client.
+                    pass
 
     def _check_rate_limit(self, client: str) -> bool:
         """Returns True if request should be rate-limited."""
