@@ -10,11 +10,44 @@ from dataclasses import dataclass
 
 from .alsa_seq import AlsaSeq, MidiDevice, MidiEventType, SeqEventType
 from .device_id import DeviceRegistry
-from .midi_filter import FilterEngine
+from .midi_filter import FilterEngine, MidiFilter, MidiMapping
 
 log = logging.getLogger(__name__)
 
 DEBOUNCE_SECONDS = 0.5
+
+
+def _edge_needs_userspace(filter_dict: dict | None,
+                          mapping_dicts: list[dict]) -> bool:
+    """True if a (filter, mappings) pair must run via the FilterEngine."""
+    if mapping_dicts:
+        return True
+    if filter_dict and not MidiFilter.from_dict(filter_dict).is_passthrough:
+        return True
+    return False
+
+
+def _normalised_filter(filter_dict: dict | None) -> dict | None:
+    """Round-trip a filter dict through MidiFilter so the comparison is
+    insensitive to msg_types order, missing channel_mask defaults, etc."""
+    if not filter_dict:
+        return None
+    return MidiFilter.from_dict(filter_dict).to_dict()
+
+
+def _filter_equal(a: dict | None, b: dict | None) -> bool:
+    return _normalised_filter(a) == _normalised_filter(b)
+
+
+def _mappings_equal(a: list[dict], b: list[dict]) -> bool:
+    """Compare two mapping lists by their canonicalised dict form."""
+    if len(a) != len(b):
+        return False
+    norm = lambda lst: [MidiMapping.from_dict(m).to_dict() for m in lst]
+    try:
+        return norm(a) == norm(b)
+    except (KeyError, ValueError):
+        return a == b
 
 
 @dataclass
@@ -756,6 +789,199 @@ class MidiEngine:
 
         self._active_notes.clear()
         log.info("Panic (%s): %d destinations", "hard" if hard else "soft", len(dests))
+
+    # --- Edge diff (Phase 2: smooth preset switching) ---
+
+    def apply_edge_diff(self, target_edges: list[dict]) -> dict:
+        """Reconcile current routing against `target_edges` with minimal
+        disruption: untouched edges keep flowing, only changed/removed
+        edges get reset.
+
+        target_edges: each dict has the same shape as a saved-config
+        connection — `src_stable_id`, `src_port`, `dst_stable_id`,
+        `dst_port`, optional `filter` dict, optional `mappings` list.
+
+        Returns a stats dict so callers can log / surface the outcome.
+        """
+        stats = {"removed": 0, "added": 0, "changed": 0, "untouched": 0, "skipped": 0}
+        if not self._seq:
+            return stats
+
+        registry = self._device_registry
+        fe = self._filter_engine
+
+        # --- Snapshot current edges keyed by stable IDs ---
+        current: dict[tuple, dict] = {}
+        for conn in list(self._connections):
+            src_info = registry.get_by_client(conn.src_client) if registry else None
+            dst_info = registry.get_by_client(conn.dst_client) if registry else None
+            if not src_info or not dst_info:
+                continue  # can't form a stable key — leave untouched
+            key = (src_info.stable_id, conn.src_port,
+                   dst_info.stable_id, conn.dst_port)
+            conn_id = f"{conn.src_client}:{conn.src_port}-{conn.dst_client}:{conn.dst_port}"
+            f_obj = fe.get_filter(conn_id) if fe else None
+            m_objs = fe.get_mappings(conn_id) if fe else []
+            current[key] = {
+                "conn": conn,
+                "conn_id": conn_id,
+                "filter_dict": f_obj.to_dict() if f_obj else None,
+                "mapping_dicts": [m.to_dict() for m in m_objs],
+                "is_userspace": fe.has_filter(conn_id) if fe else False,
+            }
+
+        # --- Build target map (skip edges whose endpoints don't resolve) ---
+        target: dict[tuple, dict] = {}
+        for edge in target_edges:
+            src_sid = edge.get("src_stable_id")
+            dst_sid = edge.get("dst_stable_id")
+            if not (src_sid and dst_sid):
+                stats["skipped"] += 1
+                continue
+            src_client = registry.client_for_stable_id(src_sid) if registry else None
+            dst_client = registry.client_for_stable_id(dst_sid) if registry else None
+            if src_client is None or dst_client is None:
+                stats["skipped"] += 1
+                continue
+            key = (src_sid, edge["src_port"], dst_sid, edge["dst_port"])
+            target[key] = {
+                "src_client": src_client,
+                "src_port": edge["src_port"],
+                "dst_client": dst_client,
+                "dst_port": edge["dst_port"],
+                "filter_dict": edge.get("filter"),
+                "mapping_dicts": edge.get("mappings", []),
+            }
+
+        current_keys = set(current.keys())
+        target_keys = set(target.keys())
+
+        # --- Removed edges: release notes + send CC 123 + tear down ---
+        for key in current_keys - target_keys:
+            try:
+                self._remove_edge_smoothly(current[key])
+                stats["removed"] += 1
+            except Exception:
+                log.exception("apply_edge_diff: failed to remove %s", current[key]["conn_id"])
+
+        # --- Common edges: changed (in-place if possible) or untouched ---
+        for key in current_keys & target_keys:
+            cur = current[key]
+            tgt = target[key]
+            new_userspace = _edge_needs_userspace(tgt["filter_dict"], tgt["mapping_dicts"])
+            same_mode = cur["is_userspace"] == new_userspace
+            same_filter = _filter_equal(cur["filter_dict"], tgt["filter_dict"])
+            same_mappings = _mappings_equal(cur["mapping_dicts"], tgt["mapping_dicts"])
+            if same_mode and same_filter and same_mappings:
+                stats["untouched"] += 1
+                continue
+            try:
+                if same_mode and cur["is_userspace"]:
+                    # In-place update — no resubscribe, no note disruption.
+                    new_filter = (MidiFilter.from_dict(tgt["filter_dict"])
+                                  if tgt["filter_dict"] else MidiFilter())
+                    fe.update_filter(cur["conn_id"], new_filter)
+                    fe.set_mappings(cur["conn_id"],
+                                    [MidiMapping.from_dict(m) for m in tgt["mapping_dicts"]])
+                else:
+                    # Mode change — need to swap subscription. Release notes
+                    # cleanly so the dst doesn't end up with a stuck note,
+                    # then add the new edge.
+                    self._remove_edge_smoothly(cur)
+                    self._add_edge(tgt["src_client"], tgt["src_port"],
+                                   tgt["dst_client"], tgt["dst_port"],
+                                   tgt["filter_dict"], tgt["mapping_dicts"])
+                stats["changed"] += 1
+            except Exception:
+                log.exception("apply_edge_diff: failed to update %s", cur["conn_id"])
+
+        # --- Added edges ---
+        for key in target_keys - current_keys:
+            tgt = target[key]
+            try:
+                self._add_edge(tgt["src_client"], tgt["src_port"],
+                               tgt["dst_client"], tgt["dst_port"],
+                               tgt["filter_dict"], tgt["mapping_dicts"])
+                stats["added"] += 1
+            except Exception:
+                log.exception("apply_edge_diff: failed to add edge %s", key)
+
+        log.info("apply_edge_diff: %s", stats)
+        return stats
+
+    def _remove_edge_smoothly(self, info: dict) -> None:
+        """Remove an edge without leaving stuck notes on the destination."""
+        conn = info["conn"]
+        used_channels = {ch for (ch, _n) in self._active_notes.get(conn, {})}
+        self.release_edge_notes(conn)
+        if used_channels:
+            self._send_all_notes_off(conn.dst_client, conn.dst_port, used_channels)
+        if info["is_userspace"] and self._filter_engine:
+            self._filter_engine.remove_filter(info["conn_id"])
+        else:
+            try:
+                self._seq.unsubscribe(conn.src_client, conn.src_port,
+                                      conn.dst_client, conn.dst_port)
+            except OSError:
+                pass
+        self._connections.discard(conn)
+
+    def _add_edge(self, src_client: int, src_port: int,
+                  dst_client: int, dst_port: int,
+                  filter_dict: dict | None, mapping_dicts: list[dict]) -> None:
+        """Install a new edge with optional filter + mappings."""
+        needs_userspace = _edge_needs_userspace(filter_dict, mapping_dicts)
+        fe = self._filter_engine
+        conn = Connection(src_client, src_port, dst_client, dst_port)
+        if needs_userspace and fe:
+            midi_filter = (MidiFilter.from_dict(filter_dict)
+                           if filter_dict else MidiFilter())
+            fe.add_filter(src_client, src_port, dst_client, dst_port, midi_filter)
+            conn_id = f"{src_client}:{src_port}-{dst_client}:{dst_port}"
+            for md in mapping_dicts:
+                try:
+                    fe.add_mapping(conn_id, MidiMapping.from_dict(md))
+                except (ValueError, KeyError):
+                    pass
+        else:
+            try:
+                self._seq.subscribe(src_client, src_port, dst_client, dst_port)
+            except OSError:
+                log.warning("apply_edge_diff: subscribe failed for %d:%d->%d:%d",
+                            src_client, src_port, dst_client, dst_port)
+                return
+        self._connections.add(conn)
+
+    def _send_all_notes_off(self, dst_client: int, dst_port: int,
+                            channels: set[int]) -> None:
+        """Emit CC 123 (All Notes Off) on each `channel` at the destination."""
+        if not self._seq:
+            return
+        import ctypes
+
+        from .alsa_seq import (
+            SND_SEQ_QUEUE_DIRECT,
+            SndSeqEvent,
+            snd_seq_event_output_direct,
+        )
+
+        src_port = self._monitor_port if self._monitor_port >= 0 else 0
+        for ch in channels:
+            ev = SndSeqEvent()
+            ev.type = int(MidiEventType.CONTROLLER)
+            ev.data.control.channel = ch
+            ev.data.control.param = 123
+            ev.data.control.value = 0
+            ev.source.client = self._seq.client_id
+            ev.source.port = src_port
+            ev.dest.client = dst_client
+            ev.dest.port = dst_port
+            ev.queue = SND_SEQ_QUEUE_DIRECT
+            ev.flags = 0
+            try:
+                snd_seq_event_output_direct(self._seq.handle, ctypes.pointer(ev))
+            except OSError:
+                pass
 
     def snapshot_rates(self) -> dict[str, int]:
         """Snapshot per-port message rates (msgs/sec) and reset counters."""
