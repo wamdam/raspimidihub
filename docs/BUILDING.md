@@ -91,13 +91,14 @@ Version numbers are defined in two places:
 When releasing a new version:
 
 1. Update both version numbers
-2. Add entry to `docs/CHANGELOG.md`
-3. Add entry to `debian/changelog`
-4. Build: `make clean all`
-5. Test on a Pi
-6. Tag: `git tag -a v1.x.x -m "v1.x.x — description"`
-7. Push: `git push --tags`
-8. Create GitHub release: `gh release create v1.x.x dist/*.deb --title "v1.x.x" --notes "..."`
+2. Rename the `Unreleased` section in `CHANGELOG.txt` to the new
+   version + date. New entries are written there continuously
+   during development, so a release just stamps the date.
+3. Build: `make clean all`
+4. Test on a Pi
+5. Tag: `git tag -a v1.x.x -m "v1.x.x — description"`
+6. Push: `git push --tags`
+7. Create GitHub release: `gh release create v1.x.x dist/*.deb --title "v1.x.x" --notes "..."`
 
 ## Project structure
 

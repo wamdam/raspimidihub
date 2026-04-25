@@ -253,7 +253,7 @@ Tests run without ALSA hardware (`RASPIMIDIHUB_TEST_MODE=1`). No Raspberry Pi re
 - [UI Guide](docs/UI_GUIDE.md) -- Walkthrough of every screen
 - [Plugin Developer Guide](plugins/README.md) -- Creating custom plugins
 - [Building from Source](docs/BUILDING.md) -- How to build the .deb packages
-- [Changelog](CHANGELOG.md) -- Release history
+- [Changelog](CHANGELOG.txt) -- Release history
 - [Functional Specification](docs/FSD.md)
 
 ---

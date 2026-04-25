@@ -1,0 +1,272 @@
+RaspiMIDIHub Changelog
+
+User-visible changes. Short tagged one-liners, no code or commit
+hashes. Tags: Added, Improved, Fix, Changed, Removed.
+
+
+Unreleased
+
+- Added: Clock Divider plugin - emits one MIDI Clock for every N received (2..32); passes notes / CC / etc. through unchanged
+- Added: UI Demo plugin - drop-in showcase of every UI control type, makes no MIDI
+- Added: Panic - second tap upgrades to "All Sound Off" (Elektron-style); first tap leaves delay / reverb tails ringing
+- Added: Matrix clock indicator - pulses in time with the source's quarter notes instead of running a generic loop
+- Improved: Plugin controls - drag and scroll feel smoother; the wheel / fader thumb no longer jitters back to a stale value mid-move
+- Improved: MIDI Delay - Delay (ms) is now a Fader; sync rate covers 4 bars down to 1/16 with triplets
+- Improved: Disconnect - destinations get a clean Note Off when a connection is removed mid-note, so notes don't stick
+- Improved: Load Config - reapplies only the connections that actually changed; unrelated routing keeps flowing without interruption
+- Improved: CC LFO - slow clock-sync rates added (up to 8 bars)
+- Fix: Clock Divider - silent when nothing is wired to it (was ticking from any clock the system happened to see)
+- Fix: Clock Divider - dividing by 4 or higher now actually divides correctly
+- Fix: Plugin panel - turning a wheel no longer slides the panel away
+
+
+2026-04-25 - Version 2.0.9
+
+- Fix: Plugin add / remove - adding or deleting a plugin instance no longer interrupts MIDI on other connections
+- Fix: Plugin remove - no extra ALSA syscalls or global rescan when a plugin is deleted
+
+
+2026-04-25 - Version 2.0.8
+
+- Improved: Service restart - graceful shutdown so restarts no longer blink the WiFi AP
+- Improved: WiFi AP - already-up matching config is left running instead of being reapplied
+- Improved: Save Config - moved off the main loop so saving never causes a clock hiccup
+- Improved: Panic - moved off the main loop so it can't stall MIDI flow
+
+
+2026-04-21 - Version 2.0.7
+
+- Added: Hotplug restore - saved connections re-apply automatically when a device is plugged back in
+- Improved: WiFi AP - auto-picks a free WiFi channel instead of a fixed default
+- Fix: PWA - "Install App" prompt appears reliably
+
+
+2026-04-19 - Version 2.0.6
+
+- Added: Arpeggiator - slow rates added (4 bar / 2 bar / 1 bar / 1/2) plus their triplets
+- Changed: Arpeggiator - rates ordered by length, base before triplet
+- Fix: Mapping - validation allows fan-out (one source mapping to several destinations)
+
+
+2026-04-19 - Version 2.0.5
+
+- Added: Hold plugin - latch notes without a sustain pedal, with MIDI-Learn for the release note
+- Added: Panic Button plugin - All Notes Off + All Sound Off across every channel
+- Added: NoteSelect - MIDI Learn button under the wheel
+- Improved: Channel remap - allows fan-out to multiple destination channels
+- Improved: Hold - "learn while held" no longer drops the held note
+- Improved: All plugins - transport Stop now clears internal state
+- Fix: Boot - saved config is loaded on first start (was resetting to all-to-all)
+- Fix: Plugins - restored before the initial device scan, so their connections actually apply
+
+
+2026-04-15 - Version 2.0.4
+
+- Changed: Clock - removed global clock / transport bridge; clock now only flows through explicit matrix connections
+
+
+2026-04-13 - Version 2.0.3
+
+- Fix: rosetup - install works on fresh Pi OS Trixie 64-bit (was failing on the new os-release contents and read-only /boot/firmware)
+
+
+2026-04-12 - Version 2.0.2
+
+- Fix: Plugin panel - swipe-dismiss no longer triggers when interacting with wheels or faders
+- Fix: Update checker - no longer crashes the service on the Pi
+- Fix: LED - no longer flickers constantly on incoming MIDI clock
+
+
+2026-04-11 - Version 2.0.1
+
+- Improved: Hotplug - filters, mappings, and connection state survive device hotplug without saving first
+- Changed: Plugins - new virtual instrument instances start unconnected; route them manually
+- Fix: Duplicate devices - two identical USB devices now get unique stable IDs so renaming one doesn't affect the other
+
+
+2026-04-11 - Version 2.0.0
+
+Major release introducing the virtual instrument / plugin system.
+
+- Added: Plugin system - 12 built-in plugins routable as MIDI devices in the matrix
+- Added: Arpeggiator plugin - pattern player with step sequencer, accents, gate control, transport sync
+- Added: CC LFO plugin - sine / triangle / square / saw / sample-and-hold with live oscilloscope
+- Added: CC Smoother plugin - jitter removal with configurable smoothing factor and dual scopes
+- Added: Chord Generator plugin - input note triggers full chords (major / minor / 7th / custom intervals)
+- Added: Master Clock plugin - internal BPM clock with start / stop / pause and a beat meter
+- Added: MIDI Delay plugin - note delay with feedback repeats and velocity decay
+- Added: Note Splitter plugin - keyboard split at a configurable note into two channels with per-zone transpose
+- Added: Note Transpose plugin - semitone shift up or down
+- Added: Panic Button plugin - All Notes Off + All Sound Off on every channel
+- Added: Scale Remapper plugin - quantize notes to musical scales with a labeled root-note wheel
+- Added: Velocity Curve plugin - drawable 128-point response curve
+- Added: Velocity Equalizer plugin - normalize velocity to a fixed value or compressed range
+- Added: Plugin config panel - declarative UI with Wheel, Fader, Radio, Toggle, StepEditor, CurveEditor, Button, NoteSelect, ChannelSelect, Group, Display
+- Added: Plugin CC automation - hardware CCs control plugin params, UI animates in real time
+- Added: Plugin clock sync - 24 PPQ tick distribution with musical divisions and Start / Stop / Continue transport
+- Added: Plugin display outputs - oscilloscope and meter inline in plugin panels
+- Added: Plugin help - "?" button surfaces per-plugin help text
+- Added: Routing matrix - plugin icons, rate meters, "Add Plugin" button
+- Added: Mapping editor - Wheel / Fader / Radio / Toggle controls replacing dropdowns, with MIDI Learn
+- Added: Presets - now include plugin instances and parameter values
+- Added: Settings - system info, CPU and memory load, PWA install button, reload button
+- Added: Haptic feedback - tick / thud sounds and vibration on the controls
+- Improved: SSE - idle-connection timeout prevents stuck connections
+- Improved: Test sender - direct addressing (no broadcast)
+- Fix: Clock bus - auto-start, monitor-port-only counting, queue flush on Start
+- Fix: MIDI Delay - circular buffer no longer explodes thread count
+- Fix: Hanging notes - stable refs in piano touch handlers
+- Fix: Filter engine - per-connection write ports prevent event leaking
+- Fix: ALSA - correct event-type constants for Start (30) and Stop (32)
+
+
+2026-04-09 - Version 1.3.6
+
+- Fix: Mapping - duplicate detection for CC fan-out
+- Fix: SSE drain timeout
+
+
+2026-04-08 - Version 1.3.5
+
+- Fix: Minor stability improvements
+
+
+2026-04-07 - Version 1.3.3
+
+- Fix: Static IP - gateway now applied (was dropped from NetworkManager config); brings the connection down / up to force it
+
+
+2026-04-07 - Version 1.3.2
+
+- Added: Offline connections - saved connections for offline devices show as grayed-out checkboxes you can still toggle
+- Added: Clock indicator - pulsing play icon on FROM devices sending MIDI clock; turns orange when multiple sources send clock at once
+- Added: MIDI bar - entries auto-expire after 2 seconds of inactivity
+- Added: Toast - tapping a renamed device shows the custom name plus the original ALSA name in gray
+- Changed: MIDI bar - clock events filtered out (shown only as the matrix indicator)
+- Changed: Device panel - MIDI monitor uses direct DOM updates so dropdowns no longer flicker
+- Changed: Rename save button - small inline style, hidden after saving
+- Fix: Matrix labels - custom port names no longer truncated
+
+
+2026-04-06 - Version 1.3.1
+
+- Fix: Network settings - nmcli reload / activate timeout no longer fails the operation
+- Fix: Static IP - DNS servers (8.8.8.8 / 8.8.4.4) added automatically
+
+
+2026-04-06 - Version 1.3.0
+
+- Added: Persistent disconnections - deliberately disabled connections are saved and survive hotplug / reboot
+- Added: Config restore - toggling a connection back on restores its previous filter and mappings automatically
+- Added: Default routing setting - choose "all-to-all" or "none (manual)" for new devices in Settings > MIDI Routing
+- Added: Offline devices - unplugged devices with saved config show grayed out in the matrix
+- Fix: Filter engine - cleanup when disconnecting a filtered connection
+
+
+2026-04-06 - Version 1.2.1
+
+- Added: "sudo reset-wifi" command to recover AP mode when the Pi is unreachable
+- Added: One-line installer - "curl -sL .../install.sh | bash"
+
+
+2026-04-06 - Version 1.2.0
+
+- Added: In-app software updates - check, view changelog, one-click install with live progress
+- Added: Version number in the header bar
+- Improved: WiFi settings - single card with clear AP / client mode indicator
+- Improved: WiFi client mode - writes .nmconnection file directly so it works on read-only fs
+- Improved: Devices sorted alphabetically in matrix and device list
+- Fix: Channel filtering - direct ALSA subscription correctly removed when switching to userspace filter
+- Fix: Captive portal - returns success responses so mobile OS stays connected
+- Fix: MIDI activity bar - no longer shows ALSA system events
+
+
+2026-04-06 - Version 1.1.7
+
+- Improved: Update mechanism - external script survives the service restart
+- Improved: UI polls status file and detects the new version after restart
+
+
+2026-04-06 - Version 1.1.6
+
+- Fix: Update button - text no longer duplicated; progress shown below button only
+
+
+2026-04-06 - Version 1.1.5
+
+- Fix: Update button - now shows progress (was broken because a prop wasn't passed)
+- Fix: Update status text - shown below button in a visible color during update
+
+
+2026-04-06 - Version 1.1.4
+
+- Fix: Update progress - SSE events now sent before the dpkg install kills the process
+
+
+2026-04-06 - Version 1.1.3
+
+- Improved: Update button - live progress shown (Downloading / Installing / Restarting)
+- Improved: Action buttons - disabled during operations with dimmed styling
+- Improved: Confirm dialogs - immediate feedback after confirming an update
+
+
+2026-04-06 - Version 1.1.1
+
+- Added: Software update UI - check for new releases, view changelog, one-click install
+- Added: WiFi settings redesign - single card with clear mode indicator and contextual actions
+- Added: Update check - offline-friendly ("no internet" message instead of raw error)
+- Fix: Channel filtering - direct ALSA subscription was not removed when switching to userspace filter on startup
+- Fix: WiFi client mode - writes .nmconnection file directly (nmcli fails on read-only fs)
+- Fix: MIDI activity bar - no longer shows ALSA system events (e.g. "0 type 66")
+
+
+2026-04-06 - Version 1.1.0
+
+- Added: Network settings page - configure eth0 (DHCP or static IP)
+- Added: MIDI activity bar - split left / right showing device names
+- Added: Devices sorted alphabetically in matrix and device list
+- Fix: Captive portal - mobile devices no longer disconnect from AP WiFi (probe endpoints now return success)
+- Removed: Unused captive portal redirect / catch-all code from web server
+
+
+2026-04-05 - Version 1.0.0
+
+First stable release.
+
+- Added: Automatic all-to-all MIDI routing between USB devices via ALSA sequencer
+- Added: Hotplug support with 500 ms debounce
+- Added: Multi-port device support
+- Added: Loop prevention (no self-connections)
+- Added: Per-connection channel filter (16-channel bitmask)
+- Added: Per-connection message-type filter (notes, CC, PC, pitch bend, aftertouch, SysEx, clock / realtime)
+- Added: Mapping - Note to CC (momentary on / off)
+- Added: Mapping - Note to CC toggle (alternates between two values)
+- Added: Mapping - CC to CC with input / output range scaling and inversion
+- Added: Mapping - Channel remap
+- Added: Mapping pass-through - forward original event alongside the mapped output
+- Added: MIDI Learn - auto-detect source note / CC from the device
+- Added: Mapping duplicate and conflict detection
+- Added: Web UI - mobile-first SPA with connection matrix, tap to connect, long-press for filters / mappings
+- Added: Slide-up panels with swipe-down dismiss, X button, ESC key
+- Added: Device detail panel - rename, MIDI monitor, test sender
+- Added: Piano keyboard for sending test notes
+- Added: CC slider for sending test CC values
+- Added: Persistent MIDI activity bar (toggleable in Settings)
+- Added: Real-time sync across multiple browsers via SSE
+- Added: Connection-lost indicator in the header
+- Added: Presets - save / load named routing configurations
+- Added: Preset export / import as JSON
+- Added: Built-in WiFi access point (RaspiMIDIHub-XXXX, WPA2)
+- Added: Captive portal for iOS / Android / Windows / macOS
+- Added: WiFi client mode with network scanner
+- Added: Auto-fallback to AP mode if client connection lost (~90 seconds)
+- Added: mDNS - reachable at http://raspimidihub.local
+- Added: Config persistence on the boot partition (FAT32)
+- Added: Stable device identification via USB topology path + VID:PID
+- Added: Read-only root filesystem via the rosetup package
+- Added: Power-safe operation - pull the power at any time
+- Added: Systemd service with watchdog
+- Added: LED status indication
+- Added: Automatic hostname (raspimidihub)
+- Added: Reboot from the web UI
+- Added: .deb packaging - raspimidihub + raspimidihub-rosetup
