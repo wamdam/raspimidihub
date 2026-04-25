@@ -8,7 +8,7 @@ import asyncio
 import logging
 from dataclasses import dataclass, field
 
-from .alsa_seq import AlsaSeq, MidiDevice, SeqEventType
+from .alsa_seq import AlsaSeq, MidiDevice, MidiEventType, SeqEventType
 from .device_id import DeviceRegistry
 from .midi_filter import FilterEngine
 
@@ -53,6 +53,10 @@ class MidiEngine:
         # Per-port message counters for rate metering
         self._port_msg_counts: dict[str, int] = {}  # "client:port" -> count
         self._port_rates: dict[str, int] = {}  # "client:port" -> msgs/sec (last snapshot)
+        # Per-edge note refcount: Connection -> {(channel, note): count}
+        # An edge is considered "holding" a note while count > 0. The same
+        # (ch, note) can stack across overlapping note-ons on the same edge.
+        self._active_notes: dict[Connection, dict[tuple[int, int], int]] = {}
 
     @property
     def devices(self) -> list[MidiDevice]:
@@ -179,6 +183,7 @@ class MidiEngine:
                 pass  # device may already be gone
 
         self._connections.clear()
+        self._active_notes.clear()
 
     def _update_monitor_subscriptions(self) -> None:
         """Subscribe monitor port to all device output ports for MIDI activity UI."""
@@ -281,6 +286,7 @@ class MidiEngine:
         self._connections = {c for c in self._connections
                              if c.src_client != gone_client_id
                              and c.dst_client != gone_client_id}
+        self._purge_active_notes_for_client(gone_client_id)
 
         # Drop filtered-connection bookkeeping for the gone client
         if self._filter_engine:
@@ -621,6 +627,8 @@ class MidiEngine:
                 if ev.dest.port == self._monitor_port:
                     key = f"{ev.source.client}:{ev.source.port}"
                     self._port_msg_counts[key] = self._port_msg_counts.get(key, 0) + 1
+                    if ev.type in (int(MidiEventType.NOTEON), int(MidiEventType.NOTEOFF)):
+                        self._track_note_event(ev)
 
                 # Notify MIDI event listeners (for monitoring)
                 if self._on_midi_event_callbacks:
@@ -693,6 +701,7 @@ class MidiEngine:
             except Exception:
                 log.exception("panic_all failed")
 
+        self._active_notes.clear()
         log.info("Panic: sent All Notes Off to %d destinations", len(dests))
 
     def snapshot_rates(self) -> dict[str, int]:
@@ -701,6 +710,72 @@ class MidiEngine:
         self._port_msg_counts.clear()
         self._port_rates = rates
         return rates
+
+    # --- Per-edge note refcount tracking ---
+
+    def _track_note_event(self, ev) -> None:
+        """Update _active_notes for note-on/off events seen on the monitor port.
+
+        For each edge whose source matches `ev.source`, increment on note-on
+        (vel > 0) and decrement on note-off (or note-on with vel == 0).
+        Filter-dropped events are not visible at this layer, so the counts
+        are best-effort intent rather than ground truth.
+        """
+        ch = ev.data.note.channel
+        note = ev.data.note.note
+        is_on = ev.type == int(MidiEventType.NOTEON) and ev.data.note.velocity > 0
+        is_off = ev.type == int(MidiEventType.NOTEOFF) or (
+            ev.type == int(MidiEventType.NOTEON) and ev.data.note.velocity == 0
+        )
+        if not (is_on or is_off):
+            return
+
+        src_client = ev.source.client
+        src_port = ev.source.port
+        key = (ch, note)
+        for conn in self._connections:
+            if conn.src_client != src_client or conn.src_port != src_port:
+                continue
+            held = self._active_notes.setdefault(conn, {})
+            if is_on:
+                held[key] = held.get(key, 0) + 1
+            else:
+                count = held.get(key, 0)
+                if count <= 1:
+                    held.pop(key, None)
+                    if not held:
+                        self._active_notes.pop(conn, None)
+                else:
+                    held[key] = count - 1
+
+    def _purge_active_notes_for_client(self, client_id: int) -> None:
+        """Drop all per-edge note state for edges touching `client_id`."""
+        for conn in list(self._active_notes):
+            if conn.src_client == client_id or conn.dst_client == client_id:
+                self._active_notes.pop(conn, None)
+
+    def active_notes_snapshot(self) -> list[dict]:
+        """Return a serializable snapshot of currently held notes per edge.
+
+        Edges whose connection has been removed are dropped so callers
+        don't see stale entries from notes held when an edge was deleted
+        mid-flight.
+        """
+        out = []
+        for conn, held in self._active_notes.items():
+            if not held or conn not in self._connections:
+                continue
+            out.append({
+                "src_client": conn.src_client,
+                "src_port": conn.src_port,
+                "dst_client": conn.dst_client,
+                "dst_port": conn.dst_port,
+                "notes": [
+                    {"channel": ch, "note": n, "count": c}
+                    for (ch, n), c in held.items()
+                ],
+            })
+        return out
 
     def _schedule_rescan(self) -> None:
         """Debounce rescans to allow multi-port devices to finish enumeration."""
