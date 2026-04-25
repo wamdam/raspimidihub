@@ -1416,6 +1416,13 @@ before implementation.
   during the swap is now mostly handled by the Engine track's
   edge-diff work; the remaining question is whether a dedicated
   panic-before-load toggle is still needed.
+- **MIDI Delay polish** — two small tweaks to the existing
+  `plugins/midi_delay` plugin: (a) swap the "Delay (ms)" param from
+  `Wheel` to `Fader` for finer thumb-driven adjustment; (b) expand
+  `clock_divisions` to match the Arpeggiator's range minus 1/32 —
+  i.e. `4/1, 4/1T, 2/1, 2/1T, 1/1, 1/1T, 1/2, 1/2T, 1/4, 1/4T, 1/8,
+  1/8T, 1/16, 1/16T`. The `rate` Radio in params would need to be
+  expanded to match.
 - **SysEx-Sender** plugin — virtual instrument in `plugins/` that
   ships a `.syx` file (uploaded via the config panel; hex-string
   paste possibly also accepted) to its connected destination, with
