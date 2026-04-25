@@ -160,6 +160,17 @@ class Config:
             log.exception("Failed to save config")
             return False
 
+    async def asave(self) -> bool:
+        """Async wrapper — runs the blocking remount/sync on a worker thread
+        so the asyncio event loop keeps pumping MIDI/SSE during the write."""
+        import asyncio
+        return await asyncio.to_thread(self.save)
+
+    async def aload(self) -> bool:
+        """Async wrapper around load() — symmetric with asave()."""
+        import asyncio
+        return await asyncio.to_thread(self.load)
+
     def init_runtime_copy(self):
         """Copy persistent config to runtime tmpfs (called at boot via ExecStartPre)."""
         try:

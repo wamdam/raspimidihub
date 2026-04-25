@@ -197,7 +197,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
             if val not in ("all", "none"):
                 return Response.error("default_routing must be 'all' or 'none'")
             config.data["default_routing"] = val
-            config.save()
+            await config.asave()
         return Response.json({"status": "updated"})
 
     # ================================================================
@@ -308,7 +308,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         names = config.data.get("device_names", {})
         names.pop(stable_id, None)
 
-        config.save()
+        await config.asave()
         await server.send_sse("connection-changed", {"action": "device-removed"})
         return Response.json({"status": "removed"})
 
@@ -340,8 +340,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
             registry.set_custom_name(info.stable_id, name)
             # Persist custom names in config
             config.data["device_names"] = registry.get_custom_names()
-            config.save()
-
+            await config.asave()
             return Response.json({"status": "renamed", "name": name})
 
         # POST /api/devices/{client_id}/rename-port
@@ -369,8 +368,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
             else:
                 port_names.pop(port_key, None)
             config.data["port_names"] = port_names
-            config.save()
-
+            await config.asave()
             return Response.json({"status": "renamed", "port_key": port_key, "name": name})
 
         # POST /api/devices/{client_id}/send
@@ -495,7 +493,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
                        for c in config.connections):
                 config.connections.append(entry)
                 config.set_connections(config.connections)
-                config.save()
+                await config.asave()
             await server.send_sse("connection-changed", {"action": "created"})
             config.set_mode("custom")
             return Response.json({"status": "created"}, 201)
@@ -576,7 +574,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
             # Add to disconnected if not already there
             if not any(match(c) for c in config.disconnected):
                 config.data.setdefault("disconnected", []).append(disconn_entry)
-            config.save()
+            await config.asave()
             config.set_mode("custom")
             await server.send_sse("connection-changed", {"action": "deleted", "id": conn_id})
             return Response.json({"status": "deleted"})
@@ -817,7 +815,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
 
         # Also persist current device names
         config.data["device_names"] = registry.get_custom_names()
-        config.save()
+        await config.asave()
         return Response.json({"status": "saved", "name": name}, 201)
 
     @server.route("POST", "/api/presets/import", exact=True)
@@ -826,7 +824,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         name = config.import_preset(data)
         if name is None:
             return Response.error("Invalid preset data")
-        config.save()
+        await config.asave()
         return Response.json({"status": "imported", "name": name}, 201)
 
     @server.route("POST", "/api/presets/", exact=False)
@@ -900,7 +898,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
             return Response.error("Missing preset name")
         if not config.delete_preset(name):
             return Response.not_found()
-        config.save()
+        await config.asave()
         return Response.json({"status": "deleted"})
 
     # ================================================================
@@ -945,7 +943,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         if engine._plugin_host:
             config.data["plugins"] = engine._plugin_host.serialize_instances()
 
-        if config.save():
+        if await config.asave():
             return Response.json({"status": "saved"})
         return Response.error("Failed to save config", 500)
 
@@ -955,7 +953,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
 
     @server.route("POST", "/api/panic")
     async def api_panic(req: Request) -> Response:
-        engine.panic()
+        await asyncio.to_thread(engine.panic)
         await server.send_sse("panic", {})
         return Response.json({"status": "panic"})
 
@@ -1092,7 +1090,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
     async def api_load_config(req: Request) -> Response:
         from .__main__ import _apply_saved_config
 
-        config.load()
+        await config.aload()
         if config.mode != "custom" or not config.connections:
             # No custom config — fall back to all-to-all
             engine.disconnect_all()
@@ -1137,8 +1135,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
             return Response.error("Invalid config format")
 
         config._data = data
-        config.save()
-
+        await config.asave()
         # Apply the imported config
         if config.mode == "custom":
             engine.disconnect_all()
@@ -1236,8 +1233,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         if password:
             cfg_wifi["ap_password"] = password
         cfg_wifi["mode"] = "ap"
-        config.save()
-
+        await config.asave()
         return Response.json({"status": "ap started", "ssid": wifi.ssid, "ip": wifi.ip})
 
     @server.route("POST", "/api/wifi/client")
@@ -1259,7 +1255,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
             cfg_wifi["mode"] = "client"
             cfg_wifi["client_ssid"] = ssid
             cfg_wifi["client_password"] = password
-            config.save()
+            await config.asave()
             return Response.json({"status": "connected", "ssid": ssid, "ip": wifi.ip})
         else:
             return Response.error("Connection failed, fell back to AP mode", 502)
