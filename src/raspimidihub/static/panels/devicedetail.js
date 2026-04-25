@@ -191,27 +191,65 @@ export function DeviceDetailPanel({ device, onClose, showToast, refresh, pluginD
 
     const displayValues = (pluginDisplays && device.plugin_instance_id) ? pluginDisplays[device.plugin_instance_id] || {} : {};
 
+    // Param updates are rAF-coalesced and the SSE echo is suppressed for
+    // params the user is actively dragging — otherwise the server-side
+    // broadcast races the next move and snaps the thumb backwards.
+    const pendingPatchesRef = useRef(new Map());     // name -> latest value queued for PATCH
+    const inFlightRef = useRef(new Map());           // name -> timeout id; presence = "user is dragging this"
+    const rafIdRef = useRef(null);
+    const IN_FLIGHT_RELEASE_MS = 250;
+
+    const flushPending = useCallback(() => {
+        rafIdRef.current = null;
+        const map = pendingPatchesRef.current;
+        if (map.size === 0) return;
+        const params = Object.fromEntries(map);
+        map.clear();
+        if (device.plugin_instance_id) {
+            api(`/plugins/instances/${device.plugin_instance_id}`, {
+                method: 'PATCH',
+                body: JSON.stringify({ params }),
+            }).catch(() => {});
+        }
+    }, [device.plugin_instance_id]);
+
+    useEffect(() => () => {
+        if (rafIdRef.current !== null) cancelAnimationFrame(rafIdRef.current);
+        for (const t of inFlightRef.current.values()) clearTimeout(t);
+        inFlightRef.current.clear();
+        pendingPatchesRef.current.clear();
+    }, []);
+
     const sseParamsKey = pluginDisplays && device.plugin_instance_id ? '_params_' + device.plugin_instance_id : null;
     const sseParams = sseParamsKey ? pluginDisplays[sseParamsKey] : null;
     const sseParamsRef = useRef(null);
     if (sseParams && sseParams !== sseParamsRef.current) {
         sseParamsRef.current = sseParams;
-        Object.entries(sseParams).forEach(([k, v]) => {
-            if (pluginParams[k] !== v) {
-                setTimeout(() => setPluginParams(prev => ({ ...prev, ...sseParams })), 0);
-            }
-        });
+        const filtered = {};
+        for (const [k, v] of Object.entries(sseParams)) {
+            if (inFlightRef.current.has(k)) continue;
+            if (pluginParams[k] !== v) filtered[k] = v;
+        }
+        if (Object.keys(filtered).length > 0) {
+            setTimeout(() => setPluginParams(prev => ({ ...prev, ...filtered })), 0);
+        }
     }
 
     const onPluginParamChange = useCallback((name, value) => {
-        setPluginParams(prev => ({ ...prev, [name]: value }));
-        if (device.plugin_instance_id) {
-            api(`/plugins/instances/${device.plugin_instance_id}`, {
-                method: 'PATCH',
-                body: JSON.stringify({ params: { [name]: value } }),
-            }).catch(() => {});
+        setPluginParams(prev => prev[name] === value ? prev : { ...prev, [name]: value });
+        if (!device.plugin_instance_id) return;
+
+        pendingPatchesRef.current.set(name, value);
+        if (rafIdRef.current === null) {
+            rafIdRef.current = requestAnimationFrame(flushPending);
         }
-    }, [device.plugin_instance_id]);
+
+        const existing = inFlightRef.current.get(name);
+        if (existing) clearTimeout(existing);
+        inFlightRef.current.set(name, setTimeout(() => {
+            inFlightRef.current.delete(name);
+        }, IN_FLIGHT_RELEASE_MS));
+    }, [device.plugin_instance_id, flushPending]);
 
     const deletePlugin = async () => {
         if (!confirm('Delete this virtual device?')) return;
