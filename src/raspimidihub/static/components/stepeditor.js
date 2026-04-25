@@ -3,6 +3,7 @@
  */
 
 import { html, tickFeedback, thudFeedback } from './common.js';
+import { useEffect, useRef } from '../lib/hooks.module.js';
 
 // =======================================================================
 // STEP EDITOR — grid with on/off dots and mini-wheel offsets

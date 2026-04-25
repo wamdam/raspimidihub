@@ -152,6 +152,9 @@ class WebServer:
         try:
             while True:
                 msg = await queue.get()
+                # None is the shutdown sentinel pushed by WebServer.stop()
+                if msg is None:
+                    break
                 writer.write(msg.encode())
                 await asyncio.wait_for(writer.drain(), timeout=5.0)
         except (ConnectionResetError, BrokenPipeError, asyncio.CancelledError,

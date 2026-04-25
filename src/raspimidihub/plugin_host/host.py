@@ -33,11 +33,15 @@ class PluginHost:
 
     def __init__(self, plugins_dir: str | Path | None = None):
         if plugins_dir is None:
-            # Default: look for plugins/ inside the package first, then beside it
+            # We live in raspimidihub/plugin_host/host.py, so:
+            #   __file__.parent             = .../raspimidihub/plugin_host/
+            #   __file__.parent.parent      = .../raspimidihub/        (installed: deb)
+            #   __file__.parent.parent.parent       = .../site-packages or src/
+            #   __file__.parent.parent.parent.parent = repo root        (dev checkout)
             pkg_dir = Path(__file__).parent
             candidates = [
-                pkg_dir / "plugins",                      # installed: .../raspimidihub/plugins/
-                pkg_dir.parent.parent / "plugins",        # dev: repo_root/plugins/
+                pkg_dir.parent / "plugins",                # installed: .../raspimidihub/plugins/
+                pkg_dir.parent.parent.parent / "plugins",  # dev: repo_root/plugins/
             ]
             plugins_dir = next((p for p in candidates if p.is_dir()), candidates[0])
         self._plugins_dir = Path(plugins_dir)
@@ -208,7 +212,7 @@ class PluginHost:
 
         # Transport: send ALSA seq event + raw MIDI bytes to hardware outputs
         # (workaround for ALSA not converting user-space transport to raw MIDI)
-        from .rawmidi import send_raw_transport, get_subscribed_destinations, MIDI_START, MIDI_STOP, MIDI_CONTINUE
+        from ..rawmidi import send_raw_transport, get_subscribed_destinations, MIDI_START, MIDI_STOP, MIDI_CONTINUE
         def _send_transport(ev_type, raw_byte):
             alsa_client.send_event(ev_type)
             try:

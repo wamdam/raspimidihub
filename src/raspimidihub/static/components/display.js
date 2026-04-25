@@ -3,6 +3,7 @@
  */
 
 import { html } from './common.js';
+import { useEffect, useRef } from '../lib/hooks.module.js';
 
 // =======================================================================
 // PLUGIN CONFIG PANEL — renders full plugin parameter UI

@@ -498,10 +498,9 @@ function ConnectionMatrix({ devices, connections, onToggle, onFilterOpen, onRemo
         if (item.multi && item.port_name !== item.port_default_name) {
             return item.port_name;
         }
-        // Otherwise: show (possibly renamed) device name, truncated to 2 words
-        const parts = item.dev_name.split(' ');
-        let short = parts.length > 2 ? parts.slice(0,2).join(' ') : item.dev_name;
+        let short = item.dev_name;
         if (item.multi) short += ` p${item.port_id + 1}`;
+        if (short.length > 20) short = short.slice(0, 19) + '\u2026';
         return short;
     };
     const showName = (item) => {

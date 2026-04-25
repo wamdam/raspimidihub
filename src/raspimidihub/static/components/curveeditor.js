@@ -3,6 +3,7 @@
  */
 
 import { html, tickFeedback } from './common.js';
+import { useState, useEffect, useRef } from '../lib/hooks.module.js';
 
 // =======================================================================
 // CURVE EDITOR — drawable 128-point curve with presets

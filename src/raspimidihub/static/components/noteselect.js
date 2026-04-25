@@ -3,6 +3,7 @@
  */
 
 import { html, tickFeedback, thudFeedback, noteName } from './common.js';
+import { useState, useEffect, useRef } from '../lib/hooks.module.js';
 
 // =======================================================================
 // NOTE SELECT — PluginWheel with note name labels instead of numbers

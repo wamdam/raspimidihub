@@ -3,6 +3,7 @@
  */
 
 import { html, tickFeedback, thudFeedback } from './common.js';
+import { useState, useEffect, useRef } from '../lib/hooks.module.js';
 
 // =======================================================================
 // FADER — mixer-strip style

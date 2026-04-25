@@ -64,45 +64,54 @@ vibrato to a synth pad without touching a physical controller."""
     # 1/1 = 16 sixteenths, 1/2 = 8, 1/4 = 4, 1/8 = 2, 1/16 = 1
     _RATE_TICKS = {"1/1": 16, "1/2": 8, "1/4": 4, "1/8": 2, "1/16": 1}
 
+    # Cap the free-runner emit rate. Above this we'd just be flooding ALSA
+    # with redundant CC traffic — 60 Hz is plenty for smooth modulation
+    # and matches the receiver-side display refresh.
+    _MAX_EMIT_HZ = 60
+
     def on_start(self):
         self._phase = 0.0
         self._last_value = -1
         self._sh_value = 64
-        self._free_running = False
-        self._thread = None
+        self._runner_generation = 0
         if not self.get_param("sync"):
             self._start_free_runner()
 
     def on_stop(self):
-        self._free_running = False
+        # Bumping the generation makes any live runner exit on its next loop.
+        self._runner_generation += 1
 
     def on_param_change(self, name, value):
         if name == "sync":
-            if value:
-                self._free_running = False
-                self._phase = 0.0
-            else:
+            # Always invalidate any current runner first, then start a new
+            # one only if we're leaving sync mode. This avoids the race
+            # where a quick on→off→on toggle leaves the previous runner
+            # alive alongside the new one.
+            self._runner_generation += 1
+            self._phase = 0.0
+            if not value:
                 self._start_free_runner()
 
     def _start_free_runner(self):
-        if self._free_running:
-            return
-        self._free_running = True
+        self._runner_generation += 1
+        my_gen = self._runner_generation
 
         def _run():
-            while self._free_running:
+            while self._runner_generation == my_gen:
                 freq_raw = self.get_param("freq") or 5
                 freq = freq_raw * 0.1  # convert to Hz
                 steps = 64  # resolution per cycle
-                interval = 1.0 / max(freq * steps, 1)
-                self._phase += 1.0 / steps
+                # Time per phase step — but never faster than _MAX_EMIT_HZ.
+                interval = max(1.0 / max(freq * steps, 0.01), 1.0 / self._MAX_EMIT_HZ)
+                # Phase advances proportionally to elapsed time so the cycle
+                # length stays correct even when the rate is capped.
+                self._phase += freq * interval
                 if self._phase >= 1.0:
-                    self._phase -= 1.0
+                    self._phase -= int(self._phase)
                 self._emit_lfo()
                 time.sleep(interval)
 
-        self._thread = threading.Thread(target=_run, daemon=True)
-        self._thread.start()
+        threading.Thread(target=_run, daemon=True).start()
 
     def on_tick(self, division):
         if not self.get_param("sync"):
