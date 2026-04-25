@@ -6,15 +6,57 @@ import { html } from './common.js';
 import { useEffect, useRef } from '../lib/hooks.module.js';
 
 // =======================================================================
-// PLUGIN CONFIG PANEL — renders full plugin parameter UI
+// Meter — read-only knob-style indicator. The LED arc reflects the live
+// value; the body shows the number. No drag, no interaction.
 // =======================================================================
+const N_LEDS = 13;
+const ANGLE_MIN = -135;
+const ANGLE_MAX = 135;
+const RING_RADIUS = 28;
+const KNOB_RADIUS = 20;
+
+function angleToXY(angleDeg, radius) {
+    const a = (angleDeg - 90) * Math.PI / 180;
+    return [Math.cos(a) * radius, Math.sin(a) * radius];
+}
+
 export function DisplayMeter({ label, value, min, max }) {
-    const pct = Math.max(0, Math.min(100, ((value || 0) - (min || 0)) / ((max || 127) - (min || 0)) * 100));
-    const color = pct < 50 ? 'var(--success)' : pct < 80 ? '#f0ad4e' : 'var(--accent)';
-    return html`<div style="margin-bottom:12px">
-        <div style="font-size:12px;color:var(--text-dim);margin-bottom:4px">${label}: ${value || 0}</div>
-        <div style="height:8px;background:rgba(255,255,255,0.06);border-radius:4px;overflow:hidden">
-            <div style="height:100%;width:${pct}%;background:${color};border-radius:4px;transition:width 0.1s"></div>
+    const lo = min || 0, hi = (max != null ? max : 127);
+    const v = value != null ? value : lo;
+    const ratio = Math.max(0, Math.min(1, (v - lo) / (hi - lo || 1)));
+    const angle = ANGLE_MIN + ratio * (ANGLE_MAX - ANGLE_MIN);
+    const [indX, indY] = angleToXY(angle, KNOB_RADIUS - 4);
+    const [indEndX, indEndY] = angleToXY(angle, KNOB_RADIUS - 12);
+
+    const leds = [];
+    for (let i = 0; i < N_LEDS; i++) {
+        const t = i / (N_LEDS - 1);
+        const a = ANGLE_MIN + t * (ANGLE_MAX - ANGLE_MIN);
+        const [lx, ly] = angleToXY(a, RING_RADIUS);
+        const lit = a <= angle + 0.5;
+        leds.push(html`<circle cx=${lx} cy=${ly} r="2" fill=${lit ? 'var(--success)' : 'rgba(255,255,255,0.10)'}
+            style=${lit ? 'filter: drop-shadow(0 0 3px var(--success))' : ''} />`);
+    }
+
+    return html`<div class="knob-group meter-readonly">
+        <span class="knob-label">${label}</span>
+        <div class="knob-container" style="cursor:default">
+            <svg viewBox="-36 -36 72 72" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                    <radialGradient id="meter-body" cx="0.35" cy="0.30" r="0.85">
+                        <stop offset="0%" stop-color="#2a3a36" />
+                        <stop offset="40%" stop-color="#1c2826" />
+                        <stop offset="100%" stop-color="#0e1614" />
+                    </radialGradient>
+                </defs>
+                ${leds}
+                <circle cx="0" cy="0" r=${KNOB_RADIUS} fill="url(#meter-body)"
+                    stroke="rgba(0,0,0,0.5)" stroke-width="1" />
+                <line x1=${indX} y1=${indY} x2=${indEndX} y2=${indEndY}
+                    stroke="var(--success)" stroke-width="2" stroke-linecap="round"
+                    style="filter: drop-shadow(0 0 2px var(--success))" />
+            </svg>
+            <div class="knob-value">${v}</div>
         </div>
     </div>`;
 }

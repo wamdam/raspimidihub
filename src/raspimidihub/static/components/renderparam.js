@@ -87,7 +87,7 @@ export function renderParam(param, values, onChange, allValues, displayCtx) {
             if (!dout) return null;
             const dv = displayCtx.values && displayCtx.values[param.display_name];
             if (dout.type === 'scope') return html`<div class="display-scope-wrap" style="min-width:0"><${DisplayScope} label=${dout.label} value=${dv} min=${dout.min} max=${dout.max} duration=${dout.duration} /></div>`;
-            if (dout.type === 'meter') return html`<div class="display-meter-wrap" style="min-width:0"><${DisplayMeter} label=${dout.label} value=${dv} min=${dout.min} max=${dout.max} /></div>`;
+            if (dout.type === 'meter') return html`<${DisplayMeter} label=${dout.label} value=${dv} min=${dout.min} max=${dout.max} />`;
             return null;
         }
         default:

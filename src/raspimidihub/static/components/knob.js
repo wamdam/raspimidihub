@@ -16,7 +16,16 @@ const ANGLE_MIN = -135;
 const ANGLE_MAX = 135;
 const RING_RADIUS = 28;
 const KNOB_RADIUS = 20;
-const PIXELS_PER_UNIT = 3;  // vertical drag sensitivity
+
+// Vertical drag distance per value step. We want a roughly constant
+// total-travel feel regardless of range size — about a third of a screen
+// (~280 px) from min to max — so a 4-value knob has clear steps and a
+// 0..127 knob isn't ridiculous to drag through. Floor at 3 px so the
+// finest knob still has reasonable response.
+function pixelsPerUnit(min, max) {
+    const range = Math.max(1, max - min);
+    return Math.max(3, 280 / range);
+}
 
 function valueToAngle(v, min, max) {
     const r = (v - min) / (max - min || 1);
@@ -67,12 +76,13 @@ export function PluginKnob({
             }
         }
 
+        const ppu = pixelsPerUnit(min, max);
         function onMove(e) {
             e.preventDefault();
             if (e.touches) e.stopPropagation();
             const pt = e.touches ? e.touches[0] : e;
             const dy = s.startY - pt.clientY;     // up = positive
-            const delta = Math.round(dy / PIXELS_PER_UNIT);
+            const delta = Math.round(dy / ppu);
             setVal_(s.startVal + delta);
         }
 
