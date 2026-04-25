@@ -386,18 +386,21 @@ body {
     padding: 0 16px 16px;
     animation: slideUp 0.2s;
 }
-/* Cards inside the plugin panel get the lit gradient so they read as
-   raised, glowing surfaces against the matrix-coloured panel
-   background. The gradient pulls violet from top-left and pink from
-   bottom-right — same family as the accent colour, but soft. */
+/* Cards inside the plugin panel: brushed-metal panel feel — a soft
+   top-edge highlight that fades to a darker base, like the housing
+   on a piece of studio gear. Subtle, no neon. */
 .filter-panel .card {
     background:
-        radial-gradient(ellipse 90% 70% at 15% 0%, rgba(120, 70, 200, 0.45) 0%, transparent 65%),
-        radial-gradient(ellipse 80% 65% at 95% 100%, rgba(233, 69, 96, 0.28) 0%, transparent 65%),
-        linear-gradient(180deg, #221a3a 0%, #1d1730 100%);
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45),
-                inset 0 1px 0 rgba(255, 255, 255, 0.04);
+        linear-gradient(180deg,
+            rgba(255, 255, 255, 0.05) 0%,
+            rgba(255, 255, 255, 0.01) 18%,
+            rgba(0, 0, 0, 0.0) 50%,
+            rgba(0, 0, 0, 0.18) 100%),
+        linear-gradient(180deg, #20253a 0%, #181a2a 100%);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5),
+                inset 0 1px 0 rgba(255, 255, 255, 0.06),
+                inset 0 -1px 0 rgba(0, 0, 0, 0.4);
 }
 .panel-header {
     position: sticky;
