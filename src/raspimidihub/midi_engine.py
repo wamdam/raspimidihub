@@ -311,6 +311,193 @@ class MidiEngine:
         dc, dp = map(int, dst.split(":"))
         return sc, sp, dc, dp
 
+    def apply_saved_config(self, *,
+                           snapshot: list[dict] | None = None,
+                           snapshot_disconn: dict[str, dict] | None = None,
+                           newly_present_stable_ids: set[str] | None = None) -> None:
+        """Apply connections, filters, and mappings from `self._config`.
+
+        When `snapshot` is provided (hotplug rescan), live state is preserved
+        — user edits that weren't saved yet survive the rescan. Saved
+        connections from config are additionally restored for any device
+        that just appeared (wasn't present in the previous scan), so
+        hot-plugging a keyboard brings back its routing without the user
+        having to hit "Load Config". Disabled (disconnected) cells in
+        config are honored regardless.
+        """
+        from .midi_filter import MidiFilter, MidiMapping
+
+        config = self._config
+        if config is None:
+            return
+
+        self.scan_devices()
+        registry = self._device_registry
+
+        if snapshot is not None:
+            saved_conns = list(snapshot)
+            snapshot_sigs = {
+                (c.get("src_stable_id"), c.get("src_port"),
+                 c.get("dst_stable_id"), c.get("dst_port"))
+                for c in snapshot
+                if c.get("src_stable_id") and c.get("dst_stable_id")
+            }
+            disabled_sigs = {
+                (c.get("src_stable_id"), c.get("src_port", 0),
+                 c.get("dst_stable_id"), c.get("dst_port", 0))
+                for c in config.disconnected
+                if c.get("src_stable_id") and c.get("dst_stable_id")
+            }
+            appeared = newly_present_stable_ids or set()
+            for c in config.connections:
+                ssid = c.get("src_stable_id")
+                dsid = c.get("dst_stable_id")
+                if not ssid or not dsid:
+                    continue
+                if ssid not in appeared and dsid not in appeared:
+                    continue
+                sig = (ssid, c.get("src_port", 0), dsid, c.get("dst_port", 0))
+                if sig in snapshot_sigs or sig in disabled_sigs:
+                    continue
+                saved_conns.append(c)
+        else:
+            saved_conns = config.connections
+
+        applied = 0
+        pending = 0
+
+        for c in saved_conns:
+            try:
+                src_port = c["src_port"]
+                dst_port = c["dst_port"]
+            except KeyError:
+                continue
+
+            src_stable = c.get("src_stable_id")
+            dst_stable = c.get("dst_stable_id")
+
+            if src_stable:
+                src_client = registry.client_for_stable_id(src_stable)
+            else:
+                src_client = c.get("src_client")
+
+            if dst_stable:
+                dst_client = registry.client_for_stable_id(dst_stable)
+            else:
+                dst_client = c.get("dst_client")
+
+            if src_client is None or dst_client is None:
+                pending += 1
+                continue
+
+            current_clients = {d.client_id for d in self._devices}
+            if src_client not in current_clients or dst_client not in current_clients:
+                pending += 1
+                continue
+
+            conn = Connection(src_client, src_port, dst_client, dst_port)
+            conn_id = f"{src_client}:{src_port}-{dst_client}:{dst_port}"
+
+            filter_data = c.get("filter")
+            mappings_data = c.get("mappings", [])
+            needs_userspace = bool(mappings_data)
+
+            if filter_data:
+                midi_filter = MidiFilter.from_dict(filter_data)
+                needs_userspace = needs_userspace or not midi_filter.is_passthrough
+            else:
+                midi_filter = MidiFilter()
+
+            if needs_userspace and self._filter_engine:
+                try:
+                    self._seq.unsubscribe(src_client, src_port, dst_client, dst_port)
+                except OSError:
+                    pass
+                self._filter_engine.add_filter(
+                    src_client, src_port, dst_client, dst_port, midi_filter
+                )
+                for md in mappings_data:
+                    try:
+                        mapping = MidiMapping.from_dict(md)
+                        self._filter_engine.add_mapping(conn_id, mapping)
+                    except (ValueError, KeyError):
+                        log.warning("Skipping invalid mapping on %s", conn_id)
+                self._connections.add(conn)
+                applied += 1
+                continue
+
+            try:
+                self._seq.subscribe(src_client, src_port, dst_client, dst_port)
+                self._connections.add(conn)
+                applied += 1
+            except OSError as e:
+                log.warning("Failed to restore connection %d:%d -> %d:%d: %s",
+                            src_client, src_port, dst_client, dst_port, e)
+
+        if snapshot_disconn is not None:
+            for old_conn_id, saved_data in snapshot_disconn.items():
+                self._disconnected[old_conn_id] = saved_data
+
+        for c in config.disconnected:
+            src_stable = c.get("src_stable_id")
+            dst_stable = c.get("dst_stable_id")
+            src_client = registry.client_for_stable_id(src_stable) if src_stable else None
+            dst_client = registry.client_for_stable_id(dst_stable) if dst_stable else None
+            if src_client is not None and dst_client is not None:
+                sp = c.get("src_port", 0)
+                dp = c.get("dst_port", 0)
+                conn_id = f"{src_client}:{sp}-{dst_client}:{dp}"
+                saved_data = {}
+                if "filter" in c:
+                    saved_data["filter"] = c["filter"]
+                if "mappings" in c:
+                    saved_data["mappings"] = c["mappings"]
+                self._disconnected[conn_id] = saved_data
+
+        # Handle device pairs not in saved config: apply default_routing
+        known_pairs = set()
+        for c in saved_conns:
+            src_stable = c.get("src_stable_id")
+            dst_stable = c.get("dst_stable_id")
+            if src_stable and dst_stable:
+                known_pairs.add((src_stable, c.get("src_port", 0), dst_stable, c.get("dst_port", 0)))
+        for c in config.disconnected:
+            src_stable = c.get("src_stable_id")
+            dst_stable = c.get("dst_stable_id")
+            if src_stable and dst_stable:
+                known_pairs.add((src_stable, c.get("src_port", 0), dst_stable, c.get("dst_port", 0)))
+
+        if config.default_routing == "all":
+            for src_dev in self._devices:
+                for dst_dev in self._devices:
+                    if src_dev.client_id == dst_dev.client_id:
+                        continue
+                    src_info = registry.get_by_client(src_dev.client_id)
+                    dst_info = registry.get_by_client(dst_dev.client_id)
+                    if src_info and src_info.is_plugin:
+                        continue
+                    if dst_info and dst_info.is_plugin:
+                        continue
+                    for src_port_obj in src_dev.input_ports:
+                        for dst_port_obj in dst_dev.output_ports:
+                            if src_info and dst_info:
+                                key = (src_info.stable_id, src_port_obj.port_id,
+                                       dst_info.stable_id, dst_port_obj.port_id)
+                                if key in known_pairs:
+                                    continue
+                            conn = Connection(src_dev.client_id, src_port_obj.port_id,
+                                              dst_dev.client_id, dst_port_obj.port_id)
+                            if conn not in self._connections:
+                                try:
+                                    self._seq.subscribe(src_dev.client_id, src_port_obj.port_id,
+                                                        dst_dev.client_id, dst_port_obj.port_id)
+                                    self._connections.add(conn)
+                                except OSError:
+                                    pass
+
+        log.info("Config restored: %d connections applied, %d pending (devices not present)",
+                 applied, pending)
+
     def _scan_and_connect(self) -> None:
         """Rescan devices and restore connections from live state snapshot.
 
@@ -343,15 +530,12 @@ class MidiEngine:
                 new_stable_ids.add(info.stable_id)
         appeared = new_stable_ids - prev_stable_ids
 
-        from .__main__ import _apply_saved_config
-
         if has_live_state:
-            _apply_saved_config(self, self._config,
-                                snapshot=snapshot_conns,
-                                snapshot_disconn=snapshot_disconn,
-                                newly_present_stable_ids=appeared)
+            self.apply_saved_config(snapshot=snapshot_conns,
+                                    snapshot_disconn=snapshot_disconn,
+                                    newly_present_stable_ids=appeared)
         elif self._config and self._config.mode == "custom":
-            _apply_saved_config(self, self._config)
+            self.apply_saved_config()
         else:
             default_routing = "all"
             if self._config:

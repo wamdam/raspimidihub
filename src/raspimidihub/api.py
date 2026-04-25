@@ -1088,8 +1088,6 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
 
     @server.route("POST", "/api/config/load")
     async def api_load_config(req: Request) -> Response:
-        from .__main__ import _apply_saved_config
-
         await config.aload()
         if config.mode != "custom" or not config.connections:
             # No custom config — fall back to all-to-all
@@ -1100,7 +1098,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
             config.set_mode("all-to-all")
         else:
             engine.disconnect_all()
-            _apply_saved_config(engine, config)
+            engine.apply_saved_config()
             engine._update_monitor_subscriptions()
 
         await server.send_sse("connection-changed", {"action": "config-loaded"})
@@ -1128,8 +1126,6 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
 
     @server.route("POST", "/api/config/import")
     async def api_import_config(req: Request) -> Response:
-        from .__main__ import _apply_saved_config
-
         data = req.json
         if not isinstance(data, dict) or "version" not in data:
             return Response.error("Invalid config format")
@@ -1139,7 +1135,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         # Apply the imported config
         if config.mode == "custom":
             engine.disconnect_all()
-            _apply_saved_config(engine, config)
+            engine.apply_saved_config()
             engine._update_monitor_subscriptions()
         else:
             engine.disconnect_all()
