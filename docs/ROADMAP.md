@@ -1252,22 +1252,24 @@ first if preferred)
 This is the suggested phasing — independent of the looser "tracks"
 above, which describe theme groupings. Each phase ends in a release.
 
-### Phase 1 — Foundation + small win (≈ 1 sprint)
+### Phase 1 — Foundation + small win (≈ 1 sprint) ✓ Done (2026-04-25)
 
 Small, mostly-mechanical work that delivers a couple of visible
 things and de-risks the bigger Engine changes in Phase 2.
 
-1. **Clock Divider plugin** (§8). Smallest fully-spec'd plugin.
-   Forces us to land:
-   - new `"tick": 1` entry in `DIVISION_TICKS`,
-   - new `on_transport_continue` plugin callback + ClockBus
-     `_notify_transport("_continue")`.
-2. **Per-edge note refcount table** (§6). Pure data, no behaviour
-   change yet. Engine starts tracking `(edge_id, channel, note) →
-   count` so we know exactly which notes are sounding on which edges.
-3. **Soft / hard panic with the double-tap state machine** (§6).
-   Uses 1.2's table. Existing Panic button gains the Elektron-style
-   double-press to upgrade to hard.
+1. ✓ **Clock Divider plugin** (§8) — shipped in `fd08762`. Landed
+   the new `"tick": 1` entry in `DIVISION_TICKS` and the
+   `on_transport_continue` plugin callback + ClockBus
+   `_notify_transport("_continue")`.
+2. ✓ **Per-edge note refcount table** (§6) — shipped earlier in
+   `bb806e1` / `9f1f336`. Engine tracks `(edge_id, channel, note) →
+   count` and flushes NoteOff on edge removal.
+3. ✓ **Soft / hard panic with the double-tap state machine** (§6) —
+   shipped in `ec86811`. Engine `panic(hard=False)` splits CC 123
+   from CC 120 and emits per-edge NoteOff for tracked notes. Client
+   state machine in `pages/routing.js` (idle → soft → hard, hard
+   auto-decays after 600 ms, incoming MIDI Start resets to idle via
+   the new `transport-start` SSE event).
 
 ### Phase 2 — Engine smoothness (≈ 1 sprint)
 
