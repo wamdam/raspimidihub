@@ -1399,6 +1399,27 @@ before implementation.
   during the swap is now mostly handled by the Engine track's
   edge-diff work; the remaining question is whether a dedicated
   panic-before-load toggle is still needed.
+- **SysEx-Sender** plugin — virtual instrument in `plugins/` that
+  ships a `.syx` file (uploaded via the config panel; hex-string
+  paste possibly also accepted) to its connected destination, with
+  configurable throttling (bytes/sec or inter-message delay) for slow
+  targets and a Button param to fire a one-shot send. Open: where the
+  uploaded file lives (plugin config blob vs. separate filesystem
+  path), whether send progress is streamed to the UI, and whether
+  hex-string input is in scope for v1.
+- **Per-version changelog in the Settings update card** — the
+  Settings → "All versions" list (driven by the existing update-check
+  /  `UpgradeCard`) already enumerates available `raspimidihub`
+  releases; this would expand each row with the matching body from
+  the top-level `CHANGELOG.md` so users see "what changed" inline
+  instead of jumping to GitHub. Two delivery options, not yet
+  decided: (a) ship the rendered changelog inside the deb so the UI
+  reads it locally with no internet — offline-friendly but only
+  covers up to the version the deb was built from; (b) fetch from
+  GitHub Release notes through the existing update-check path —
+  always current but needs connectivity. Open: Markdown-or-plain
+  rendering, and whether per-version sections are folded
+  (expand-on-click) or shown as one big scrollable list.
 
 ## Dropped
 
