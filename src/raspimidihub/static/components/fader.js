@@ -83,13 +83,13 @@ export function PluginFader({ name, label, min, max, value, onChange, vertical, 
     }, [min, max, name, vertical]);
 
     const ratio = (val - min) / (max - min || 1);
-    // Clamp thumb inside track (thumb: 64px horiz, 22px vert)
+    // Clamp thumb inside track (thumb: 48px horiz, 28px vert)
     const thumbStyle = vertical
         ? { bottom: `calc(3px + ${ratio} * (100% - 28px))` }
-        : { left: `calc(2px + ${ratio} * (100% - 68px))` };
+        : { left: `calc(2px + ${ratio} * (100% - 52px))` };
     const fillStyle = vertical
         ? { height: `${ratio * 100}%` }
-        : { width: `calc(34px + ${ratio} * (100% - 68px))` };
+        : { width: `calc(26px + ${ratio} * (100% - 52px))` };
 
     return html`<div class="fader-group ${vertical ? 'vertical' : ''}">
         <span class="fader-label">${label}</span>

@@ -377,7 +377,10 @@ body {
     justify-content: center;
 }
 .filter-panel {
-    background: var(--bg);
+    background:
+        radial-gradient(ellipse 80% 60% at 20% 0%, rgba(83, 52, 131, 0.35) 0%, transparent 60%),
+        radial-gradient(ellipse 70% 50% at 90% 100%, rgba(233, 69, 96, 0.18) 0%, transparent 60%),
+        linear-gradient(180deg, #1a1a2e 0%, #161628 100%);
     width: 100%;
     max-width: 500px;
     max-height: 90vh;
@@ -389,7 +392,8 @@ body {
 .panel-header {
     position: sticky;
     top: 0;
-    background: var(--bg);
+    background: linear-gradient(180deg, #1a1a2e 0%, rgba(26, 26, 46, 0.92) 100%);
+    backdrop-filter: blur(4px);
     padding: 8px 0 12px;
     z-index: 1;
     display: flex;
@@ -694,14 +698,14 @@ body {
 .wheel-group { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; margin-bottom: 12px; }
 .wheel-label { font-size: 12px; color: var(--text-dim); }
 .btn-learn-inline {
-    margin-top: 2px; padding: 2px 10px; font-size: 11px; line-height: 1.4;
+    margin-top: 2px; padding: 2px 6px; font-size: 11px; line-height: 1.4;
     border: 1px solid rgba(255,255,255,0.08); border-radius: 6px;
     background: var(--surface2); color: var(--text);
-    cursor: pointer; min-width: 100px; min-height: 24px;
+    cursor: pointer; width: 80px; min-height: 24px;
 }
 .btn-learn-inline:active { opacity: 0.7; }
 .wheel-container {
-    width: 100px; height: 60px; overflow: hidden; border-radius: 10px;
+    width: 80px; height: 52px; overflow: hidden; border-radius: 10px;
     position: relative; touch-action: none; cursor: grab;
     background: linear-gradient(180deg, #080810 0%, #141420 8%, #1c1c30 20%, #222238 50%, #1c1c30 80%, #141420 92%, #080810 100%);
     border: 1px solid rgba(255,255,255,0.04);
@@ -729,13 +733,13 @@ body {
 
 /* Fader */
 /* Fader — mixer strip style */
-.fader-group { display: flex; flex-direction: column; align-items: stretch; gap: 4px; margin-bottom: 12px; flex: 1; min-width: 120px; }
-.fader-group.vertical { align-items: center; width: 60px; display: inline-flex; margin-right: 12px; min-width: unset; }
+.fader-group { display: flex; flex-direction: column; align-items: stretch; gap: 4px; margin-bottom: 12px; width: 80px; }
+.fader-group.vertical { align-items: center; width: 80px; display: inline-flex; margin-right: 0; }
 .fader-label { font-size: 12px; color: var(--text-dim); }
 
 /* Horizontal track */
 .fader-track {
-    position: relative; height: 60px; width: 100%; border-radius: 6px;
+    position: relative; height: 52px; width: 100%; border-radius: 6px;
     background: linear-gradient(180deg, #08080e 0%, #10101a 30%, #181825 50%, #10101a 70%, #08080e 100%);
     box-shadow: inset 0 2px 6px rgba(0,0,0,0.8), 0 1px 1px rgba(255,255,255,0.03);
     border: 1px solid rgba(255,255,255,0.06); touch-action: none; cursor: pointer; overflow: visible;
@@ -754,7 +758,7 @@ body {
 }
 /* Fader cap/thumb — mixer-style, sharp edges */
 .fader-thumb {
-    position: absolute; top: 2px; width: 64px; height: 56px; border-radius: 0;
+    position: absolute; top: 2px; width: 48px; height: 48px; border-radius: 0;
     background: linear-gradient(90deg, #444 0%, #555 1px, #aaa 4px, #bbb 20%, #aaa 40%, #999 50%, #aaa 60%, #bbb 80%, #aaa 96%, #555 calc(100% - 1px), #444 100%);
     box-shadow: 0 2px 5px rgba(0,0,0,0.7), inset 0 1px 0 rgba(255,255,255,0.25), inset 0 -1px 0 rgba(0,0,0,0.4);
     z-index: 1;
@@ -801,14 +805,14 @@ body {
 .toggle-group { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; margin-bottom: 12px; }
 .toggle-label { font-size: 12px; color: var(--text-dim); }
 .metal-toggle {
-    width: 80px; height: 44px; border-radius: 4px;
+    width: 80px; height: 52px; border-radius: 4px;
     background: linear-gradient(180deg, #2a2a2a 0%, #1a1a1a 40%, #0f0f0f 100%);
     box-shadow: inset 0 1px 3px rgba(0,0,0,0.8), 0 1px 2px rgba(255,255,255,0.05);
     position: relative; cursor: pointer; border: 1px solid #333; overflow: hidden; touch-action: none;
     display: flex; align-items: center;
 }
 .metal-toggle::before {
-    content: ''; position: absolute; top: 3px; width: 34px; height: 36px; border-radius: 3px;
+    content: ''; position: absolute; top: 4px; width: 34px; height: 42px; border-radius: 3px;
     background: linear-gradient(180deg, #888 0%, #aaa 20%, #999 40%, #777 60%, #888 80%, #666 100%);
     box-shadow: 0 1px 4px rgba(0,0,0,0.6), inset 0 1px 1px rgba(255,255,255,0.4);
     transition: left 0.15s cubic-bezier(0.4, 0, 0.2, 1); left: 3px;
@@ -834,14 +838,15 @@ body {
 .radio-options { display: flex; flex-wrap: wrap; gap: 6px; }
 .radio-opt {
     padding: 7px 14px; background: var(--bg); border: 1px solid var(--surface2); border-radius: 6px;
-    color: var(--text-dim); font-size: 13px; cursor: pointer; transition: all 0.15s; user-select: none;
+    color: var(--text-dim); font-size: 13px; font-weight: 500; cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, color 0.15s; user-select: none;
 }
-.radio-opt.active { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 500; }
+.radio-opt.active { background: var(--accent); border-color: var(--accent); color: #fff; }
 
 /* Rubber push button */
 .btn-group-param { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; margin-bottom: 12px; }
 .rubber-btn {
-    width: 100px; height: 60px; border-radius: 4px; border: none; cursor: pointer;
+    width: 80px; height: 52px; border-radius: 4px; border: none; cursor: pointer;
     background: linear-gradient(180deg, #2a2a2a 0%, #222 30%, #1a1a1a 60%, #151515 100%);
     box-shadow: 0 3px 6px rgba(0,0,0,0.5), inset 0 1px 1px rgba(255,255,255,0.06);
     position: relative; display: flex; flex-direction: column; align-items: center;
@@ -894,7 +899,7 @@ body {
 .curve-presets { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; justify-content: center; }
 
 /* Inline param row — wheels/toggles side by side */
-.param-row { display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.param-row { display: flex; flex-wrap: wrap; gap: 4px 8px; }
 .param-row .wheel-group { margin-bottom: 12px; }
 .param-row .toggle-group { margin-bottom: 12px; }
 
