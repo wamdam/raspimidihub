@@ -4,6 +4,35 @@ All notable changes to RaspiMIDIHub will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [2.0.8] - 2026-04-25
+
+### Fixed
+- **Service restart no longer blinks the AP.** Three coupled fixes that
+  together stop the post-deploy Wi-Fi flap that was forcing Android to
+  demote the saved network:
+  1. Graceful asyncio shutdown — replaced the `loop.stop()` SIGTERM
+     handler (which raced background tasks and exited 1/FAILURE,
+     prompting systemd to auto-restart on top of the already-pending
+     dpkg postinst restart) with `asyncio.run(runner())` + `task.cancel()`.
+     Cleanup awaits are bounded by 2 s timeouts.
+  2. `WebServer.stop()` ordering bug — SSE queues were being signalled
+     after `wait_closed()`, causing wait_closed to hang forever.
+     Signal SSE first, then wait.
+  3. `wifi.start_ap` is now idempotent — renders the candidate hostapd
+     and dnsmasq configs in memory, byte-compares to disk, and only
+     kill-restarts whichever process actually changed. If both match
+     and both processes are alive, returns immediately without touching
+     wlan0 or its IP. Channel survey is skipped if a prior config
+     already exists (tmpfs persists it across service restarts; reboot
+     clears it).
+  4. systemd `KillMode=process` so daemonized hostapd / dnsmasq survive
+     a service stop and the idempotent path can detect them on the
+     next start.
+- **Saving config no longer freezes the UI.** `config.save()`,
+  `config.load()`, and `engine.panic()` now run on a worker thread via
+  `asyncio.to_thread`, so the FAT32 remount/sync (~100–400 ms) doesn't
+  block MIDI forwarding through userspace filters or pause SSE.
+
 ## [2.0.7] - 2026-04-21
 
 ### Added
