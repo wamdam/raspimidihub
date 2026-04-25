@@ -20,12 +20,16 @@ WIFI_FAIL_THRESHOLD = 3  # consecutive failures before fallback
 
 
 async def rate_meter(engine, server) -> None:
-    """Broadcast per-port MIDI message rates every second."""
+    """Broadcast per-port MIDI message rates and CC observatory deltas
+    every second."""
     while True:
         await asyncio.sleep(1.0)
         rates = engine.snapshot_rates()
         if rates:
             await server.send_sse("midi-rates", rates)
+        cc_changes = engine.cc_snapshot_dirty()
+        if cc_changes:
+            await server.send_sse("cc-changes", cc_changes)
 
 
 async def watchdog_ping(interval: float, notify_fn) -> None:

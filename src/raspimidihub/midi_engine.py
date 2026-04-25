@@ -57,6 +57,11 @@ class MidiEngine:
         # An edge is considered "holding" a note while count > 0. The same
         # (ch, note) can stack across overlapping note-ons on the same edge.
         self._active_notes: dict[Connection, dict[tuple[int, int], int]] = {}
+        # CC observatory: (src_client, src_port, channel, cc) -> last value.
+        # Updated from CC events seen on the monitor port. `_cc_dirty` tracks
+        # keys that changed since the last delta snapshot for SSE broadcast.
+        self._cc_cache: dict[tuple[int, int, int, int], int] = {}
+        self._cc_dirty: set[tuple[int, int, int, int]] = set()
 
     @property
     def devices(self) -> list[MidiDevice]:
@@ -287,6 +292,7 @@ class MidiEngine:
                              if c.src_client != gone_client_id
                              and c.dst_client != gone_client_id}
         self._purge_active_notes_for_client(gone_client_id)
+        self._purge_cc_cache_for_client(gone_client_id)
 
         # Drop filtered-connection bookkeeping for the gone client
         if self._filter_engine:
@@ -629,6 +635,8 @@ class MidiEngine:
                     self._port_msg_counts[key] = self._port_msg_counts.get(key, 0) + 1
                     if ev.type in (int(MidiEventType.NOTEON), int(MidiEventType.NOTEOFF)):
                         self._track_note_event(ev)
+                    elif ev.type == int(MidiEventType.CONTROLLER):
+                        self._track_cc_event(ev)
 
                 # Notify MIDI event listeners (for monitoring)
                 if self._on_midi_event_callbacks:
@@ -753,6 +761,46 @@ class MidiEngine:
         for conn in list(self._active_notes):
             if conn.src_client == client_id or conn.dst_client == client_id:
                 self._active_notes.pop(conn, None)
+
+    # --- CC observatory ---
+
+    def _track_cc_event(self, ev) -> None:
+        """Update `_cc_cache` from a CC event seen on the monitor port."""
+        ch = ev.data.control.channel
+        cc = ev.data.control.param
+        val = ev.data.control.value
+        key = (ev.source.client, ev.source.port, ch, cc)
+        if self._cc_cache.get(key) != val:
+            self._cc_cache[key] = val
+            self._cc_dirty.add(key)
+
+    def _purge_cc_cache_for_client(self, client_id: int) -> None:
+        """Drop CC cache entries originating from `client_id`."""
+        for key in [k for k in self._cc_cache if k[0] == client_id]:
+            self._cc_cache.pop(key, None)
+            self._cc_dirty.discard(key)
+
+    def cc_snapshot(self) -> list[dict]:
+        """Return the full current CC state — every (port, channel, cc) we've
+        observed at least once since the last clear."""
+        return [
+            {"src_client": sc, "src_port": sp,
+             "channel": ch, "cc": cc, "value": val}
+            for (sc, sp, ch, cc), val in self._cc_cache.items()
+        ]
+
+    def cc_snapshot_dirty(self) -> list[dict]:
+        """Return CC entries that changed since the last call. Clears the
+        dirty set so subsequent calls only see new changes."""
+        out = []
+        for key in self._cc_dirty:
+            if key not in self._cc_cache:
+                continue
+            sc, sp, ch, cc = key
+            out.append({"src_client": sc, "src_port": sp,
+                        "channel": ch, "cc": cc, "value": self._cc_cache[key]})
+        self._cc_dirty.clear()
+        return out
 
     def active_notes_snapshot(self) -> list[dict]:
         """Return a serializable snapshot of currently held notes per edge.
