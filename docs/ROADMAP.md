@@ -850,116 +850,6 @@ clock-aware plugins) handle Continue correctly.
 
 ---
 
-## 9. USB Network gadget
-
-### Goal
-
-A USB cable as the second way onto the Pi's web UI, alongside the
-WiFi AP. Plug a phone or laptop into the Pi's OTG port, the Pi
-appears as a USB-Ethernet device, the client gets `10.55.0.x` from
-DHCP, and `http://10.55.0.1/` opens the same matrix UI. Useful
-when the WiFi AP is busy/unreachable, or for studio setups where
-cable is preferred.
-
-### User stories
-- "I'm in a venue where 2.4 GHz is unusable. I plug a USB cable
-  from my laptop to the Pi and the UI opens immediately."
-- "I want both the AP and the cable working at the same time —
-  whichever I grab first wins."
-
-### Hardware support
-
-- **Pi 4 / Pi 5**: USB-C port supports OTG. Power continues through
-  the same port; data goes peripheral. ✓
-- **Pi Zero / Pi Zero 2 W**: micro-USB OTG port. ✓
-- **Pi 3**: no native OTG — feature **unsupported on Pi 3**, falls
-  back to AP-only. Surfaces as "USB gadget mode unavailable on this
-  hardware" in the Settings UI.
-
-### Setup-time changes (`raspimidihub-rosetup`)
-
-`rosetup/setup.sh` adds these on first install (idempotent — safe to
-re-run):
-
-1. Append `dtoverlay=dwc2,dr_mode=peripheral` to
-   `/boot/firmware/config.txt`. Loads the OTG driver in peripheral
-   mode at boot.
-2. Drop a file `/etc/modules-load.d/raspimidihub-gadget.conf` with
-   `g_ether` so the USB-Ethernet gadget module loads automatically.
-3. (Pi 3 detection: skip both steps with a note, set a flag the app
-   reads to grey-out the UI toggle.)
-
-A reboot is required after first install for the kernel changes to
-take effect. The UI toggle (below) tells the user when a reboot is
-needed.
-
-### Runtime config (`raspimidihub`)
-
-A new `network.usb_gadget` boolean in `config.json`, default `true`
-on hardware that supports it:
-
-- **At service start**, if `usb_gadget` is enabled and `usb0` exists:
-  - `ip addr add 10.55.0.1/24 dev usb0`
-  - `ip link set usb0 up`
-  - Write `/run/raspimidihub/dnsmasq-usb.conf` (DHCP range
-    `10.55.0.10..50`, captive-portal address resolution to the Pi
-    like the AP's dnsmasq)
-  - Spawn a separate `dnsmasq` bound to `usb0`
-- **At shutdown**, kill the dnsmasq instance and flush `usb0`.
-
-Coexistence with the AP is automatic — both dnsmasq instances use
-`bind-interfaces` and serve disjoint subnets (`192.168.4.0/24` on
-wlan0, `10.55.0.0/24` on usb0). avahi already publishes
-`raspimidihub.local` on every interface, so mDNS resolution works
-on both.
-
-### UI
-
-Settings → **Network** section grows a new toggle:
-
-```
-[ x ] WiFi AP                      ssid: RaspiMIDIHub-735C   ip: 192.168.4.1
-[ x ] USB Network gadget           ip: 10.55.0.1
-       (Reboot required after enabling)
-```
-
-If the hardware doesn't support OTG (Pi 3), the toggle is disabled
-and labelled "Not supported on this Raspberry Pi model".
-
-### Engine / web-server plumbing
-
-None — the existing web server already binds to `0.0.0.0:80` and
-will pick up the new `usb0` address automatically. The only new
-code lives in `wifi.py` (or a sibling `network.py`) for the dnsmasq
-setup path. No changes to ALSA / MIDI engine.
-
-### Testing
-
-- Boot test: USB gadget enabled, plug into a laptop, confirm `usb0`
-  shows up on the laptop and DHCP hands out `10.55.0.x`.
-- Coexistence test: AP up, USB gadget up, both serve the matrix UI
-  on their respective addresses.
-- Pi 3 test: toggle is greyed out; no kernel modules attempted.
-- Reboot semantics: enabling the toggle without reboot fails
-  gracefully with a "reboot required" toast.
-
-### Open questions
-
-1. **Default state**. On a fresh install, ship with USB gadget
-   **on** by default for supported hardware? It's a free win when
-   you have a cable; users who don't care won't notice it. I'd say
-   yes.
-2. **DHCP scope size**. `10.55.0.10..50` (40 leases) feels excessive
-   for a USB cable that only ever has one client at a time. Could
-   shrink to `10.55.0.10..15` for hygiene. No real reason either
-   way — pick one and move on.
-3. **mDNS hostname conflict**. If two Pis are on the same LAN both
-   advertising `raspimidihub.local`, avahi resolves to whichever
-   responds first. Already true today for the AP. Out of scope —
-   document.
-
----
-
 ## Shared concerns
 
 - **New param types.** Both plugins need UI components that don't exist
@@ -1036,14 +926,6 @@ first if preferred)
    `DIVISION_TICKS` and the new `on_transport_continue` plugin
    callback.
 
-**Network track** (new; rosetup-side, independent of everything)
-1. `dtoverlay=dwc2,dr_mode=peripheral` and `g_ether` modules-load in
-   `rosetup/setup.sh`.
-2. `wifi.py` (or sibling `network.py`) brings up `usb0` with
-   `10.55.0.1/24` and a second dnsmasq on `usb0` at service start.
-3. Settings → Network UI toggle, with Pi 3 detection greying out the
-   option.
-
 ---
 
 ## Pending design — sketched, not yet specified
@@ -1064,6 +946,15 @@ before implementation.
   during the swap is now mostly handled by the Engine track's
   edge-diff work; the remaining question is whether a dedicated
   panic-before-load toggle is still needed.
+
+## Dropped
+
+- **USB Network gadget** (formerly §9). Pi 3 routes USB through a
+  LAN9514 hub that doesn't expose OTG / peripheral mode, so there's
+  no way to make the Pi appear as a USB-Ethernet device on the
+  current target hardware. Pi 4 / 5 / Zero would support it, but
+  not the deploy target. Spec preserved in git history if we ever
+  switch hardware.
 
 ## Not planned right now (but noted for later)
 
