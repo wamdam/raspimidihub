@@ -3,6 +3,13 @@
 Living doc for upcoming work — discuss + adjust before any implementation.
 Items listed are **proposals**, not commitments.
 
+**Markers used in this doc:**
+- `**TODO:**` — items that need a design discussion or
+  implementation pass. `grep -n "TODO:" docs/ROADMAP.md` lists every
+  open item in the doc.
+- `✓ Done (YYYY-MM-DD)` on a phase header — that phase has
+  shipped; commit hashes are in the body.
+
 ---
 
 ## 1. Rhythm Sequencer plugin ("Drum Groover")
@@ -1296,7 +1303,15 @@ phase** — it touches the live MIDI hot path.
 old `disconnect_all + apply_saved_config` pair — preset activation
 involves plugin instance teardown that invalidates cached client
 IDs, and the hotplug path has its own snapshot-merge logic. Both
-are tracked as follow-ups, not part of Phase 2.
+are tracked as follow-ups, not part of Phase 2:
+
+- **TODO: wire `apply_edge_diff` into `api_preset_action`** —
+  needs a strategy for the plugin restore step (skip restore if
+  the preset's plugin set is identical to current; otherwise
+  fall back to the teardown path).
+- **TODO: wire `apply_edge_diff` into hotplug `_scan_and_connect`**
+  — the offline-snapshot merge logic needs a careful pass before
+  the diff replaces it.
 
 After this, Preset Trigger is essentially a 30-line plugin —
 stays in pending until requested.
@@ -1417,28 +1432,28 @@ spec'd, gives us the test bed for the new `tick` plumbing and the
 These have been discussed at idea-level but need another design pass
 before implementation.
 
-- **`cc_lfo` per-cycle gate pattern** — `StepEditor`-style 1–32 step
-  pattern that mutes/un-mutes whole LFO cycles for ducking-style
+- **TODO: `cc_lfo` per-cycle gate pattern** — `StepEditor`-style 1–32
+  step pattern that mutes/un-mutes whole LFO cycles for ducking-style
   effects (e.g. `0111` = first cycle off, next three on). Behaviour
   during an off step (silent / hold-last / configurable rest value)
   TBD.
-- **CC Sequencer** — step-based plugin emitting up to 4
+- **TODO: CC Sequencer** — step-based plugin emitting up to 4
   `(channel, cc, value)` per step, with arm-and-record from the CC
   observatory. Step grid UI shared with the Tracker.
-- **Preset Trigger** plugin — `(channel, note) → preset_name`. Calls
-  the matrix preset-load API on note-on. Behaviour around hung notes
-  during the swap is now mostly handled by the Engine track's
+- **TODO: Preset Trigger** plugin — `(channel, note) → preset_name`.
+  Calls the matrix preset-load API on note-on. Behaviour around hung
+  notes during the swap is now mostly handled by the Engine track's
   edge-diff work; the remaining question is whether a dedicated
   panic-before-load toggle is still needed.
-- **SysEx-Sender** plugin — virtual instrument in `plugins/` that
-  ships a `.syx` file (uploaded via the config panel; hex-string
+- **TODO: SysEx-Sender** plugin — virtual instrument in `plugins/`
+  that ships a `.syx` file (uploaded via the config panel; hex-string
   paste possibly also accepted) to its connected destination, with
   configurable throttling (bytes/sec or inter-message delay) for slow
   targets and a Button param to fire a one-shot send. Open: where the
   uploaded file lives (plugin config blob vs. separate filesystem
   path), whether send progress is streamed to the UI, and whether
   hex-string input is in scope for v1.
-- **Per-version changelog in the Settings update card** — the
+- **TODO: Per-version changelog in the Settings update card** — the
   Settings → "All versions" list (driven by the existing update-check
   /  `UpgradeCard`) already enumerates available `raspimidihub`
   releases; this would expand each row with the matching body from
@@ -1451,6 +1466,15 @@ before implementation.
   always current but needs connectivity. Open: Markdown-or-plain
   rendering, and whether per-version sections are folded
   (expand-on-click) or shown as one big scrollable list.
+- **TODO: per-device clock-master selector** — when multiple external
+  devices send MIDI Clock at once they all feed the global ClockBus
+  and tempo perception breaks. Add a UI toggle on each device's
+  detail panel ("this device drives the system clock") that gates
+  whether its Clock events feed the bus. Plugins already opt in via
+  `feeds_clock_bus`; the same shape should extend to hardware. Decide
+  whether multiple-clock-masters is allowed (probably not — first
+  active wins, others ignored) and how the choice persists across
+  hotplug.
 
 ## Dropped
 
