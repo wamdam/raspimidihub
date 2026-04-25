@@ -533,6 +533,19 @@ class PluginHost:
                 ids.add(instance.alsa_client.client_id)
         return ids
 
+    def is_clock_consumer_client(self, client_id: int) -> bool:
+        """True if `client_id` is a plugin instance that subscribes to clock
+        ticks. Used by the engine to suppress feedback: a clock-consuming
+        plugin's own emitted clock must not be fed back into the ClockBus,
+        or it double-ticks itself. Pure clock generators (Master Clock,
+        clock_divisions = []) are not consumers, so their OUT-port clock
+        still drives the bus normally.
+        """
+        for instance in self._instances.values():
+            if instance.alsa_client and instance.alsa_client.client_id == client_id:
+                return bool(instance.plugin.__class__.clock_divisions)
+        return False
+
     def rename_instance(self, instance_id: str, new_name: str) -> bool:
         """Rename a plugin instance."""
         instance = self._instances.get(instance_id)

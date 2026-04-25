@@ -665,22 +665,30 @@ class MidiEngine:
                         except Exception:
                             pass
 
-                # Forward clock events to plugin clock bus
-                # (deduplicate: only process on monitor port)
+                # Forward clock events to plugin clock bus.
+                # Deduplicate: only process on monitor port. Suppress
+                # feedback: ignore clock/transport events emitted by
+                # plugins that themselves consume clock ticks, otherwise
+                # a Clock Divider's own OUT re-feeds the bus and the
+                # divider double-counts its own emission. Pure generators
+                # (Master Clock — clock_divisions = []) still feed the
+                # bus normally so they can drive the Arpeggiator etc.
                 if self._plugin_host:
+                    from_consumer = self._plugin_host.is_clock_consumer_client(
+                        ev.source.client)
                     if ev.type == MidiEventType.CLOCK:
-                        if ev.dest.port == self._monitor_port:
+                        if ev.dest.port == self._monitor_port and not from_consumer:
                             self._plugin_host.clock_bus.on_clock_tick()
-                    elif ev.type == MidiEventType.START:
+                    elif ev.type == MidiEventType.START and not from_consumer:
                         self._plugin_host.clock_bus.on_start()
                         for cb in self._on_transport_start_callbacks:
                             try:
                                 cb()
                             except Exception:
                                 log.exception("transport_start callback failed")
-                    elif ev.type == MidiEventType.CONTINUE:
+                    elif ev.type == MidiEventType.CONTINUE and not from_consumer:
                         self._plugin_host.clock_bus.on_continue()
-                    elif ev.type == MidiEventType.STOP:
+                    elif ev.type == MidiEventType.STOP and not from_consumer:
                         self._plugin_host.clock_bus.on_stop()
 
                 # Process filtered MIDI events
