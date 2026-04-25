@@ -14,6 +14,7 @@ from .api import register_api
 from .config import Config
 from .led import LedController
 from .midi_engine import MidiEngine
+from .runtime.loops import rate_meter, watchdog_ping, wifi_watchdog
 from .plugin_host import PluginHost
 from .web import WebServer
 from .wifi import WifiManager
@@ -205,13 +206,13 @@ async def async_main() -> None:
         watchdog_usec = os.environ.get("WATCHDOG_USEC")
         if watchdog_usec:
             interval = int(watchdog_usec) / 1_000_000 / 2
-            asyncio.ensure_future(_watchdog_ping(interval))
+            asyncio.ensure_future(watchdog_ping(interval, notify_systemd))
 
         # WiFi client mode watchdog — fall back to AP if connection lost
-        asyncio.ensure_future(_wifi_watchdog(wifi, config, server))
+        asyncio.ensure_future(wifi_watchdog(wifi, config, server))
 
         # MIDI rate meter — snapshot and broadcast every second
-        asyncio.ensure_future(_rate_meter(engine, server))
+        asyncio.ensure_future(rate_meter(engine, server))
 
         try:
             await engine.run_event_loop()
@@ -238,52 +239,6 @@ async def async_main() -> None:
         led.set_off()
         led.restore_default_trigger()
         log.info("Shutdown complete")
-
-
-async def _rate_meter(engine, server) -> None:
-    """Broadcast per-port MIDI message rates every second."""
-    while True:
-        await asyncio.sleep(1.0)
-        rates = engine.snapshot_rates()
-        if rates:
-            await server.send_sse("midi-rates", rates)
-
-
-async def _watchdog_ping(interval: float) -> None:
-    """Periodically ping the systemd watchdog."""
-    while True:
-        notify_systemd("WATCHDOG=1")
-        await asyncio.sleep(interval)
-
-
-WIFI_CHECK_INTERVAL = 30
-WIFI_FAIL_THRESHOLD = 3  # consecutive failures before fallback
-
-
-async def _wifi_watchdog(wifi, config, server) -> None:
-    """Monitor client WiFi connection, fall back to AP if lost."""
-    fail_count = 0
-    while True:
-        await asyncio.sleep(WIFI_CHECK_INTERVAL)
-        if wifi.mode != "client":
-            fail_count = 0
-            continue
-        if wifi.check_client_connected():
-            fail_count = 0
-        else:
-            fail_count += 1
-            log.warning("WiFi client connection check failed (%d/%d)",
-                        fail_count, WIFI_FAIL_THRESHOLD)
-            if fail_count >= WIFI_FAIL_THRESHOLD:
-                log.warning("WiFi connection lost, falling back to AP mode")
-                wifi_cfg = config.wifi
-                loop = asyncio.get_event_loop()
-                await loop.run_in_executor(
-                    None, wifi.start_ap,
-                    wifi_cfg.get("ap_ssid", ""),
-                    wifi_cfg.get("ap_password", "midihub1"),
-                )
-                fail_count = 0
 
 
 def main() -> None:
