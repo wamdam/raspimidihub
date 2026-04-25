@@ -683,6 +683,283 @@ drone" case but it cuts delay/reverb tails too. Split:
 
 ---
 
+## 7. Drawable LFO (`CC Curve LFO`)
+
+### Goal
+
+A second LFO plugin whose waveform is a user-drawn 128-point curve
+instead of a preset shape. Same timing / output controls as `cc_lfo`,
+just with the existing `CurveEditor` param driving the shape.
+
+### User stories
+- "I want a custom LFO shape — a slow attack with a sharp drop, or
+  three little humps then a long tail — that I can sketch with my
+  finger and have it loop forever."
+- "I want to drop a starting shape (sine / saw / linear / exp) into
+  the editor and tweak from there."
+- "After scribbling, I want to **smooth** the curve with one tap; tap
+  again to smooth more."
+
+### Plugin shape
+
+Near-clone of `cc_lfo`. Same timing knobs (`sync`, `rate`, `freq`),
+output target (`cc_num`, `out_ch`), amplitude (`depth`, `center`),
+and clock-bus subscription. The only swap: instead of choosing a
+mathematical wave, the user draws.
+
+| Param | Type | Notes |
+|-------|------|-------|
+| `wave` | `CurveEditor(wrap=True, shapes=[...])` | 128-point curve, looping |
+| `sync`, `rate`, `freq`, `cc_num`, `out_ch`, `depth`, `center` | as in `cc_lfo` | unchanged |
+
+At each emit step, sample the curve at index `int(phase × 128) % 128`
+and map through `depth` / `center` like the existing LFO. Phase
+advances per 1/16 tick (synced) or per free-runner step.
+
+### CurveEditor extensions (shared with `velocity_curve`)
+
+The drawable canvas grows a few things any current or future drawable
+benefits from. Implemented once on the `CurveEditor` param.
+
+1. **`wrap: bool`** flag (default `False`) on the dataclass. Drawable
+   LFO sets `wrap=True`; the smoothing kernel and the canvas's
+   "left of x=0" / "right of x=127" preview both wrap accordingly.
+   `velocity_curve` keeps the default — endpoints are clamped, so the
+   "0 → 0, 127 → 127" reference line stays meaningful.
+
+2. **`shapes: list[str]`** field. Each consumer declares its starting
+   shapes. Replaces the current preset pills (Linear/S-Curve/Exp/Log)
+   with a single Shape pulldown. Default lists per consumer:
+   - `velocity_curve`: `["Linear", "S-Curve", "Exp", "Log"]`
+   - `cc_curve_lfo`: `["Sine", "Saw", "Triangle", "Square", "Linear", "Exp Up", "Exp Down"]`
+
+3. **Smooth button**, in the same row as the Shape pulldown. Each tap
+   applies one pass of 3-point Gaussian smoothing
+   (`new[i] = 0.25·left + 0.5·this + 0.25·right`) using the wrap flag
+   for edge handling. Repeated taps converge toward the mean —
+   user-throttled by simply tapping more or less.
+
+UI row layout:
+
+```
+[ Shape: Sine ▼ ]   [ Smooth ]
+```
+
+Picking a shape from the pulldown overwrites the curve with that
+shape. Smooth is non-destructive in the sense that the user can
+always reset by re-picking a shape.
+
+### Persistence
+
+`_param_values["wave"]` already holds a 128-int list (existing
+StepEditor / CurveEditor convention). No schema change.
+
+### Open questions
+
+1. **Number-of-passes control on Smooth.** Single button vs stepped
+   `[Smooth ×N]` wheel. Default to single button — taps are cheap.
+2. **Shape rendering on the pulldown options** — show a tiny preview
+   thumbnail next to each shape name? Nice-to-have; not blocker.
+
+---
+
+## 8. Clock Divider plugin
+
+### Goal
+
+Slow a connected device down by an integer factor without affecting
+anything else in the chain. Wire `Master clock → Divider IN`, then
+`Divider OUT → slave instrument`, set `Divide by` to N, and the
+slave receives 1 clock tick for every N the master sends.
+
+### User stories
+- "I want my arpeggiator to play half-speed against the master DAW
+  clock without changing the DAW tempo."
+- "I want a four-bar pad to retrigger a quarter as often as the
+  drums, without doing any maths in my head."
+
+### Plugin shape
+
+Tiny — one knob plus boilerplate.
+
+| Param | Type | Range / default |
+|-------|------|-----------------|
+| `divide_by` | `Wheel` | 2..32, default 2 |
+
+I/O: standard plugin IN + OUT ports.
+
+Behaviour:
+- For every N-th `MIDI Clock` arriving on IN, emit one `MIDI Clock`
+  on OUT. All other Clock ticks are dropped.
+- Forward `Start`, `Continue`, `Stop` **intact** (no division).
+- On `Start` or `Continue`, reset the internal counter to 0 so the
+  first emitted tick lines up with downbeat.
+- Pass through every other event type (notes, CC, etc.) unchanged —
+  so the divider can also sit in a notes path without breaking it.
+
+### Engine plumbing
+
+Plugins today receive *musical-division* ticks (`1/4`, `1/8`, …) via
+the existing `ClockBus`, not raw 24-PPQ ticks. To divide every Nth
+raw clock we need one of:
+
+- **(A) New "tick" division** — add `"tick": 1` to `DIVISION_TICKS`.
+  A plugin declaring `clock_divisions = ["tick"]` then receives
+  `on_tick("tick")` on every raw clock. Tiny one-line change.
+- **(B) New `on_raw_clock` callback** — bypass the ClockBus and let
+  the dispatcher deliver `MIDI Clock` events directly to opting-in
+  plugins. More invasive.
+
+I'd take **(A)** — one extra map entry, no API surface change. The
+Clock Divider becomes:
+
+```python
+clock_divisions = ["tick"]
+
+def on_tick(self, division):
+    self._n += 1
+    if self._n >= self.get_param("divide_by"):
+        self._n = 0
+        self.send_clock()
+
+def on_transport_start(self):
+    self._n = 0
+    self.send_start()
+
+def on_transport_stop(self):
+    self.send_stop()
+```
+
+### One small infrastructure addition
+
+Plugins currently get `on_transport_start` and `on_transport_stop`
+but not `on_transport_continue`. The ClockBus's `on_continue` only
+flips its internal `_running` flag and doesn't notify plugins. Add
+`_notify_transport("_continue")` and `on_transport_continue()`
+default-no-op on `PluginBase` so the divider (and future
+clock-aware plugins) handle Continue correctly.
+
+### Open questions
+
+1. **Phase offset** — should the user be able to pick which raw tick
+   the output falls on (e.g. divide-by-4 starting on tick 0, 1, 2,
+   or 3)? I'd skip for v1; reset-on-Start is enough for typical
+   live use.
+2. **CC `divide_by` automation** — `cc_inputs = {74: "divide_by"}`?
+   Cheap to add; useful for build-up/drop performance moves.
+
+---
+
+## 9. USB Network gadget
+
+### Goal
+
+A USB cable as the second way onto the Pi's web UI, alongside the
+WiFi AP. Plug a phone or laptop into the Pi's OTG port, the Pi
+appears as a USB-Ethernet device, the client gets `10.55.0.x` from
+DHCP, and `http://10.55.0.1/` opens the same matrix UI. Useful
+when the WiFi AP is busy/unreachable, or for studio setups where
+cable is preferred.
+
+### User stories
+- "I'm in a venue where 2.4 GHz is unusable. I plug a USB cable
+  from my laptop to the Pi and the UI opens immediately."
+- "I want both the AP and the cable working at the same time —
+  whichever I grab first wins."
+
+### Hardware support
+
+- **Pi 4 / Pi 5**: USB-C port supports OTG. Power continues through
+  the same port; data goes peripheral. ✓
+- **Pi Zero / Pi Zero 2 W**: micro-USB OTG port. ✓
+- **Pi 3**: no native OTG — feature **unsupported on Pi 3**, falls
+  back to AP-only. Surfaces as "USB gadget mode unavailable on this
+  hardware" in the Settings UI.
+
+### Setup-time changes (`raspimidihub-rosetup`)
+
+`rosetup/setup.sh` adds these on first install (idempotent — safe to
+re-run):
+
+1. Append `dtoverlay=dwc2,dr_mode=peripheral` to
+   `/boot/firmware/config.txt`. Loads the OTG driver in peripheral
+   mode at boot.
+2. Drop a file `/etc/modules-load.d/raspimidihub-gadget.conf` with
+   `g_ether` so the USB-Ethernet gadget module loads automatically.
+3. (Pi 3 detection: skip both steps with a note, set a flag the app
+   reads to grey-out the UI toggle.)
+
+A reboot is required after first install for the kernel changes to
+take effect. The UI toggle (below) tells the user when a reboot is
+needed.
+
+### Runtime config (`raspimidihub`)
+
+A new `network.usb_gadget` boolean in `config.json`, default `true`
+on hardware that supports it:
+
+- **At service start**, if `usb_gadget` is enabled and `usb0` exists:
+  - `ip addr add 10.55.0.1/24 dev usb0`
+  - `ip link set usb0 up`
+  - Write `/run/raspimidihub/dnsmasq-usb.conf` (DHCP range
+    `10.55.0.10..50`, captive-portal address resolution to the Pi
+    like the AP's dnsmasq)
+  - Spawn a separate `dnsmasq` bound to `usb0`
+- **At shutdown**, kill the dnsmasq instance and flush `usb0`.
+
+Coexistence with the AP is automatic — both dnsmasq instances use
+`bind-interfaces` and serve disjoint subnets (`192.168.4.0/24` on
+wlan0, `10.55.0.0/24` on usb0). avahi already publishes
+`raspimidihub.local` on every interface, so mDNS resolution works
+on both.
+
+### UI
+
+Settings → **Network** section grows a new toggle:
+
+```
+[ x ] WiFi AP                      ssid: RaspiMIDIHub-735C   ip: 192.168.4.1
+[ x ] USB Network gadget           ip: 10.55.0.1
+       (Reboot required after enabling)
+```
+
+If the hardware doesn't support OTG (Pi 3), the toggle is disabled
+and labelled "Not supported on this Raspberry Pi model".
+
+### Engine / web-server plumbing
+
+None — the existing web server already binds to `0.0.0.0:80` and
+will pick up the new `usb0` address automatically. The only new
+code lives in `wifi.py` (or a sibling `network.py`) for the dnsmasq
+setup path. No changes to ALSA / MIDI engine.
+
+### Testing
+
+- Boot test: USB gadget enabled, plug into a laptop, confirm `usb0`
+  shows up on the laptop and DHCP hands out `10.55.0.x`.
+- Coexistence test: AP up, USB gadget up, both serve the matrix UI
+  on their respective addresses.
+- Pi 3 test: toggle is greyed out; no kernel modules attempted.
+- Reboot semantics: enabling the toggle without reboot fails
+  gracefully with a "reboot required" toast.
+
+### Open questions
+
+1. **Default state**. On a fresh install, ship with USB gadget
+   **on** by default for supported hardware? It's a free win when
+   you have a cable; users who don't care won't notice it. I'd say
+   yes.
+2. **DHCP scope size**. `10.55.0.10..50` (40 leases) feels excessive
+   for a USB cable that only ever has one client at a time. Could
+   shrink to `10.55.0.10..15` for hygiene. No real reason either
+   way — pick one and move on.
+3. **mDNS hostname conflict**. If two Pis are on the same LAN both
+   advertising `raspimidihub.local`, avahi resolves to whichever
+   responds first. Already true today for the AP. Out of scope —
+   document.
+
+---
+
 ## Shared concerns
 
 - **New param types.** Both plugins need UI components that don't exist
@@ -748,6 +1025,25 @@ first if preferred)
    teardown-and-rebuild in `api_load_config`.
 3. Soft vs hard panic split (long-press = hard).
 
+**Modulator track** (new)
+1. CurveEditor extensions — `wrap` flag, `shapes` pulldown
+   replacement of the preset pills, Smooth button. Shared with
+   `velocity_curve`.
+2. Drawable LFO plugin (`CC Curve LFO`) — uses the extended
+   CurveEditor.
+3. `cc_lfo` per-cycle gate pattern (still TBD).
+4. Clock Divider plugin — needs the `"tick"` entry in
+   `DIVISION_TICKS` and the new `on_transport_continue` plugin
+   callback.
+
+**Network track** (new; rosetup-side, independent of everything)
+1. `dtoverlay=dwc2,dr_mode=peripheral` and `g_ether` modules-load in
+   `rosetup/setup.sh`.
+2. `wifi.py` (or sibling `network.py`) brings up `usb0` with
+   `10.55.0.1/24` and a second dnsmasq on `usb0` at service start.
+3. Settings → Network UI toggle, with Pi 3 detection greying out the
+   option.
+
 ---
 
 ## Pending design — sketched, not yet specified
@@ -755,27 +1051,19 @@ first if preferred)
 These have been discussed at idea-level but need another design pass
 before implementation.
 
-- **LFO improvements** on the existing `cc_lfo` plugin:
-  - `min` / `max` value bounds (replacing or supplementing
-    `depth/offset`).
-  - **Per-cycle gate pattern** (e.g. `0111` mutes one cycle in four —
-    ducking-style). Pattern length 1–32, default empty (always on).
-- **Drawable LFO** — new plugin or mode that walks a 128-point curve
-  from the existing `CurveEditor` param at the configured rate.
+- **`cc_lfo` per-cycle gate pattern** — `StepEditor`-style 1–32 step
+  pattern that mutes/un-mutes whole LFO cycles for ducking-style
+  effects (e.g. `0111` = first cycle off, next three on). Behaviour
+  during an off step (silent / hold-last / configurable rest value)
+  TBD.
 - **CC Sequencer** — step-based plugin emitting up to 4
   `(channel, cc, value)` per step, with arm-and-record from the CC
   observatory. Step grid UI shared with the Tracker.
-- **Clock Divider** plugin — forward every Nth Clock tick, pass
-  Start/Stop/Continue intact. ~30 lines.
 - **Preset Trigger** plugin — `(channel, note) → preset_name`. Calls
   the matrix preset-load API on note-on. Behaviour around hung notes
   during the swap is now mostly handled by the Engine track's
   edge-diff work; the remaining question is whether a dedicated
   panic-before-load toggle is still needed.
-- **USB Network gadget** (lives in `raspimidihub-rosetup`, not the
-  app) — Pi exposes a USB ethernet interface via `dwc2` + `g_ether`,
-  serves DHCP on `10.55.0.0/24`. Runs in parallel with the AP.
-  Settings → Network toggle.
 
 ## Not planned right now (but noted for later)
 
