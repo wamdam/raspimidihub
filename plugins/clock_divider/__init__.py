@@ -23,7 +23,9 @@ All non-clock events (notes, CC, pitch bend, aftertouch, program
 change) pass through unchanged, so the divider can sit in any
 chain without breaking it.
 
-Wire: Master clock → Divider IN, Divider OUT → slave instrument."""
+Wire: Master clock → Divider IN, Divider OUT → slave instrument.
+The divider only counts clocks arriving on its IN port — it
+ignores any clock the system happens to see elsewhere."""
 
     params = [
         Wheel("divide_by", "Divide by", min=2, max=32, default=2),
@@ -32,28 +34,24 @@ Wire: Master clock → Divider IN, Divider OUT → slave instrument."""
     inputs = ["MIDI Clock", "Start / Continue / Stop", "All other events (pass-through)"]
     outputs = ["MIDI Clock (÷N)", "Start / Continue / Stop", "All other events (pass-through)"]
 
-    clock_divisions = ["tick"]
-
     def on_start(self):
         self._n = 0
 
-    def on_tick(self, division):
-        if division != "tick":
-            return
+    def on_clock(self):
         self._n += 1
         if self._n >= (self.get_param("divide_by") or 2):
             self._n = 0
             self.send_clock()
 
-    def on_transport_start(self):
+    def on_clock_start(self):
         self._n = 0
         self.send_start()
 
-    def on_transport_continue(self):
+    def on_clock_continue(self):
         self._n = 0
         self.send_continue()
 
-    def on_transport_stop(self):
+    def on_clock_stop(self):
         self.send_stop()
 
     def on_note_on(self, channel, note, velocity):

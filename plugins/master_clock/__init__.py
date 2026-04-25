@@ -31,6 +31,8 @@ Wire the Master Clock OUT to any device or plugin that needs clock."""
     inputs = []
     outputs = ["MIDI Clock (24 PPQ), Start, Stop"]
 
+    feeds_clock_bus = True  # pure generator — drives the global ClockBus
+
     def on_start(self):
         self._running = True
         self._thread = threading.Thread(target=self._clock_loop, daemon=True)

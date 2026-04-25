@@ -16,7 +16,6 @@ log = logging.getLogger(__name__)
 
 # Division name → ticks per division at 24 PPQ (1 PPQ = 1/24 of a quarter).
 DIVISION_TICKS = {
-    "tick": 1,    # raw 24 PPQ — every incoming MIDI Clock
     "4/1": 384,   # 4 bars
     "2/1": 192,   # 2 bars
     "1/1": 96,    # 1 bar / whole note

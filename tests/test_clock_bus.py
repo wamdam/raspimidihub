@@ -1,14 +1,8 @@
-"""Tests for ClockBus DIVISION_TICKS and transport notification."""
+"""Tests for ClockBus transport notification."""
 
 from unittest.mock import MagicMock
 
-from raspimidihub.plugin_host.clock_bus import DIVISION_TICKS, ClockBus
-
-
-class TestDivisionTicks:
-    def test_tick_division_present(self):
-        """The "tick" division equals 1 PPQ — fires on every raw clock."""
-        assert DIVISION_TICKS["tick"] == 1
+from raspimidihub.plugin_host.clock_bus import ClockBus
 
 
 class TestTransportNotification:
@@ -22,7 +16,7 @@ class TestTransportNotification:
 
     def test_on_continue_notifies_subscribers(self):
         bus = ClockBus()
-        instance = self._make_subscribed_instance(bus, ["tick"])
+        instance = self._make_subscribed_instance(bus, ["1/16"])
 
         bus.on_continue()
 
@@ -31,7 +25,7 @@ class TestTransportNotification:
 
     def test_on_start_notifies_and_resets_count(self):
         bus = ClockBus()
-        instance = self._make_subscribed_instance(bus, ["tick"])
+        instance = self._make_subscribed_instance(bus, ["1/16"])
         bus._tick_count = 42
 
         bus.on_start()
@@ -41,22 +35,9 @@ class TestTransportNotification:
 
     def test_on_stop_notifies(self):
         bus = ClockBus()
-        instance = self._make_subscribed_instance(bus, ["tick"])
+        instance = self._make_subscribed_instance(bus, ["1/16"])
 
         bus.on_stop()
 
         instance._tick_queue.put_nowait.assert_called_once_with("_stop")
         assert bus._running is False
-
-    def test_on_clock_tick_dispatches_tick_division(self):
-        """A subscriber on "tick" should be queued on every clock tick."""
-        bus = ClockBus()
-        instance = self._make_subscribed_instance(bus, ["tick"])
-
-        for _ in range(3):
-            bus.on_clock_tick()
-
-        # 3 ticks → 3 "tick" dispatches
-        tick_calls = [c for c in instance._tick_queue.put_nowait.call_args_list
-                      if c.args == ("tick",)]
-        assert len(tick_calls) == 3

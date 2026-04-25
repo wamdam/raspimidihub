@@ -381,11 +381,14 @@ class PluginHost:
                 plugin.on_aftertouch(ev.data.control.channel, ev.data.control.value)
             elif ev.type == MidiEventType.PGMCHANGE:
                 plugin.on_program_change(ev.data.control.channel, ev.data.control.value)
-            elif ev.type in (MidiEventType.CLOCK, MidiEventType.START,
-                             MidiEventType.CONTINUE, MidiEventType.STOP):
-                # Clock events are handled by the clock bus in the engine's
-                # main event loop — don't double-process here.
-                pass
+            elif ev.type == MidiEventType.CLOCK:
+                plugin.on_clock()
+            elif ev.type == MidiEventType.START:
+                plugin.on_clock_start()
+            elif ev.type == MidiEventType.CONTINUE:
+                plugin.on_clock_continue()
+            elif ev.type == MidiEventType.STOP:
+                plugin.on_clock_stop()
         except Exception as e:
             log.warning("Plugin %s event handler error: %s", instance.name, e)
 
@@ -533,17 +536,20 @@ class PluginHost:
                 ids.add(instance.alsa_client.client_id)
         return ids
 
-    def is_clock_consumer_client(self, client_id: int) -> bool:
-        """True if `client_id` is a plugin instance that subscribes to clock
-        ticks. Used by the engine to suppress feedback: a clock-consuming
-        plugin's own emitted clock must not be fed back into the ClockBus,
-        or it double-ticks itself. Pure clock generators (Master Clock,
-        clock_divisions = []) are not consumers, so their OUT-port clock
-        still drives the bus normally.
+    def client_feeds_clock_bus(self, client_id: int) -> bool:
+        """True if `client_id` is a plugin instance whose OUT-port clock
+        should feed the global ClockBus. Only pure clock generators
+        (Master Clock — `feeds_clock_bus = True`) qualify; clock
+        processors and everything else default to False so their emission
+        doesn't pollute the bus's tempo perception.
+
+        External hardware clients (not plugins) also return False here;
+        they're handled separately at the call site by the monitor-port
+        check.
         """
         for instance in self._instances.values():
             if instance.alsa_client and instance.alsa_client.client_id == client_id:
-                return bool(instance.plugin.__class__.clock_divisions)
+                return bool(instance.plugin.__class__.feeds_clock_bus)
         return False
 
     def rename_instance(self, instance_id: str, new_name: str) -> bool:

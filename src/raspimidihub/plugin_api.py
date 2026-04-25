@@ -264,6 +264,13 @@ class PluginBase:
 
     # --- Clock ---
     clock_divisions: list[str] = []  # e.g. ["1/8", "1/16"]
+    # True only for plugins that GENERATE clock from scratch (Master Clock).
+    # When True, the plugin's emitted CLOCK / START / CONTINUE / STOP feeds
+    # the global ClockBus so that bus-following plugins (Arpeggiator, CC LFO,
+    # MIDI Delay) can sync to it. Default False — clock-processing plugins
+    # like Clock Divider must not feed the bus or they'd pollute the
+    # system's tempo perception with their own divided output.
+    feeds_clock_bus: bool = False
 
     # --- Display outputs (declared in subclass, framework renders read-only) ---
     # Each entry: {"name": str, "type": "meter"|"text", "label": str, "min": 0, "max": 127}
@@ -324,6 +331,28 @@ class PluginBase:
 
     def on_transport_continue(self) -> None:
         """MIDI Continue received — resume without resetting position."""
+        pass
+
+    # Source-routed clock callbacks (delivered when CLOCK / START / CONTINUE
+    # / STOP arrives at *this plugin's IN port* via the matrix). Use these
+    # instead of the global ClockBus when you need per-source clock — e.g.
+    # a Clock Divider that should only tick from clock actually wired to
+    # it, not from any clock the engine happens to see.
+
+    def on_clock(self) -> None:
+        """A MIDI Clock (24 PPQ) arrived on this plugin's IN port."""
+        pass
+
+    def on_clock_start(self) -> None:
+        """A MIDI Start arrived on this plugin's IN port."""
+        pass
+
+    def on_clock_continue(self) -> None:
+        """A MIDI Continue arrived on this plugin's IN port."""
+        pass
+
+    def on_clock_stop(self) -> None:
+        """A MIDI Stop arrived on this plugin's IN port."""
         pass
 
     def on_tick(self, division: str) -> None:
