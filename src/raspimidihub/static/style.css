@@ -377,10 +377,7 @@ body {
     justify-content: center;
 }
 .filter-panel {
-    background:
-        radial-gradient(ellipse 90% 60% at 15% 0%, rgba(120, 70, 200, 0.55) 0%, transparent 60%),
-        radial-gradient(ellipse 80% 55% at 95% 100%, rgba(233, 69, 96, 0.32) 0%, transparent 60%),
-        linear-gradient(180deg, #1c1530 0%, #1a1a2e 100%);
+    background: var(--bg);
     width: 100%;
     max-width: 500px;
     max-height: 90vh;
@@ -389,20 +386,23 @@ body {
     padding: 0 16px 16px;
     animation: slideUp 0.2s;
 }
-/* Cards inside the plugin panel are translucent so the panel gradient
-   reads as foreground lighting on each card, instead of being hidden
-   by a solid card fill. */
+/* Cards inside the plugin panel get the lit gradient so they read as
+   raised, glowing surfaces against the matrix-coloured panel
+   background. The gradient pulls violet from top-left and pink from
+   bottom-right — same family as the accent colour, but soft. */
 .filter-panel .card {
-    background: rgba(15, 15, 30, 0.45);
-    backdrop-filter: blur(2px);
-    border: 1px solid rgba(255, 255, 255, 0.04);
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+    background:
+        radial-gradient(ellipse 90% 70% at 15% 0%, rgba(120, 70, 200, 0.45) 0%, transparent 65%),
+        radial-gradient(ellipse 80% 65% at 95% 100%, rgba(233, 69, 96, 0.28) 0%, transparent 65%),
+        linear-gradient(180deg, #221a3a 0%, #1d1730 100%);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45),
+                inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 .panel-header {
     position: sticky;
     top: 0;
-    background: linear-gradient(180deg, #1a1a2e 0%, rgba(26, 26, 46, 0.92) 100%);
-    backdrop-filter: blur(4px);
+    background: var(--bg);
     padding: 8px 0 12px;
     z-index: 1;
     display: flex;
@@ -710,7 +710,7 @@ body {
     margin-top: 2px; padding: 2px 6px; font-size: 11px; line-height: 1.4;
     border: 1px solid rgba(255,255,255,0.08); border-radius: 6px;
     background: var(--surface2); color: var(--text);
-    cursor: pointer; width: 80px; min-height: 24px;
+    cursor: pointer; width: 100%; min-height: 24px;
 }
 .btn-learn-inline:active { opacity: 0.7; }
 .wheel-container {
