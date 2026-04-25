@@ -207,6 +207,13 @@ export function DeviceDetailPanel({ device, onClose, showToast, refresh, pluginD
     const patchInFlightRef = useRef(false);          // a PATCH is currently on the wire
     const IN_FLIGHT_RELEASE_MS = 250;
 
+    // Refs that track the latest local + server view of params, so the
+    // settle-check below can compare them outside of a render closure.
+    const pluginParamsRef = useRef(pluginParams);
+    pluginParamsRef.current = pluginParams;
+    const pluginDisplaysRef = useRef(pluginDisplays);
+    pluginDisplaysRef.current = pluginDisplays;
+
     const flushPending = useCallback(() => {
         rafIdRef.current = null;
         if (patchInFlightRef.current) return;        // queued; will fire after current PATCH finishes
@@ -287,6 +294,25 @@ export function DeviceDetailPanel({ device, onClose, showToast, refresh, pluginD
         if (existing) clearTimeout(existing);
         inFlightRef.current.set(name, setTimeout(() => {
             inFlightRef.current.delete(name);
+            // Eventually-consistent watchdog. After the user idles for
+            // IN_FLIGHT_RELEASE_MS, compare our optimistic local state
+            // for this param against the most recent server value seen
+            // via SSE. If they disagree the final PATCH didn't land —
+            // re-queue our local value as the authoritative one and
+            // flush. The retry-on-429 + serialised flush logic above
+            // takes it from there until SSE finally echoes back.
+            const ssp = pluginDisplaysRef.current
+                && pluginDisplaysRef.current['_params_' + device.plugin_instance_id];
+            const localVal = pluginParamsRef.current[name];
+            if (device.plugin_instance_id && ssp
+                    && ssp[name] !== undefined
+                    && ssp[name] !== localVal
+                    && pendingPatchesRef.current.get(name) !== localVal) {
+                pendingPatchesRef.current.set(name, localVal);
+                if (rafIdRef.current === null && !patchInFlightRef.current) {
+                    rafIdRef.current = requestAnimationFrame(flushPending);
+                }
+            }
         }, IN_FLIGHT_RELEASE_MS));
     }, [device.plugin_instance_id, flushPending]);
 
