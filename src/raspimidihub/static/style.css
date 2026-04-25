@@ -127,6 +127,19 @@ body {
     border: 1px solid #a02424;
 }
 .btn-panic:active { background: #5a0e0e; }
+.btn-panic-soft {
+    border-color: #ff5050;
+    animation: panic-pulse 1.2s ease-in-out infinite;
+}
+.btn-panic-hard {
+    background: #d02020;
+    border-color: #ff8080;
+    box-shadow: 0 0 12px 2px rgba(255, 80, 80, 0.8);
+}
+@keyframes panic-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(255, 80, 80, 0.6); }
+    50% { box-shadow: 0 0 0 6px rgba(255, 80, 80, 0); }
+}
 .btn-secondary { background: var(--surface2); color: var(--text); }
 .btn-danger { background: var(--error); color: #fff; }
 .btn-success { background: var(--success); color: #fff; }

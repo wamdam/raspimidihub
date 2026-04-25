@@ -50,6 +50,7 @@ class MidiEngine:
         self._config = None  # set externally for config-aware rescan
         self._on_change_callbacks: list = []
         self._on_midi_event_callbacks: list = []
+        self._on_transport_start_callbacks: list = []
         # Per-port message counters for rate metering
         self._port_msg_counts: dict[str, int] = {}  # "client:port" -> count
         self._port_rates: dict[str, int] = {}  # "client:port" -> msgs/sec (last snapshot)
@@ -78,6 +79,10 @@ class MidiEngine:
     def on_midi_event(self, callback):
         """Register a callback for MIDI events (for monitoring)."""
         self._on_midi_event_callbacks.append(callback)
+
+    def on_transport_start(self, callback):
+        """Register a callback fired on incoming MIDI Start (no args)."""
+        self._on_transport_start_callbacks.append(callback)
 
     def _notify_change(self):
         for cb in self._on_change_callbacks:
@@ -668,6 +673,11 @@ class MidiEngine:
                             self._plugin_host.clock_bus.on_clock_tick()
                     elif ev.type == MidiEventType.START:
                         self._plugin_host.clock_bus.on_start()
+                        for cb in self._on_transport_start_callbacks:
+                            try:
+                                cb()
+                            except Exception:
+                                log.exception("transport_start callback failed")
                     elif ev.type == MidiEventType.CONTINUE:
                         self._plugin_host.clock_bus.on_continue()
                     elif ev.type == MidiEventType.STOP:
@@ -680,12 +690,15 @@ class MidiEngine:
             if hotplug:
                 self._schedule_rescan()
 
-    def panic(self) -> None:
-        """Silence all sounding notes across every outbound destination.
+    def panic(self, hard: bool = False) -> None:
+        """Silence sounding notes across every outbound destination.
 
-        Sends CC 123 (All Notes Off) + CC 120 (All Sound Off) on all 16
-        channels to every unique destination that has active connections,
-        then asks each plugin to release its internal note state.
+        Soft (default): per-edge NoteOff for tracked active notes + CC 123
+        (All Notes Off) on every channel of every destination + plugin
+        panic_all(). Lets delay/reverb tails keep ringing.
+
+        Hard: soft + CC 120 (All Sound Off) on every channel — for when the
+        rig is genuinely stuck and tails don't matter.
         """
         if not self._seq:
             return
@@ -699,12 +712,17 @@ class MidiEngine:
             snd_seq_event_output_direct,
         )
 
+        # Per-edge NoteOff for every tracked active note (surgical).
+        for conn in list(self._active_notes):
+            self.release_edge_notes(conn)
+
         panic_port = self._monitor_port if self._monitor_port >= 0 else 0
         dests = {(c.dst_client, c.dst_port) for c in self._connections}
+        ccs = [123, 120] if hard else [123]
 
         for dst_client, dst_port in dests:
             for ch in range(16):
-                for cc in (123, 120):  # All Notes Off, All Sound Off
+                for cc in ccs:
                     ev = SndSeqEvent()
                     ev.type = int(MidiEventType.CONTROLLER)
                     ev.data.control.channel = ch
@@ -725,7 +743,7 @@ class MidiEngine:
                 log.exception("panic_all failed")
 
         self._active_notes.clear()
-        log.info("Panic: sent All Notes Off to %d destinations", len(dests))
+        log.info("Panic (%s): %d destinations", "hard" if hard else "soft", len(dests))
 
     def snapshot_rates(self) -> dict[str, int]:
         """Snapshot per-port message rates (msgs/sec) and reset counters."""

@@ -971,9 +971,11 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
 
     @server.route("POST", "/api/panic")
     async def api_panic(req: Request) -> Response:
-        await asyncio.to_thread(engine.panic)
-        await server.send_sse("panic", {})
-        return Response.json({"status": "panic"})
+        data = req.json or {}
+        hard = bool(data.get("hard", False))
+        await asyncio.to_thread(engine.panic, hard)
+        await server.send_sse("panic", {"hard": hard})
+        return Response.json({"status": "panic", "hard": hard})
 
     # ================================================================
     # POST /api/system/reboot — reboot the Pi

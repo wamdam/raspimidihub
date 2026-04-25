@@ -3,7 +3,7 @@
  * + add-plugin overlay + global Panic.
  */
 
-import { useState } from '../lib/hooks.module.js';
+import { useState, useEffect } from '../lib/hooks.module.js';
 import { html, api } from '../ui/common.js';
 import { PluginIcon } from '../ui/icons.js';
 import { ConnectionMatrix } from './matrix.js';
@@ -96,12 +96,26 @@ export function RoutingPage({ devices, connections, refresh, showToast, clockSou
         refresh();
         showToast('Configuration loaded');
     };
-    const [panicing, setPanicing] = useState(false);
+    // Panic state machine: 'idle' → tap → 'soft' → tap → 'hard' (briefly, then back to idle)
+    // Incoming MIDI Start resets to 'idle'. Hard auto-decays after 600ms.
+    const [panicState, setPanicState] = useState('idle');
     const panic = async () => {
-        setPanicing(true);
-        try { await api('/panic', { method: 'POST' }); showToast('Panic — all notes off'); }
-        finally { setTimeout(() => setPanicing(false), 400); }
+        const goingHard = panicState === 'soft';
+        setPanicState(goingHard ? 'hard' : 'soft');
+        try {
+            await api('/panic', { method: 'POST', body: JSON.stringify({ hard: goingHard }) });
+            showToast(goingHard ? 'Panic — all sound off' : 'Panic — all notes off');
+        } catch {}
+        if (goingHard) {
+            setTimeout(() => setPanicState('idle'), 600);
+        }
     };
+    useEffect(() => {
+        const es = new EventSource('/api/events');
+        const reset = () => setPanicState('idle');
+        es.addEventListener('transport-start', reset);
+        return () => es.close();
+    }, []);
 
     return html`
         ${filterConn && html`<${FilterPanel}
@@ -132,7 +146,9 @@ export function RoutingPage({ devices, connections, refresh, showToast, clockSou
             }}>Import Config</button>
         </div>
         <div class="btn-group" style="margin-top:4px">
-            <button class="btn btn-panic ${panicing ? 'btn-held' : ''}" onclick=${panic}>Panic — All Notes Off</button>
+            <button class="btn btn-panic ${panicState === 'soft' ? 'btn-panic-soft' : ''} ${panicState === 'hard' ? 'btn-panic-hard' : ''}" onclick=${panic}>
+                ${panicState === 'soft' ? 'Press again for full Sound Off' : 'Panic — All Notes Off'}
+            </button>
         </div>
         ${showAddPlugin && html`
             <div class="filter-overlay" onclick=${(e) => e.target.className === 'filter-overlay' && setShowAddPlugin(false)}>

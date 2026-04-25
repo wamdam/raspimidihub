@@ -123,6 +123,11 @@ async def async_main() -> None:
 
     engine.on_midi_event(on_midi_event)
 
+    def on_transport_start():
+        asyncio.ensure_future(server.send_sse("transport-start", {}))
+
+    engine.on_transport_start(on_transport_start)
+
     try:
         # Store config ref before start() so _scan_and_connect uses saved config
         if config_ok:
