@@ -233,6 +233,79 @@ class MidiEngine:
         snapshot_disconn = dict(self._disconnected)
         return snapshot_conns, snapshot_disconn
 
+    def _cancel_pending_rescan(self) -> None:
+        """Cancel any in-flight debounced rescan — used by the additive
+        plugin add/remove fast paths to override the engine event-loop's
+        hotplug-driven rescan in case it managed to schedule one before
+        the new client made it into plugin_host._instances."""
+        if self._debounce_task and not self._debounce_task.done():
+            self._debounce_task.cancel()
+            self._debounce_task = None
+
+    def handle_plugin_added(self) -> None:
+        """Fast path for "a new plugin instance just appeared".
+
+        No teardown. No disconnect_all. Just registers the new ALSA
+        client, updates monitor subscriptions, and notifies listeners.
+        Existing subscriptions, filter ports, and userspace mappings
+        all stay live — clock and MIDI through filtered connections
+        are not interrupted.
+
+        Used instead of _schedule_rescan() when the caller knows the
+        change is purely additive (no devices disappeared, no client
+        IDs shuffled).
+        """
+        if not self._seq:
+            return
+        self._cancel_pending_rescan()
+        self.scan_devices()
+        self._update_monitor_subscriptions()
+        self._notify_change()
+
+    def handle_plugin_removed(self, gone_client_id: int) -> None:
+        """Fast path for "a plugin instance is being removed".
+
+        Drops only the connections that touch the going-away client,
+        plus its monitor subscription. Other subscriptions stay live.
+        """
+        if not self._seq:
+            return
+        self._cancel_pending_rescan()
+
+        # Drop direct connections touching the removed client
+        for conn in list(self._connections):
+            if conn.src_client == gone_client_id or conn.dst_client == gone_client_id:
+                try:
+                    self._seq.unsubscribe(conn.src_client, conn.src_port,
+                                          conn.dst_client, conn.dst_port)
+                except OSError:
+                    pass
+                self._connections.discard(conn)
+
+        # Drop filtered connections touching the removed client
+        if self._filter_engine:
+            for conn_id in list(self._filter_engine.filtered_connections.keys()):
+                try:
+                    sc, _, dc, _ = self._parse_conn_id(conn_id)
+                except (ValueError, IndexError):
+                    continue
+                if sc == gone_client_id or dc == gone_client_id:
+                    self._filter_engine.remove_filter(conn_id)
+
+        # Drop monitor subscription for the gone client
+        self._monitored_clients.discard(gone_client_id)
+
+        self.scan_devices()
+        self._update_monitor_subscriptions()
+        self._notify_change()
+
+    @staticmethod
+    def _parse_conn_id(conn_id: str) -> tuple[int, int, int, int]:
+        src, dst = conn_id.split("-")
+        sc, sp = map(int, src.split(":"))
+        dc, dp = map(int, dst.split(":"))
+        return sc, sp, dc, dp
+
     def _scan_and_connect(self) -> None:
         """Rescan devices and restore connections from live state snapshot.
 
@@ -337,6 +410,16 @@ class MidiEngine:
                         affected_port = ev.data.raw8[1]
                         # Ignore events from our own client
                         if affected_client == self._seq.client_id:
+                            continue
+                        # Plugin-managed clients are added/removed by the
+                        # plugin host's fast paths (handle_plugin_added /
+                        # handle_plugin_removed). Skip the global rescan
+                        # for them — otherwise we'd tear down every filter
+                        # port and re-subscribe everything just because a
+                        # plugin instance came or went, glitching MIDI
+                        # through every other connection.
+                        if (self._plugin_host
+                                and affected_client in self._plugin_host.get_plugin_client_ids()):
                             continue
                         log.info("Hotplug event: %s (client %d, port %d)",
                                  ev_type.name, affected_client, affected_port)

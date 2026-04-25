@@ -1321,8 +1321,10 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         except Exception as e:
             return Response.error(f"Failed to create instance: {e}", 500)
 
-        # Trigger device rescan so the new ALSA client appears in the matrix
-        engine._schedule_rescan()
+        # Register the new ALSA client without tearing down existing
+        # subscriptions — keeps clock and MIDI flowing through the
+        # other plugins.
+        engine.handle_plugin_added()
 
         data = engine._plugin_host.get_instance_data(instance.id)
         return Response.json(data, status=201)
@@ -1367,10 +1369,16 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         if instance is None:
             return Response.error("Instance not found", 404)
 
+        gone_client_id = instance.alsa_client.client_id if instance.alsa_client else -1
+
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(None, engine._plugin_host.stop_instance, instance_id)
 
-        # Trigger device rescan so the removed ALSA client disappears from the matrix
-        engine._schedule_rescan()
+        # Drop only this client's subscriptions; leave everything else
+        # alone so clock and MIDI through other plugins keep flowing.
+        if gone_client_id >= 0:
+            engine.handle_plugin_removed(gone_client_id)
+        else:
+            engine.handle_plugin_added()  # fall back to a plain refresh
 
         return Response.json({"status": "deleted"})
