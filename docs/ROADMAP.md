@@ -254,10 +254,29 @@ configured plugin into a new instance.
 | Connection cell (empty)  | Paste (if compat) · Add connection |
 | Plugin row/column header | Edit · Copy · Paste-as-new · Delete |
 | Hardware row/column header | Rename · (no copy — hardware is physical) |
+| **Mapping row** (in FilterPanel) | **Edit · Copy · Remove** |
 
 **Edit** on a connection cell is today's long-press behaviour (opens
 the filter/mapping panel). **Edit** on a plugin header opens the
 plugin config panel (same as tap).
+
+For **mapping rows** specifically:
+- **Single tap** opens the inline mapping Edit form (replaces the
+  current "Edit" button — a single tap is the obvious interaction
+  for "I want to edit this thing").
+- **Long tap** opens the popover menu (Edit · Copy · Remove). Edit
+  is duplicated for muscle-memory consistency with other rows.
+- Paste is **not** in the row's menu. Instead, when the clipboard
+  holds a `kind: "mapping"` payload, a `[ + Paste Mapping ]` button
+  appears next to the existing `[ + Add Mapping ]` button at the
+  bottom of the mapping list. Paste always **appends a new mapping**
+  with one destination field auto-bumped (see Clipboard shape
+  below). Avoids the ambiguous "does paste replace this row or
+  insert?" question that Paste-on-row would raise.
+
+The current inline **Edit** and **Delete** buttons on each mapping
+row are **removed**. Edit is single-tap; Delete becomes Remove in
+the long-tap menu.
 
 ### Clipboard shape
 
@@ -280,6 +299,16 @@ clipboard = {
   params) **or** another plugin row of the same type (replace its
   params). Name is NOT copied — the new instance gets an auto-name so
   two clones don't collide.
+- **kind: "mapping"** — `payload = <full mapping dict>`. Paste target:
+  the same connection's mapping list, **or any other connection's
+  mapping list**. On paste, **one destination field is auto-bumped
+  by +1** so the new mapping doesn't trip duplicate detection:
+  - **CC→CC**: `dst_cc_num` += 1 (clamped 0..127)
+  - **Note→CC / Note→CC-toggle**: `dst_cc` += 1
+  - **Channel Map**: `dst_channel` += 1 (mod 16)
+  If the bumped value still collides (same src + already-existing
+  bumped dst), the validator throws and the user adjusts manually —
+  no auto-search for a free slot, that would be surprising.
 
 Clipboard lives in client state (Preact). Shared across devices via the
 existing SSE bus — **out of scope for MVP**; single-browser clipboard only.
@@ -633,17 +662,52 @@ The current Panic button does CC 123 + CC 120 + plugin `panic()` on
 every destination. That's correct for the "rescue me from a stuck
 drone" case but it cuts delay/reverb tails too. Split:
 
-- **Soft panic** (default tap on the Panic button)
+- **Soft panic** (1st tap on the Panic button — default)
   - For each edge: emit `note_off` for tracked active notes.
   - `CC 123` (All Notes Off) on each used channel.
   - Plugins still get `panic()` so internal state (Hold, Arp) clears.
   - **Does not send `CC 120`** (All Sound Off) — delay / reverb tails
     keep ringing.
-- **Hard panic** (long-press the button — or a separate "Sound Off"
-  control)
+- **Hard panic** (2nd tap while the panic state is `soft-panicked`)
   - Soft panic + `CC 120` on every channel of every destination.
   - For when the rig is genuinely stuck and you don't care about
     tails.
+
+### Panic state machine (Elektron-style)
+
+The button is a 3-state machine driven by taps and Transport Start:
+
+```
+        idle  ── tap ──▶  soft-panicked  ── tap ──▶  hard-panicked
+         ▲                      │                        │
+         │ Transport Start      │ Transport Start        │
+         └──────────────────────┴────────────────────────┘
+                                                         │ tap
+                                                         ▼
+                                                   (back to idle —
+                                                    one hard is enough)
+```
+
+Rules:
+- `idle` → tap → emits **soft panic**, state becomes `soft-panicked`.
+- `soft-panicked` → tap → emits **hard panic**, state becomes
+  `hard-panicked`.
+- `hard-panicked` → tap → emits soft panic again, state becomes
+  `soft-panicked` (so the user can ramp-up again).
+- **Transport Start** (incoming MIDI Start) at any state →
+  `idle`. Matches Elektron behaviour: pressing Play "rearms" Stop.
+
+No timeout — state persists across long pauses. Only Transport Start
+resets it.
+
+### UI feedback for the panic button
+
+- `idle`: standard red button labelled `Panic`.
+- `soft-panicked`: pulsing red outline + helper text under it,
+  "Press again for full Sound Off". Makes the second press feel
+  intentional.
+- `hard-panicked`: brief solid red flash, then back to standard
+  appearance after ~600 ms.
 
 ### Where this plugs in
 
@@ -653,6 +717,8 @@ drone" case but it cuts delay/reverb tails too. Split:
 - `api.api_load_config` and the (future) Preset Trigger plugin call
   `apply_edge_diff` instead of disconnecting first.
 - `api.api_panic` POST body gains `{"hard": bool}` (default False).
+  The state machine itself lives client-side — the API just emits
+  whichever flavour the client requests.
 
 ### Testing
 
@@ -668,15 +734,11 @@ drone" case but it cuts delay/reverb tails too. Split:
 
 ### Open questions
 
-1. **Soft vs hard panic surface**. Long-press for hard, or two
-   buttons? I'd default to long-press to keep the matrix toolbar
-   tidy, with a tooltip on the existing button explaining both
-   behaviours.
-2. **Delay/reverb tail responsibility**. Soft panic relies on the
+1. **Delay/reverb tail responsibility**. Soft panic relies on the
    downstream FX device honouring CC 123 (note-off-style behaviour)
    and not interpreting it as CC 120. Most synths do the right
    thing; document the exception list as we encounter it.
-3. **Preset Trigger plugin interaction**. With smooth presets,
+2. **Preset Trigger plugin interaction**. With smooth presets,
    panic-before-load becomes unnecessary in normal cases. The
    Preset Trigger plugin can default to "no panic, smooth diff" and
    leave hard panic as a manual user action.
@@ -850,6 +912,143 @@ clock-aware plugins) handle Continue correctly.
 
 ---
 
+## 9. UI element sizing & grid scaling
+
+### Goal
+
+A consistent, grid-friendly layout language for every interactive
+control across the app — used by plugin config panels today and by
+the Controller's `LayoutGrid` tomorrow. Cells line up cleanly,
+fullscreen modes scale predictably to the device, and the visual
+language stays uniform.
+
+### Base unit (`1u`)
+
+Every UI control declares its footprint as **integer multiples of a
+shared base unit**. No fractional sizes.
+
+| Control | Footprint (`w × h` in units) | Notes |
+|---------|--------------------------------|-------|
+| Wheel | `1 × 1` |  |
+| Knob | `1 × 1` | (new in §5) |
+| Toggle | `1 × 1` |  |
+| Pad / Button | `1 × 1` |  |
+| Display (meter) | `2 × 1` |  |
+| Display (scope) | `3 × 1` |  |
+| Fader (vertical) | `1 × 3` | tall thin |
+| Fader (horizontal) | `3 × 1` | wide thin |
+| XY pad | `2 × 2` | (new in §5) |
+| StepEditor (8 steps) | `4 × 1` | scales with step count |
+| CurveEditor | `4 × 4` | square canvas |
+| ChannelSelect | `1 × 1` | thumb-driven wheel |
+| NoteSelect | `1 × 1` | thumb-driven wheel |
+| Group title | `N × 0` | spans full width, no height in the grid sense |
+
+Larger variants exist where it makes sense (a `2 × 1` Wheel for
+`split_point`-style ranges; a `2 × 3` Fader for the master volume
+in fullscreen). Plugins may declare them via the existing param
+dataclasses; the renderer just snaps to the requested grid.
+
+### `1u` value at render time
+
+Computed at render time from the viewport — the base unit is **not
+a fixed pixel count**. Two contexts:
+
+- **Config panels in matrix view**: `1u` defaults to ~80 px on
+  desktop, ~64 px on phone. Picked to make a 4-column control row
+  feel right on both.
+- **Controller fullscreen play mode**: `1u = min(viewport_w / cols,
+  viewport_h / rows)` over the LayoutGrid's declared `cols × rows`.
+  No scrolling — the grid fits. Big tablets get big knobs.
+
+### Open questions
+
+1. **Per-device override**. Should the user be able to nudge the base
+   unit up/down in Settings? Probably v2.
+2. **Density**. A high-resolution phone in landscape can fit a lot.
+   Cap `1u` at some maximum (~140 px) so things stay touch-sized?
+
+---
+
+## 10. UI Demo plugin
+
+### Goal
+
+A plugin whose only purpose is to **showcase every UI param type at
+its canonical size**, on a real `LayoutGrid`. Created like any
+plugin via "+ Add Plugin"; doesn't emit MIDI. Functions as:
+
+- a **visual reference** for the sizing rules (§9) — Knob next to
+  Fader next to XY pad on the same screen, see them in proportion;
+- an **acceptance surface** for the UI controls refactor (§11) —
+  the demo plugin renders all controls; if it looks right, the
+  refactor didn't regress;
+- a **sandbox** where new control designs (Knob, XY pad, future
+  ones) can iterate before they get used in real plugins.
+
+### Contents
+
+A single `LayoutGrid` containing one of each control type, plus an
+inline `Display` showing live values fed by simple internal logic
+(LFO ticking against the wheel, square XY pad updating both axes,
+etc.). All bound to a virtual no-op output — wiring this plugin to
+anything in the matrix produces silence.
+
+### Lives in
+
+`plugins/ui_demo/__init__.py`. Tests are visual — covered by the
+demo's own existence and by exercising it during Phase 3 of the
+implementation plan.
+
+---
+
+## 11. UI controls refactor
+
+### Goal
+
+`plugin-controls.js` is currently one ~950-line file holding every
+control. New controls (Knob, XY pad, LayoutGrid) are about to be
+added; before that lands, split the existing components into
+per-component files so each new control gets its own file too.
+
+### Layout after refactor
+
+```
+src/raspimidihub/static/
+  plugin-controls.js          ← thin shim: imports + re-exports
+  components/
+    common.js                 ← shared helpers (tickFeedback,
+                                thudFeedback, drum animation, etc.)
+    render-param.js           ← the dispatcher (renderParam,
+                                INLINE_TYPES, renderParamGroup,
+                                renderParamList)
+    wheel.js                  ← PluginWheel
+    fader.js                  ← PluginFader
+    radio.js                  ← PluginRadio
+    toggle.js                 ← PluginToggle
+    button.js                 ← PluginButton
+    note-select.js            ← PluginNoteSelect
+    channel-select.js         ← PluginChannelSelect
+    step-editor.js            ← PluginStepEditor
+    curve-editor.js           ← PluginCurveEditor
+    display.js                ← PluginScope, PluginMeter
+    knob.js                   ← new in §5
+    xy-pad.js                 ← new in §5
+    layout-grid.js            ← new in §5
+```
+
+Each file ≤ ~200 lines. `plugin-controls.js` stays as the public
+entry point so existing imports (`./plugin-controls.js`) keep
+working — no changes outside this directory.
+
+### Rule going forward
+
+**New components always land as their own file** under
+`components/`. `plugin-controls.js` only ever grows by one
+`export` line.
+
+---
+
 ## Shared concerns
 
 - **New param types.** Both plugins need UI components that don't exist
@@ -925,6 +1124,143 @@ first if preferred)
 4. Clock Divider plugin — needs the `"tick"` entry in
    `DIVISION_TICKS` and the new `on_transport_continue` plugin
    callback.
+
+---
+
+## Recommended implementation order
+
+This is the suggested phasing — independent of the looser "tracks"
+above, which describe theme groupings. Each phase ends in a release.
+
+### Phase 1 — Foundation + small win (≈ 1 sprint)
+
+Small, mostly-mechanical work that delivers a couple of visible
+things and de-risks the bigger Engine changes in Phase 2.
+
+1. **Clock Divider plugin** (§8). Smallest fully-spec'd plugin.
+   Forces us to land:
+   - new `"tick": 1` entry in `DIVISION_TICKS`,
+   - new `on_transport_continue` plugin callback + ClockBus
+     `_notify_transport("_continue")`.
+2. **Per-edge note refcount table** (§6). Pure data, no behaviour
+   change yet. Engine starts tracking `(edge_id, channel, note) →
+   count` so we know exactly which notes are sounding on which edges.
+3. **Soft / hard panic with the double-tap state machine** (§6).
+   Uses 1.2's table. Existing Panic button gains the Elektron-style
+   double-press to upgrade to hard.
+
+### Phase 2 — Engine smoothness (≈ 1 sprint)
+
+The big invasive Engine change. **Highest test coverage of any
+phase** — it touches the live MIDI hot path.
+
+1. `MidiEngine.apply_edge_diff(target_edges)`. Replace the
+   `disconnect_all() + _apply_saved_config()` pair in
+   `api_load_config` with the diff-and-apply algorithm from §6.
+2. Synthetic edge-diff tests covering all permutations
+   (removed-only, added-only, both, changed-filter, changed-mappings,
+   untouched).
+3. End-to-end Pi test: load a preset while a synthesised note is
+   sounding on a soon-to-be-removed edge → assert clean note-off,
+   assert untouched edges receive nothing extra.
+
+After this, Preset Trigger is essentially a 30-line plugin —
+stays in pending until requested.
+
+### Phase 3 — Foundation for Controllers (≈ 0.5 sprint)
+
+Foundation work the Controller MVP depends on. Nothing user-visible
+ships in this phase alone, but everything in 4 builds on it.
+
+1. **UI controls refactor** (§11). Split `plugin-controls.js` into
+   `components/*.js`. Acceptance: every existing plugin renders
+   identically.
+2. **UI sizing rules** (§9) baked into `plugin_api.py` param
+   dataclasses (`size_w`, `size_h` defaults per type) + the
+   renderer reads them.
+3. **UI Demo plugin** (§10). Lands now so subsequent Knob / Fader /
+   XY pad work has a live target to render into.
+4. **CC observatory** (§5 engine plumbing). Cache last-seen value
+   per `(client, port, ch, cc)`; broadcast on change via SSE
+   `cc-snapshot`. Useful side-benefit: matrix can later show live
+   CC values on cells.
+
+### Phase 4 — Controller MVP (≈ 1 sprint)
+
+Biggest user-visible win for performance.
+
+1. `LayoutGrid` + `PluginXYPad` UI param types (§5).
+2. Controller plugin: Knob / Fader / Toggle / XY pad cells, OUT port
+   emit, IN port for MIDI Learn + bidirectional sync. Drop pad with
+   short-press fire / long-press capture **only** — autodrop and
+   preview deferred to 5.
+3. Top-nav "Controller" entry, fullscreen mode, `localStorage`
+   last-viewed persistence.
+
+### Phase 5 — Controller polish (≈ 0.5 sprint)
+
+1. **Autodrop**. Bar-quantized fire scheduling via the existing
+   ClockBus. Free now that 1.1 added the new tick infrastructure.
+2. **Preview mode**. Ghost indicators on cells.
+3. Whatever the MVP usage in Phase 4 surfaced.
+
+### Phase 6 — Workflow (≈ 1 sprint)
+
+Quality-of-life, not blocking anything live.
+
+1. **Matrix context menu** (§3). Long-press / right-click popover
+   on cells, headers, **mapping rows** (with single-tap = Edit
+   shortcut). Removes the inline Edit/Delete buttons on mapping
+   rows; adds the `[ + Paste Mapping ]` button next to `[ + Add
+   Mapping ]`.
+2. **Connection clipboard**. Copy filter + mappings; paste onto
+   another connection.
+3. **Plugin clipboard**. Paste-as-new + paste-over-instance.
+4. **Mapping clipboard with auto-bump**. Append-with-bumped-dst
+   semantics from §3.
+5. **Undo / Redo**. Client-side `Command` stack, labelled toasts,
+   Ctrl+Z + toolbar buttons.
+
+### Phase 7 — Modulator (≈ 0.5–1 sprint)
+
+Creative, niche, no other dependencies.
+
+1. **CurveEditor extensions** (§7). `wrap` flag, `shapes` pulldown
+   replacing preset pills, Smooth button. `velocity_curve` benefits
+   for free.
+2. **Drawable LFO** (`CC Curve LFO`, §7).
+
+### Phase 8 — Sequencers (≈ 3 sprints)
+
+The biggest pieces but the lowest live-performance urgency. Most
+users will use Arp + Hold for sequencing while these mature.
+
+1. **Rhythm Sequencer MVP** (§1). 5 genres × 5 templates,
+   probability profiles for those 5.
+2. **Tracker MVP** (§2).
+3. **Generalize step grid**. Pull common code out of `DrumGrid` /
+   `TrackerGrid` into a reusable component.
+4. **CC Sequencer** (pending design — finalise spec just before
+   this step). Uses the generalised step grid + CC observatory.
+5. **Rhythm Sequencer genre expansion**. Round out to 21 genres.
+6. **Tracker polish**. Copy/paste bars, transpose, paginator, live
+   pass-through toggle.
+
+### What I'd start with right now
+
+If you say "go" today: **Phase 1.1, Clock Divider**. Smallest, fully
+spec'd, gives us the test bed for the new `tick` plumbing and the
+`on_transport_continue` callback.
+
+### Risk callouts
+
+- **Phase 2 (`apply_edge_diff`)** is the riskiest. If you only have
+  appetite for one phase to be paranoidly tested, it's that one.
+- **Phase 4 (Controller MVP)** is the most UI-heavy. Plan for design
+  iterations on the LayoutGrid edit experience.
+- **Phase 8 (Sequencers)** has the highest sunk-time risk —
+  templates and genre profiles are content work. Time-box at 5×5
+  if interest fades.
 
 ---
 
