@@ -19,7 +19,11 @@ log = logging.getLogger(__name__)
 STATIC_DIR = Path(__file__).parent / "static"
 
 # Rate limiting
-MAX_MUTATING_PER_SEC = 10
+# 60 mutating requests / sec is enough for one PATCH per animation frame
+# during a fast knob/fader drag. The earlier 10/sec cap silently 429'd the
+# tail of a fast drag, so the *latest* value never reached the server and
+# other clients sat at an intermediate value via SSE.
+MAX_MUTATING_PER_SEC = 60
 MAX_SSE_CONNECTIONS = 5
 
 SECURITY_HEADERS = {
