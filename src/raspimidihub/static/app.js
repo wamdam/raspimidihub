@@ -33,6 +33,7 @@ function App() {
     const [showMidiBar, setShowMidiBar] = useState(() => localStorage.getItem('midiBar') !== 'off');
     const [midiEvents, setMidiEvents] = useState({});  // src_client -> {name, text}
     const [clockSources, setClockSources] = useState({});  // src_client -> timestamp
+    const [clockQuarters, setClockQuarters] = useState({}); // src_client -> ts of last quarter-note tick
     const [midiRates, setMidiRates] = useState({});  // "client:port" -> msgs/sec
     const [pluginDisplays, setPluginDisplays] = useState({});  // instance_id -> {name: value}
     const [sseConnected, setSseConnected] = useState(true);
@@ -119,6 +120,9 @@ function App() {
                 [data.instance_id]: { ...(prev[data.instance_id] || {}), [data.name]: data.value },
             }));
         }
+        if (type === 'clock-quarter') {
+            setClockQuarters(prev => ({ ...prev, [data.src_client]: Date.now() }));
+        }
     }, (connected) => {
         setSseConnected(connected);
         if (connected) refresh();
@@ -138,7 +142,7 @@ function App() {
     let page;
     switch (tab) {
         case 'routing':
-            page = html`<${RoutingPage} devices=${devices} connections=${connections} refresh=${refresh} showToast=${showToast} clockSources=${clockSources} midiRates=${midiRates}
+            page = html`<${RoutingPage} devices=${devices} connections=${connections} refresh=${refresh} showToast=${showToast} clockSources=${clockSources} clockQuarters=${clockQuarters} midiRates=${midiRates}
                 onDeviceOpen=${(clientId) => setSelectedDeviceId(clientId)} />`;
             break;
         case 'presets':

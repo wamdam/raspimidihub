@@ -532,14 +532,19 @@ body {
     border-color: transparent transparent transparent var(--success);
     vertical-align: middle;
     margin-left: 5px;
-    animation: clock-pulse 0.6s ease-in-out infinite;
+    transform-origin: center;
+    /* One-shot beat played on mount. The element is keyed by the
+       latest quarter-note timestamp from the server, so each beat
+       remounts and replays the animation in time with the source. */
+    animation: clock-beat 220ms ease-out;
+    opacity: 0.55;
 }
 .clock-icon.clock-warn {
     border-left-color: var(--warn);
 }
-@keyframes clock-pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.4; }
+@keyframes clock-beat {
+    0%   { opacity: 1;    transform: scale(1.45); }
+    100% { opacity: 0.55; transform: scale(1); }
 }
 
 /* --- MIDI Monitor --- */

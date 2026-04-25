@@ -9,7 +9,7 @@ import { PluginIcon } from '../ui/icons.js';
 import { ConnectionMatrix } from './matrix.js';
 import { FilterPanel } from '../panels/filterpanel.js';
 
-export function RoutingPage({ devices, connections, refresh, showToast, clockSources, midiRates, onDeviceOpen }) {
+export function RoutingPage({ devices, connections, refresh, showToast, clockSources, clockQuarters, midiRates, onDeviceOpen }) {
     const [filterConnId, setFilterConnId] = useState(null);
     const [showAddPlugin, setShowAddPlugin] = useState(false);
     const [pluginTypes, setPluginTypes] = useState({});
@@ -130,7 +130,7 @@ export function RoutingPage({ devices, connections, refresh, showToast, clockSou
             srcClientId=${filterConn.src_client} />`}
         <${ConnectionMatrix} devices=${devices} connections=${connections} onToggle=${onToggle} onFilterOpen=${(conn) => setFilterConnId(conn.id)}
             onRemoveDevice=${async (sid) => { await api('/devices/' + encodeURIComponent(sid), { method: 'DELETE' }); refresh(); }}
-            showToast=${showToast} clockSources=${clockSources} midiRates=${midiRates}
+            showToast=${showToast} clockSources=${clockSources} clockQuarters=${clockQuarters} midiRates=${midiRates}
             onDeviceOpen=${onDeviceOpen} onAddPlugin=${() => { loadPluginTypes(); setShowAddPlugin(true); }} />
         <div class="btn-group">
             <button class="btn btn-primary" onclick=${saveConfig} disabled=${saving || loading}>${saving ? 'Saving...' : 'Save Config'}</button>

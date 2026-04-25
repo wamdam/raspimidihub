@@ -35,7 +35,7 @@ export function useSSE(onEvent, onConnChange) {
             try { onEvent(type, JSON.parse(e.data)); }
             catch {}
         };
-        for (const ev of ['device-connected','device-disconnected','connection-changed','midi-activity','midi-rates','plugin-display','plugin-param']) {
+        for (const ev of ['device-connected','device-disconnected','connection-changed','midi-activity','midi-rates','plugin-display','plugin-param','clock-quarter']) {
             es.addEventListener(ev, handler(ev));
         }
         es.onopen = () => onConnChange(true);

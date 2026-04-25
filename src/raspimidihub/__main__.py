@@ -89,6 +89,10 @@ async def async_main() -> None:
         32: "Stop", 130: "SysEx",
     }
 
+    # Per-source clock counter so the UI can pulse the matrix indicator at
+    # quarter-note rate (24 PPQ → emit once every 24 clocks per source).
+    _clock_counts: dict[str, int] = {}
+
     def on_midi_event(ev):
         # Only process known MIDI events, not system/subscription events
         if ev.type not in _EVENT_NAMES:
@@ -96,6 +100,17 @@ async def async_main() -> None:
         # Clock: gentle heartbeat per beat; other MIDI: sharp blink
         if ev.type == 36:  # CLOCK
             led.clock_pulse()
+            ckey = f"{ev.source.client}:{ev.source.port}"
+            c = _clock_counts.get(ckey, 0) + 1
+            if c >= 24:
+                c = 0
+                asyncio.ensure_future(server.send_sse("clock-quarter", {
+                    "src_client": ev.source.client,
+                    "src_port": ev.source.port,
+                }))
+            _clock_counts[ckey] = c
+        elif ev.type == 30:  # START — re-phase that source's quarter counter
+            _clock_counts[f"{ev.source.client}:{ev.source.port}"] = 0
         else:
             led.midi_blink()
         key = f"{ev.source.client}:{ev.source.port}"

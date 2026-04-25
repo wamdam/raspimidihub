@@ -38,16 +38,18 @@ export function MatrixCell({ on, filtered, onTap, onLongPress, offline }) {
     </td>`;
 }
 
-export function MatrixHeader({ item, label, isPlugin, pluginType, sendsClock, multiClock, online, stableId, onTap, onLongPress, midiRate }) {
+export function MatrixHeader({ item, label, isPlugin, pluginType, sendsClock, multiClock, clockBeat, online, stableId, onTap, onLongPress, midiRate }) {
     const timerRef = useRef(null);
     const didLong = useRef(false);
     const start = () => { didLong.current = false; timerRef.current = setTimeout(() => { didLong.current = true; onLongPress(); }, 500); };
     const end = () => { if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; } };
     const click = (e) => { if (!didLong.current) onTap(); };
     const ctx = (e) => { e.preventDefault(); onLongPress(); };
+    // Re-key the clock icon on each quarter-note SSE so the one-shot
+    // CSS animation replays in time with the source.
     return html`<th class="row-header ${online ? '' : 'offline'} ${isPlugin ? 'plugin-row' : ''}" style="cursor:pointer"
         onclick=${click} onContextMenu=${ctx}
-        onTouchStart=${start} onTouchEnd=${end} onTouchCancel=${end}>${isPlugin ? html`<${PluginIcon} type=${pluginType} />` : html`<span class="dev-icon din" style="display:inline-flex;vertical-align:middle;margin-right:3px">${IconDIN}</span>`} ${label}${sendsClock ? html`<span class="clock-icon ${multiClock ? 'clock-warn' : ''}" title="${multiClock ? 'Multiple clock sources!' : 'Sending clock'}"></span>` : ''}
+        onTouchStart=${start} onTouchEnd=${end} onTouchCancel=${end}>${isPlugin ? html`<${PluginIcon} type=${pluginType} />` : html`<span class="dev-icon din" style="display:inline-flex;vertical-align:middle;margin-right:3px">${IconDIN}</span>`} ${label}${sendsClock ? html`<span key=${clockBeat || 0} class="clock-icon ${multiClock ? 'clock-warn' : ''}" title="${multiClock ? 'Multiple clock sources!' : 'Sending clock'}"></span>` : ''}
         <${RateMeter} rate=${midiRate} /></th>`;
 }
 
@@ -61,7 +63,7 @@ export function RateMeter({ rate }) {
     </div>`;
 }
 
-export function ConnectionMatrix({ devices, connections, onToggle, onFilterOpen, onRemoveDevice, showToast, clockSources, midiRates, onDeviceOpen, onAddPlugin }) {
+export function ConnectionMatrix({ devices, connections, onToggle, onFilterOpen, onRemoveDevice, showToast, clockSources, clockQuarters, midiRates, onDeviceOpen, onAddPlugin }) {
     const inputs = [];
     const outputs = [];
     for (const dev of devices) {
@@ -144,6 +146,7 @@ export function ConnectionMatrix({ devices, connections, onToggle, onFilterOpen,
                         <tr>
                             <${MatrixHeader} item=${inp} label=${label(inp)} isPlugin=${inp.is_plugin} pluginType=${inp.plugin_type}
                                 sendsClock=${sendsClock} multiClock=${multiClock}
+                                clockBeat=${clockQuarters && clockQuarters[inp.client_id]}
                                 online=${inp.online} stableId=${inp.stable_id}
                                 onTap=${() => inp.online && inp.client_id ? onDeviceOpen(inp.client_id) : (inp.stable_id && onRemoveDevice && confirm('Remove ' + inp.dev_name + '?') && onRemoveDevice(inp.stable_id))}
                                 onLongPress=${() => inp.online && showName(inp)}
