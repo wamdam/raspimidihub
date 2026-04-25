@@ -217,13 +217,38 @@ export function DeviceDetailPanel({ device, onClose, showToast, refresh, pluginD
         const params = Object.fromEntries(map);
         map.clear();
         patchInFlightRef.current = true;
-        api(`/plugins/instances/${device.plugin_instance_id}`, {
+        // Use fetch directly so we can detect 429 (rate limit) and re-queue
+        // the params instead of silently dropping them. api() resolves on
+        // 4xx because it just calls res.json() — the helpful path here is
+        // to inspect res.status ourselves.
+        fetch(`/api/plugins/instances/${device.plugin_instance_id}`, {
             method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ params }),
-        }).catch(() => {}).finally(() => {
+        }).then(res => {
+            if (!res.ok) {
+                // Re-queue values we tried to send (fresher onChanges already
+                // in pending take precedence — only restore keys that aren't
+                // already queued with a newer value).
+                for (const [k, v] of Object.entries(params)) {
+                    if (!pendingPatchesRef.current.has(k)) {
+                        pendingPatchesRef.current.set(k, v);
+                    }
+                }
+            }
+        }).catch(() => {
+            // Network error — same retry policy as a 4xx.
+            for (const [k, v] of Object.entries(params)) {
+                if (!pendingPatchesRef.current.has(k)) {
+                    pendingPatchesRef.current.set(k, v);
+                }
+            }
+        }).finally(() => {
             patchInFlightRef.current = false;
-            // Anything queued during the round-trip — flush now (latest value wins).
-            if (pendingPatchesRef.current.size > 0) flushPending();
+            if (pendingPatchesRef.current.size > 0) {
+                // Small backoff so a sustained 429 storm doesn't busy-loop.
+                setTimeout(flushPending, 30);
+            }
         });
     }, [device.plugin_instance_id]);
 

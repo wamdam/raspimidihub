@@ -19,12 +19,17 @@ log = logging.getLogger(__name__)
 STATIC_DIR = Path(__file__).parent / "static"
 
 # Rate limiting
-# 60 mutating requests / sec is enough for one PATCH per animation frame
-# during a fast knob/fader drag. The earlier 10/sec cap silently 429'd the
-# tail of a fast drag, so the *latest* value never reached the server and
-# other clients sat at an intermediate value via SSE.
-MAX_MUTATING_PER_SEC = 60
-MAX_SSE_CONNECTIONS = 5
+# Rate limit for mutating requests. 120/sec is roughly 2x animation-frame
+# rate — covers a worst-case fast drag where every other rAF tick fits a
+# round-trip. The client also serialises one PATCH at a time, so on a
+# realistic LAN we won't actually hit this; it's the floor where
+# misbehaving clients start getting 429'd.
+MAX_MUTATING_PER_SEC = 120
+# SSE connections allowed across all clients. Each browser tab opens
+# several EventSources (global event bus + transport-start + device-detail
+# MIDI monitor + ...), so a single laptop with the matrix open and a
+# plugin panel open can use ~3-4 by itself. Headroom for several phones.
+MAX_SSE_CONNECTIONS = 30
 
 SECURITY_HEADERS = {
     "X-Content-Type-Options": "nosniff",
