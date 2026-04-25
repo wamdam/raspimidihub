@@ -4,6 +4,39 @@ All notable changes to RaspiMIDIHub will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [2.0.9] - 2026-04-25
+
+### Fixed
+- **Adding or removing a virtual instrument no longer hicks up clock and
+  MIDI through other plugins.** The old code routed plugin create / delete
+  through the engine's full hotplug rescan path: tear down every filter
+  port and direct subscription, scan devices, re-apply the snapshot. All
+  synchronously on the asyncio loop, so MIDI through any userspace-filtered
+  connection paused for tens of milliseconds and clock pulses queued in
+  the kernel and arrived in a burst.
+
+  Two fast paths replace the rescan when the change is purely additive
+  or a single client is going away:
+
+  - `MidiEngine.handle_plugin_added()` — registers the new ALSA client,
+    refreshes monitor subscriptions, notifies listeners. Existing
+    subscriptions, filter ports and userspace mappings are untouched.
+  - `MidiEngine.handle_plugin_removed(gone_client_id)` — pure Python
+    state prune. The plugin's `alsa_client.close()` already destroyed
+    the seq client and the kernel removed every subscription that
+    touched it; we just clean our internal tracking. No ALSA syscalls,
+    no full re-enumeration.
+
+  Engine event-loop's hotplug detection skips plugin-managed clients,
+  and the fast paths cancel any pending debounced rescan to cover the
+  brief window where the kernel's `CLIENT_START` arrives before the
+  new instance has been registered in `plugin_host._instances`.
+
+  Also: `plugin_host.stop_instance` writes to the plugin thread's
+  wakeup pipe right after flipping `running = False`, so `thread.join`
+  returns in milliseconds instead of waiting for the next 100 ms select
+  tick.
+
 ## [2.0.8] - 2026-04-25
 
 ### Fixed
