@@ -91,6 +91,13 @@ export function renderParam(param, values, onChange, allValues, displayCtx) {
 
 export const INLINE_TYPES = new Set(['wheel', 'fader', 'noteselect', 'channelselect', 'toggle', 'button', 'display']);
 
+// Wrap a rendered inline param with a grid-column-span container if
+// the param schema declares a span > 1. Single-cell params render as-is.
+function applySpan(rendered, span) {
+    if (!span || span <= 1) return rendered;
+    return html`<div class="param-cell" style="grid-column: span ${span}">${rendered}</div>`;
+}
+
 export function renderParamGroup(items, values, onChange, displayCtx) {
     const result = [];
     let inlineRun = [];
@@ -103,7 +110,7 @@ export function renderParamGroup(items, values, onChange, displayCtx) {
     for (const p of items) {
         const rendered = renderParam(p, values, onChange, values, displayCtx);
         if (!rendered) continue;
-        if (INLINE_TYPES.has(p.type)) inlineRun.push(rendered);
+        if (INLINE_TYPES.has(p.type)) inlineRun.push(applySpan(rendered, p.span));
         else { flushInline(); result.push(rendered); }
     }
     flushInline();

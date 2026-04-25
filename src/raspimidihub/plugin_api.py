@@ -41,11 +41,16 @@ class Param:
     name: str
     label: str
     visible_when: tuple | None = field(default=None, kw_only=True)  # (param_name, value_or_list)
+    # Grid-column footprint in the param-row. Default 1u; set to 2/3/4
+    # for wider controls (e.g. a fat horizontal fader spanning the row).
+    span: int = field(default=1, kw_only=True)
 
     def to_dict(self) -> dict:
         d = {"type": self.__class__.__name__.lower(), "name": self.name, "label": self.label}
         if self.visible_when:
             d["visible_when"] = {"param": self.visible_when[0], "value": self.visible_when[1]}
+        if self.span and self.span > 1:
+            d["span"] = self.span
         return d
 
 
