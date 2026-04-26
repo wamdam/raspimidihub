@@ -39,6 +39,15 @@ function App() {
     const setSelectedDeviceId = useCallback((id) => {
         navigate({ tab: 'routing', deviceId: id != null ? id : null });
     }, [navigate]);
+    // ControllerPage's refreshList depends on this callback's identity;
+    // an inline arrow recreated per render fired the list-fetch effect
+    // on every SSE event (~20/s during a fader move) and pinned the
+    // server's asyncio loop on JSON serialisation. useCallback keeps
+    // identity stable so the effect only fires when `navigate` itself
+    // changes (~never).
+    const setControllerId = useCallback((id, opts) => {
+        navigate({ tab: 'controller', controllerId: id }, opts);
+    }, [navigate]);
     const selectedDevice = selectedDeviceId != null ? devices.find(d => d.client_id === selectedDeviceId) || null : null;
     const [showMidiBar, setShowMidiBar] = useState(() => localStorage.getItem('midiBar') !== 'off');
     const [midiEvents, setMidiEvents] = useState({});  // src_client -> {name, text}
@@ -158,7 +167,7 @@ function App() {
         case 'controller':
             page = html`<${ControllerPage} pluginDisplays=${pluginDisplays} showToast=${showToast}
                 selectedId=${route.controllerId}
-                onSelect=${(id, opts) => navigate({ tab: 'controller', controllerId: id }, opts)} />`;
+                onSelect=${setControllerId} />`;
             break;
         case 'presets':
             page = html`<${PresetsPage} refresh=${refresh} showToast=${showToast} />`;

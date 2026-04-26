@@ -1347,15 +1347,24 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
 
     @server.route("GET", "/api/plugins/instances")
     async def api_plugins_instances(req: Request) -> Response:
-        """List running plugin instances."""
+        """List running plugin instances. Returns a *light* row per
+        instance (id, type, name, status) — full data including
+        params_schema is only ever needed for the currently selected
+        one, fetched via /api/plugins/instances/<id>. The full payload
+        used to be ~kB per Controller; with 4 controllers and a re-
+        rendering frontend, listing them was the dominant CPU cost on
+        the asyncio loop."""
         if not engine._plugin_host:
             return Response.json([])
-        instances = []
+        rows = []
         for inst in engine._plugin_host.get_instances():
-            data = engine._plugin_host.get_instance_data(inst.id)
-            if data:
-                instances.append(data)
-        return Response.json(instances)
+            rows.append({
+                "id": inst.id,
+                "type": inst.plugin_type,
+                "name": inst.name,
+                "status": "crashed" if inst.crashed else ("running" if inst.running else "stopped"),
+            })
+        return Response.json(rows)
 
     @server.route("POST", "/api/plugins/instances")
     async def api_plugins_create(req: Request) -> Response:
