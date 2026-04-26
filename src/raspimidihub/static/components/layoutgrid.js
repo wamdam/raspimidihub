@@ -126,6 +126,19 @@ export function PluginLayoutGrid({ param, values, onChange, displayCtx, renderPa
                             title="CC value when the button is OFF (0-127)"
                             onInput=${(e) => setBinding(c.param.name, 'off',
                                 e.target.value === '' ? null : parseInt(e.target.value, 10))} />
+                        <button type="button" class="cell-edit-swap"
+                            title="Swap On / Off values"
+                            onclick=${() => {
+                                const curOn  = ovOn  != null ? ovOn  : 127;
+                                const curOff = ovOff != null ? ovOff : 0;
+                                // Setting both via two updates so each goes
+                                // through the same setBinding pipeline.
+                                const cur = bindings[c.param.name] || {};
+                                onChange(param.bindings_param, {
+                                    ...bindings,
+                                    [c.param.name]: { ...cur, on: curOff, off: curOn },
+                                });
+                            }}>↔</button>
                     </div>` : null}
                 </div>`;
             })}

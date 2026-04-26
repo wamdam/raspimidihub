@@ -1132,6 +1132,21 @@ body {
     letter-spacing: 0.5px;
     cursor: pointer;
 }
+.cell-edit-swap {
+    flex: 0 0 auto;
+    margin-left: auto;
+    width: 36px;
+    height: 30px;
+    padding: 0;
+    background: rgba(0,0,0,0.3);
+    border: 1px solid rgba(255,255,255,0.18);
+    border-radius: 3px;
+    color: var(--text-dim);
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+}
+.cell-edit-swap:hover { color: var(--text); border-color: rgba(255,255,255,0.3); }
 .cell-edit-learn:hover { color: var(--text); border-color: rgba(255,255,255,0.3); }
 .cell-edit-learn.on {
     background: rgba(255,160,80,0.25);
