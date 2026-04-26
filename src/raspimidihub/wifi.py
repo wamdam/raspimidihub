@@ -185,9 +185,10 @@ no-hosts
         return None
 
     @staticmethod
-    def _find_pids(executable: str, required_arg: str) -> list[int]:
+    def _find_pids(executable: str, required_arg: str,
+                   proc_root: Path = Path("/proc")) -> list[int]:
         """PIDs whose argv0 basename is `executable` and whose argv contains
-        `required_arg` as a literal element.
+        `required_arg` as a literal substring of one of the args after argv0.
 
         Bypasses pgrep -f, which matches against the full cmdline of any
         process — including shell wrappers, journalctl tails, or our own
@@ -195,9 +196,11 @@ no-hosts
         path. Reading /proc/<pid>/cmdline directly is precise: we only count
         a process if it really *is* an `executable` invocation with our
         config as one of its argv tokens.
+
+        `proc_root` is parameterised so tests can inject a synthetic /proc.
         """
         pids: list[int] = []
-        for entry in Path("/proc").iterdir():
+        for entry in proc_root.iterdir():
             if not entry.name.isdigit():
                 continue
             try:
@@ -212,6 +215,8 @@ no-hosts
             try:
                 argv_str = [a.decode("utf-8") for a in argv if a]
             except UnicodeDecodeError:
+                continue
+            if not argv_str:
                 continue
             if argv_str[0].rsplit("/", 1)[-1] != executable:
                 continue
