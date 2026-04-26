@@ -374,6 +374,10 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
             # Persist custom names in config
             config.data["device_names"] = registry.get_custom_names()
             await config.asave()
+            # Also bust the plugin-instances list cache — the resolved
+            # display_name comes from custom_names so a rename here
+            # changes what /api/plugins/instances returns.
+            _invalidate_instances_cache()
             return Response.json({"status": "renamed", "name": name})
 
         # POST /api/devices/{client_id}/rename-port
@@ -1388,12 +1392,23 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
                 status=200, body=_instances_cache["body"],
                 content_type="application/json",
             )
+        # Resolve user-facing name via the device registry's custom_names.
+        # Plugin instance.name is just the spawn-time default and isn't
+        # persisted; renames go through device_names (keyed by stable_id)
+        # so that's the source of truth for "what the user calls this".
+        registry = engine.device_registry
         rows = []
         for inst in engine._plugin_host.get_instances():
+            display_name = inst.name
+            client_id = inst.alsa_client.client_id if inst.alsa_client else None
+            if client_id is not None:
+                info = registry.get_by_client(client_id)
+                if info is not None and info.custom_name:
+                    display_name = info.custom_name
             rows.append({
                 "id": inst.id,
                 "type": inst.plugin_type,
-                "name": inst.name,
+                "name": display_name,
                 "status": "crashed" if inst.crashed else ("running" if inst.running else "stopped"),
             })
         body = json.dumps(rows).encode()
