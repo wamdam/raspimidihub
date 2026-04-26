@@ -287,15 +287,24 @@ class LayoutGrid:
     surrounding knobs are 1×1. Cells render via the existing renderParam
     dispatcher — LayoutGrid is a structural container, not a value-
     holding param.
+
+    `edit_param` / `labels_param`: optional param names the renderer
+    consults so the user can rename cells inline. When the bool param
+    `edit_param` is true, each cell renders as a text input bound to
+    `labels_param[cell.param.name]` (a dict of cell_name -> override
+    label). In display mode, the override label is shown over the
+    schema label when present.
     """
     name: str
     label: str
     cols: int = 8
     rows: int = 4
     cells: list = field(default_factory=list)  # list[LayoutCell]
+    edit_param: str | None = None
+    labels_param: str | None = None
 
     def to_dict(self) -> dict:
-        return {
+        d = {
             "type": "layoutgrid",
             "name": self.name,
             "label": self.label,
@@ -310,6 +319,11 @@ class LayoutGrid:
                 for c in self.cells
             ],
         }
+        if self.edit_param:
+            d["edit_param"] = self.edit_param
+        if self.labels_param:
+            d["labels_param"] = self.labels_param
+        return d
 
 
 # ---------------------------------------------------------------------------

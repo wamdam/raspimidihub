@@ -65,9 +65,12 @@ the bindings are fixed and printed above."""
 
     params = [
         DropPad("pad", "DROP"),
+        Button("edit_labels", "Edit names", color="blue"),
         LayoutGrid(
             "controller", "",
             cols=8, rows=3,
+            edit_param="edit_labels",
+            labels_param="cell_labels",
             cells=[
                 # Row 1: knobs (sends / pan).
                 *[LayoutCell(Knob(f"k{i}", f"K{i+1}", min=0, max=127, default=64),
@@ -86,6 +89,10 @@ the bindings are fixed and printed above."""
     cc_outputs = list(range(16, 40))  # CC 16..39 ch 1
     inputs = ["CC (bidirectional sync — silent UI updates, no re-emit)"]
     outputs = ["CC 16..39 on ch 1 — knobs, faders, mute buttons"]
+
+    def on_start(self):
+        """Initialise non-schema state on first start (and after restore)."""
+        self._param_values.setdefault("cell_labels", {})
 
     def on_param_change(self, name, value):
         """User moved a UI cell -> emit the matching CC. Or drop-pad

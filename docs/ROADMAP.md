@@ -1402,8 +1402,17 @@ Biggest user-visible win for performance.
      `_param_values["pad_snapshot"]`. Fire re-emits captured CCs +
      snaps cells back. Pad value cycles 'idle' / 'capture' / 'fire'
      / 'captured' so the UI knows when a snapshot is armed.
-   - **TODO 4.2.c:** Per-cell rename + per-cell rebind UI + MIDI
-     Learn buttons.
+   - **In progress 4.2.c:** Per-cell rename + per-cell rebind UI +
+     MIDI Learn buttons.
+     - ✓ **4.2.c.1 (2026-04-26):** Per-cell rename. LayoutGrid
+       gained `edit_param` + `labels_param` fields; "Edit names"
+       toggle on the Controller swaps cells for text inputs that
+       persist via `_param_values["cell_labels"]`. Display mode
+       reads overrides and renders them over the schema label.
+       Watchdog now does deep-equality so dict-valued params don't
+       loop on identity mismatch.
+     - **TODO 4.2.c.2:** Per-cell channel + CC rebind.
+     - **TODO 4.2.c.3:** Per-cell MIDI Learn button.
    - **TODO 4.2.d:** Performance 16 + FX 6 templates (replace
      throwaway controller_b / controller_c).
 3. **TODO:** Top-nav "Controller" entry, fullscreen mode,

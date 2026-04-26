@@ -924,6 +924,30 @@ body {
 }
 .layout-cell .fader-group { width: 100%; }
 .layout-cell .rubber-btn, .layout-cell .wheel-container { width: 100%; }
+.layout-cell-editing {
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(80, 130, 200, 0.12);
+    border: 1px dashed rgba(120, 170, 220, 0.4);
+    border-radius: 4px;
+    padding: 4px;
+    min-height: 44px;
+}
+.layout-cell-rename {
+    width: 100%;
+    background: rgba(0,0,0,0.3);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 3px;
+    color: var(--text);
+    font-size: 12px;
+    padding: 4px 6px;
+    text-align: center;
+    box-sizing: border-box;
+}
+.layout-cell-rename:focus {
+    outline: none;
+    border-color: var(--accent);
+    background: rgba(0,0,0,0.5);
+}
 
 /* Radio group */
 .radio-group { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }

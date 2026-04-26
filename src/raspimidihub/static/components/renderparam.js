@@ -100,11 +100,30 @@ export function renderParam(param, values, onChange, allValues, displayCtx) {
         }
         case 'layoutgrid': {
             const gridStyle = `display:grid;grid-template-columns:repeat(${param.cols}, minmax(0, 1fr));grid-template-rows:repeat(${param.rows}, auto);gap:6px`;
+            const editing = param.edit_param ? !!values[param.edit_param] : false;
+            const labels = (param.labels_param && values[param.labels_param]) || {};
+            const setLabel = (cellName, newLabel) => {
+                const updated = { ...labels, [cellName]: newLabel };
+                onChange(param.labels_param, updated);
+            };
             return html`<div class="layout-grid" style=${gridStyle}>
                 ${param.cells.map(c => {
                     const cellStyle = `grid-column: ${c.col} / span ${c.span_cols}; grid-row: ${c.row} / span ${c.span_rows}; min-width: 0`;
+                    const override = labels[c.param.name];
+                    const effectiveLabel = override != null && override !== '' ? override : c.param.label;
+                    if (editing && param.labels_param) {
+                        return html`<div class="layout-cell layout-cell-editing" style=${cellStyle}>
+                            <input class="layout-cell-rename" type="text"
+                                value=${effectiveLabel}
+                                placeholder=${c.param.label}
+                                onInput=${(e) => setLabel(c.param.name, e.target.value)} />
+                        </div>`;
+                    }
+                    const patchedParam = override != null && override !== ''
+                        ? { ...c.param, label: override }
+                        : c.param;
                     return html`<div class="layout-cell" style=${cellStyle}>
-                        ${renderParam(c.param, values, onChange, allValues, displayCtx)}
+                        ${renderParam(patchedParam, values, onChange, allValues, displayCtx)}
                     </div>`;
                 })}
             </div>`;

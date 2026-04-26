@@ -160,6 +160,15 @@ export function ScrollablePiano({ heldNotes, onNoteDown, onNoteUp, pianoKeys }) 
     </div>`;
 }
 
+// Deep-equality check that's safe for dict-valued plugin params (e.g.
+// cell_labels). Identity (!==) is always true for fresh dicts even when
+// their contents match, which loops the eventually-consistent watchdog.
+function paramsEqual(a, b) {
+    if (a === b) return true;
+    if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null) return false;
+    try { return JSON.stringify(a) === JSON.stringify(b); } catch { return false; }
+}
+
 export function DeviceDetailPanel({ device, onClose, showToast, refresh, pluginDisplays }) {
     const panelRef = { current: null };
     const close = () => animateClose(panelRef.current, onClose);
@@ -274,7 +283,7 @@ export function DeviceDetailPanel({ device, onClose, showToast, refresh, pluginD
         const filtered = {};
         for (const [k, v] of Object.entries(sseParams)) {
             if (inFlightRef.current.has(k)) continue;
-            if (pluginParams[k] !== v) filtered[k] = v;
+            if (!paramsEqual(pluginParams[k], v)) filtered[k] = v;
         }
         if (Object.keys(filtered).length > 0) {
             setTimeout(() => setPluginParams(prev => ({ ...prev, ...filtered })), 0);
@@ -335,8 +344,8 @@ export function DeviceDetailPanel({ device, onClose, showToast, refresh, pluginD
             const localVal = pluginParamsRef.current[name];
             if (device.plugin_instance_id && ssp
                     && ssp[name] !== undefined
-                    && ssp[name] !== localVal
-                    && pendingPatchesRef.current.get(name) !== localVal) {
+                    && !paramsEqual(ssp[name], localVal)
+                    && !paramsEqual(pendingPatchesRef.current.get(name), localVal)) {
                 pendingPatchesRef.current.set(name, localVal);
                 if (rafIdRef.current === null && !patchInFlightRef.current) {
                     rafIdRef.current = requestAnimationFrame(flushPending);
