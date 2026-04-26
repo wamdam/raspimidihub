@@ -828,6 +828,57 @@ body {
 .fader-track.vertical .fader-thumb-val { top: 2px; }
 .fader-track.vertical .fader-fill { left: 50%; bottom: 12px; width: 4px; height: auto; top: auto; margin-left: -2px; margin-top: 0; }
 
+/* XYPad */
+.xypad-group { display: flex; flex-direction: column; align-items: stretch; gap: 4px; margin-bottom: 12px; min-width: 0; }
+.xypad-label { font-size: 12px; color: var(--text-dim); }
+.xypad-pad {
+    position: relative;
+    aspect-ratio: 1;
+    width: 100%;
+    background: linear-gradient(135deg, #15151c 0%, #0a0a10 100%);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 4px;
+    cursor: crosshair;
+    touch-action: none;
+    box-shadow: inset 0 1px 3px rgba(0,0,0,0.6);
+}
+.xypad-axis-x, .xypad-axis-y {
+    position: absolute;
+    background: rgba(255,255,255,0.05);
+    pointer-events: none;
+}
+.xypad-axis-x { left: 0; right: 0; top: 50%; height: 1px; }
+.xypad-axis-y { top: 0; bottom: 0; left: 50%; width: 1px; }
+.xypad-dot {
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    margin-left: -7px;
+    margin-bottom: -7px;
+    background: var(--accent);
+    border-radius: 50%;
+    pointer-events: none;
+    box-shadow: 0 0 6px var(--accent), inset 0 0 2px rgba(255,255,255,0.4);
+}
+.xypad-value {
+    position: absolute;
+    top: 4px;
+    right: 6px;
+    font-size: 9px;
+    color: var(--text-dim);
+    pointer-events: none;
+    font-variant-numeric: tabular-nums;
+}
+
+/* LayoutGrid — fixed-position cell grid for Controller plugin templates */
+.layout-grid { width: 100%; }
+.layout-cell .knob-group, .layout-cell .wheel-group, .layout-cell .btn-group-param,
+.layout-cell .fader-group, .layout-cell .xypad-group {
+    margin-bottom: 0; min-width: 0;
+}
+.layout-cell .fader-group { width: 100%; }
+.layout-cell .rubber-btn, .layout-cell .wheel-container { width: 100%; }
+
 /* Radio group */
 .radio-group { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
 .radio-group .radio-label { font-size: 12px; color: var(--text-dim); }

@@ -1378,9 +1378,15 @@ Biggest user-visible win for performance.
 
    Source-keyed cache can come back later when a real consumer
    appears (CC monitor / debug view). Don't carry both meanwhile.
-1. **TODO:** `LayoutGrid` + `PluginXYPad` UI param types (§5).
-   Knob already shipped in Phase 3.
-2. **TODO:** Controller plugin — Knob / Fader / Toggle / XY pad
+1. ✓ **Done (2026-04-26):** `LayoutGrid` + `XYPad` param types.
+   Knob already shipped in Phase 3; LayoutGrid is a fixed-position
+   container with `(col, row, span_cols, span_rows)` per cell;
+   XYPad is a square pad with a draggable dot, value
+   `{x: int, y: int}`, multi-touch-safe (uses the same
+   `activeTouchId` pattern as Fader/Knob). Validated via a 6×4
+   demo grid in `ui_demo` mixing knobs / faders / mute buttons /
+   2×2 XY pad / row-spanning master fader.
+2. **TODO:** Controller plugin — Knob / Fader / Button / XY pad
    cells, OUT port emit, IN port for MIDI Learn + bidirectional
    sync (consumes destination-keyed cache). Drop pad with
    short-press fire / long-press capture **only** — autodrop and

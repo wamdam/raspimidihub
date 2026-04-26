@@ -19,11 +19,14 @@ from raspimidihub.plugin_api import (
     Fader,
     Group,
     Knob,
+    LayoutCell,
+    LayoutGrid,
     NoteSelect,
     PluginBase,
     Radio,
     StepEditor,
     Wheel,
+    XYPad,
 )
 
 
@@ -133,6 +136,42 @@ updates are flowing."""
         Group("Grid 8-wide buttons", [
             Button(f"g8_t{i}", f"T{i+1}", color="green") for i in range(8)
         ], cols=8),
+        # --- XYPad standalone (in a 2-col group so it doesn't stretch) ---
+        Group("XY Pad", [
+            XYPad("xy_demo", "XY", min=0, max=127, default_x=64, default_y=64),
+            Knob("xy_demo_x_view", "X view", min=0, max=127, default=64),
+        ], cols=2),
+        # --- LayoutGrid demo: 6×4 grid mixing Knob / Fader / Button / XYPad ---
+        # The XY pad spans 2×2 in the corner; surrounding cells are 1×1.
+        Group("LayoutGrid demo", [
+            LayoutGrid(
+                "lg_demo", "Mixed",
+                cols=6, rows=4,
+                cells=[
+                    # Top row: 4 knobs across cols 1-4; XY pad spans cols 5-6 rows 1-2.
+                    LayoutCell(Knob("lg_k1", "K1", min=0, max=127, default=50), col=1, row=1),
+                    LayoutCell(Knob("lg_k2", "K2", min=0, max=127, default=70), col=2, row=1),
+                    LayoutCell(Knob("lg_k3", "K3", min=0, max=127, default=90), col=3, row=1),
+                    LayoutCell(Knob("lg_k4", "K4", min=0, max=127, default=110), col=4, row=1),
+                    LayoutCell(XYPad("lg_xy", "XY", default_x=64, default_y=64),
+                               col=5, row=1, span_cols=2, span_rows=2),
+                    # Row 2: 4 vertical faders below the knobs.
+                    LayoutCell(Fader("lg_f1", "F1", min=0, max=127, default=80, vertical=True), col=1, row=2),
+                    LayoutCell(Fader("lg_f2", "F2", min=0, max=127, default=64, vertical=True), col=2, row=2),
+                    LayoutCell(Fader("lg_f3", "F3", min=0, max=127, default=48, vertical=True), col=3, row=2),
+                    LayoutCell(Fader("lg_f4", "F4", min=0, max=127, default=96, vertical=True), col=4, row=2),
+                    # Row 3: 6 mute buttons across the row.
+                    LayoutCell(Button("lg_m1", "M1", color="green"), col=1, row=3),
+                    LayoutCell(Button("lg_m2", "M2", color="green"), col=2, row=3),
+                    LayoutCell(Button("lg_m3", "M3", color="green"), col=3, row=3),
+                    LayoutCell(Button("lg_m4", "M4", color="green"), col=4, row=3),
+                    LayoutCell(Button("lg_m5", "M5", color="green"), col=5, row=3),
+                    LayoutCell(Button("lg_m6", "M6", color="green"), col=6, row=3),
+                    # Row 4: a wide horizontal master fader spanning all 6 cols.
+                    LayoutCell(Fader("lg_master", "Master", min=0, max=127, default=100), col=1, row=4, span_cols=6),
+                ],
+            ),
+        ]),
     ]
 
     # No MIDI I/O — purely a UI demo

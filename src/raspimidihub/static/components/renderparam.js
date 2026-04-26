@@ -8,6 +8,7 @@ import { PluginKnob } from './knob.js';
 import { PluginFader } from './fader.js';
 import { PluginRadio } from './radio.js';
 import { PluginButton } from './button.js';
+import { PluginXYPad } from './xypad.js';
 import { PluginStepEditor } from './stepeditor.js';
 import { PluginCurveEditor } from './curveeditor.js';
 import { PluginNoteSelect } from './noteselect.js';
@@ -86,12 +87,29 @@ export function renderParam(param, values, onChange, allValues, displayCtx) {
             if (dout.type === 'meter') return html`<${DisplayMeter} label=${dout.label} value=${dv} min=${dout.min} max=${dout.max} />`;
             return null;
         }
+        case 'xypad': {
+            const xy = val != null ? val : { x: param.default_x, y: param.default_y };
+            return html`<${PluginXYPad} name=${param.name} label=${param.label}
+                min=${param.min} max=${param.max} value=${xy}
+                onChange=${onChange} />`;
+        }
+        case 'layoutgrid': {
+            const gridStyle = `display:grid;grid-template-columns:repeat(${param.cols}, minmax(0, 1fr));grid-template-rows:repeat(${param.rows}, auto);gap:6px`;
+            return html`<div class="layout-grid" style=${gridStyle}>
+                ${param.cells.map(c => {
+                    const cellStyle = `grid-column: ${c.col} / span ${c.span_cols}; grid-row: ${c.row} / span ${c.span_rows}; min-width: 0`;
+                    return html`<div class="layout-cell" style=${cellStyle}>
+                        ${renderParam(c.param, values, onChange, allValues, displayCtx)}
+                    </div>`;
+                })}
+            </div>`;
+        }
         default:
             return html`<div style="color:var(--text-dim);font-size:12px">Unknown: ${param.type}</div>`;
     }
 }
 
-export const INLINE_TYPES = new Set(['wheel', 'knob', 'fader', 'noteselect', 'channelselect', 'button', 'display']);
+export const INLINE_TYPES = new Set(['wheel', 'knob', 'fader', 'noteselect', 'channelselect', 'button', 'display', 'xypad']);
 
 // Wrap a rendered inline param with a grid-column-span container if
 // the param schema declares a span > 1. Single-cell params render as-is.

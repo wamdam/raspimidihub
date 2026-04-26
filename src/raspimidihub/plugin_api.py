@@ -230,6 +230,67 @@ class Group:
         return d
 
 
+@dataclass
+class XYPad(Param):
+    """Square pad with a draggable dot. Two-axis value stored as
+    `{"x": int, "y": int}`. Used inside LayoutGrid templates as a touch-
+    friendly dual-CC controller cell."""
+    min: int = 0
+    max: int = 127
+    default_x: int = 64
+    default_y: int = 64
+
+    def to_dict(self) -> dict:
+        d = super().to_dict()
+        d.update({"min": self.min, "max": self.max,
+                  "default_x": self.default_x, "default_y": self.default_y})
+        return d
+
+
+@dataclass
+class LayoutCell:
+    """One positioned cell in a LayoutGrid: a Param + (col, row, span)."""
+    param: Param
+    col: int  # 1-based column
+    row: int  # 1-based row
+    span_cols: int = 1
+    span_rows: int = 1
+
+
+@dataclass
+class LayoutGrid:
+    """Fixed-position grid of cells (Knob / Fader / Button / XYPad).
+
+    Used by the §5 Controller plugin templates. Each cell declares its
+    (col, row) and optional span, so an XYPad can claim 2×2 while
+    surrounding knobs are 1×1. Cells render via the existing renderParam
+    dispatcher — LayoutGrid is a structural container, not a value-
+    holding param.
+    """
+    name: str
+    label: str
+    cols: int = 8
+    rows: int = 4
+    cells: list = field(default_factory=list)  # list[LayoutCell]
+
+    def to_dict(self) -> dict:
+        return {
+            "type": "layoutgrid",
+            "name": self.name,
+            "label": self.label,
+            "cols": self.cols,
+            "rows": self.rows,
+            "cells": [
+                {
+                    "col": c.col, "row": c.row,
+                    "span_cols": c.span_cols, "span_rows": c.span_rows,
+                    "param": c.param.to_dict(),
+                }
+                for c in self.cells
+            ],
+        }
+
+
 # ---------------------------------------------------------------------------
 # Param serialization helpers
 # ---------------------------------------------------------------------------
@@ -240,11 +301,13 @@ def params_to_dicts(params: list) -> list[dict]:
 
 
 def get_all_params(params: list) -> list[Param]:
-    """Flatten params list, extracting Params from Groups."""
+    """Flatten params list, extracting Params from Groups and LayoutGrids."""
     result = []
     for p in params:
         if isinstance(p, Group):
             result.extend(get_all_params(p.children))
+        elif isinstance(p, LayoutGrid):
+            result.extend(get_all_params([c.param for c in p.cells]))
         elif isinstance(p, Param):
             result.append(p)
     return result
@@ -259,6 +322,8 @@ def get_defaults(params: list) -> dict[str, Any]:
             defaults[p.name] = [{"on": p.default_on, "offset": 0} for _ in range(length)]
         elif isinstance(p, CurveEditor):
             defaults[p.name] = list(range(128))  # linear by default
+        elif isinstance(p, XYPad):
+            defaults[p.name] = {"x": p.default_x, "y": p.default_y}
         elif hasattr(p, "default"):
             defaults[p.name] = p.default
     return defaults

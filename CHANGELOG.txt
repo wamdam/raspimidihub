@@ -6,6 +6,8 @@ hashes. Tags: Added, Improved, Fix, Changed, Removed.
 
 Unreleased
 
+- Added: XY Pad control - square touch surface with a draggable dot; emits two values (x, y) for use as a dual-CC source
+- Added: LayoutGrid - fixed-position param container that lets a plugin declare cells in explicit (col, row) slots with multi-cell spans; ground floor for the upcoming Controller plugin
 - Improved: Plugin controls - multi-touch fixed; two fingers on different knobs or wheels now track independently instead of both following the first finger
 - Improved: Panic - momentary trigger button that flashes red when fired and clears itself when the all-notes-off completes (replaces the latching toggle)
 - Improved: Switch-style toggles unified into LED buttons - same behaviour, color-coded (green = on, red = destructive), more compact in dense grids
