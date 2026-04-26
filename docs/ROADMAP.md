@@ -1347,37 +1347,16 @@ since it was needed to validate the grid sizing — 1 of the 3
 Phase 4 §5 controls is therefore done early. **TODO: LayoutGrid
 and PluginXYPad** still remain for Phase 4.
 
-### Phase 4 — Controller MVP (≈ 1 sprint)
+### Phase 4 — Controller MVP (≈ 1 sprint) ✓ Done (2026-04-26)
 
 Biggest user-visible win for performance.
 
-0. **TODO (prereq):** Replace source-keyed CC observatory with a
-   **destination-keyed CC cache**. The current `_cc_cache` keyed by
-   `(src_client, src_port, ch, cc)` was added in Phase 3 but has no
-   consumers in the codebase, and the wrong shape for everything
-   downstream wants:
-   - The §5 Controller's bidirectional sync needs *"what's the most
-     recent value Synth X received on (ch, cc)?"* — a destination
-     query that source-keyed cache can't answer cleanly when
-     multiple Controllers share `(ch, cc)` but bind to different
-     destinations.
-   - Pickup/Relative wants the same destination-keyed query.
-   - CC Sequencer arm-and-record (pending) can use either, so it
-     doesn't pin the design.
-
-   Rip out the source-keyed cache, monitor-port snoop hook, dirty
-   tracking, `/api/observatory`, and `cc-changes` SSE. Replace with:
-   - `_cc_dest_cache: dict[(dst_client, dst_port, ch, cc), int]`
-     updated at the engine routing site (every CC the engine
-     forwards to a destination writes here).
-   - `engine.last_cc_to(dest, ch, cc) -> int | None` for plugin and
-     UI queries.
-   - SSE event keyed by destination (`cc-dest-changes` or similar)
-     for Controller bidirectional-sync push.
-   - HTTP snapshot endpoint for Controller bootstrap on page load.
-
-   Source-keyed cache can come back later when a real consumer
-   appears (CC monitor / debug view). Don't carry both meanwhile.
+0. ✓ **Done (2026-04-26):** Destination-keyed CC observatory.
+   `_cc_dest_cache: dict[(dst_client, dst_port, ch, cc), int]`
+   populated at the engine routing site, exposed via
+   `engine.last_cc_to(dst, ch, cc)` and the `cc-changes` SSE
+   delta-push fired once per second from the rate_meter loop.
+   The source-keyed observatory was removed in the same pass.
 1. ✓ **Done (2026-04-26):** `LayoutGrid` + `XYPad` param types.
    Knob already shipped in Phase 3; LayoutGrid is a fixed-position
    container with `(col, row, span_cols, span_rows)` per cell;
@@ -1386,11 +1365,11 @@ Biggest user-visible win for performance.
    `activeTouchId` pattern as Fader/Knob). Validated via a 6×4
    demo grid in `ui_demo` mixing knobs / faders / mute buttons /
    2×2 XY pad / row-spanning master fader.
-2. **In progress:** Controller plugin — Knob / Fader / Button / XY pad
-   cells, OUT port emit, IN port for MIDI Learn + bidirectional
-   sync (consumes destination-keyed cache). Drop pad with
-   short-press fire / long-press capture **only** — autodrop and
-   preview deferred to Phase 5.
+2. ✓ **Done (2026-04-26):** Controller plugin — Knob / Fader /
+   Button / XY pad cells, OUT port emit, IN port for MIDI Learn +
+   bidirectional sync (consumes destination-keyed cache). Drop pad
+   with short-press fire / long-press capture **only** — autodrop
+   and preview indicators deferred to Phase 5.
    - ✓ **4.2.a (2026-04-26):** Controller — Mixer 8 plugin shipped
      with hard-coded bindings (ch 1, CC 16-39). OUT emits on cell
      change, IN silently mirrors matching CCs into the on-screen
@@ -1402,7 +1381,7 @@ Biggest user-visible win for performance.
      `_param_values["pad_snapshot"]`. Fire re-emits captured CCs +
      snaps cells back. Pad value cycles 'idle' / 'capture' / 'fire'
      / 'captured' so the UI knows when a snapshot is armed.
-   - **In progress 4.2.c:** Per-cell rename + per-cell rebind UI +
+   - ✓ **4.2.c (2026-04-26):** Per-cell rename + per-cell rebind UI +
      MIDI Learn buttons.
      - ✓ **4.2.c.1 (2026-04-26):** Per-cell rename. LayoutGrid
        gained `edit_param` + `labels_param` fields; "Edit names"
@@ -1440,15 +1419,83 @@ Biggest user-visible win for performance.
      discovery tightened to filter by `__module__` so the imported
      base class is never picked as a plugin in its own right.
      Throwaway controller_b / controller_c removed.
+   - ✓ **4.2.e (2026-04-26):** Controller — XY 4 plugin shipped
+     (2× 2×2 XY pads on top + 8 knobs + 4 buttons; CC 16-31 ch 1).
+     Per-axis Ch + CC config: LayoutCell gained `channel_y` and
+     `cc_y` so an XY pad can route X and Y to different synths or
+     different MIDI channels. Edit-mode card now lays the XY pad
+     out as two axis rows ("X: Ch / CC / Learn", "Y: Ch / CC");
+     Y channel defaults to X when not set. Learn captures the X
+     axis only — type Y manually.
+   - ✓ **4.2.f (2026-04-26):** Controller — per-cell on / off
+     CC values for button cells (defaults 127 / 0); pair can be
+     inverted or set to any half-value pair (e.g. 64 / 0). ↔ swap
+     button next to the values flips them in one tap. Bidirectional
+     sync uses "closer to on or off?" matching so any pair works.
+   - ✓ **4.2.g (2026-04-26):** Per-controller background colour.
+     8 dark themes (Default, Navy, Forest, Wine, Plum, Teal,
+     Sienna, Slate) selectable in the device-detail Plugin Config;
+     the picker previews live as you choose, the Controller page
+     itself stays uncluttered.
 3. ✓ **Done (2026-04-26):** Top-nav "Controller" entry, fullscreen
    mode, `localStorage` last-viewed persistence. Implementation
-   used a dropdown + ‹ › arrow buttons for instance switching
-   (Phase 4 MVP); horizontal-swipe-between-instances and a
-   true-fullscreen "no app chrome" mode are deferred polish for
-   Phase 5. Param management extracted into a shared
-   `usePluginParams` hook so the Controller page and the device
-   panel both go through the same coalesced PATCH + SSE settle
-   pipeline.
+   used a dropdown + ‹ › arrow buttons for instance switching;
+   horizontal-swipe-between-instances landed in a follow-up pass
+   the same day (touch handler at the page root, controls
+   stopPropagation so a touch on a knob never reaches it).
+   URL routing also moved into the same pass — `/controller`,
+   `/controller/<instance_id>`, `/routing/d/<device_id>` etc. now
+   reflect what's on screen so back/forward + bookmarks work.
+   Param management extracted into a shared `usePluginParams` hook
+   so the Controller page and the device panel both go through the
+   same coalesced PATCH + SSE settle pipeline.
+
+4. ✓ **Done (2026-04-26):** Streaming-controller perf round.
+   Surfaced when the user drove 4 simultaneous LaunchControl faders
+   into Mixer 8 with 4 connected browsers and the asyncio loop
+   pinned at 100+% CPU with 50-75 ms loop lag. Rather than a single
+   change, this turned out to be a stack of bugs + bottlenecks
+   layered on each other; all fixed in 2026-04-26's commits:
+   - `TrailingCoalescer` extracted as a shared abstraction for
+     last-value-wins rate caps (was duplicated, all three copies
+     had the same trailing-value bug — a fader stopping between
+     two windows left the UI on a stale value forever). Applied
+     to plugin-param + plugin-display SSE streams.
+   - Per-view SSE subscription model. Each view declares its
+     interest via `useSSESubscription(events, instances)`;
+     `SubscriptionManager` unions per-hook contributions and
+     sends to `/api/sse/subscribe`. Server filters per recipient.
+     Idle browsers no longer eat the active controller's flood;
+     traffic scales with what you're looking at, not with what
+     every other client is doing. Killed `_handle_sse` from the
+     CPU profile entirely.
+   - SSE keep-alive heartbeat (30 s comment line per outbox) to
+     surface dead sockets — the subscription model exposed a
+     latent leak where queues that never wrote could never
+     detect a dead TCP socket.
+   - Plugin host now caches `get_plugin_client_ids()` (was
+     called per ALSA event, building a fresh set each time).
+   - Engine event loop holds a single persistent fd reader
+     instead of registering/unregistering per iteration.
+   - LED sysfs writes off the asyncio loop via run_in_executor;
+     midi-blink rate-cap from 20 Hz to 1 Hz.
+   - Plugin schema cached per class so PATCH responses don't
+     re-serialise on every knob drag.
+   - `/api/plugins/instances` returns a light shape with a 500 ms
+     TTL cache + invalidation on lifecycle mutations. Resolves
+     custom names through the device registry so the Controller
+     dropdown matches the Routing tab.
+   - Top-bar build-token badge ("v2.0.9·<token>") with a "stale,
+     reload" link when the loaded JS bundle's token doesn't
+     match the server's. Per-restart token in `?v=` busts the
+     module cache on every redeploy.
+   - Closure-id rekey bug fixed — coalescer closures captured
+     `instance.id` at definition time, which broke after
+     `restore_instances` rekeyed to the saved id. Closures now
+     dereference `instance.id` at call time.
+   - Net result: same 4-fader load now sits at 47-74 % CPU with
+     single-digit-ms loop lag, ~95 SSE/s (down from 1478),
+     zero backlog, even with 7 connected browsers.
 
 ### Phase 5 — Controller polish (≈ 0.5 sprint)
 
@@ -1480,7 +1527,31 @@ Biggest user-visible win for performance.
    noticed the drop pad's local flash didn't propagate to other
    browsers and felt insufficient as the only "this is loaded"
    cue.
-3. Whatever the MVP usage in Phase 4 surfaced.
+3. **Whatever the MVP usage in Phase 4 surfaced.** As of 2026-04-26
+   nothing user-facing is open — the day's session ran four
+   simultaneous LC faders into Mixer 8 across multiple browsers and
+   identified a stack of bottlenecks rather than UX issues. Open
+   technical follow-ups parked here:
+   - **Optional: Rust port of `read_event` + the engine drain.**
+     After the Phase 4.4 perf round, ALSA reading + the Python
+     drain-and-classify loop are the dominant non-fundamental cost
+     (~26 % CPU under 4-fader load: 14.9 % syscall + 11.7 %
+     iter-and-branch). A `pyo3` extension exposing
+     `drain_events(seq_handle, max_events) -> List[Event]` could
+     collapse it to ~5-8 %. Probably 200-300 lines of Rust and a
+     few days of work. **Not urgent** — the system runs at 47-74 %
+     CPU on a Pi 4 under the heaviest measured load, with plenty
+     of headroom. Reach for it only if a real ceiling appears
+     (e.g. driving 4 hardware destinations through filter chains
+     while running a CC LFO on every knob).
+   - **Closure-rekey lesson**: `restore_instances` re-keys an
+     instance from the transient create-time id to the saved id;
+     closures that captured `instance.id` at definition time
+     stayed pointing at the dead transient id. Both coalescer
+     closures had this bug. Pattern to remember: capture the
+     OBJECT, dereference `.id` at call time. Worth a code-review
+     reflex check on any new closure added under
+     `_create_instance` / `_setup_plugin_callbacks`.
 
 ### Phase 5.5 — Transient WiFi for updates (≈ 0.5 sprint)
 
