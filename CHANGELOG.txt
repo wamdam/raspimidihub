@@ -6,6 +6,7 @@ hashes. Tags: Added, Improved, Fix, Changed, Removed.
 
 Unreleased
 
+- Added: Controller - Mixer 8: drop pad row above the grid; long-press (500 ms with progress ring) captures the current state of every cell; short-press snaps every cell back to the captured state and re-emits the corresponding CCs in one go
 - Added: Controller - Mixer 8 plugin: 8 knobs / 8 vertical faders / 8 mute buttons, OUT port emits CC 16-39 ch 1, IN port silently mirrors external CCs back into the on-screen cells (no feedback loops)
 - Added: XY Pad control - square touch surface with a draggable dot; emits two values (x, y) for use as a dual-CC source
 - Added: LayoutGrid - fixed-position param container that lets a plugin declare cells in explicit (col, row) slots with multi-cell spans; ground floor for the upcoming Controller plugin

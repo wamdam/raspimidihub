@@ -1386,11 +1386,26 @@ Biggest user-visible win for performance.
    `activeTouchId` pattern as Fader/Knob). Validated via a 6×4
    demo grid in `ui_demo` mixing knobs / faders / mute buttons /
    2×2 XY pad / row-spanning master fader.
-2. **TODO:** Controller plugin — Knob / Fader / Button / XY pad
+2. **In progress:** Controller plugin — Knob / Fader / Button / XY pad
    cells, OUT port emit, IN port for MIDI Learn + bidirectional
    sync (consumes destination-keyed cache). Drop pad with
    short-press fire / long-press capture **only** — autodrop and
    preview deferred to Phase 5.
+   - ✓ **4.2.a (2026-04-26):** Controller — Mixer 8 plugin shipped
+     with hard-coded bindings (ch 1, CC 16-39). OUT emits on cell
+     change, IN silently mirrors matching CCs into the on-screen
+     cells with no re-emit (no feedback loops). Replaces throwaway
+     controller_a.
+   - ✓ **4.2.b (2026-04-26):** Drop pad shipped — `DropPad` param
+     type with short-press fire / long-press (≥500 ms) capture +
+     visible progress ring. Snapshot stored in
+     `_param_values["pad_snapshot"]`. Fire re-emits captured CCs +
+     snaps cells back. Pad value cycles 'idle' / 'capture' / 'fire'
+     / 'captured' so the UI knows when a snapshot is armed.
+   - **TODO 4.2.c:** Per-cell rename + per-cell rebind UI + MIDI
+     Learn buttons.
+   - **TODO 4.2.d:** Performance 16 + FX 6 templates (replace
+     throwaway controller_b / controller_c).
 3. **TODO:** Top-nav "Controller" entry, fullscreen mode,
    `localStorage` last-viewed persistence.
 

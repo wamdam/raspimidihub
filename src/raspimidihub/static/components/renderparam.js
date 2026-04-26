@@ -9,6 +9,7 @@ import { PluginFader } from './fader.js';
 import { PluginRadio } from './radio.js';
 import { PluginButton } from './button.js';
 import { PluginXYPad } from './xypad.js';
+import { PluginDropPad } from './droppad.js';
 import { PluginStepEditor } from './stepeditor.js';
 import { PluginCurveEditor } from './curveeditor.js';
 import { PluginNoteSelect } from './noteselect.js';
@@ -86,6 +87,10 @@ export function renderParam(param, values, onChange, allValues, displayCtx) {
             if (dout.type === 'scope') return html`<div class="display-scope-wrap" style="min-width:0"><${DisplayScope} label=${dout.label} value=${dv} min=${dout.min} max=${dout.max} duration=${dout.duration} /></div>`;
             if (dout.type === 'meter') return html`<${DisplayMeter} label=${dout.label} value=${dv} min=${dout.min} max=${dout.max} />`;
             return null;
+        }
+        case 'droppad': {
+            return html`<${PluginDropPad} name=${param.name} label=${param.label}
+                value=${val != null ? val : 'idle'} onChange=${onChange} />`;
         }
         case 'xypad': {
             const xy = val != null ? val : { x: param.default_x, y: param.default_y };

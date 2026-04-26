@@ -828,6 +828,58 @@ body {
 .fader-track.vertical .fader-thumb-val { top: 2px; }
 .fader-track.vertical .fader-fill { left: 50%; bottom: 12px; width: 4px; height: auto; top: auto; margin-left: -2px; margin-top: 0; }
 
+/* DropPad — one-shot snapshot fire/capture pad */
+.droppad-row { margin-bottom: 12px; }
+.droppad {
+    position: relative;
+    width: 100%;
+    height: 56px;
+    background: linear-gradient(180deg, #2a2030 0%, #1a1018 100%);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 6px;
+    cursor: pointer;
+    user-select: none;
+    touch-action: none;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.1s, box-shadow 0.1s;
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.6), 0 1px 2px rgba(255,255,255,0.04);
+}
+.droppad.armed {
+    border-color: rgba(255,160,80,0.35);
+    background: linear-gradient(180deg, #3a2030 0%, #281018 100%);
+}
+.droppad.pressing {
+    transform: translateY(1px);
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.8);
+}
+.droppad-label {
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: 4px;
+    color: #ffd0b0;
+    text-shadow: 0 0 6px rgba(255,160,80,0.4);
+    z-index: 1;
+}
+.droppad-progress {
+    position: absolute;
+    left: 0; bottom: 0; height: 3px;
+    background: var(--accent);
+    box-shadow: 0 0 8px var(--accent);
+    transition: none;
+    pointer-events: none;
+}
+.droppad-armed {
+    position: absolute;
+    top: 4px; right: 8px;
+    font-size: 9px;
+    color: #ffd0b0;
+    pointer-events: none;
+    letter-spacing: 0.5px;
+}
+
 /* XYPad */
 .xypad-group { display: flex; flex-direction: column; align-items: stretch; gap: 4px; margin-bottom: 12px; min-width: 0; }
 .xypad-label { font-size: 12px; color: var(--text-dim); }

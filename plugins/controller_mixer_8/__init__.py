@@ -17,6 +17,7 @@ Drop pad lands in 4.2.b.
 
 from raspimidihub.plugin_api import (
     Button,
+    DropPad,
     Fader,
     Knob,
     LayoutCell,
@@ -63,6 +64,7 @@ the bindings are fixed and printed above."""
     _BINDINGS = _bindings()
 
     params = [
+        DropPad("pad", "DROP"),
         LayoutGrid(
             "controller", "",
             cols=8, rows=3,
@@ -86,7 +88,11 @@ the bindings are fixed and printed above."""
     outputs = ["CC 16..39 on ch 1 — knobs, faders, mute buttons"]
 
     def on_param_change(self, name, value):
-        """User moved a UI cell -> emit the matching CC."""
+        """User moved a UI cell -> emit the matching CC. Or drop-pad
+        fired -> handle the snapshot action."""
+        if name == "pad":
+            self._handle_pad_action(value)
+            return
         binding = self._BINDINGS.get(name)
         if binding is None:
             return
@@ -98,6 +104,58 @@ the bindings are fixed and printed above."""
         else:
             return
         self.send_cc(ch, cc, cc_val)
+
+    # --- Drop pad ---
+
+    def _handle_pad_action(self, action):
+        """Dispatch on the DropPad action value sent by the UI.
+        After processing, reset `pad` to 'captured' (if a snapshot
+        exists) or 'idle'."""
+        if action == "fire":
+            self._fire_snapshot()
+        elif action == "capture":
+            self._capture_snapshot()
+        else:
+            return  # 'idle' / 'captured' echoed back from server, no-op
+        new_state = "captured" if self._param_values.get("pad_snapshot") else "idle"
+        self.set_param("pad", new_state)
+
+    def _capture_snapshot(self):
+        """Read every bound cell's current value into pad_snapshot."""
+        snap = {}
+        for cell_name in self._BINDINGS:
+            v = self._param_values.get(cell_name)
+            if v is not None:
+                snap[cell_name] = v
+        self._param_values["pad_snapshot"] = snap
+
+    def _fire_snapshot(self):
+        """Re-emit each captured CC + snap on-screen cells to the
+        captured value. No-op if no snapshot has been taken yet."""
+        snap = self._param_values.get("pad_snapshot") or {}
+        if not snap:
+            return
+        for cell_name, v in snap.items():
+            binding = self._BINDINGS.get(cell_name)
+            if binding is None:
+                continue
+            ch, cc = binding
+            if isinstance(v, bool):
+                cc_val = 127 if v else 0
+            elif isinstance(v, int):
+                cc_val = max(0, min(127, v))
+            else:
+                continue
+            self.send_cc(ch, cc, cc_val)
+            # Snap UI to captured value (set + notify, no re-emit
+            # since on_param_change is bypassed by direct write).
+            if self._param_values.get(cell_name) != v:
+                self._param_values[cell_name] = v
+                if self._notify_param_change:
+                    try:
+                        self._notify_param_change(cell_name, v)
+                    except Exception:
+                        pass
 
     def on_cc(self, channel, cc, value):
         """Bidirectional sync: external CC silently updates the matching
