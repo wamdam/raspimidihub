@@ -233,6 +233,29 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
             "active_notes": engine.active_notes_snapshot(),
         })
 
+    # POST /api/sse/subscribe — set this connection's subscription set.
+    # Body: {conn_id, events: [str], instances: [instance_id]}.
+    # The conn_id is the UUID the server sent as the `connection`
+    # event right after the SSE handshake. Calling subscribe replaces
+    # the existing subscription wholesale — the frontend's
+    # SubscriptionManager unions all active hooks' contributions and
+    # sends the merged set, so this endpoint is the single point of
+    # truth for "what should this client receive".
+    @server.route("POST", "/api/sse/subscribe")
+    async def api_sse_subscribe(req: Request) -> Response:
+        body = req.json
+        conn_id = body.get("conn_id", "")
+        if not conn_id:
+            return Response.error("conn_id required")
+        conn = server._sse_connections.get(conn_id)
+        if conn is None:
+            return Response.error("connection not found", 404)
+        events = body.get("events") or []
+        instances = body.get("instances") or []
+        conn.events = set(events)
+        conn.instances = set(instances)
+        return Response.json({"status": "ok"})
+
     # ================================================================
     # GET /api/devices — list MIDI devices
     # ================================================================

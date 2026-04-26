@@ -12,6 +12,7 @@
 import { render } from './lib/preact.module.js';
 import { useState, useEffect, useRef, useCallback } from './lib/hooks.module.js';
 import { html, api, useSSE, Toast, MidiBar } from './ui/common.js';
+import { setSSEConnectionId, useSSESubscription } from './ui/sse-subscriptions.js';
 import { IconRouting, IconController, IconPreset, IconSettings } from './ui/icons.js';
 import { runStorageCleanup } from './ui/storage.js';
 import { useRouter } from './ui/router.js';
@@ -186,7 +187,21 @@ function App() {
     }, (connected) => {
         setSseConnected(connected);
         if (connected) refresh();
+    }, (conn_id) => {
+        // Server emits this exactly once after a successful SSE handshake;
+        // hand it to the SubscriptionManager so per-view useSSESubscription
+        // hooks can flush their merged set to /api/sse/subscribe.
+        setSSEConnectionId(conn_id);
     });
+
+    // App-level baseline subscription. The header always shows the
+    // device count and SSE-status indicator, so we always need device
+    // and connection lifecycle events. Pages add their own on top.
+    useSSESubscription(
+        ['device-connected', 'device-disconnected', 'connection-changed',
+         'panic', 'plugin-changed'],
+        [],
+    );
 
     const toggleMidiBar = () => {
         const next = !showMidiBar;

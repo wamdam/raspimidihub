@@ -5,6 +5,7 @@
 
 import { useState, useEffect, useRef } from '../lib/hooks.module.js';
 import { html, api, animateClose, useEscapeClose, useSwipeDismiss } from '../ui/common.js';
+import { useSSESubscription } from '../ui/sse-subscriptions.js';
 import { noteName } from '../state/constants.js';
 import { PluginConfigPanel, PluginWheel, PluginFader } from '../plugin-controls.js';
 import { usePluginParams } from '../ui/plugin-params.js';
@@ -164,6 +165,15 @@ export function ScrollablePiano({ heldNotes, onNoteDown, onNoteUp, pianoKeys }) 
 }
 
 export function DeviceDetailPanel({ device, onClose, showToast, refresh, pluginDisplays, onJumpToController }) {
+    // While the panel is open we want plugin-param + plugin-display
+    // events for THIS device's plugin instance (if it's a plugin) so
+    // the inline param controls and meters / scopes update live.
+    // Empty list when the device isn't a plugin — the hook still
+    // contributes a no-op subscription that costs nothing.
+    useSSESubscription(
+        [],
+        device.is_plugin && device.plugin_instance_id ? [device.plugin_instance_id] : [],
+    );
     const panelRef = { current: null };
     const close = () => animateClose(panelRef.current, onClose);
     const swipe = useSwipeDismiss(close, panelRef);

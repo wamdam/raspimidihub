@@ -5,11 +5,20 @@
 
 import { useState, useEffect } from '../lib/hooks.module.js';
 import { html, api } from '../ui/common.js';
+import { useSSESubscription } from '../ui/sse-subscriptions.js';
 import { PluginIcon } from '../ui/icons.js';
 import { ConnectionMatrix } from './matrix.js';
 import { FilterPanel } from '../panels/filterpanel.js';
 
 export function RoutingPage({ devices, connections, refresh, showToast, clockSources, clockQuarters, midiRates, onDeviceOpen }) {
+    // The matrix shows live MIDI activity, clock pulses, message rates,
+    // and CC observatory; all of those need their respective events.
+    // App already subscribes to device/connection lifecycle.
+    useSSESubscription(
+        ['midi-activity', 'midi-rates', 'clock-quarter', 'cc-changes',
+         'transport-start'],
+        [],
+    );
     const [filterConnId, setFilterConnId] = useState(null);
     const [showAddPlugin, setShowAddPlugin] = useState(false);
     const [pluginTypes, setPluginTypes] = useState({});

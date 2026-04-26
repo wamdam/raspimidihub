@@ -11,6 +11,7 @@ import mimetypes
 import os
 import time
 import urllib.parse
+import uuid
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
@@ -31,6 +32,28 @@ MAX_MUTATING_PER_SEC = 120
 # MIDI monitor + ...), so a single laptop with the matrix open and a
 # plugin panel open can use ~3-4 by itself. Headroom for several phones.
 MAX_SSE_CONNECTIONS = 30
+
+# Events that carry an `instance_id` field and are filtered by the
+# client's per-instance subscription set; everything else is filtered
+# by the event-type set.
+_PER_INSTANCE_EVENTS = frozenset({"plugin-param", "plugin-display"})
+
+
+@dataclass
+class SSEConnection:
+    """Per-SSE-connection state. The client receives a UUID as its
+    first event; subsequent /api/sse/subscribe calls reference that
+    UUID so the server can update this connection's subscription.
+
+    `events` and `instances` are the client's currently-active
+    subscription set. send_sse() consults them to decide whether to
+    fan an event out to this client. Empty sets = receive nothing
+    (intentional — every view must declare its interest)."""
+    conn_id: str
+    queue: "asyncio.Queue"
+    events: set[str]
+    instances: set[str]
+
 
 SECURITY_HEADERS = {
     "X-Content-Type-Options": "nosniff",
@@ -103,6 +126,17 @@ class WebServer:
         self.host = host
         self.port = port
         self.routes: list[Route] = []
+        # Per-connection SSE state. Each entry tracks the client's
+        # current subscription set (event types + plugin instance ids).
+        # send_sse() filters per-recipient against this — a backgrounded
+        # phone tab on a view that subscribes to nothing receives zero
+        # plugin-param noise. There is NO backward-compat fallback:
+        # connections that haven't called /api/sse/subscribe have empty
+        # sets and receive nothing. Every view explicitly declares its
+        # interest via the useSSESubscription() hook.
+        self._sse_connections: dict[str, "SSEConnection"] = {}
+        # Kept for shutdown fan-out only — points to the same queue
+        # objects held in _sse_connections.
         self._sse_queues: list[asyncio.Queue] = []
         # SSE traffic meter — incremented per broadcast (one per send_sse,
         # not per recipient), sampled to _sse_per_sec each second by
@@ -138,17 +172,32 @@ class WebServer:
         return decorator
 
     async def send_sse(self, event: str, data: dict):
-        """Broadcast an SSE event to all connected clients.
+        """Broadcast an SSE event to clients subscribed to it.
 
-        If a client's queue is full (slow / backgrounded tab), drop its
-        oldest queued event and try again. This keeps the client
-        subscribed instead of silently disconnecting it from broadcast
-        for the lifetime of the connection — which used to leave one
-        phone updating while the others sat stale until refresh.
+        Per-connection filter: events of type `plugin-param` or
+        `plugin-display` are delivered only to clients whose
+        `instances` set contains `data['instance_id']`. All other
+        events are delivered to clients whose `events` set contains
+        `event`. A client that hasn't subscribed at all (empty sets)
+        receives nothing — every view must explicitly declare its
+        interest via /api/sse/subscribe.
+
+        If a client's queue is full (slow / backgrounded tab), drop
+        its oldest queued event and try again — the client stays
+        subscribed; the freshest event wins.
         """
         msg = f"event: {event}\ndata: {json.dumps(data)}\n\n"
         self._sse_count_window += 1
-        for q in self._sse_queues:
+        per_instance = event in _PER_INSTANCE_EVENTS
+        instance_id = data.get("instance_id") if per_instance else None
+        for conn in self._sse_connections.values():
+            if per_instance:
+                if instance_id is None or instance_id not in conn.instances:
+                    continue
+            else:
+                if event not in conn.events:
+                    continue
+            q = conn.queue
             try:
                 q.put_nowait(msg)
             except asyncio.QueueFull:
@@ -159,8 +208,6 @@ class WebServer:
                 try:
                     q.put_nowait(msg)
                 except asyncio.QueueFull:
-                    # Still full somehow (race) — skip this event for this client
-                    # rather than dropping the client.
                     pass
 
     def sample_sse_rate(self) -> None:
@@ -216,13 +263,19 @@ class WebServer:
         return False
 
     async def _handle_sse(self, request: Request, writer: asyncio.StreamWriter):
-        """Handle SSE connection with direct writer access."""
-        if len(self._sse_queues) >= MAX_SSE_CONNECTIONS:
+        """Handle SSE connection with direct writer access. The first
+        message sent is `event: connection` carrying a UUID; the
+        client uses it as conn_id when calling /api/sse/subscribe."""
+        if len(self._sse_connections) >= MAX_SSE_CONNECTIONS:
             resp = Response.error("Too many SSE connections", 429)
             await self._write_response(writer, resp)
             return
 
         queue: asyncio.Queue = asyncio.Queue(maxsize=100)
+        conn_id = uuid.uuid4().hex
+        conn = SSEConnection(conn_id=conn_id, queue=queue,
+                             events=set(), instances=set())
+        self._sse_connections[conn_id] = conn
         self._sse_queues.append(queue)
 
         # Write SSE headers
@@ -237,6 +290,12 @@ class WebServer:
         writer.write(header.encode())
         await writer.drain()
 
+        # Hand the client its conn_id immediately so the
+        # SubscriptionManager can call /api/sse/subscribe.
+        intro = f"event: connection\ndata: {json.dumps({'conn_id': conn_id})}\n\n"
+        writer.write(intro.encode())
+        await writer.drain()
+
         try:
             while True:
                 msg = await queue.get()
@@ -246,9 +305,7 @@ class WebServer:
                 # Batch: while we were waiting in queue.get(), more events
                 # may have piled in. Drain them all into a single write +
                 # drain instead of paying the StreamWriter / TCP-flush cost
-                # per event. With 4 clients and a 30 ev/s broadcast rate
-                # this used to be the dominant CPU cost on the asyncio
-                # loop; batching cuts it to one drain per loop tick.
+                # per event.
                 msgs = [msg]
                 while True:
                     try:
@@ -256,8 +313,6 @@ class WebServer:
                     except asyncio.QueueEmpty:
                         break
                     if m is None:
-                        # Shutdown sentinel hidden mid-batch — flush what
-                        # we have, then exit.
                         writer.write("".join(msgs).encode())
                         await asyncio.wait_for(writer.drain(), timeout=5.0)
                         msgs = None
@@ -271,6 +326,7 @@ class WebServer:
                 OSError, asyncio.TimeoutError):
             pass
         finally:
+            self._sse_connections.pop(conn_id, None)
             if queue in self._sse_queues:
                 self._sse_queues.remove(queue)
             try:

@@ -28,14 +28,34 @@ export function useEscapeClose(close) {
 }
 
 // --- SSE subscription ---
-export function useSSE(onEvent, onConnChange) {
+//
+// Per-view subscription model: the server filters events per recipient
+// against this client's subscription set. The first message after a
+// successful SSE connect is `event: connection` carrying a conn_id —
+// SubscriptionManager (./sse-subscriptions.js) uses it to call
+// /api/sse/subscribe whenever views register / unregister their needs.
+export function useSSE(onEvent, onConnChange, onConnectionId) {
     useEffect(() => {
         const es = new EventSource('/api/events');
         const handler = (type) => (e) => {
             try { onEvent(type, JSON.parse(e.data)); }
             catch {}
         };
-        for (const ev of ['device-connected','device-disconnected','connection-changed','midi-activity','midi-rates','plugin-display','plugin-param','clock-quarter']) {
+        // The server-emitted connection-id event — captured by App so
+        // the SubscriptionManager can flush the merged set to the
+        // server. Distinct from `connection-changed` (routing).
+        es.addEventListener('connection', (e) => {
+            try {
+                const { conn_id } = JSON.parse(e.data);
+                if (conn_id && onConnectionId) onConnectionId(conn_id);
+            } catch {}
+        });
+        for (const ev of [
+            'device-connected', 'device-disconnected', 'connection-changed',
+            'midi-activity', 'midi-rates', 'plugin-display', 'plugin-param',
+            'clock-quarter', 'transport-start', 'cc-changes', 'panic',
+            'plugin-changed',
+        ]) {
             es.addEventListener(ev, handler(ev));
         }
         es.onopen = () => onConnChange(true);

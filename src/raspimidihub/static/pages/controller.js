@@ -15,6 +15,7 @@
 
 import { html, api } from '../ui/common.js';
 import { useEffect, useState, useCallback, useRef } from '../lib/hooks.module.js';
+import { useSSESubscription } from '../ui/sse-subscriptions.js';
 import { renderParamList } from '../components/renderparam.js';
 import { usePluginParams } from '../ui/plugin-params.js';
 
@@ -58,6 +59,15 @@ function ControllerSurface({ instance, pluginData, pluginDisplays }) {
 }
 
 export function ControllerPage({ pluginDisplays, showToast, selectedId, onSelect }) {
+    // Subscribe only to plugin events for the currently-selected
+    // instance — that's the only plugin whose cells are visible. Also
+    // grab transport-start so the surface can react to global play /
+    // stop. App-level baseline already covers plugin-changed for the
+    // dropdown.
+    useSSESubscription(
+        ['transport-start'],
+        selectedId ? [selectedId] : [],
+    );
     const [instances, setInstances] = useState([]);
     const [pluginData, setPluginData] = useState(null);
     // null = haven't fetched yet; true = fetched at least once. Lets us
