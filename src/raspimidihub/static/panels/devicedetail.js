@@ -9,6 +9,7 @@ import { noteName } from '../state/constants.js';
 import { PluginConfigPanel, PluginWheel, PluginFader } from '../plugin-controls.js';
 import { usePluginParams } from '../ui/plugin-params.js';
 import { IconMaximize } from '../ui/icons.js';
+import { touchTs } from '../ui/storage.js';
 
 export function PortRenameRow({ device, port, showToast }) {
     const [name, setName] = useState(port.name);
@@ -174,8 +175,8 @@ export function DeviceDetailPanel({ device, onClose, showToast, refresh, pluginD
     const [sendPort, setSendPort] = useState(0);
     const [ccNum, _setCcNum] = useState(_saved.current.cc != null ? _saved.current.cc : 1);
     const [ccVal, setCcVal] = useState(64);
-    const setSendChannel = (v) => { _setSendChannel(v); _saved.current.ch = v; localStorage.setItem(`sender_${sid}`, JSON.stringify(_saved.current)); };
-    const setCcNum = (v) => { _setCcNum(v); _saved.current.cc = v; localStorage.setItem(`sender_${sid}`, JSON.stringify(_saved.current)); };
+    const setSendChannel = (v) => { _setSendChannel(v); _saved.current.ch = v; localStorage.setItem(`sender_${sid}`, JSON.stringify(touchTs(_saved.current))); };
+    const setCcNum = (v) => { _setCcNum(v); _saved.current.cc = v; localStorage.setItem(`sender_${sid}`, JSON.stringify(touchTs(_saved.current))); };
     const [heldNotes, setHeldNotes] = useState(new Set());
     const maxEvents = 50;
 

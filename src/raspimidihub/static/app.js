@@ -13,6 +13,7 @@ import { render } from './lib/preact.module.js';
 import { useState, useEffect, useRef, useCallback } from './lib/hooks.module.js';
 import { html, api, useSSE, Toast, MidiBar } from './ui/common.js';
 import { IconRouting, IconController, IconPreset, IconSettings } from './ui/icons.js';
+import { runStorageCleanup } from './ui/storage.js';
 import { noteName } from './state/constants.js';
 import { DeviceDetailPanel } from './panels/devicedetail.js';
 import { RoutingPage } from './pages/routing.js';
@@ -183,5 +184,9 @@ function App() {
         <${Toast} message=${toast} />
     `;
 }
+
+// Hygiene: prune stale per-device localStorage entries on app startup
+// so the per-origin store doesn't grow unboundedly across sessions.
+runStorageCleanup();
 
 render(html`<${App} />`, document.getElementById('app'));
