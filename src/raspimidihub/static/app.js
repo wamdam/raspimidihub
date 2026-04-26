@@ -27,11 +27,14 @@ import { SettingsPage } from './pages/settings.js';
 // one. Lets the user verify they're running fresh code at a glance.
 function VersionBadge({ version, loadedBuild, serverBuild }) {
     if (!version) return html`<h1>RaspiMIDIHub</h1>`;
-    const shortBuild = loadedBuild ? loadedBuild.split('-').pop() : '';
-    const stale = serverBuild && loadedBuild && serverBuild !== loadedBuild;
+    // loadedBuild looks like "2.0.9-69ee5610" (?v=<version>-<token>);
+    // serverBuild is just "69ee5610" — strip the version prefix so we
+    // compare apples to apples.
+    const loadedToken = loadedBuild ? loadedBuild.split('-').pop() : '';
+    const stale = serverBuild && loadedToken && serverBuild !== loadedToken;
     return html`<h1>RaspiMIDIHub
         <span style="font-size:11px;font-weight:400;color:var(--text-dim)">
-            v${version}${shortBuild ? '·' + shortBuild : ''}
+            v${version}${loadedToken ? '·' + loadedToken : ''}
             ${stale ? html`<span style="color:#f80;cursor:pointer;margin-left:6px"
                 title="Server has been redeployed since this tab loaded — click to reload"
                 onclick=${() => location.reload()}>· stale, reload</span>` : ''}
