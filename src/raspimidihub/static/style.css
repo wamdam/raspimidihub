@@ -957,8 +957,36 @@ body {
     border-color: var(--accent);
     background: rgba(0,0,0,0.5);
 }
-.layout-cell-binding { display: flex; gap: 2px; }
+.layout-cell-binding { display: flex; gap: 2px; align-items: stretch; }
 .layout-cell-binding .layout-cell-bind { flex: 1; min-width: 0; }
+.layout-cell-learn {
+    flex: 0 0 auto;
+    width: 22px;
+    background: rgba(0,0,0,0.3);
+    border: 1px solid rgba(255,255,255,0.18);
+    border-radius: 3px;
+    color: var(--text-dim);
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+}
+.layout-cell-learn:hover { color: var(--text); border-color: rgba(255,255,255,0.3); }
+.layout-cell-learn.on {
+    background: rgba(255,160,80,0.25);
+    border-color: rgba(255,180,100,0.7);
+    color: #ffe0c0;
+    animation: layout-cell-learn-pulse 1.2s ease-in-out infinite;
+}
+@keyframes layout-cell-learn-pulse {
+    0%, 100% { box-shadow: 0 0 0 rgba(255,160,80,0); }
+    50%      { box-shadow: 0 0 8px rgba(255,160,80,0.7); }
+}
+.layout-cell-editing.learning {
+    border-color: rgba(255,180,100,0.7);
+    background: rgba(255,160,80,0.10);
+}
 
 /* Radio group */
 .radio-group { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }

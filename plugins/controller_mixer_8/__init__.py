@@ -61,6 +61,7 @@ keep both sides in sync without feedback loops."""
             edit_param="edit_labels",
             labels_param="cell_labels",
             bindings_param="cell_bindings",
+            learn_param="cell_learn",
             cells=[
                 # Row 1: knobs (sends / pan) — ch 1, CC 16..23.
                 *[LayoutCell(Knob(f"k{i}", f"K{i+1}", min=0, max=127, default=64),
@@ -84,6 +85,7 @@ keep both sides in sync without feedback loops."""
         """Initialise non-schema state on first start (and after restore)."""
         self._param_values.setdefault("cell_labels", {})
         self._param_values.setdefault("cell_bindings", {})
+        self._param_values.setdefault("cell_learn", "")
         # Cache the schema's default (channel, cc) per cell name. Computed
         # once per instance from the LayoutGrid in self.params.
         self._defaults: dict[str, tuple[int, int]] = {}
@@ -175,8 +177,17 @@ keep both sides in sync without feedback loops."""
                         pass
 
     def on_cc(self, channel, cc, value):
-        """Bidirectional sync: external CC silently updates the matching
-        cell. Does NOT re-emit on OUT (no feedback loops)."""
+        """If MIDI Learn is armed for a cell, the next incoming CC
+        captures that cell's binding and clears the learn state.
+        Otherwise: bidirectional sync — external CC silently updates the
+        matching cell. Does NOT re-emit on OUT (no feedback loops)."""
+        learn_target = self._param_values.get("cell_learn") or ""
+        if learn_target and learn_target in self._defaults:
+            bindings = dict(self._param_values.get("cell_bindings") or {})
+            bindings[learn_target] = {"channel": channel, "cc": cc}
+            self.set_param("cell_bindings", bindings)
+            self.set_param("cell_learn", "")
+            return
         for name in self._defaults:
             binding = self._effective_binding(name)
             if binding is None:

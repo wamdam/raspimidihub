@@ -1420,7 +1420,17 @@ Biggest user-visible win for performance.
        `_effective_binding(name)` (override > default) for both
        OUT emit and IN sync. Channel is 0-based on the wire and
        1-based in the UI.
-     - **TODO 4.2.c.3:** Per-cell MIDI Learn button.
+     - ✓ **4.2.c.3 (2026-04-26):** Per-cell MIDI Learn. LayoutGrid
+       gained `learn_param` (a sibling string-valued param;
+       cell_name = currently learning, "" = idle). Each edit-mode
+       cell has a small `L` button that arms learning for that
+       cell. The plugin's `on_cc` checks `cell_learn` first — if
+       set and matches a known cell, the next incoming CC's
+       (channel, cc) is captured into `cell_bindings` and learn
+       state is cleared, otherwise the CC flows into normal
+       bidirectional sync. Frontend treats `learn_param` as
+       trigger-style (PATCH only, no optimism / watchdog) so the
+       server-side reset on capture doesn't loop.
    - **TODO 4.2.d:** Performance 16 + FX 6 templates (replace
      throwaway controller_b / controller_c).
 3. **TODO:** Top-nav "Controller" entry, fullscreen mode,

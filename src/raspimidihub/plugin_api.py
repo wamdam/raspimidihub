@@ -311,6 +311,7 @@ class LayoutGrid:
     edit_param: str | None = None
     labels_param: str | None = None
     bindings_param: str | None = None
+    learn_param: str | None = None  # str-valued: "" idle, "<cell_name>" learning
 
     def to_dict(self) -> dict:
         d = {
@@ -336,6 +337,8 @@ class LayoutGrid:
             d["labels_param"] = self.labels_param
         if self.bindings_param:
             d["bindings_param"] = self.bindings_param
+        if self.learn_param:
+            d["learn_param"] = self.learn_param
         return d
 
 

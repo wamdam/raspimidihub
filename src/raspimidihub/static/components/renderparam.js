@@ -103,6 +103,7 @@ export function renderParam(param, values, onChange, allValues, displayCtx) {
             const editing = param.edit_param ? !!values[param.edit_param] : false;
             const labels = (param.labels_param && values[param.labels_param]) || {};
             const bindings = (param.bindings_param && values[param.bindings_param]) || {};
+            const learnTarget = (param.learn_param && values[param.learn_param]) || '';
             const setLabel = (cellName, newLabel) => {
                 const updated = { ...labels, [cellName]: newLabel };
                 onChange(param.labels_param, updated);
@@ -112,6 +113,9 @@ export function renderParam(param, values, onChange, allValues, displayCtx) {
                 const parsed = parseInt(raw, 10);
                 const next = { ...cur, [key]: Number.isFinite(parsed) ? parsed : null };
                 onChange(param.bindings_param, { ...bindings, [cellName]: next });
+            };
+            const toggleLearn = (cellName) => {
+                onChange(param.learn_param, learnTarget === cellName ? '' : cellName);
             };
             return html`<div class="layout-grid" style=${gridStyle}>
                 ${param.cells.map(c => {
@@ -126,7 +130,8 @@ export function renderParam(param, values, onChange, allValues, displayCtx) {
                     const ovCh = (bindOv.channel != null && bindOv.channel !== '') ? bindOv.channel + 1 : null;
                     const ovCc = (bindOv.cc != null && bindOv.cc !== '') ? bindOv.cc : null;
                     if (editing && param.labels_param) {
-                        return html`<div class="layout-cell layout-cell-editing" style=${cellStyle}>
+                        const isLearning = learnTarget === c.param.name;
+                        return html`<div class="layout-cell layout-cell-editing ${isLearning ? 'learning' : ''}" style=${cellStyle}>
                             <input class="layout-cell-rename" type="text"
                                 value=${effectiveLabel}
                                 placeholder=${c.param.label}
@@ -143,6 +148,10 @@ export function renderParam(param, values, onChange, allValues, displayCtx) {
                                         placeholder=${defCc != null ? `cc ${defCc}` : 'cc'}
                                         onInput=${(e) => setBinding(c.param.name, 'cc',
                                             e.target.value === '' ? null : parseInt(e.target.value, 10))} />
+                                    ${param.learn_param ? html`
+                                        <button type="button" class="layout-cell-learn ${isLearning ? 'on' : ''}"
+                                            title=${isLearning ? 'Listening for CC… (tap to cancel)' : 'MIDI Learn'}
+                                            onclick=${() => toggleLearn(c.param.name)}>L</button>` : null}
                                 </div>` : null}
                         </div>`;
                     }

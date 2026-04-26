@@ -300,7 +300,13 @@ export function DeviceDetailPanel({ device, onClose, showToast, refresh, pluginD
             if (!items) return;
             for (const p of items) {
                 if (p.type === 'group') walk(p.children);
-                else if (p.type === 'layoutgrid') walk((p.cells || []).map(c => c.param));
+                else if (p.type === 'layoutgrid') {
+                    walk((p.cells || []).map(c => c.param));
+                    // learn_param self-resets on the server after a CC capture,
+                    // so it has the same fire-and-forget shape as DropPad: PATCH
+                    // only, no optimistic local commit, no watchdog re-queue.
+                    if (p.learn_param) s.add(p.learn_param);
+                }
                 else if (p.type === 'droppad') s.add(p.name);
                 else if (p.type === 'button' && p.trigger) s.add(p.name);
             }
