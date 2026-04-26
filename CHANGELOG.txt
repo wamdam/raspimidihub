@@ -6,6 +6,9 @@ hashes. Tags: Added, Improved, Fix, Changed, Removed.
 
 Unreleased
 
+- Added: XY Pad cell config - separate Ch + CC inputs for X and Y axes (Y channel defaults to X). Lets you route the two axes to different synths or different MIDI channels on the same synth. Learn captures the X axis only; type Y manually
+- Added: Settings - Loop lag, MIDI in -> SSE out, MIDI in -> MIDI out and Control in -> MIDI out latency probes (windowed-max ms over the last second), plus process CPU% as percent-of-one-core. Loop lag is the single best signal that the server is keeping up with itself
+- Fix: Controller fullscreen + filtered MIDI no longer pinned the asyncio loop. Inline onSelect arrow recreated per render fired the list-fetch effect on every SSE event - typing /api/plugins/instances 20x/s, each call re-serialising every plugin's full schema. Stable callback identity + light list endpoint shape; server CPU dropped from 99% to ~30% with 4 clients
 - Fix: Controller plugins no longer pin the asyncio loop at 80-98% CPU when external CC streams in - plugin PATCH responses no longer re-serialise the full instance schema, and the schema is now cached per class. Page load went from >2 s to ~10 ms; the system stays responsive while a fader is moving
 - Added: Settings - SSE backlog stat shows per-client outbox queue depth so a stuck phone is immediately visible
 - Added: Settings - SSE / sec stat alongside Load + CPU temp; ticks live every 2 s and shows current connected client count
