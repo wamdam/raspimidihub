@@ -187,14 +187,20 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         sse_queue_depths = sorted(
             (q.qsize() for q in server._sse_queues), reverse=True
         )
+        # Latency snapshot — windowed max ms over the last second for each
+        # probed path. Missing keys mean no events of that kind happened
+        # in the window (frontend renders "—" for those). Round to 1 dp.
+        latency_max = {k: round(v, 1) for k, v in server._latency_max.items()}
         return Response.json({
             "hostname": hostname, "version": __version__,
             "ip_addresses": ips, "cpu_temp_c": temp, "ram": ram,
             "uptime_seconds": uptime, "load1": load1,
+            "cpu_percent": server._cpu_percent,
             "sse_per_sec": server._sse_per_sec,
             "sse_clients": len(server._sse_queues),
             "sse_queue_max": sse_queue_depths[0] if sse_queue_depths else 0,
             "sse_queue_depths": sse_queue_depths,
+            "latency_max": latency_max,
             "config_fallback": config.fallback_active,
             "default_routing": config.default_routing,
         })

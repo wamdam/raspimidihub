@@ -423,10 +423,14 @@ class FilterEngine:
         for conn_id in list(self._filtered.keys()):
             self.remove_filter(conn_id)
 
-    def process_event(self, ev: SndSeqEvent) -> None:
-        """Process a single event — check all filtered connections, apply filters + mappings."""
+    def process_event(self, ev: SndSeqEvent) -> bool:
+        """Process a single event — check all filtered connections, apply
+        filters + mappings. Returns True if at least one connection
+        forwarded or mapped the event (used by the engine's latency
+        probe to skip recording when nothing happened in userspace)."""
         src_client = ev.source.client
         src_port = ev.source.port
+        forwarded = False
 
         for fc in self._filtered.values():
             if fc.src_client != src_client or fc.src_port != src_port:
@@ -442,11 +446,14 @@ class FilterEngine:
             # Apply mappings — a mapping may consume the event and produce new ones
             if fc.mappings:
                 consumed = self._apply_mappings(ev, fc)
+                forwarded = True
                 if consumed:
                     continue
 
             # Forward original event via dedicated write port
             self._forward_event(ev, fc)
+            forwarded = True
+        return forwarded
 
     def _forward_event(self, ev: SndSeqEvent, fc: FilteredConnection) -> None:
         """Forward an event via the connection's dedicated write port."""

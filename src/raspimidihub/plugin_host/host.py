@@ -53,6 +53,7 @@ class PluginHost:
         self.clock_bus = ClockBus()
         self._on_display_callback = None  # (instance_id, name, value) -> None
         self._on_param_change_callback = None  # (instance_id, name, value) -> None
+        self._latency_cb = None  # set by __main__ to server.record_latency
 
     # --- Discovery ---
 
@@ -202,12 +203,30 @@ class PluginHost:
                 alsa_client.send_event(ev_type, **kwargs)
             return send
 
+        # Wrap plugin MIDI sends so that the first send_cc following a
+        # set_params on this instance records a control-in→midi-out
+        # latency. The "control-in" timestamp is whatever the host last
+        # stamped on instance._param_t0; window-bounded to 100 ms so a
+        # later autonomous CC from the plugin doesn't get attributed to
+        # the prior PATCH.
+        host_self = self
+        def _record_param_latency():
+            t0 = getattr(instance, "_param_t0", 0.0)
+            if not t0:
+                return
+            elapsed_ms = (time.monotonic() - t0) * 1000.0
+            instance._param_t0 = 0.0
+            if elapsed_ms < 100.0 and host_self._latency_cb:
+                host_self._latency_cb("control_in_midi_out", elapsed_ms)
+
         instance.plugin._send_note_on = lambda ch, note, vel: alsa_client.send_event(
             MidiEventType.NOTEON, channel=ch, note=note, velocity=vel)
         instance.plugin._send_note_off = lambda ch, note: alsa_client.send_event(
             MidiEventType.NOTEOFF, channel=ch, note=note, velocity=0)
-        instance.plugin._send_cc = lambda ch, cc, val: alsa_client.send_event(
-            MidiEventType.CONTROLLER, channel=ch, cc=cc, value=val)
+        def _send_cc_with_lat(ch, cc, val):
+            alsa_client.send_event(MidiEventType.CONTROLLER, channel=ch, cc=cc, value=val)
+            _record_param_latency()
+        instance.plugin._send_cc = _send_cc_with_lat
         instance.plugin._send_pitchbend = lambda ch, val: alsa_client.send_event(
             MidiEventType.PITCHBEND, channel=ch, value=val)
         instance.plugin._send_aftertouch = lambda ch, val: alsa_client.send_event(
@@ -489,6 +508,10 @@ class PluginHost:
         instance = self._instances.get(instance_id)
         if instance is None:
             return
+
+        # Stamp control-in time so a downstream send_cc within 100 ms can
+        # report control_in_midi_out latency (see _record_param_latency).
+        instance._param_t0 = time.monotonic()
 
         instance.plugin._param_values[name] = value
 

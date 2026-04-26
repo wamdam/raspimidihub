@@ -15,7 +15,7 @@ from .config import Config
 from .led import LedController
 from .midi_engine import MidiEngine
 from .plugin_host import PluginHost
-from .runtime.loops import rate_meter, watchdog_ping, wifi_watchdog
+from .runtime.loops import loop_lag_meter, rate_meter, watchdog_ping, wifi_watchdog
 from .web import WebServer
 from .wifi import WifiManager
 
@@ -138,7 +138,15 @@ async def async_main() -> None:
             data["cc"] = ev.data.control.param
             data["value"] = ev.data.control.value
 
-        asyncio.ensure_future(server.send_sse("midi-activity", data))
+        # Latency probe: from "engine handed us this event" to "SSE
+        # message put on every client queue". Captures asyncio
+        # scheduling delay between ensure_future and the coroutine
+        # actually running, so loop saturation shows up here too.
+        t0 = _time.monotonic()
+        async def _send_with_lat(d=data, t=t0):
+            await server.send_sse("midi-activity", d)
+            server.record_latency("midi_in_sse_out", (_time.monotonic() - t) * 1000.0)
+        asyncio.ensure_future(_send_with_lat())
 
     engine.on_midi_event(on_midi_event)
 
@@ -154,6 +162,12 @@ async def async_main() -> None:
 
         # Wire plugin host to engine
         engine._plugin_host = plugin_host
+
+        # Latency probe: lets the engine record userspace-routed
+        # midi-in→midi-out into the same window as loop_lag and
+        # midi_in_sse_out, all visible in /api/system → Settings.
+        engine._latency_cb = server.record_latency
+        plugin_host._latency_cb = server.record_latency
 
         # Discover available plugins
         plugin_host.discover_plugins()
@@ -237,6 +251,10 @@ async def async_main() -> None:
 
         # MIDI rate meter — snapshot and broadcast every second
         asyncio.ensure_future(rate_meter(engine, server))
+
+        # asyncio loop-lag probe — single best signal for "server
+        # keeping up with itself", visible as Loop lag in Settings.
+        asyncio.ensure_future(loop_lag_meter(server))
 
         try:
             await engine.run_event_loop()

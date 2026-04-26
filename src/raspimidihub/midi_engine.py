@@ -6,6 +6,7 @@ using the ALSA sequencer API.
 
 import asyncio
 import logging
+import time
 from dataclasses import dataclass
 
 from .alsa_seq import AlsaSeq, MidiDevice, MidiEventType, SeqEventType
@@ -84,6 +85,9 @@ class MidiEngine:
         self._on_change_callbacks: list = []
         self._on_midi_event_callbacks: list = []
         self._on_transport_start_callbacks: list = []
+        # Optional latency reporter — set by __main__ to server.record_latency.
+        # Used by run_event_loop to measure userspace-routed midi-in→midi-out.
+        self._latency_cb = None
         # Per-port message counters for rate metering
         self._port_msg_counts: dict[str, int] = {}  # "client:port" -> count
         self._port_rates: dict[str, int] = {}  # "client:port" -> msgs/sec (last snapshot)
@@ -731,9 +735,20 @@ class MidiEngine:
                     elif ev.type == MidiEventType.STOP and feeds_bus:
                         self._plugin_host.clock_bus.on_stop()
 
-                # Process filtered MIDI events
+                # Process filtered MIDI events. Time the userspace-routed
+                # path so the engine can report a midi-in→midi-out latency
+                # for connections that go through filters / mappings.
+                # Kernel-routed (direct ALSA subscription) flows bypass
+                # this entirely and don't show up in the metric, which is
+                # the right thing — they're effectively zero-latency.
                 if self._filter_engine:
-                    self._filter_engine.process_event(ev)
+                    t0 = time.monotonic()
+                    forwarded = self._filter_engine.process_event(ev)
+                    if forwarded and self._latency_cb:
+                        self._latency_cb(
+                            "midi_in_midi_out",
+                            (time.monotonic() - t0) * 1000.0,
+                        )
 
             if hotplug:
                 self._schedule_rescan()

@@ -1,9 +1,13 @@
 """Background asyncio loops kept running for the lifetime of the service.
 
-Three independent supervisors:
+Independent supervisors:
 
 - `rate_meter`: snapshots per-port MIDI message rates from the engine
-  every second and broadcasts them over SSE.
+  every second, broadcasts them over SSE, and rolls server-side
+  meters (SSE rate, latency probes, CPU%) into their /api/system fields.
+- `loop_lag_meter`: probes asyncio scheduling lag — schedules a wake
+  100 ms out, measures how late the loop actually serviced it. The
+  single best signal for "is the server keeping up with itself?".
 - `watchdog_ping`: pings systemd's `WATCHDOG=1` at the unit's
   WatchdogSec interval / 2.
 - `wifi_watchdog`: when WiFi is in client mode, polls the connection
@@ -12,6 +16,7 @@ Three independent supervisors:
 
 import asyncio
 import logging
+import time
 
 log = logging.getLogger(__name__)
 
@@ -21,16 +26,35 @@ WIFI_FAIL_THRESHOLD = 3  # consecutive failures before fallback
 
 async def rate_meter(engine, server) -> None:
     """Broadcast per-port MIDI message rates and CC observatory deltas
-    every second, and snapshot the SSE broadcast rate for /api/system."""
+    every second, and snapshot all server-side meters (SSE rate,
+    latency probes, CPU%) for /api/system."""
     while True:
         await asyncio.sleep(1.0)
         server.sample_sse_rate()
+        server.sample_latencies()
+        server.sample_cpu()
         rates = engine.snapshot_rates()
         if rates:
             await server.send_sse("midi-rates", rates)
         cc_changes = engine.cc_dest_snapshot_dirty()
         if cc_changes:
             await server.send_sse("cc-changes", cc_changes)
+
+
+async def loop_lag_meter(server) -> None:
+    """Schedule a wake-up 100 ms out and measure how late the asyncio
+    loop actually serviced it. A healthy loop wakes 0-3 ms late;
+    pinned-loop wakes show 50-500 ms. Reports the windowed max via
+    server.record_latency('loop_lag', ms)."""
+    interval = 0.1
+    expected = time.monotonic() + interval
+    while True:
+        await asyncio.sleep(interval)
+        now = time.monotonic()
+        lag_ms = (now - expected) * 1000.0
+        if lag_ms > 0:
+            server.record_latency("loop_lag", lag_ms)
+        expected = now + interval
 
 
 async def watchdog_ping(interval: float, notify_fn) -> None:

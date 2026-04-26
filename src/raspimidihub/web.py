@@ -8,6 +8,7 @@ import asyncio
 import json
 import logging
 import mimetypes
+import os
 import time
 import urllib.parse
 from collections import defaultdict
@@ -108,6 +109,19 @@ class WebServer:
         # runtime.loops.rate_meter so /api/system can report it cheaply.
         self._sse_count_window = 0
         self._sse_per_sec = 0
+        # Latency probes — caller records per-event ms via record_latency,
+        # rate_meter snapshots the windowed max into _latency_max once a
+        # second so /api/system reads cheaply. Tracking only the running
+        # max (not every sample) keeps overhead at ~1 dict lookup +
+        # 1 compare per recorded event.
+        self._latency_window: dict[str, float] = {}
+        self._latency_max: dict[str, float] = {}
+        # Process CPU sampling — captures /proc/self/stat utime+stime in
+        # jiffies, computes delta vs prior snapshot, expressed as
+        # percent-of-one-core (100 = one core pinned; >100 means
+        # multi-thread is summing).
+        self._cpu_percent = 0.0
+        self._cpu_last_snapshot: tuple[float, int] | None = None
         self._rate_counts: dict[str, list[float]] = defaultdict(list)
         self._server: asyncio.AbstractServer | None = None
     def route(self, method: str, path: str, exact: bool = True):
@@ -149,6 +163,40 @@ class WebServer:
         the latest value without doing any work itself."""
         self._sse_per_sec = self._sse_count_window
         self._sse_count_window = 0
+
+    def record_latency(self, name: str, ms: float) -> None:
+        """Record a single latency sample. Stored as a running max in the
+        current 1-second window — cheap (one get + one compare) and
+        bounded (no growing list). The actionable signal users care
+        about is the worst case anyway."""
+        cur = self._latency_window.get(name, 0.0)
+        if ms > cur:
+            self._latency_window[name] = ms
+
+    def sample_latencies(self) -> None:
+        """Roll the latency window into _latency_max. Called once per
+        second from runtime.loops.rate_meter."""
+        self._latency_max = self._latency_window
+        self._latency_window = {}
+
+    def sample_cpu(self) -> None:
+        """Sample process CPU usage as percent-of-one-core. /proc/self/stat
+        fields 14 (utime) and 15 (stime) are jiffies consumed in user /
+        kernel mode; delta over wall-clock × 100 / Hz = % of one core."""
+        try:
+            with open("/proc/self/stat") as f:
+                fields = f.read().split()
+            jiffies = int(fields[13]) + int(fields[14])
+        except (OSError, IndexError, ValueError):
+            return
+        now = time.monotonic()
+        if self._cpu_last_snapshot is not None:
+            t0, j0 = self._cpu_last_snapshot
+            dt = now - t0
+            if dt > 0:
+                hz = os.sysconf("SC_CLK_TCK") or 100
+                self._cpu_percent = round(100.0 * (jiffies - j0) / hz / dt, 1)
+        self._cpu_last_snapshot = (now, jiffies)
 
     def _check_rate_limit(self, client: str) -> bool:
         """Returns True if request should be rate-limited."""

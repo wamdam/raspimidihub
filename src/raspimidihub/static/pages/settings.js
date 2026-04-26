@@ -327,6 +327,10 @@ export function SettingsPage({ showToast, showMidiBar, toggleMidiBar }) {
                     <div class="stat"><div class="label">CPU Temp</div><div class="value">${sys.cpu_temp_c != null ? sys.cpu_temp_c + '\u00b0C' : '?'}</div></div>
                     <div class="stat"><div class="label">Uptime</div><div class="value">${uptimeStr}</div></div>
                     ${sys.load1 != null && html`<div class="stat"><div class="label">Load (1m)</div><div class="value">${sys.load1}</div></div>`}
+                    ${sys.cpu_percent != null && html`<div class="stat" title="Process CPU as percent-of-one-core. 100% = the asyncio loop has saturated one core (the failure mode that causes lag); >100% means plugin worker threads are summing in. Updated every second.">
+                        <div class="label">CPU</div>
+                        <div class="value">${sys.cpu_percent}%</div>
+                    </div>`}
                     <div class="stat"><div class="label">RAM</div><div class="value">${sys.ram.available_mb || '?'} / ${sys.ram.total_mb || '?'} MB</div></div>
                     ${sys.sse_per_sec != null && html`<div class="stat" title="Broadcast events/sec the server pushes to every connected browser. ×N is the number of currently subscribed clients - every event fans out to each, so total socket writes/sec is roughly events × clients.">
                         <div class="label">SSE / sec</div>
@@ -336,6 +340,24 @@ export function SettingsPage({ showToast, showMidiBar, toggleMidiBar }) {
                         <div class="label">SSE backlog</div>
                         <div class="value">${sys.sse_queue_depths.join(' / ')}</div>
                     </div>`}
+                    ${sys.latency_max && html`
+                        <div class="stat" title="asyncio scheduling lag: a healthy loop wakes 0-3 ms after a scheduled time. Spikes here mean the loop is busy and everything else is paced by it. The single best signal that something is wrong server-side.">
+                            <div class="label">Loop lag</div>
+                            <div class="value">${sys.latency_max.loop_lag != null ? sys.latency_max.loop_lag + ' ms' : '—'}</div>
+                        </div>
+                        <div class="stat" title="Time between an external MIDI event being read by the engine and its midi-activity SSE message being placed on every client outbox. Captures any per-event work + asyncio scheduling delay between the two.">
+                            <div class="label">MIDI in → SSE out</div>
+                            <div class="value">${sys.latency_max.midi_in_sse_out != null ? sys.latency_max.midi_in_sse_out + ' ms' : '—'}</div>
+                        </div>
+                        <div class="stat" title="Time spent in the userspace filter / mapping path for a forwarded MIDI event (kernel-routed direct subscriptions bypass userspace and are effectively zero - they don't show here). 0 ms when no filtered connection forwarded an event in the window.">
+                            <div class="label">MIDI in → MIDI out</div>
+                            <div class="value">${sys.latency_max.midi_in_midi_out != null ? sys.latency_max.midi_in_midi_out + ' ms' : '—'}</div>
+                        </div>
+                        <div class="stat" title="Time from PATCH-receive on a plugin instance to the first send_cc the plugin performs in response (within 100 ms window). Covers controller-page touches → MIDI-out latency on the server side.">
+                            <div class="label">Control in → MIDI out</div>
+                            <div class="value">${sys.latency_max.control_in_midi_out != null ? sys.latency_max.control_in_midi_out + ' ms' : '—'}</div>
+                        </div>
+                    `}
                     ${(sys.ip_addresses || []).map(ip => html`
                         <div class="stat"><div class="label">${ip.interface}</div><div class="value">${ip.address}</div></div>
                     `)}
