@@ -270,12 +270,20 @@ class XYPad(Param):
 
 @dataclass
 class LayoutCell:
-    """One positioned cell in a LayoutGrid: a Param + (col, row, span)."""
+    """One positioned cell in a LayoutGrid: a Param + (col, row, span).
+
+    Optional `channel` + `cc` declare the cell's default MIDI binding —
+    used by Controller plugins. Channel is 0-based internally (matches
+    ALSA seq); the UI displays 1-based. The user can override via the
+    LayoutGrid's `bindings_param` dict at runtime.
+    """
     param: Param
     col: int  # 1-based column
     row: int  # 1-based row
     span_cols: int = 1
     span_rows: int = 1
+    channel: int | None = None  # 0-based default MIDI channel
+    cc: int | None = None       # default CC number (0-127)
 
 
 @dataclass
@@ -302,6 +310,7 @@ class LayoutGrid:
     cells: list = field(default_factory=list)  # list[LayoutCell]
     edit_param: str | None = None
     labels_param: str | None = None
+    bindings_param: str | None = None
 
     def to_dict(self) -> dict:
         d = {
@@ -315,6 +324,8 @@ class LayoutGrid:
                     "col": c.col, "row": c.row,
                     "span_cols": c.span_cols, "span_rows": c.span_rows,
                     "param": c.param.to_dict(),
+                    **({"channel": c.channel} if c.channel is not None else {}),
+                    **({"cc": c.cc} if c.cc is not None else {}),
                 }
                 for c in self.cells
             ],
@@ -323,6 +334,8 @@ class LayoutGrid:
             d["edit_param"] = self.edit_param
         if self.labels_param:
             d["labels_param"] = self.labels_param
+        if self.bindings_param:
+            d["bindings_param"] = self.bindings_param
         return d
 
 

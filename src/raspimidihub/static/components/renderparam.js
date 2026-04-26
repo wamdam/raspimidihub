@@ -102,25 +102,52 @@ export function renderParam(param, values, onChange, allValues, displayCtx) {
             const gridStyle = `display:grid;grid-template-columns:repeat(${param.cols}, minmax(0, 1fr));grid-template-rows:repeat(${param.rows}, auto);gap:6px`;
             const editing = param.edit_param ? !!values[param.edit_param] : false;
             const labels = (param.labels_param && values[param.labels_param]) || {};
+            const bindings = (param.bindings_param && values[param.bindings_param]) || {};
             const setLabel = (cellName, newLabel) => {
                 const updated = { ...labels, [cellName]: newLabel };
                 onChange(param.labels_param, updated);
             };
+            const setBinding = (cellName, key, raw) => {
+                const cur = bindings[cellName] || {};
+                const parsed = parseInt(raw, 10);
+                const next = { ...cur, [key]: Number.isFinite(parsed) ? parsed : null };
+                onChange(param.bindings_param, { ...bindings, [cellName]: next });
+            };
             return html`<div class="layout-grid" style=${gridStyle}>
                 ${param.cells.map(c => {
                     const cellStyle = `grid-column: ${c.col} / span ${c.span_cols}; grid-row: ${c.row} / span ${c.span_rows}; min-width: 0`;
-                    const override = labels[c.param.name];
-                    const effectiveLabel = override != null && override !== '' ? override : c.param.label;
+                    const labelOv = labels[c.param.name];
+                    const effectiveLabel = labelOv != null && labelOv !== '' ? labelOv : c.param.label;
+                    const bindOv = bindings[c.param.name] || {};
+                    // Defaults from the schema (LayoutCell.channel/cc; channel is 0-based internally).
+                    // UI shows / accepts 1-based channels so they match what musicians see on hardware.
+                    const defCh = c.channel != null ? c.channel + 1 : null;
+                    const defCc = c.cc;
+                    const ovCh = (bindOv.channel != null && bindOv.channel !== '') ? bindOv.channel + 1 : null;
+                    const ovCc = (bindOv.cc != null && bindOv.cc !== '') ? bindOv.cc : null;
                     if (editing && param.labels_param) {
                         return html`<div class="layout-cell layout-cell-editing" style=${cellStyle}>
                             <input class="layout-cell-rename" type="text"
                                 value=${effectiveLabel}
                                 placeholder=${c.param.label}
                                 onInput=${(e) => setLabel(c.param.name, e.target.value)} />
+                            ${param.bindings_param && (defCh != null || defCc != null) ? html`
+                                <div class="layout-cell-binding">
+                                    <input class="layout-cell-bind" type="number" min="1" max="16"
+                                        value=${ovCh != null ? ovCh : ''}
+                                        placeholder=${defCh != null ? `ch ${defCh}` : 'ch'}
+                                        onInput=${(e) => setBinding(c.param.name, 'channel',
+                                            e.target.value === '' ? null : (parseInt(e.target.value, 10) - 1))} />
+                                    <input class="layout-cell-bind" type="number" min="0" max="127"
+                                        value=${ovCc != null ? ovCc : ''}
+                                        placeholder=${defCc != null ? `cc ${defCc}` : 'cc'}
+                                        onInput=${(e) => setBinding(c.param.name, 'cc',
+                                            e.target.value === '' ? null : parseInt(e.target.value, 10))} />
+                                </div>` : null}
                         </div>`;
                     }
-                    const patchedParam = override != null && override !== ''
-                        ? { ...c.param, label: override }
+                    const patchedParam = labelOv != null && labelOv !== ''
+                        ? { ...c.param, label: labelOv }
                         : c.param;
                     return html`<div class="layout-cell" style=${cellStyle}>
                         ${renderParam(patchedParam, values, onChange, allValues, displayCtx)}

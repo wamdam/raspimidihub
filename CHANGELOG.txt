@@ -6,6 +6,7 @@ hashes. Tags: Added, Improved, Fix, Changed, Removed.
 
 Unreleased
 
+- Added: Controller - Mixer 8: per-cell channel + CC rebind - in edit mode each cell now also shows a small ch and cc input, override defaults per cell so you can route different cells to different synths on different channels
 - Added: Controller - Mixer 8: per-cell rename - tap "Edit names" to swap every cell for an inline text input, type a friendly name (e.g. "Cutoff" instead of "K1"), names persist per-instance
 - Added: Controller - Mixer 8: drop pad row above the grid; long-press (500 ms with progress ring) captures the current state of every cell; short-press snaps every cell back to the captured state and re-emits the corresponding CCs in one go
 - Added: Controller - Mixer 8 plugin: 8 knobs / 8 vertical faders / 8 mute buttons, OUT port emits CC 16-39 ch 1, IN port silently mirrors external CCs back into the on-screen cells (no feedback loops)

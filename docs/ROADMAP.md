@@ -1411,7 +1411,15 @@ Biggest user-visible win for performance.
        reads overrides and renders them over the schema label.
        Watchdog now does deep-equality so dict-valued params don't
        loop on identity mismatch.
-     - **TODO 4.2.c.2:** Per-cell channel + CC rebind.
+     - ✓ **4.2.c.2 (2026-04-26):** Per-cell channel + CC rebind.
+       LayoutCell schema gained optional `channel` + `cc` fields
+       (the default binding); LayoutGrid gained `bindings_param`
+       pointing at a sibling dict of `{cell_name: {channel, cc}}`
+       overrides. Edit mode now shows a small `ch` + `cc` input
+       under the rename input. Plugin uses
+       `_effective_binding(name)` (override > default) for both
+       OUT emit and IN sync. Channel is 0-based on the wire and
+       1-based in the UI.
      - **TODO 4.2.c.3:** Per-cell MIDI Learn button.
    - **TODO 4.2.d:** Performance 16 + FX 6 templates (replace
      throwaway controller_b / controller_c).
