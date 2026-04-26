@@ -28,6 +28,7 @@ Unreleased
 - Fix: Plugin panel - turning a wheel / knob no longer slides the panel away
 - Fix: Radio buttons - the active pill no longer shifts its neighbours by 1 px when toggled
 - Fix: Note wheel - active value now centred on the indicator
+- Fix: WiFi AP - service restart now heals "no AP" / "two hostapds racing" states (was sometimes leaving the SSID dead or letting clients connect-then-immediately-disconnect)
 
 
 2026-04-25 - Version 2.0.9

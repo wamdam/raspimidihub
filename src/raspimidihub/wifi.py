@@ -6,8 +6,11 @@ Manages hostapd + dnsmasq for AP mode, NetworkManager for client/ethernet.
 import asyncio
 import contextlib
 import logging
+import os
 import re
+import signal
 import subprocess
+import time
 from pathlib import Path
 
 log = logging.getLogger(__name__)
@@ -182,26 +185,103 @@ no-hosts
         return None
 
     @staticmethod
-    def _process_running(pattern: str) -> bool:
-        """Check whether a process matching the pattern is alive."""
+    def _find_pids(executable: str, required_arg: str) -> list[int]:
+        """PIDs whose argv0 basename is `executable` and whose argv contains
+        `required_arg` as a literal element.
+
+        Bypasses pgrep -f, which matches against the full cmdline of any
+        process — including shell wrappers, journalctl tails, or our own
+        python -c snippets that happen to mention "hostapd" and the config
+        path. Reading /proc/<pid>/cmdline directly is precise: we only count
+        a process if it really *is* an `executable` invocation with our
+        config as one of its argv tokens.
+        """
+        pids: list[int] = []
+        for entry in Path("/proc").iterdir():
+            if not entry.name.isdigit():
+                continue
+            try:
+                cmdline = (entry / "cmdline").read_bytes()
+            except (FileNotFoundError, PermissionError, ProcessLookupError):
+                continue
+            if not cmdline:
+                continue
+            argv = cmdline.split(b"\0")
+            if not argv or not argv[0]:
+                continue
+            try:
+                argv_str = [a.decode("utf-8") for a in argv if a]
+            except UnicodeDecodeError:
+                continue
+            if argv_str[0].rsplit("/", 1)[-1] != executable:
+                continue
+            if any(required_arg in a for a in argv_str[1:]):
+                pids.append(int(entry.name))
+        return pids
+
+    @staticmethod
+    def _wlan_mode() -> str:
+        """Return wlan0 type from `iw dev wlan0 info` ('AP' / 'managed' / '')."""
         try:
-            r = subprocess.run(["pgrep", "-f", pattern],
-                               capture_output=True, timeout=2)
-            return r.returncode == 0
+            r = subprocess.run(["iw", "dev", WLAN_IFACE, "info"],
+                               capture_output=True, text=True, timeout=2)
         except (subprocess.TimeoutExpired, FileNotFoundError):
-            return False
+            return ""
+        if r.returncode != 0:
+            return ""
+        for line in r.stdout.splitlines():
+            line = line.strip()
+            if line.startswith("type "):
+                return line.split(None, 1)[1].strip()
+        return ""
+
+    @classmethod
+    def _kill_and_wait(cls, executable: str, required_arg: str,
+                      term_timeout: float = 2.0, kill_timeout: float = 0.5) -> None:
+        """SIGTERM matching processes, wait, then SIGKILL stragglers.
+
+        Prevents the "two hostapds racing on wlan0" failure mode: spawning
+        a fresh hostapd while the old one is still bound produces a
+        half-broken AP that clients associate with and immediately drop.
+        """
+        pids = cls._find_pids(executable, required_arg)
+        if not pids:
+            return
+        for pid in pids:
+            try:
+                os.kill(pid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+        deadline = time.monotonic() + term_timeout
+        while time.monotonic() < deadline:
+            if not cls._find_pids(executable, required_arg):
+                return
+            time.sleep(0.05)
+        stragglers = cls._find_pids(executable, required_arg)
+        for pid in stragglers:
+            log.warning("%s pid=%d ignored SIGTERM, sending SIGKILL", executable, pid)
+            try:
+                os.kill(pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+        deadline = time.monotonic() + kill_timeout
+        while time.monotonic() < deadline:
+            if not cls._find_pids(executable, required_arg):
+                return
+            time.sleep(0.05)
+        if cls._find_pids(executable, required_arg):
+            log.error("%s pids %s survived SIGKILL", executable,
+                      cls._find_pids(executable, required_arg))
 
     def start_ap(self, ssid: str = "", password: str = "midihub1"):
         """Bring up WiFi AP mode. Idempotent.
 
-        If the candidate config matches the on-disk config and our hostapd
-        + dnsmasq are alive, returns without touching wlan0 — so a service
-        restart doesn't blink the SSID and confuse client devices.
-        Otherwise (re)writes the configs and (re)spawns whichever process
-        actually changed.
+        If the candidate config matches the on-disk config, our hostapd +
+        dnsmasq are alive, and wlan0 is actually in AP mode, returns
+        without touching wlan0 — so a service restart doesn't blink the
+        SSID and confuse client devices. Otherwise (re)writes the configs
+        and (re)spawns whichever process actually changed.
         """
-        import time
-
         if not ssid:
             ssid = f"RaspiMIDIHub-{_get_mac_suffix()}"
         self._ssid = ssid
@@ -220,16 +300,38 @@ no-hosts
         candidate_hostapd = self._render_hostapd_conf(ssid, password, channel)
         candidate_dnsmasq = self._render_dnsmasq_conf()
 
+        # Idempotency guard: only skip restart when ALL three hold —
+        # config matches, daemon is actually running with our config path,
+        # AND the kernel reports wlan0 as type AP. Without the wlan_mode
+        # check, a previous external `pkill hostapd` leaves wlan0 in
+        # type=managed and we'd silently keep "skipping restart" forever.
+        hostapd_pids = self._find_pids("hostapd", str(HOSTAPD_CONF))
+        dnsmasq_pids = self._find_pids("dnsmasq", str(DNSMASQ_AP_CONF))
+        wlan_mode = self._wlan_mode()
+
         hostapd_ok = (existing_hostapd == candidate_hostapd
-                      and self._process_running("hostapd.*raspimidihub"))
+                      and len(hostapd_pids) == 1
+                      and wlan_mode == "AP")
         dnsmasq_ok = (existing_dnsmasq == candidate_dnsmasq
-                      and self._process_running("dnsmasq.*raspimidihub"))
+                      and len(dnsmasq_pids) == 1)
 
         if hostapd_ok and dnsmasq_ok:
             self._mode = "ap"
             log.info("WiFi AP already up and matching: SSID=%s, channel=%d — skipping restart",
                      ssid, channel)
             return
+
+        # Log why the fast path was bypassed — invaluable when diagnosing
+        # the exact reproduction the patch above guards against.
+        if not hostapd_ok:
+            log.info("WiFi AP: hostapd needs (re)start "
+                     "(config_match=%s pids=%s wlan_mode=%s)",
+                     existing_hostapd == candidate_hostapd,
+                     hostapd_pids, wlan_mode or "?")
+        if not dnsmasq_ok:
+            log.info("WiFi AP: dnsmasq needs (re)start "
+                     "(config_match=%s pids=%s)",
+                     existing_dnsmasq == candidate_dnsmasq, dnsmasq_pids)
 
         # Only touch wlan0's network layer when hostapd itself needs to be
         # restarted. Replacing dnsmasq alone shouldn't blink the IP — that
@@ -244,10 +346,24 @@ no-hosts
             HOSTAPD_CONF.write_text(candidate_hostapd)
             log.info("Wrote hostapd config: SSID=%s, channel=%d", ssid, channel)
 
+            # systemctl stop covers the distro hostapd.service if it ever
+            # got enabled; the precise kill-and-wait handles our own
+            # daemonized hostapd (and any extra strays).
             _run(["systemctl", "stop", "hostapd"], check=False)
-            _run(["pkill", "-f", "hostapd.*raspimidihub"], check=False)
-            time.sleep(0.5)
+            self._kill_and_wait("hostapd", str(HOSTAPD_CONF))
             _run(["hostapd", "-B", str(HOSTAPD_CONF)], check=False)
+
+            # Verify the new hostapd actually drove wlan0 into AP mode.
+            # If it didn't, the spawn silently failed and we'd have been
+            # back to "phone connects then immediately disconnects".
+            deadline = time.monotonic() + 3.0
+            while time.monotonic() < deadline:
+                if self._wlan_mode() == "AP":
+                    break
+                time.sleep(0.1)
+            else:
+                log.error("hostapd spawned but wlan0 stayed in mode=%r after 3 s",
+                          self._wlan_mode())
 
         if not dnsmasq_ok:
             DNSMASQ_AP_CONF.parent.mkdir(parents=True, exist_ok=True)
@@ -255,8 +371,7 @@ no-hosts
             log.info("Wrote dnsmasq AP config")
 
             _run(["systemctl", "stop", "dnsmasq"], check=False)
-            _run(["pkill", "-f", "dnsmasq.*raspimidihub"], check=False)
-            time.sleep(0.3)
+            self._kill_and_wait("dnsmasq", str(DNSMASQ_AP_CONF))
             _run(["dnsmasq", "--conf-file=" + str(DNSMASQ_AP_CONF),
                   "--pid-file=/run/raspimidihub/dnsmasq.pid"], check=False)
 
@@ -268,8 +383,8 @@ no-hosts
 
     def stop_ap(self):
         """Stop WiFi access point."""
-        _run(["pkill", "-f", "hostapd.*raspimidihub"], check=False)
-        _run(["pkill", "-f", "dnsmasq.*raspimidihub"], check=False)
+        self._kill_and_wait("hostapd", str(HOSTAPD_CONF))
+        self._kill_and_wait("dnsmasq", str(DNSMASQ_AP_CONF))
         _run(["ip", "addr", "flush", "dev", WLAN_IFACE], check=False)
         log.info("WiFi AP stopped")
 
