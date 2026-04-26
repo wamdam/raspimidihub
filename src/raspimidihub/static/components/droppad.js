@@ -43,10 +43,14 @@ export function PluginDropPad({ name, label, value, onChange }) {
         if (flashTimer.current) clearTimeout(flashTimer.current);
     }, []);
 
-    // 'fire' is the brief intermediate state right after a short-press;
-    // server resets to 'captured' within ~10 ms, so treat it as still
-    // armed for the steady visual indicator.
-    const armed = value === 'captured' || value === 'fire';
+    // Armed = "the server has a snapshot loaded for this pad". Anything
+    // other than the explicit unarmed state ('idle' or unset) qualifies.
+    // Including 'capture' here matters: when the user re-learns from an
+    // already-armed pad, value cycles captured → capture → captured. If
+    // 'capture' weren't in the armed set, the glow would flicker off
+    // briefly between the two SSE updates whenever React decides not to
+    // batch them.
+    const armed = !!value && value !== 'idle';
 
     useEffect(() => {
         const el = padRef.current;

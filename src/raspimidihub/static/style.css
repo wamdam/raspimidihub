@@ -915,14 +915,20 @@ body {
 }
 .controller-surface { /* renderParamList output renders directly into the page */ }
 
-/* DropPad — one-shot snapshot fire/capture pad */
+/* DropPad — one-shot snapshot fire/capture pad.
+ * Three visual states:
+ *   - unarmed   (no snapshot)  → muted grey, low contrast.
+ *   - armed     (snapshot set) → warm orange gradient + glow.
+ *   - flashing  (action fired) → bright orange burst, 200 ms.
+ */
 .droppad-row { margin-bottom: 12px; }
 .droppad {
     position: relative;
     width: 100%;
     height: 56px;
-    background: linear-gradient(180deg, #2a2030 0%, #1a1018 100%);
-    border: 1px solid rgba(255,255,255,0.08);
+    /* Unarmed default — clearly muted, no warm tint, no glow. */
+    background: linear-gradient(180deg, #2a2a30 0%, #16161a 100%);
+    border: 1px solid rgba(255,255,255,0.06);
     border-radius: 6px;
     cursor: pointer;
     user-select: none;
@@ -931,15 +937,28 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: background 0.1s, box-shadow 0.1s;
-    box-shadow: inset 0 1px 2px rgba(0,0,0,0.6), 0 1px 2px rgba(255,255,255,0.04);
+    transition: background 0.15s, box-shadow 0.15s, border-color 0.15s;
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.6);
+}
+.droppad-label {
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: 4px;
+    /* Muted label by default — matches the unarmed pad. */
+    color: rgba(220,220,220,0.45);
+    text-shadow: none;
+    z-index: 1;
+    transition: color 0.15s, text-shadow 0.15s;
 }
 .droppad.armed {
-    border-color: rgba(255,170,90,0.45);
-    background: linear-gradient(180deg, #322028 0%, #1f1018 100%);
-    box-shadow: inset 0 1px 2px rgba(0,0,0,0.6), 0 0 8px rgba(255,160,80,0.25);
+    border-color: rgba(255,170,90,0.55);
+    background: linear-gradient(180deg, #3a2330 0%, #1f1018 100%);
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.6), 0 0 14px rgba(255,160,80,0.40);
 }
-.droppad.armed .droppad-label { color: #ffe0c0; }
+.droppad.armed .droppad-label {
+    color: #ffe0c0;
+    text-shadow: 0 0 6px rgba(255,160,80,0.6);
+}
 .droppad.flashing {
     background: linear-gradient(180deg, #ffaa55 0%, #ff8833 100%);
     border-color: rgba(255,200,140,0.6);
@@ -949,14 +968,6 @@ body {
 .droppad.pressing {
     transform: translateY(1px);
     box-shadow: inset 0 2px 4px rgba(0,0,0,0.8);
-}
-.droppad-label {
-    font-size: 18px;
-    font-weight: 700;
-    letter-spacing: 4px;
-    color: #ffd0b0;
-    text-shadow: 0 0 6px rgba(255,160,80,0.4);
-    z-index: 1;
 }
 .droppad-progress {
     position: absolute;
