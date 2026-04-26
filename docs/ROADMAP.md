@@ -1422,7 +1422,32 @@ Biggest user-visible win for performance.
 
 1. **Autodrop**. Bar-quantized fire scheduling via the existing
    ClockBus. Free now that 1.1 added the new tick infrastructure.
-2. **Preview mode**. Ghost indicators on cells.
+2. **Preview / drop-snapshot indicator on the cells themselves**
+   (replaces the original "ghost indicators" sketch with the
+   concrete UX surfaced during Phase 4.2.b review):
+   - **Knobs**: render the captured snapshot value on the LED arc
+     in a contrasting color (turquoise against the live-value's
+     warm accent), so the arc shows BOTH the current value *and*
+     where the drop will jump it. Difference between current and
+     snapshot reads as the in-between arc length.
+   - **Faders**: re-purpose / add a colored bar near the track to
+     mark the snapshot value at the same scale as the thumb.
+   - **Buttons**: less obvious — option A: an extra small dot on
+     the LED in turquoise that only shows if "snap value !=
+     current". Option B: a thin border tint while armed.
+   - **XY pads**: a second faint dot at the snapshot (x, y).
+   - **Wheels**: a coloured tick on the side of the wheel at the
+     captured value (or skip — Wheel is rarely on a Controller,
+     mostly internal-plugin UI).
+   This is a much better "armed" affordance than the per-cell
+   tinting we initially considered, and survives multi-browser
+   (every connected browser reads the same `pad_snapshot` over
+   SSE, so the indicators stay in sync without depending on the
+   user's local action).
+   Surfaced 2026-04-26 during Phase 4.2.b review when the user
+   noticed the drop pad's local flash didn't propagate to other
+   browsers and felt insufficient as the only "this is loaded"
+   cue.
 3. Whatever the MVP usage in Phase 4 surfaced.
 
 ### Phase 5.5 — Transient WiFi for updates (≈ 0.5 sprint)

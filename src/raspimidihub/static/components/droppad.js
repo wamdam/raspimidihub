@@ -21,38 +21,32 @@ export function PluginDropPad({ name, label, value, onChange }) {
 
     const [pressing, setPressing] = useState(false);
     const [progress, setProgress] = useState(0);  // 0..1
-    // Brief lighter flash when the server confirms a capture or fire,
-    // as visual feedback (the audible drop already covers fire's "did
-    // it work" question, but a flash matches both actions cheaply).
+    // Local flash, fired by the user's own action — the SSE-watch
+    // approach doesn't survive React's render-batching when 'capture'
+    // and 'captured' arrive in quick succession (the component sees
+    // value=='captured' both before and after the batch, and the
+    // useEffect comparator no-ops). Multi-browser users still get a
+    // stable armed indicator via the value prop.
     const [flashing, setFlashing] = useState(false);
-    const prevValue = useRef(value);
     const flashTimer = useRef(null);
     const pressState = useRef({
         startTs: 0, longFired: false, rafId: null, activeTouchId: null,
     });
 
-    useEffect(() => {
-        if (value !== prevValue.current) {
-            // Flash on transitions INTO an action-completed state.
-            // Skips the 'idle' / 'capture' / 'fire' intermediate values —
-            // we only blink when the server confirms 'captured' (after a
-            // capture) or right after the brief 'fire' state.
-            if (value === 'captured' && prevValue.current !== 'fire') {
-                setFlashing(true);
-                if (flashTimer.current) clearTimeout(flashTimer.current);
-                flashTimer.current = setTimeout(() => setFlashing(false), 200);
-            } else if (value === 'fire') {
-                setFlashing(true);
-                if (flashTimer.current) clearTimeout(flashTimer.current);
-                flashTimer.current = setTimeout(() => setFlashing(false), 200);
-            }
-            prevValue.current = value;
-        }
-    }, [value]);
+    function triggerFlash() {
+        setFlashing(true);
+        if (flashTimer.current) clearTimeout(flashTimer.current);
+        flashTimer.current = setTimeout(() => setFlashing(false), 200);
+    }
 
     useEffect(() => () => {
         if (flashTimer.current) clearTimeout(flashTimer.current);
     }, []);
+
+    // 'fire' is the brief intermediate state right after a short-press;
+    // server resets to 'captured' within ~10 ms, so treat it as still
+    // armed for the steady visual indicator.
+    const armed = value === 'captured' || value === 'fire';
 
     useEffect(() => {
         const el = padRef.current;
@@ -67,6 +61,7 @@ export function PluginDropPad({ name, label, value, onChange }) {
                 ps.longFired = true;
                 thudFeedback();
                 onChangeRef.current(name, 'capture');
+                triggerFlash();
             }
             if (elapsed < LONG_PRESS_MS * 1.2 && ps.startTs > 0) {
                 ps.rafId = requestAnimationFrame(tick);
@@ -92,6 +87,7 @@ export function PluginDropPad({ name, label, value, onChange }) {
             // and the press ended before the long-press threshold.
             if (!ps.longFired && elapsed < LONG_PRESS_MS) {
                 onChangeRef.current(name, 'fire');
+                triggerFlash();
             }
             ps.longFired = false;
         }
@@ -143,7 +139,7 @@ export function PluginDropPad({ name, label, value, onChange }) {
     const text = pressing ? 'HOLD TO LEARN' : (label || 'DROP');
 
     return html`<div class="droppad-row">
-        <div class="droppad ${pressing ? 'pressing' : ''} ${flashing ? 'flashing' : ''}" ref=${padRef}>
+        <div class="droppad ${pressing ? 'pressing' : ''} ${flashing ? 'flashing' : ''} ${armed ? 'armed' : ''}" ref=${padRef}>
             <span class="droppad-label">${text}</span>
             ${pressing ? html`<div class="droppad-progress" style="width: ${progress * 100}%"></div>` : null}
         </div>
