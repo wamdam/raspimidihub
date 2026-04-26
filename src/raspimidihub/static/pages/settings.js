@@ -328,7 +328,14 @@ export function SettingsPage({ showToast, showMidiBar, toggleMidiBar }) {
                     <div class="stat"><div class="label">Uptime</div><div class="value">${uptimeStr}</div></div>
                     ${sys.load1 != null && html`<div class="stat"><div class="label">Load (1m)</div><div class="value">${sys.load1}</div></div>`}
                     <div class="stat"><div class="label">RAM</div><div class="value">${sys.ram.available_mb || '?'} / ${sys.ram.total_mb || '?'} MB</div></div>
-                    ${sys.sse_per_sec != null && html`<div class="stat"><div class="label">SSE / sec</div><div class="value">${sys.sse_per_sec}${sys.sse_clients ? html` <span style="color:var(--text-dim);font-size:11px">×${sys.sse_clients}</span>` : ''}</div></div>`}
+                    ${sys.sse_per_sec != null && html`<div class="stat" title="Broadcast events/sec the server pushes to every connected browser. ×N is the number of currently subscribed clients - every event fans out to each, so total socket writes/sec is roughly events × clients.">
+                        <div class="label">SSE / sec</div>
+                        <div class="value">${sys.sse_per_sec}${sys.sse_clients ? html` <span style="color:var(--text-dim);font-size:11px">× ${sys.sse_clients} ${sys.sse_clients === 1 ? 'client' : 'clients'}</span>` : ''}</div>
+                    </div>`}
+                    ${sys.sse_queue_depths && sys.sse_queue_depths.length > 0 && html`<div class="stat" title="Per-client SSE outbox depths (max 100). Non-zero means a tab is buffering and the server is fanning ahead of it - usually a phone with the screen off.">
+                        <div class="label">SSE backlog</div>
+                        <div class="value">${sys.sse_queue_depths.join(' / ')}</div>
+                    </div>`}
                     ${(sys.ip_addresses || []).map(ip => html`
                         <div class="stat"><div class="label">${ip.interface}</div><div class="value">${ip.address}</div></div>
                     `)}

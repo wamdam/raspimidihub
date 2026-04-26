@@ -528,6 +528,14 @@ class PluginHost:
             return None
 
         cls = instance.plugin.__class__
+        # params_schema is built from class-level dataclasses that never
+        # change at runtime — cache the serialized form on the class so
+        # we don't rebuild ~300 nested dicts per controller page load /
+        # PATCH response. This was a meaningful share of asyncio CPU.
+        schema = getattr(cls, "_params_schema_cache", None)
+        if schema is None:
+            schema = params_to_dicts(cls.params)
+            cls._params_schema_cache = schema
         return {
             "id": instance.id,
             "type": instance.plugin_type,
@@ -537,7 +545,7 @@ class PluginHost:
             "client_id": instance.alsa_client.client_id if instance.alsa_client else None,
             "in_port": instance.alsa_client.in_port if instance.alsa_client else None,
             "out_port": instance.alsa_client.out_port if instance.alsa_client else None,
-            "params_schema": params_to_dicts(cls.params),
+            "params_schema": schema,
             "params": dict(instance.plugin._param_values),
             "cc_inputs": {str(k): v for k, v in cls.cc_inputs.items()},
             "cc_outputs": cls.cc_outputs,

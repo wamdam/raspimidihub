@@ -180,12 +180,21 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         except Exception:
             pass
 
+        # Per-client SSE queue depth (0 = idle, 100 = saturated and
+        # dropping oldest). A spike here means a slow tab is buffering
+        # and the server is fanning out to it the wrong way — useful
+        # for diagnosing "feels stuck" on a phone.
+        sse_queue_depths = sorted(
+            (q.qsize() for q in server._sse_queues), reverse=True
+        )
         return Response.json({
             "hostname": hostname, "version": __version__,
             "ip_addresses": ips, "cpu_temp_c": temp, "ram": ram,
             "uptime_seconds": uptime, "load1": load1,
             "sse_per_sec": server._sse_per_sec,
             "sse_clients": len(server._sse_queues),
+            "sse_queue_max": sse_queue_depths[0] if sse_queue_depths else 0,
+            "sse_queue_depths": sse_queue_depths,
             "config_fallback": config.fallback_active,
             "default_routing": config.default_routing,
         })
@@ -1400,8 +1409,13 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         if "params" in body:
             engine._plugin_host.set_params(instance_id, body["params"])
 
-        data = engine._plugin_host.get_instance_data(instance_id)
-        return Response.json(data)
+        # Don't return get_instance_data here — frontend doesn't read the
+        # body on a successful PATCH, but the schema serialization is
+        # several ms per call. With rAF-coalesced PATCHes during a knob
+        # drag plus inbound CC mirroring, this used to pin the asyncio
+        # loop at ~80% CPU and make the controller page feel sluggish.
+        # SSE plugin-param events deliver the canonical post-write state.
+        return Response.json({"status": "updated", "id": instance_id})
 
     @server.route("DELETE", "/api/plugins/instances/", exact=False)
     async def api_plugins_instance_delete(req: Request) -> Response:
