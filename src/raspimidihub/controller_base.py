@@ -57,6 +57,7 @@ class ControllerBase(PluginBase):
         self._param_values["pad"] = "captured" if self._param_values["pad_snapshot"] else "idle"
         # Derived from the schema once per instance.
         self._defaults: dict[str, tuple[int, int]] = {}
+        self._defaults_y: dict[str, int] = {}  # XY-pad Y-axis CC
         self._cell_types: dict[str, str] = {}
         self._cell_default_values: dict[str, Any] = {}
         for p in self.__class__.params:
@@ -65,9 +66,16 @@ class ControllerBase(PluginBase):
                     name = c.param.name
                     if c.channel is not None and c.cc is not None:
                         self._defaults[name] = (c.channel, c.cc)
+                    if c.cc_y is not None:
+                        self._defaults_y[name] = c.cc_y
                     self._cell_types[name] = type(c.param).__name__.lower()
                     if hasattr(c.param, "default"):
                         self._cell_default_values[name] = c.param.default
+                    elif type(c.param).__name__.lower() == "xypad":
+                        self._cell_default_values[name] = {
+                            "x": getattr(c.param, "default_x", 0),
+                            "y": getattr(c.param, "default_y", 0),
+                        }
 
     # --- Helpers ---
 
@@ -78,18 +86,23 @@ class ControllerBase(PluginBase):
     _BUTTON_DEFAULT_OFF = 0
 
     def _effective_binding(self, cell_name: str) -> dict | None:
-        """Return a dict `{channel, cc, [on, off for buttons]}` with the
-        user's per-cell override layered over the schema's default. Only
-        complete overrides take effect — partial dicts fall back."""
+        """Return a dict `{channel, cc, [on, off for buttons], [cc_y for
+        xypads]}` with the user's per-cell override layered over the
+        schema's default. Only complete overrides take effect — partial
+        dicts fall back to the schema."""
         default = self._defaults.get(cell_name)
         if default is None:
             return None
         ch, cc = default
-        is_button = self._cell_types.get(cell_name) == "button"
+        cell_type = self._cell_types.get(cell_name, "")
+        is_button = cell_type == "button"
+        is_xypad = cell_type == "xypad"
         binding: dict = {"channel": ch, "cc": cc}
         if is_button:
             binding["on"] = self._BUTTON_DEFAULT_ON
             binding["off"] = self._BUTTON_DEFAULT_OFF
+        if is_xypad and cell_name in self._defaults_y:
+            binding["cc_y"] = self._defaults_y[cell_name]
         ov = (self._param_values.get("cell_bindings") or {}).get(cell_name)
         if isinstance(ov, dict):
             if isinstance(ov.get("channel"), int):
@@ -101,6 +114,8 @@ class ControllerBase(PluginBase):
                     binding["on"] = max(0, min(127, ov["on"]))
                 if isinstance(ov.get("off"), int):
                     binding["off"] = max(0, min(127, ov["off"]))
+            if is_xypad and isinstance(ov.get("cc_y"), int):
+                binding["cc_y"] = max(0, min(127, ov["cc_y"]))
         return binding
 
     def _cell_value_to_cc(self, cell_name: str, value: Any, binding: dict) -> int | None:
@@ -133,10 +148,27 @@ class ControllerBase(PluginBase):
         binding = self._effective_binding(name)
         if binding is None:
             return
+        if self._cell_types.get(name) == "xypad":
+            self._emit_xypad(value, binding)
+            return
         cc_val = self._cell_value_to_cc(name, value, binding)
         if cc_val is None:
             return
         self.send_cc(binding["channel"], binding["cc"], cc_val)
+
+    def _emit_xypad(self, value: Any, binding: dict) -> None:
+        """Emit X (binding['cc']) and Y (binding['cc_y']) CCs for an xypad
+        cell whose stored value is a `{"x": int, "y": int}` dict."""
+        if not isinstance(value, dict):
+            return
+        ch = binding["channel"]
+        x = value.get("x")
+        if isinstance(x, int):
+            self.send_cc(ch, binding["cc"], max(0, min(127, x)))
+        cc_y = binding.get("cc_y")
+        y = value.get("y")
+        if cc_y is not None and isinstance(y, int):
+            self.send_cc(ch, cc_y, max(0, min(127, y)))
 
     def on_cc(self, channel, cc, value):
         """MIDI Learn capture (if armed for a cell), else bidirectional
@@ -144,15 +176,40 @@ class ControllerBase(PluginBase):
         learn_target = self._param_values.get("cell_learn") or ""
         if learn_target and learn_target in self._defaults:
             bindings = dict(self._param_values.get("cell_bindings") or {})
+            # For xypad cells, Learn captures the X-axis CC. The user can
+            # type the Y-axis CC manually in the edit row (or we add
+            # Learn-X / Learn-Y as a v2 follow-up).
             bindings[learn_target] = {"channel": channel, "cc": cc}
             self.set_param("cell_bindings", bindings)
             self.set_param("cell_learn", "")
             return
         for name in self._defaults:
             binding = self._effective_binding(name)
-            if binding is None:
+            if binding is None or binding["channel"] != channel:
                 continue
-            if binding["channel"] != channel or binding["cc"] != cc:
+            cell_type = self._cell_types.get(name, "")
+            if cell_type == "xypad":
+                # Match either axis; update only that axis in the cell's
+                # {x, y} dict. Other axis stays where it was.
+                axis = None
+                if binding["cc"] == cc:
+                    axis = "x"
+                elif binding.get("cc_y") == cc:
+                    axis = "y"
+                if axis is None:
+                    continue
+                cur = self._param_values.get(name)
+                if not isinstance(cur, dict):
+                    cur = {"x": 0, "y": 0}
+                if cur.get(axis) == value:
+                    return
+                new_val = {**cur, axis: value}
+                self._param_values[name] = new_val
+                if self._notify_param_change:
+                    try: self._notify_param_change(name, new_val)
+                    except Exception: pass
+                return
+            if binding["cc"] != cc:
                 continue
             new_val = self._store_cc_into_cell(name, value, binding)
             if self._param_values.get(name) == new_val:
@@ -206,10 +263,13 @@ class ControllerBase(PluginBase):
             binding = self._effective_binding(cell_name)
             if binding is None:
                 continue
-            cc_val = self._cell_value_to_cc(cell_name, v, binding)
-            if cc_val is None:
-                continue
-            self.send_cc(binding["channel"], binding["cc"], cc_val)
+            if self._cell_types.get(cell_name) == "xypad":
+                self._emit_xypad(v, binding)
+            else:
+                cc_val = self._cell_value_to_cc(cell_name, v, binding)
+                if cc_val is None:
+                    continue
+                self.send_cc(binding["channel"], binding["cc"], cc_val)
             if self._param_values.get(cell_name) != v:
                 self._param_values[cell_name] = v
                 if self._notify_param_change:
@@ -230,9 +290,12 @@ class ControllerBase(PluginBase):
             if self._param_values.get(name) == default:
                 continue
             self._param_values[name] = default
-            cc_val = self._cell_value_to_cc(name, default, binding)
-            if cc_val is not None:
-                self.send_cc(binding["channel"], binding["cc"], cc_val)
+            if self._cell_types.get(name) == "xypad":
+                self._emit_xypad(default, binding)
+            else:
+                cc_val = self._cell_value_to_cc(name, default, binding)
+                if cc_val is not None:
+                    self.send_cc(binding["channel"], binding["cc"], cc_val)
             if self._notify_param_change:
                 try:
                     self._notify_param_change(name, default)
