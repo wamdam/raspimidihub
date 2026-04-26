@@ -75,6 +75,10 @@ export function PluginLayoutGrid({ param, values, onChange, displayCtx, renderPa
                 const ovOff = (bindOv.off != null && bindOv.off !== '') ? bindOv.off : null;
                 const defCcY = c.cc_y;
                 const ovCcY = (bindOv.cc_y != null && bindOv.cc_y !== '') ? bindOv.cc_y : null;
+                // Y axis defaults to the X channel unless the schema set
+                // a separate channel_y or the user has overridden it.
+                const defChY = c.channel_y != null ? c.channel_y + 1 : null;
+                const ovChY = (bindOv.channel_y != null && bindOv.channel_y !== '') ? bindOv.channel_y + 1 : null;
                 const hasBindings = param.bindings_param && (defCh != null || defCc != null);
                 return html`<div class="cell-edit ${isLearning ? 'learning' : ''}">
                     <div class="cell-edit-row">
@@ -84,33 +88,60 @@ export function PluginLayoutGrid({ param, values, onChange, displayCtx, renderPa
                             placeholder=${c.param.label}
                             onInput=${(e) => setLabel(c.param.name, e.target.value)} />
                     </div>
-                    ${hasBindings ? html`<div class="cell-edit-row">
+                    ${hasBindings && isXYPad ? html`
+                        <div class="cell-edit-row">
+                            <span class="cell-edit-fieldlabel">X:</span>
+                            <span class="cell-edit-fieldlabel">Ch</span>
+                            <input class="cell-edit-num" type="number" min="1" max="16"
+                                value=${ovCh != null ? ovCh : (defCh != null ? defCh : '')}
+                                title="X-axis channel (1-16)"
+                                onInput=${(e) => setBinding(c.param.name, 'channel',
+                                    e.target.value === '' ? null : (parseInt(e.target.value, 10) - 1))} />
+                            <span class="cell-edit-fieldlabel">CC</span>
+                            <input class="cell-edit-num" type="number" min="0" max="127"
+                                value=${ovCc != null ? ovCc : (defCc != null ? defCc : '')}
+                                title="X-axis CC (0-127)"
+                                onInput=${(e) => setBinding(c.param.name, 'cc',
+                                    e.target.value === '' ? null : parseInt(e.target.value, 10))} />
+                            ${param.learn_param ? html`
+                                <button type="button" class="cell-edit-learn ${isLearning ? 'on' : ''}"
+                                    title=${isLearning ? 'Listening for incoming CC — tap to cancel'
+                                        : 'Tap, then twist a hardware knob to capture the X-axis (channel, cc). Type Y axis manually.'}
+                                    onclick=${() => toggleLearn(c.param.name)}>${isLearning ? 'Listening…' : 'Learn'}</button>` : null}
+                        </div>
+                        <div class="cell-edit-row">
+                            <span class="cell-edit-fieldlabel">Y:</span>
+                            <span class="cell-edit-fieldlabel">Ch</span>
+                            <input class="cell-edit-num" type="number" min="1" max="16"
+                                value=${ovChY != null ? ovChY : (defChY != null ? defChY : (ovCh != null ? ovCh : (defCh != null ? defCh : '')))}
+                                title="Y-axis channel (1-16). Defaults to the X channel."
+                                onInput=${(e) => setBinding(c.param.name, 'channel_y',
+                                    e.target.value === '' ? null : (parseInt(e.target.value, 10) - 1))} />
+                            <span class="cell-edit-fieldlabel">CC</span>
+                            <input class="cell-edit-num" type="number" min="0" max="127"
+                                value=${ovCcY != null ? ovCcY : (defCcY != null ? defCcY : '')}
+                                title="Y-axis CC (0-127)"
+                                onInput=${(e) => setBinding(c.param.name, 'cc_y',
+                                    e.target.value === '' ? null : parseInt(e.target.value, 10))} />
+                        </div>
+                    ` : null}
+                    ${hasBindings && !isXYPad ? html`<div class="cell-edit-row">
                         <span class="cell-edit-fieldlabel">Ch</span>
                         <input class="cell-edit-num" type="number" min="1" max="16"
                             value=${ovCh != null ? ovCh : (defCh != null ? defCh : '')}
                             title="Channel (1-16)"
                             onInput=${(e) => setBinding(c.param.name, 'channel',
                                 e.target.value === '' ? null : (parseInt(e.target.value, 10) - 1))} />
-                        <span class="cell-edit-fieldlabel">${isXYPad ? 'CC X' : 'CC'}</span>
+                        <span class="cell-edit-fieldlabel">CC</span>
                         <input class="cell-edit-num" type="number" min="0" max="127"
                             value=${ovCc != null ? ovCc : (defCc != null ? defCc : '')}
-                            title=${isXYPad ? 'X-axis CC (0-127)' : 'CC (0-127)'}
+                            title="CC (0-127)"
                             onInput=${(e) => setBinding(c.param.name, 'cc',
                                 e.target.value === '' ? null : parseInt(e.target.value, 10))} />
-                        ${isXYPad ? html`
-                            <span class="cell-edit-fieldlabel">CC Y</span>
-                            <input class="cell-edit-num" type="number" min="0" max="127"
-                                value=${ovCcY != null ? ovCcY : (defCcY != null ? defCcY : '')}
-                                title="Y-axis CC (0-127)"
-                                onInput=${(e) => setBinding(c.param.name, 'cc_y',
-                                    e.target.value === '' ? null : parseInt(e.target.value, 10))} />
-                        ` : null}
                         ${param.learn_param ? html`
                             <button type="button" class="cell-edit-learn ${isLearning ? 'on' : ''}"
                                 title=${isLearning ? 'Listening for incoming CC — tap to cancel'
-                                    : (isXYPad
-                                        ? 'Tap, then twist a hardware knob to capture the X-axis (channel, cc). Type CC Y manually.'
-                                        : 'Tap, then twist a hardware knob to capture its (channel, cc)')}
+                                    : 'Tap, then twist a hardware knob to capture its (channel, cc)'}
                                 onclick=${() => toggleLearn(c.param.name)}>${isLearning ? 'Listening…' : 'Learn'}</button>` : null}
                     </div>` : null}
                     ${isButton && hasBindings ? html`<div class="cell-edit-row">

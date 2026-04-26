@@ -281,8 +281,9 @@ class LayoutCell:
     Optional `channel` + `cc` declare the cell's default MIDI binding —
     used by Controller plugins. Channel is 0-based internally (matches
     ALSA seq); the UI displays 1-based. For XY pad cells the X axis
-    uses `cc` and the Y axis uses `cc_y` (same channel for both axes).
-    The user can override either via the LayoutGrid's `bindings_param`
+    uses (channel, cc) and the Y axis uses (channel_y, cc_y); when
+    channel_y is None the Y axis falls back to the X channel. The user
+    can override any of the four via the LayoutGrid's `bindings_param`
     dict at runtime.
     """
     param: Param
@@ -290,9 +291,10 @@ class LayoutCell:
     row: int  # 1-based row
     span_cols: int = 1
     span_rows: int = 1
-    channel: int | None = None  # 0-based default MIDI channel
-    cc: int | None = None       # default CC number (0-127); X axis on XY pads
-    cc_y: int | None = None     # XY-pad-only: default Y-axis CC (0-127)
+    channel: int | None = None    # 0-based default MIDI channel (X axis on XY)
+    cc: int | None = None         # default CC number (0-127); X axis on XY pads
+    channel_y: int | None = None  # XY-pad-only: default Y-axis channel (None = same as X)
+    cc_y: int | None = None       # XY-pad-only: default Y-axis CC (0-127)
 
 
 @dataclass
@@ -334,6 +336,7 @@ class LayoutGrid:
                     "param": c.param.to_dict(),
                     **({"channel": c.channel} if c.channel is not None else {}),
                     **({"cc": c.cc} if c.cc is not None else {}),
+                    **({"channel_y": c.channel_y} if c.channel_y is not None else {}),
                     **({"cc_y": c.cc_y} if c.cc_y is not None else {}),
                 }
                 for c in self.cells
