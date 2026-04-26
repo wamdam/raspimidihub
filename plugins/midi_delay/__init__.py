@@ -4,11 +4,11 @@ import threading
 import time
 
 from raspimidihub.plugin_api import (
+    Button,
     Fader,
     Group,
     PluginBase,
     Radio,
-    Toggle,
     Wheel,
 )
 
@@ -37,7 +37,7 @@ echoes that fade out on a lead synth line."""
 
     params = [
         Group("Timing", [
-            Toggle("sync", "Sync to Clock", default=False),
+            Button("sync", "Sync to Clock", color="green"),
             Fader("delay_ms", "Delay (ms)", min=10, max=2000, default=250,
                   visible_when=("sync", False)),
             Radio("rate", "Rate", _DELAY_RATES, default="1/8",

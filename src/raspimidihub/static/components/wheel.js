@@ -70,33 +70,12 @@ export function PluginWheel({ name, label, min, max, value, onChange, suffix, ti
 
         const oc = onChangeRef;
 
-        function onStart(e) {
-            e.preventDefault(); e.stopPropagation();
-            // Touch lock: claim this touch, skip if another wheel owns it
-            if (e.touches) {
-                const tid = e.touches[0].identifier;
-                if (_activeWheelTouch.has(tid)) return;
-                _activeWheelTouch.set(tid, el);
-                s._touchId = tid;
-            }
-            if (s.animId) { cancelAnimationFrame(s.animId); s.animId = null; }
-            s.atBoundary = false;
-            const pt = e.touches ? e.touches[0] : e;
-            s.startY = pt.clientY; s.startOffset = s.offset;
-            s.lastY = pt.clientY; s.lastT = Date.now(); s.velocity = 0;
-            el.addEventListener('touchmove', onMove, { passive: false });
-            window.addEventListener('mousemove', onMove);
-            window.addEventListener('touchend', onEnd);
-            window.addEventListener('mouseup', onEnd);
-        }
-        function onMove(e) {
-            e.preventDefault();
-            if (e.touches) e.stopPropagation();
-            const pt = e.touches ? e.touches[0] : e;
+        // Common move-step that runs from both touch and mouse paths.
+        function applyMove(clientY) {
             const now = Date.now(); const dt = now - s.lastT;
-            if (dt > 0) s.velocity = (pt.clientY - s.lastY) / dt;
-            s.lastY = pt.clientY; s.lastT = now;
-            let raw = s.startOffset + (pt.clientY - s.startY);
+            if (dt > 0) s.velocity = (clientY - s.lastY) / dt;
+            s.lastY = clientY; s.lastT = now;
+            let raw = s.startOffset + (clientY - s.startY);
             const clamped = clampOffset(raw);
             const hitBound = raw !== clamped;
             s.offset = clamped;
@@ -106,16 +85,70 @@ export function PluginWheel({ name, label, min, max, value, onChange, suffix, ti
             if (nv !== s.value) { tickFeedback(); s.value = nv; updateTicks(); oc.current(name, nv); }
             setOffset(s.offset);
         }
-        function onEnd(e) {
-            if (e && e.touches) e.stopPropagation();
-            // Release touch lock
-            if (s._touchId != null) { _activeWheelTouch.delete(s._touchId); s._touchId = null; }
-            el.removeEventListener('touchmove', onMove);
-            window.removeEventListener('mousemove', onMove);
-            window.removeEventListener('touchend', onEnd);
-            window.removeEventListener('mouseup', onEnd);
+        function startGesture(clientY) {
+            if (s.animId) { cancelAnimationFrame(s.animId); s.animId = null; }
+            s.atBoundary = false;
+            s.startY = clientY; s.startOffset = s.offset;
+            s.lastY = clientY; s.lastT = Date.now(); s.velocity = 0;
+        }
+        function endGesture() {
             if (Math.abs(s.velocity) > 0.2) animateMomentum();
             else snapToValue();
+        }
+
+        // --- Touch path: pin the gesture to a single Touch.identifier so
+        // simultaneous drags on multiple wheels don't read e.touches[0]
+        // for everyone.
+        let activeTouchId = null;
+        function findTouch(e, id) {
+            for (const t of e.touches) if (t.identifier === id) return t;
+            return null;
+        }
+        function onTouchStart(e) {
+            e.preventDefault(); e.stopPropagation();
+            const t = e.changedTouches[0];
+            if (_activeWheelTouch.has(t.identifier)) return;
+            _activeWheelTouch.set(t.identifier, el);
+            activeTouchId = t.identifier;
+            s._touchId = t.identifier;
+            startGesture(t.clientY);
+            el.addEventListener('touchmove', onTouchMove, { passive: false });
+            window.addEventListener('touchend', onTouchEnd);
+            window.addEventListener('touchcancel', onTouchEnd);
+        }
+        function onTouchMove(e) {
+            e.preventDefault(); e.stopPropagation();
+            const t = findTouch(e, activeTouchId);
+            if (t) applyMove(t.clientY);
+        }
+        function onTouchEnd(e) {
+            if (e) e.stopPropagation();
+            for (const t of e.changedTouches) {
+                if (t.identifier === activeTouchId) {
+                    _activeWheelTouch.delete(activeTouchId);
+                    activeTouchId = null;
+                    s._touchId = null;
+                    el.removeEventListener('touchmove', onTouchMove);
+                    window.removeEventListener('touchend', onTouchEnd);
+                    window.removeEventListener('touchcancel', onTouchEnd);
+                    endGesture();
+                    break;
+                }
+            }
+        }
+
+        // --- Mouse path: separate from touch (no multitouch concerns).
+        function onMouseDown(e) {
+            e.preventDefault();
+            startGesture(e.clientY);
+            const mm = (ev) => applyMove(ev.clientY);
+            const mu = () => {
+                window.removeEventListener('mousemove', mm);
+                window.removeEventListener('mouseup', mu);
+                endGesture();
+            };
+            window.addEventListener('mousemove', mm);
+            window.addEventListener('mouseup', mu);
         }
         function animateMomentum() {
             const friction = 0.95;
@@ -146,12 +179,12 @@ export function PluginWheel({ name, label, min, max, value, onChange, suffix, ti
                 (nv === min || nv === max) ? thudFeedback() : tickFeedback();
             }
         }
-        el.addEventListener('touchstart', onStart, { passive: false });
-        el.addEventListener('mousedown', onStart);
+        el.addEventListener('touchstart', onTouchStart, { passive: false });
+        el.addEventListener('mousedown', onMouseDown);
         el.addEventListener('wheel', onWheel, { passive: false });
         return () => {
-            el.removeEventListener('touchstart', onStart);
-            el.removeEventListener('mousedown', onStart);
+            el.removeEventListener('touchstart', onTouchStart);
+            el.removeEventListener('mousedown', onMouseDown);
             el.removeEventListener('wheel', onWheel);
         };
     }, [min, max, name]);

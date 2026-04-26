@@ -1,10 +1,10 @@
 """Hold — latches pressed notes until a release-note or a new note is played."""
 
 from raspimidihub.plugin_api import (
+    Button,
     Group,
     NoteSelect,
     PluginBase,
-    Toggle,
 )
 
 
@@ -38,7 +38,7 @@ if you only want the "play a new note to replace" behaviour."""
 
     params = [
         Group("Release Note", [
-            Toggle("use_release_note", "Enabled", default=True),
+            Button("use_release_note", "Enabled", default=True, color="green"),
             NoteSelect("release_note", "Note", default=108,  # C8
                        visible_when=("use_release_note", True)),
         ]),

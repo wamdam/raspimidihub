@@ -11,7 +11,6 @@ export { PluginWheel } from './components/wheel.js';
 export { PluginKnob } from './components/knob.js';
 export { PluginFader } from './components/fader.js';
 export { PluginRadio } from './components/radio.js';
-export { PluginToggle } from './components/toggle.js';
 export { PluginButton } from './components/button.js';
 export { PluginStepEditor } from './components/stepeditor.js';
 export { PluginCurveEditor } from './components/curveeditor.js';

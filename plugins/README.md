@@ -137,7 +137,7 @@ Import parameter types from the plugin API:
 
 ```python
 from raspimidihub.plugin_api import (
-    PluginBase, Group, Radio, Wheel, Fader, Toggle,
+    PluginBase, Group, Radio, Wheel, Fader, Button,
     StepEditor, CurveEditor, NoteSelect, ChannelSelect,
 )
 ```
@@ -193,12 +193,13 @@ Pill-style tap-to-select buttons.
 Radio("pattern", "Pattern", ["up", "down", "up-down", "random"], default="up")
 ```
 
-### Toggle
+### Button
 
-Metal switch with LED indicator. Boolean value.
+Rubber push-button with colored LED indicator. Boolean value, latching
+(click flips the state). Color choices: `green`, `yellow`, `red`, `blue`.
 
 ```python
-Toggle("sync", "Sync to Clock", default=True)
+Button("sync", "Sync to Clock", default=True, color="green")
 ```
 
 ### StepEditor
@@ -276,7 +277,7 @@ Titled section that visually groups related parameters.
 
 ```python
 Group("Timing", [
-    Toggle("sync", "Sync to Clock", default=False),
+    Button("sync", "Sync to Clock", color="green"),
     Wheel("bpm", "BPM", min=40, max=300, default=120),
 ])
 ```
@@ -291,7 +292,7 @@ on another parameter's current value.
 
 ```python
 params = [
-    Toggle("sync", "Sync to Clock", default=False),
+    Button("sync", "Sync to Clock", color="green"),
     Wheel("bpm", "BPM", min=40, max=300, default=120, visible_when=("sync", False)),
     Radio("rate", "Rate", ["1/4", "1/8", "1/16"], default="1/4",
           visible_when=("sync", True)),
@@ -480,7 +481,7 @@ tests including plugin tests. No ALSA hardware or Raspberry Pi required.
 
 ## Full Example: Arpeggiator
 
-For a comprehensive example showing Groups, Radio, Wheel, Toggle, cc_inputs,
+For a comprehensive example showing Groups, Radio, Wheel, Button, cc_inputs,
 clock_divisions, on_start/on_stop lifecycle, on_tick, on_param_change,
 threading, and conditional visibility, see `plugins/arpeggiator/__init__.py`.
 

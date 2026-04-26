@@ -8,7 +8,7 @@ clock distribution, and persistence.
 Example::
 
     from raspimidihub.plugin_api import (
-        PluginBase, Group, Radio, Wheel, Toggle, Fader,
+        PluginBase, Group, Radio, Wheel, Button, Fader,
     )
 
     class MyPlugin(PluginBase):
@@ -20,7 +20,7 @@ Example::
         params = [
             Group("Controls", [
                 Wheel("speed", "Speed", min=1, max=10, default=5),
-                Toggle("active", "Active", default=True),
+                Button("active", "Active", default=True, color="green"),
             ]),
         ]
 
@@ -133,17 +133,6 @@ class Radio(Param):
 
 
 @dataclass
-class Toggle(Param):
-    """Metal switch with LED indicator."""
-    default: bool = False
-
-    def to_dict(self) -> dict:
-        d = super().to_dict()
-        d["default"] = self.default
-        return d
-
-
-@dataclass
 class StepEditor(Param):
     """Grid of steps with on/off dots and mini-wheel note offsets."""
     length_param: str = ""  # Wheel/Radio param name that controls step count
@@ -191,13 +180,24 @@ class ChannelSelect(Param):
 
 @dataclass
 class Button(Param):
-    """Rubber push button with LED indicator. Sends True on press, False on release."""
+    """Rubber push button with colored LED indicator. Boolean value.
+
+    Two modes:
+      - Latching (default, `trigger=False`): click flips value. LED follows
+        value. Off/On text shown.
+      - Trigger (`trigger=True`): click always sends True. LED flashes
+        for ≥100 ms regardless, then follows value (server is expected
+        to reset value to False after handling, broadcast back via SSE).
+        No Off/On text. Used for one-shot fire actions (Panic, Drop pad).
+    """
     default: bool = False
     color: str = "green"  # LED color: green, yellow, red, blue
+    trigger: bool = False  # momentary fire-mode if True
 
     def to_dict(self) -> dict:
         d = super().to_dict()
-        d.update({"default": self.default, "color": self.color})
+        d.update({"default": self.default, "color": self.color,
+                  "trigger": self.trigger})
         return d
 
 
@@ -217,13 +217,17 @@ class Group:
     """Titled section grouping related params."""
     title: str
     children: list = field(default_factory=list)
+    cols: int | None = None  # override default 4-col grid for this group's inline row
 
     def to_dict(self) -> dict:
-        return {
+        d = {
             "type": "group",
             "title": self.title,
             "children": [c.to_dict() for c in self.children],
         }
+        if self.cols is not None:
+            d["cols"] = self.cols
+        return d
 
 
 # ---------------------------------------------------------------------------
@@ -326,6 +330,17 @@ class PluginBase:
     def get_param(self, name: str) -> Any:
         """Get current value of a parameter."""
         return self._param_values.get(name)
+
+    def set_param(self, name: str, value: Any) -> None:
+        """Update a parameter value from inside the plugin and push the
+        change to the UI via SSE. Use this for trigger-style buttons that
+        reset their value after firing (e.g. Panic, Drop pad)."""
+        self._param_values[name] = value
+        if self._notify_param_change:
+            try:
+                self._notify_param_change(name, value)
+            except Exception:
+                pass
 
     # --- Display output (push live state to UI) ---
 

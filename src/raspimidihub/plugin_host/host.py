@@ -245,15 +245,20 @@ class PluginHost:
                 self._on_display_callback(instance.id, name, value)
         instance.plugin._notify_display = _on_display
 
-        # Wire param change callback for CC automation UI updates
+        # Wire param change callback for CC automation UI updates.
+        # Throttle dedupe-style: drop consecutive updates with the same
+        # value within 50 ms (CC-automation flood control). A different
+        # value always passes through immediately so trigger-style
+        # True→False resets aren't swallowed.
         _last_param = {}
-        def _on_param_change(inst_id, name, value):
+        def _on_param_change(name, value):
             now = _time.monotonic()
-            if now - _last_param.get(name, 0) < 0.05:
+            last_time, last_val = _last_param.get(name, (0.0, object()))
+            if value == last_val and now - last_time < 0.05:
                 return
-            _last_param[name] = now
+            _last_param[name] = (now, value)
             if self._on_param_change_callback:
-                self._on_param_change_callback(inst_id, name, value)
+                self._on_param_change_callback(instance.id, name, value)
         instance.plugin._notify_param_change = _on_param_change
 
         # Every instance gets a tick/transport queue so on_transport_start/stop
@@ -483,7 +488,7 @@ class PluginHost:
         # Notify UI via callback (set by API layer)
         if instance.plugin._notify_param_change:
             try:
-                instance.plugin._notify_param_change(instance_id, name, value)
+                instance.plugin._notify_param_change(name, value)
             except Exception:
                 pass
 

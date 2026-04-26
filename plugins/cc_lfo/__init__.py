@@ -6,13 +6,13 @@ import threading
 import time
 
 from raspimidihub.plugin_api import (
+    Button,
     ChannelSelect,
     Display,
     Fader,
     Group,
     PluginBase,
     Radio,
-    Toggle,
     Wheel,
 )
 
@@ -38,7 +38,7 @@ vibrato to a synth pad without touching a physical controller."""
             Radio("wave", "Wave", ["sine", "triangle", "square", "saw", "s&h"], default="sine"),
         ]),
         Group("Timing", [
-            Toggle("sync", "Sync to Clock", default=False),
+            Button("sync", "Sync to Clock", color="green"),
             Radio("rate", "Rate",
                   ["8/1", "4/1", "2/1", "1/1", "1/2", "1/4", "1/8", "1/16"],
                   default="1/4",

@@ -77,32 +77,62 @@ export function PluginKnob({
         }
 
         const ppu = pixelsPerUnit(min, max);
-        function onMove(e) {
-            e.preventDefault();
-            if (e.touches) e.stopPropagation();
-            const pt = e.touches ? e.touches[0] : e;
-            const dy = s.startY - pt.clientY;     // up = positive
+
+        function applyMove(clientY) {
+            const dy = s.startY - clientY;        // up = positive
             const delta = Math.round(dy / ppu);
             setVal_(s.startVal + delta);
         }
 
-        function onEnd() {
-            el.removeEventListener('touchmove', onMove);
-            window.removeEventListener('mousemove', onMove);
-            window.removeEventListener('touchend', onEnd);
-            window.removeEventListener('mouseup', onEnd);
+        // --- Touch path: track the gesture's own touch identifier so
+        // two-finger drags on two knobs don't cross-track on e.touches[0].
+        let activeTouchId = null;
+        function findTouch(e, id) {
+            for (const t of e.touches) if (t.identifier === id) return t;
+            return null;
         }
-
-        function onStart(e) {
+        function onTouchStart(e) {
             e.preventDefault();
             e.stopPropagation();
-            const pt = e.touches ? e.touches[0] : e;
-            s.startY = pt.clientY;
+            const t = e.changedTouches[0];
+            activeTouchId = t.identifier;
+            s.startY = t.clientY;
             s.startVal = s.val;
-            el.addEventListener('touchmove', onMove, { passive: false });
-            window.addEventListener('mousemove', onMove);
-            window.addEventListener('touchend', onEnd);
-            window.addEventListener('mouseup', onEnd);
+            el.addEventListener('touchmove', onTouchMove, { passive: false });
+            window.addEventListener('touchend', onTouchEnd);
+            window.addEventListener('touchcancel', onTouchEnd);
+        }
+        function onTouchMove(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            const t = findTouch(e, activeTouchId);
+            if (t) applyMove(t.clientY);
+        }
+        function onTouchEnd(e) {
+            if (e) e.stopPropagation();
+            for (const t of e.changedTouches) {
+                if (t.identifier === activeTouchId) {
+                    activeTouchId = null;
+                    el.removeEventListener('touchmove', onTouchMove);
+                    window.removeEventListener('touchend', onTouchEnd);
+                    window.removeEventListener('touchcancel', onTouchEnd);
+                    break;
+                }
+            }
+        }
+
+        // --- Mouse path: separate from touch (no multitouch concerns).
+        function onMouseDown(e) {
+            e.preventDefault();
+            s.startY = e.clientY;
+            s.startVal = s.val;
+            const mm = (ev) => applyMove(ev.clientY);
+            const mu = () => {
+                window.removeEventListener('mousemove', mm);
+                window.removeEventListener('mouseup', mu);
+            };
+            window.addEventListener('mousemove', mm);
+            window.addEventListener('mouseup', mu);
         }
 
         function onWheel(e) {
@@ -117,13 +147,13 @@ export function PluginKnob({
             setVal_(Math.round((min + max) / 2));
         }
 
-        el.addEventListener('touchstart', onStart, { passive: false });
-        el.addEventListener('mousedown', onStart);
+        el.addEventListener('touchstart', onTouchStart, { passive: false });
+        el.addEventListener('mousedown', onMouseDown);
         el.addEventListener('wheel', onWheel, { passive: false });
         el.addEventListener('dblclick', onDblClick);
         return () => {
-            el.removeEventListener('touchstart', onStart);
-            el.removeEventListener('mousedown', onStart);
+            el.removeEventListener('touchstart', onTouchStart);
+            el.removeEventListener('mousedown', onMouseDown);
             el.removeEventListener('wheel', onWheel);
             el.removeEventListener('dblclick', onDblClick);
         };

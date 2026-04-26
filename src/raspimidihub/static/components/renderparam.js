@@ -7,7 +7,6 @@ import { PluginWheel } from './wheel.js';
 import { PluginKnob } from './knob.js';
 import { PluginFader } from './fader.js';
 import { PluginRadio } from './radio.js';
-import { PluginToggle } from './toggle.js';
 import { PluginButton } from './button.js';
 import { PluginStepEditor } from './stepeditor.js';
 import { PluginCurveEditor } from './curveeditor.js';
@@ -59,13 +58,10 @@ export function renderParam(param, values, onChange, allValues, displayCtx) {
             return html`<${PluginRadio} name=${param.name} label=${param.label}
                 options=${param.options} value=${val != null ? val : param.default}
                 onChange=${onChange} />`;
-        case 'toggle':
-            return html`<${PluginToggle} name=${param.name} label=${param.label}
-                value=${val != null ? val : param.default} onChange=${onChange} />`;
         case 'button':
             return html`<${PluginButton} name=${param.name} label=${param.label}
                 value=${val != null ? val : param.default} color=${param.color}
-                onChange=${onChange} />`;
+                trigger=${param.trigger} onChange=${onChange} />`;
         case 'stepeditor':
             return html`<${PluginStepEditor} name=${param.name} label=${param.label}
                 value=${val || []} onChange=${onChange}
@@ -95,7 +91,7 @@ export function renderParam(param, values, onChange, allValues, displayCtx) {
     }
 }
 
-export const INLINE_TYPES = new Set(['wheel', 'knob', 'fader', 'noteselect', 'channelselect', 'toggle', 'button', 'display']);
+export const INLINE_TYPES = new Set(['wheel', 'knob', 'fader', 'noteselect', 'channelselect', 'button', 'display']);
 
 // Wrap a rendered inline param with a grid-column-span container if
 // the param schema declares a span > 1. Single-cell params render as-is.
@@ -104,12 +100,16 @@ function applySpan(rendered, span) {
     return html`<div class="param-cell" style="grid-column: span ${span}">${rendered}</div>`;
 }
 
-export function renderParamGroup(items, values, onChange, displayCtx) {
+export function renderParamGroup(items, values, onChange, displayCtx, cols) {
     const result = [];
     let inlineRun = [];
+    const rowStyle = cols && cols !== 4
+        ? `grid-template-columns: repeat(${cols}, minmax(0, 1fr))`
+        : null;
     const flushInline = () => {
         if (inlineRun.length === 0) return;
         if (inlineRun.length === 1) result.push(inlineRun[0]);
+        else if (rowStyle) result.push(html`<div class="param-row" style=${rowStyle}>${inlineRun}</div>`);
         else result.push(html`<div class="param-row">${inlineRun}</div>`);
         inlineRun = [];
     };
@@ -127,7 +127,7 @@ export function renderParamList(params, values, onChange, displayCtx) {
     if (!params) return null;
     const expanded = [];
     for (const p of params) {
-        if (p.type === 'group') expanded.push({ _isGroup: true, title: p.title, children: p.children });
+        if (p.type === 'group') expanded.push({ _isGroup: true, title: p.title, children: p.children, cols: p.cols });
         else expanded.push(p);
     }
     const result = [];
@@ -142,7 +142,7 @@ export function renderParamList(params, values, onChange, displayCtx) {
         if (p._isGroup) {
             flushInline();
             result.push(html`<${PluginGroup} title=${p.title}>
-                ${renderParamGroup(p.children, values, onChange, displayCtx)}
+                ${renderParamGroup(p.children, values, onChange, displayCtx, p.cols)}
             <//>`);
         } else {
             const rendered = renderParam(p, values, onChange, values, displayCtx);

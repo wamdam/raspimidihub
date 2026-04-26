@@ -204,13 +204,13 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         return Response.json({"status": "updated"})
 
     # ================================================================
-    # GET /api/observatory — current CC values + held notes per edge
+    # GET /api/observatory — current CC values per destination + held notes
     # ================================================================
 
     @server.route("GET", "/api/observatory")
     async def api_observatory(req: Request) -> Response:
         return Response.json({
-            "cc": engine.cc_snapshot(),
+            "cc": engine.cc_dest_snapshot(),
             "active_notes": engine.active_notes_snapshot(),
         })
 

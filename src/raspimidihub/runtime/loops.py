@@ -27,7 +27,7 @@ async def rate_meter(engine, server) -> None:
         rates = engine.snapshot_rates()
         if rates:
             await server.send_sse("midi-rates", rates)
-        cc_changes = engine.cc_snapshot_dirty()
+        cc_changes = engine.cc_dest_snapshot_dirty()
         if cc_changes:
             await server.send_sse("cc-changes", cc_changes)
 

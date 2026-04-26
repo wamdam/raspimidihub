@@ -5,7 +5,7 @@
 import { useState, useEffect } from '../lib/hooks.module.js';
 import { html, animateClose, useEscapeClose, useSwipeDismiss } from '../ui/common.js';
 import { MAPPING_TYPES, noteName } from '../state/constants.js';
-import { PluginRadio, PluginWheel, PluginNoteSelect, PluginToggle } from '../plugin-controls.js';
+import { PluginRadio, PluginWheel, PluginNoteSelect, PluginButton } from '../plugin-controls.js';
 
 export function mappingDesc(m) {
     const sch = m.src_channel != null ? `CH${m.src_channel + 1} ` : '';
@@ -142,7 +142,7 @@ export function MappingFormOverlay({ onSubmit, onClose, editing, srcClientId }) 
                     </div>
                 `}
                 ${type !== 'channel_map' && html`
-                    <${PluginToggle} name="passThrough" label="Pass through"
+                    <${PluginButton} name="passThrough" label="Pass through" color="green"
                         value=${passThrough} onChange=${(_, v) => setPassThrough(v)} />
                 `}
                 <div class="btn-group">

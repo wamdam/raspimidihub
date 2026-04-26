@@ -23,7 +23,6 @@ from raspimidihub.plugin_api import (
     PluginBase,
     Radio,
     StepEditor,
-    Toggle,
     Wheel,
 )
 
@@ -84,8 +83,6 @@ updates are flowing."""
             Fader("fader_master", "Master", min=0, max=127, default=100, span=4),
         ]),
         Group("Switches", [
-            Toggle("toggle_a", "Toggle", default=False),
-            Toggle("toggle_b", "Latched", default=True),
             Button("button_green", "Green", color="green"),
             Button("button_yellow", "Yellow", color="yellow"),
             Button("button_red", "Red", color="red"),
@@ -111,11 +108,31 @@ updates are flowing."""
             Display("_meter", "Meter", display_name="meter_out"),
         ]),
         Group("Visibility", [
-            Toggle("show_extra", "Reveal Extra", default=False),
+            Button("show_extra", "Reveal Extra", color="green"),
             Wheel("extra", "Extra Param",
                   min=0, max=127, default=42,
                   visible_when=("show_extra", True)),
         ]),
+        # --- Grid-sizing experiments — feel out 5/6/7/8 cols at typical viewports ---
+        Group("Grid 5-wide", [
+            Knob(f"g5_k{i}", f"K{i+1}", min=0, max=127, default=64) for i in range(5)
+        ], cols=5),
+        Group("Grid 6-wide", [
+            Knob(f"g6_k{i}", f"K{i+1}", min=0, max=127, default=64) for i in range(6)
+        ], cols=6),
+        Group("Grid 7-wide", [
+            Knob(f"g7_k{i}", f"K{i+1}", min=0, max=127, default=64) for i in range(7)
+        ], cols=7),
+        Group("Grid 8-wide knobs", [
+            Knob(f"g8_k{i}", f"K{i+1}", min=0, max=127, default=64) for i in range(8)
+        ], cols=8),
+        Group("Grid 8-wide faders", [
+            Fader(f"g8_f{i}", f"F{i+1}",
+                  min=0, max=127, default=64 + i * 4, vertical=True) for i in range(8)
+        ], cols=8),
+        Group("Grid 8-wide buttons", [
+            Button(f"g8_t{i}", f"T{i+1}", color="green") for i in range(8)
+        ], cols=8),
     ]
 
     # No MIDI I/O — purely a UI demo

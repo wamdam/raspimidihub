@@ -527,9 +527,14 @@ performance moves.
 - One `Controller` instance = one page. Multiple instances = multiple
   pages.
 - A `LayoutGrid` param type holds the page's `cols × rows` and the cell
-  list. Cell types in v1: **Knob**, **Fader**, **Toggle**, **XY pad**.
-  Each cell stores a name, color, and one or two `(channel, cc)`
-  bindings (XY pad has two — one per axis).
+  list. Cell types in v1: **Knob**, **Fader**, **Button**, **XY pad**.
+  Each cell stores a **user-rename­able label** (e.g. M1 → "Cutoff"),
+  color, and one or two `(channel, cc)` bindings (XY pad has two — one
+  per axis). Templates ship with placeholder labels (M1, F1, B1…); the
+  user overrides per cell at configure time. The label is per-instance
+  (stored in `_param_values`), so two instances of the same template
+  can rename their cells independently. (Deferred from Phase-3 throwaway
+  controller-template review 2026-04-26.)
 - The drop-pad row is hard-coded above the user grid and not editable
   away — it's a property of the Controller, not a cell type.
 
@@ -1346,12 +1351,40 @@ and PluginXYPad** still remain for Phase 4.
 
 Biggest user-visible win for performance.
 
+0. **TODO (prereq):** Replace source-keyed CC observatory with a
+   **destination-keyed CC cache**. The current `_cc_cache` keyed by
+   `(src_client, src_port, ch, cc)` was added in Phase 3 but has no
+   consumers in the codebase, and the wrong shape for everything
+   downstream wants:
+   - The §5 Controller's bidirectional sync needs *"what's the most
+     recent value Synth X received on (ch, cc)?"* — a destination
+     query that source-keyed cache can't answer cleanly when
+     multiple Controllers share `(ch, cc)` but bind to different
+     destinations.
+   - Pickup/Relative wants the same destination-keyed query.
+   - CC Sequencer arm-and-record (pending) can use either, so it
+     doesn't pin the design.
+
+   Rip out the source-keyed cache, monitor-port snoop hook, dirty
+   tracking, `/api/observatory`, and `cc-changes` SSE. Replace with:
+   - `_cc_dest_cache: dict[(dst_client, dst_port, ch, cc), int]`
+     updated at the engine routing site (every CC the engine
+     forwards to a destination writes here).
+   - `engine.last_cc_to(dest, ch, cc) -> int | None` for plugin and
+     UI queries.
+   - SSE event keyed by destination (`cc-dest-changes` or similar)
+     for Controller bidirectional-sync push.
+   - HTTP snapshot endpoint for Controller bootstrap on page load.
+
+   Source-keyed cache can come back later when a real consumer
+   appears (CC monitor / debug view). Don't carry both meanwhile.
 1. **TODO:** `LayoutGrid` + `PluginXYPad` UI param types (§5).
    Knob already shipped in Phase 3.
 2. **TODO:** Controller plugin — Knob / Fader / Toggle / XY pad
    cells, OUT port emit, IN port for MIDI Learn + bidirectional
-   sync. Drop pad with short-press fire / long-press capture
-   **only** — autodrop and preview deferred to Phase 5.
+   sync (consumes destination-keyed cache). Drop pad with
+   short-press fire / long-press capture **only** — autodrop and
+   preview deferred to Phase 5.
 3. **TODO:** Top-nav "Controller" entry, fullscreen mode,
    `localStorage` last-viewed persistence.
 
@@ -1449,6 +1482,57 @@ before implementation.
 - **TODO: CC Sequencer** — step-based plugin emitting up to 4
   `(channel, cc, value)` per step, with arm-and-record from the CC
   observatory. Step grid UI shared with the Tracker.
+- **TODO: CC Pickup / Relative plugin** — single virtual instrument
+  with `mode = pickup | relative`, re-introducing the classic synth
+  pickup/scale modes. Depends on the Phase-4 destination-keyed CC
+  cache prereq above. Use case: user is editing a synth from the
+  web-UI Controller (§5), then wants to grab a hardware controller
+  and continue twisting *the same parameter* without value jumps.
+
+  **Topology** (single IN, single OUT): `Physical Ctrl → Pickup IN`,
+  `Pickup OUT → Synth`. The §5 Virtual Controller keeps its own
+  parallel wire to the synth. When the user moves a UI knob, the
+  engine routes the CC to the synth, the destination-keyed cache
+  records "Synth received (ch, cc) = N", and Pickup's reference
+  reads from there. No matrix wire between Virtual Controller and
+  Pickup is needed. Plugin help text must document this — the
+  routing is the non-obvious bit.
+
+  **Per-(ch, cc) state**: `current` (initial reference, seeded from
+  destination-keyed cache on first touch) + `engaged` flag (Pickup
+  mode only).
+
+  **Modes:**
+    - **Pickup**: incoming CC suppressed until controller raw value
+      crosses `current`. Once crossed, engage and forward 1:1 until
+      an external write to the destination resets the reference.
+    - **Relative** (a.k.a. scale): two-segment linear scaling hinged
+      at the touch-point. At first touch, raw `r0` ≡ `current`; raw
+      above `r0` maps linearly to `[current..127]`, raw below `r0`
+      maps to `[0..current]`. So with `current=100, r0=20`, raw
+      20..127 → 100..127 and raw 0..20 → 0..100. Reference resets
+      whenever the destination-keyed cache shows another source
+      moved the value.
+
+  **First-touch behaviour**: when the very first CC for a given
+  `(ch, cc)` arrives, query `engine.last_cc_to(my_destination, ch,
+  cc)` once and seed `current` from it. Do *not* pre-fetch at
+  instantiation. Do *not* "first-touch = no-transform" — that would
+  let the controller snap the synth to its raw value on first
+  touch and defeat the whole point of pickup.
+
+  **Scope**: wildcard — any CC arriving on IN is transformed. No
+  per-(ch, cc) whitelist.
+
+  **UI**: no engaged/armed indicator on the plugin itself. The §5
+  Virtual Controller already shows live values, which gives the
+  user the visual feedback they need.
+
+  **Still open**: how the plugin discovers its destination
+  `(client, port)` — iterate the plugin's OUT-port matrix wires at
+  first-touch time and pick the unique destination; fall back to
+  "no reference, suppress until external write" when ambiguous
+  (multiple destinations) or disconnected.
 - **TODO: Preset Trigger** plugin — `(channel, note) → preset_name`.
   Calls the matrix preset-load API on note-on. Behaviour around hung
   notes during the swap is now mostly handled by the Engine track's

@@ -91,11 +91,14 @@ class MidiEngine:
         # An edge is considered "holding" a note while count > 0. The same
         # (ch, note) can stack across overlapping note-ons on the same edge.
         self._active_notes: dict[Connection, dict[tuple[int, int], int]] = {}
-        # CC observatory: (src_client, src_port, channel, cc) -> last value.
-        # Updated from CC events seen on the monitor port. `_cc_dirty` tracks
-        # keys that changed since the last delta snapshot for SSE broadcast.
-        self._cc_cache: dict[tuple[int, int, int, int], int] = {}
-        self._cc_dirty: set[tuple[int, int, int, int]] = set()
+        # CC observatory: (dst_client, dst_port, channel, cc) -> last value.
+        # Keyed by destination — answers "what's the most recent CC value
+        # this destination received on (ch, cc)?". Written at the
+        # monitor-port snoop site: each CC event seen on the monitor port
+        # is fanned out to every matrix destination of its source.
+        # `_cc_dest_dirty` tracks keys changed since the last delta snapshot.
+        self._cc_dest_cache: dict[tuple[int, int, int, int], int] = {}
+        self._cc_dest_dirty: set[tuple[int, int, int, int]] = set()
 
     @property
     def devices(self) -> list[MidiDevice]:
@@ -344,7 +347,7 @@ class MidiEngine:
         self._connections = {c for c in self._connections
                              if c.src_client != gone_client_id
                              and c.dst_client != gone_client_id}
-        self._purge_cc_cache_for_client(gone_client_id)
+        self._purge_cc_dest_cache_for_client(gone_client_id)
 
         # Drop filtered-connection bookkeeping for the gone client
         if self._filter_engine:
@@ -688,7 +691,7 @@ class MidiEngine:
                     if ev.type in (int(MidiEventType.NOTEON), int(MidiEventType.NOTEOFF)):
                         self._track_note_event(ev)
                     elif ev.type == int(MidiEventType.CONTROLLER):
-                        self._track_cc_event(ev)
+                        self._track_cc_to_destinations(ev)
 
                 # Notify MIDI event listeners (for monitoring)
                 if self._on_midi_event_callbacks:
@@ -1079,44 +1082,54 @@ class MidiEngine:
             except OSError:
                 pass  # destination might already be gone
 
-    # --- CC observatory ---
+    # --- CC observatory (destination-keyed) ---
 
-    def _track_cc_event(self, ev) -> None:
-        """Update `_cc_cache` from a CC event seen on the monitor port."""
+    def _track_cc_to_destinations(self, ev) -> None:
+        """Walk the matrix from this CC's source and write the value to
+        every destination's slot in `_cc_dest_cache`."""
         ch = ev.data.control.channel
         cc = ev.data.control.param
         val = ev.data.control.value
-        key = (ev.source.client, ev.source.port, ch, cc)
-        if self._cc_cache.get(key) != val:
-            self._cc_cache[key] = val
-            self._cc_dirty.add(key)
+        sc = ev.source.client
+        sp = ev.source.port
+        for conn in self._connections:
+            if conn.src_client != sc or conn.src_port != sp:
+                continue
+            key = (conn.dst_client, conn.dst_port, ch, cc)
+            if self._cc_dest_cache.get(key) != val:
+                self._cc_dest_cache[key] = val
+                self._cc_dest_dirty.add(key)
 
-    def _purge_cc_cache_for_client(self, client_id: int) -> None:
-        """Drop CC cache entries originating from `client_id`."""
-        for key in [k for k in self._cc_cache if k[0] == client_id]:
-            self._cc_cache.pop(key, None)
-            self._cc_dirty.discard(key)
+    def _purge_cc_dest_cache_for_client(self, client_id: int) -> None:
+        """Drop dest-keyed cache entries whose destination matches client_id."""
+        for key in [k for k in self._cc_dest_cache if k[0] == client_id]:
+            self._cc_dest_cache.pop(key, None)
+            self._cc_dest_dirty.discard(key)
 
-    def cc_snapshot(self) -> list[dict]:
-        """Return the full current CC state — every (port, channel, cc) we've
-        observed at least once since the last clear."""
+    def last_cc_to(self, dst_client: int, dst_port: int,
+                   channel: int, cc: int) -> int | None:
+        """Most recent CC value the engine forwarded to (dst, ch, cc), or
+        None if no CC for that destination has been observed yet."""
+        return self._cc_dest_cache.get((dst_client, dst_port, channel, cc))
+
+    def cc_dest_snapshot(self) -> list[dict]:
+        """Full current state of the destination-keyed CC cache."""
         return [
-            {"src_client": sc, "src_port": sp,
+            {"dst_client": dc, "dst_port": dp,
              "channel": ch, "cc": cc, "value": val}
-            for (sc, sp, ch, cc), val in self._cc_cache.items()
+            for (dc, dp, ch, cc), val in self._cc_dest_cache.items()
         ]
 
-    def cc_snapshot_dirty(self) -> list[dict]:
-        """Return CC entries that changed since the last call. Clears the
-        dirty set so subsequent calls only see new changes."""
+    def cc_dest_snapshot_dirty(self) -> list[dict]:
+        """Entries changed since the last call. Clears the dirty set."""
         out = []
-        for key in self._cc_dirty:
-            if key not in self._cc_cache:
+        for key in self._cc_dest_dirty:
+            if key not in self._cc_dest_cache:
                 continue
-            sc, sp, ch, cc = key
-            out.append({"src_client": sc, "src_port": sp,
-                        "channel": ch, "cc": cc, "value": self._cc_cache[key]})
-        self._cc_dirty.clear()
+            dc, dp, ch, cc = key
+            out.append({"dst_client": dc, "dst_port": dp,
+                        "channel": ch, "cc": cc, "value": self._cc_dest_cache[key]})
+        self._cc_dest_dirty.clear()
         return out
 
     def active_notes_snapshot(self) -> list[dict]:

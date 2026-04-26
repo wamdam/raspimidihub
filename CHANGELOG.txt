@@ -6,6 +6,10 @@ hashes. Tags: Added, Improved, Fix, Changed, Removed.
 
 Unreleased
 
+- Improved: Plugin controls - multi-touch fixed; two fingers on different knobs or wheels now track independently instead of both following the first finger
+- Improved: Panic - momentary trigger button that flashes red when fired and clears itself when the all-notes-off completes (replaces the latching toggle)
+- Improved: Switch-style toggles unified into LED buttons - same behaviour, color-coded (green = on, red = destructive), more compact in dense grids
+- Added: Plugin panel - section titles can be hidden for tighter dense layouts
 - Added: Knob control - round body with rotating indicator, LED arc that lights up to the current value, value text in the centre; drag sensitivity scales with the value range so labelled / few-step knobs aren't twitchy
 - Added: Clock Divider plugin - emits one MIDI Clock for every N received (2..32); passes notes / CC / etc. through unchanged
 - Added: UI Demo plugin - drop-in showcase of every UI control type, makes no MIDI

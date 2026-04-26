@@ -1,8 +1,8 @@
 """Panic Button — sends All Notes Off + All Sound Off on all channels."""
 
 from raspimidihub.plugin_api import (
+    Button,
     PluginBase,
-    Toggle,
     Wheel,
 )
 
@@ -22,12 +22,12 @@ class Panic(PluginBase):
 Sends All Notes Off and All Sound Off on all 16 MIDI channels. Kills
 stuck notes instantly. Can be triggered from the UI or via a CC.
 
-Example: A stuck note is droning on your synth. Hit the Panic toggle
+Example: A stuck note is droning on your synth. Hit the Panic button
 or send CC#64 value 127 from a foot switch to silence everything.
 Keep this wired to your output as a safety net."""
 
     params = [
-        Toggle("trigger", "Panic!", default=False),
+        Button("trigger", "Panic!", color="red", trigger=True),
         Wheel("trigger_cc", "Trigger CC #", min=0, max=127, default=64),
     ]
 
@@ -39,8 +39,8 @@ Keep this wired to your output as a safety net."""
     def on_param_change(self, name, value):
         if name == "trigger" and value:
             self._send_panic()
-            # Reset toggle
-            self._param_values["trigger"] = False
+            # Reset trigger and broadcast — UI uses this to clear the LED
+            self.set_param("trigger", False)
 
     def on_cc(self, channel, cc, value):
         trigger_cc = self.get_param("trigger_cc")
