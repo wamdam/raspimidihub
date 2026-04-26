@@ -237,7 +237,29 @@ class WebServer:
                 # None is the shutdown sentinel pushed by WebServer.stop()
                 if msg is None:
                     break
-                writer.write(msg.encode())
+                # Batch: while we were waiting in queue.get(), more events
+                # may have piled in. Drain them all into a single write +
+                # drain instead of paying the StreamWriter / TCP-flush cost
+                # per event. With 4 clients and a 30 ev/s broadcast rate
+                # this used to be the dominant CPU cost on the asyncio
+                # loop; batching cuts it to one drain per loop tick.
+                msgs = [msg]
+                while True:
+                    try:
+                        m = queue.get_nowait()
+                    except asyncio.QueueEmpty:
+                        break
+                    if m is None:
+                        # Shutdown sentinel hidden mid-batch — flush what
+                        # we have, then exit.
+                        writer.write("".join(msgs).encode())
+                        await asyncio.wait_for(writer.drain(), timeout=5.0)
+                        msgs = None
+                        break
+                    msgs.append(m)
+                if msgs is None:
+                    break
+                writer.write("".join(msgs).encode())
                 await asyncio.wait_for(writer.drain(), timeout=5.0)
         except (ConnectionResetError, BrokenPipeError, asyncio.CancelledError,
                 OSError, asyncio.TimeoutError):
