@@ -120,11 +120,16 @@ class LedController:
             pass
 
     def midi_blink(self) -> None:
-        """Brief green LED flicker on note/CC activity. Throttled to max ~20/sec."""
+        """Brief green LED flicker on note/CC activity. Throttled to one
+        blink per second — humans can't read a blink rate above ~5 Hz
+        as anything other than "lit". One per second under any MIDI
+        flow is enough to confirm activity, and 1 Hz × 2 writes is
+        cheap; the previous 20 Hz cap was 40 sysfs writes/s on a
+        streaming controller."""
         if self._state != LedState.STEADY:
             return
         now = time.monotonic()
-        if now - self._last_midi_blink < 0.05:
+        if now - self._last_midi_blink < 1.0:
             return
         self._last_midi_blink = now
         if self._midi_task and not self._midi_task.done():
