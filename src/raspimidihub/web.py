@@ -190,7 +190,12 @@ class WebServer:
                 pass
 
     async def _serve_static(self, path: str) -> Response:
-        """Serve a static file from the static directory."""
+        """Serve a static file from the static directory.
+
+        SPA fallback: paths without a file extension (e.g. /controller,
+        /routing/d/42) fall through to index.html so the JS router can
+        handle them on the client side. Real 404s only fire for paths
+        that look like asset requests (have an extension)."""
         # Security: prevent directory traversal
         clean = path.lstrip("/")
         if clean == "" or clean.endswith("/"):
@@ -201,6 +206,17 @@ class WebServer:
             return Response.not_found()
 
         if not file_path.is_file():
+            # SPA fallback for extensionless paths — serve index.html so
+            # client-side routing can take over. Anything with a "."
+            # in the last segment (asset paths like /missing.png) gets
+            # the real 404 it deserves.
+            last_segment = clean.rsplit("/", 1)[-1]
+            if "." not in last_segment:
+                fallback = (STATIC_DIR / "index.html").resolve()
+                if fallback.is_file():
+                    body = fallback.read_bytes()
+                    return Response(body=body, content_type="text/html",
+                                    headers={"Cache-Control": "no-cache, must-revalidate"})
             return Response.not_found()
 
         content_type, _ = mimetypes.guess_type(str(file_path))

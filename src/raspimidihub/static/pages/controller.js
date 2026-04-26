@@ -57,17 +57,24 @@ function ControllerSurface({ instance, pluginData, pluginDisplays }) {
     </div>`;
 }
 
-export function ControllerPage({ pluginDisplays, showToast }) {
+export function ControllerPage({ pluginDisplays, showToast, selectedId, onSelect }) {
     const [instances, setInstances] = useState([]);
-    const [selectedId, setSelectedIdRaw] = useState(null);
     const [pluginData, setPluginData] = useState(null);
 
-    const setSelectedId = useCallback((id) => {
-        setSelectedIdRaw(id);
-        if (id) {
-            try { localStorage.setItem(LAST_KEY, id); } catch {}
+    // Persist current selection to localStorage as the "last viewed".
+    // The router URL is the source of truth while navigating; localStorage
+    // is the fallback when the user lands on /controller (no id in URL).
+    useEffect(() => {
+        if (selectedId) {
+            try { localStorage.setItem(LAST_KEY, selectedId); } catch {}
         }
-    }, []);
+    }, [selectedId]);
+
+    // Public setter: notifies the router; the URL update flows back as
+    // a new selectedId prop on the next render.
+    const setSelectedId = useCallback((id) => {
+        if (onSelect) onSelect(id);
+    }, [onSelect]);
 
     const refreshList = useCallback(async () => {
         try {
@@ -77,16 +84,22 @@ export function ControllerPage({ pluginDisplays, showToast }) {
                 .sort((a, b) => (a.id < b.id ? -1 : 1));
             setInstances(controllers);
             if (controllers.length === 0) {
-                setSelectedIdRaw(null);
                 setPluginData(null);
                 return;
             }
-            const stored = (() => { try { return localStorage.getItem(LAST_KEY); } catch { return null; } })();
-            const hasStored = stored && controllers.some((c) => c.id === stored);
-            const id = hasStored ? stored : controllers[0].id;
-            setSelectedIdRaw(id);
+            // If the URL has no id (or an id not in the list), fall back
+            // to the last-viewed in localStorage, then the first instance.
+            const haveValid = selectedId && controllers.some((c) => c.id === selectedId);
+            if (!haveValid) {
+                const stored = (() => { try { return localStorage.getItem(LAST_KEY); } catch { return null; } })();
+                const hasStored = stored && controllers.some((c) => c.id === stored);
+                const id = hasStored ? stored : controllers[0].id;
+                // Auto-default → replace, not push. User-driven selection
+                // via the dropdown / arrows pushes (default behaviour).
+                if (onSelect) onSelect(id, { replace: true });
+            }
         } catch {}
-    }, []);
+    }, [selectedId, onSelect]);
 
     useEffect(() => { refreshList(); }, [refreshList]);
 

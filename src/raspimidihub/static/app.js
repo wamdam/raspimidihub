@@ -14,6 +14,7 @@ import { useState, useEffect, useRef, useCallback } from './lib/hooks.module.js'
 import { html, api, useSSE, Toast, MidiBar } from './ui/common.js';
 import { IconRouting, IconController, IconPreset, IconSettings } from './ui/icons.js';
 import { runStorageCleanup } from './ui/storage.js';
+import { useRouter } from './ui/router.js';
 import { noteName } from './state/constants.js';
 import { DeviceDetailPanel } from './panels/devicedetail.js';
 import { RoutingPage } from './pages/routing.js';
@@ -22,7 +23,9 @@ import { PresetsPage } from './pages/presets.js';
 import { SettingsPage } from './pages/settings.js';
 
 function App() {
-    const [tab, setTab] = useState('routing');
+    const { route, navigate } = useRouter();
+    const tab = route.tab;
+    const setTab = useCallback((t) => navigate({ tab: t }), [navigate]);
     const [devices, setDevices] = useState([]);
     const devicesRef = useRef([]);
     const connectionsRef = useRef([]);
@@ -30,7 +33,12 @@ function App() {
     const [toast, setToast] = useState('');
     const [configFallback, setConfigFallback] = useState(false);
     const [version, setVersion] = useState('');
-    const [selectedDeviceId, setSelectedDeviceId] = useState(null);
+    // Device-detail panel open state lives in the URL — opening / closing
+    // the panel pushes a new history entry, so the back button closes it.
+    const selectedDeviceId = route.deviceId != null ? Number(route.deviceId) : null;
+    const setSelectedDeviceId = useCallback((id) => {
+        navigate({ tab: 'routing', deviceId: id != null ? id : null });
+    }, [navigate]);
     const selectedDevice = selectedDeviceId != null ? devices.find(d => d.client_id === selectedDeviceId) || null : null;
     const [showMidiBar, setShowMidiBar] = useState(() => localStorage.getItem('midiBar') !== 'off');
     const [midiEvents, setMidiEvents] = useState({});  // src_client -> {name, text}
@@ -148,7 +156,9 @@ function App() {
                 onDeviceOpen=${(clientId) => setSelectedDeviceId(clientId)} />`;
             break;
         case 'controller':
-            page = html`<${ControllerPage} pluginDisplays=${pluginDisplays} showToast=${showToast} />`;
+            page = html`<${ControllerPage} pluginDisplays=${pluginDisplays} showToast=${showToast}
+                selectedId=${route.controllerId}
+                onSelect=${(id, opts) => navigate({ tab: 'controller', controllerId: id }, opts)} />`;
             break;
         case 'presets':
             page = html`<${PresetsPage} refresh=${refresh} showToast=${showToast} />`;
@@ -178,8 +188,7 @@ function App() {
             pluginDisplays=${pluginDisplays}
             onJumpToController=${(instanceId) => {
                 try { localStorage.setItem('raspimidihub:lastController', instanceId); } catch {}
-                setSelectedDeviceId(null);
-                setTab('controller');
+                navigate({ tab: 'controller', controllerId: instanceId });
             }} />`}
         <${Toast} message=${toast} />
     `;
