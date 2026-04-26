@@ -6,6 +6,8 @@ hashes. Tags: Added, Improved, Fix, Changed, Removed.
 
 Unreleased
 
+- Fix: Controller plugins no longer pin the asyncio loop at 80-98% CPU when external CC streams in - plugin PATCH responses no longer re-serialise the full instance schema, and the schema is now cached per class. Page load went from >2 s to ~10 ms; the system stays responsive while a fader is moving
+- Added: Settings - SSE backlog stat shows per-client outbox queue depth so a stuck phone is immediately visible
 - Added: Settings - SSE / sec stat alongside Load + CPU temp; ticks live every 2 s and shows current connected client count
 - Improved: SSE traffic cut roughly in half - Clock events stop double-emitting through midi-activity, plugin display callbacks throttled to 10 Hz with same-value dedup, ui_demo scope/meter halved to 10 / 5 Hz
 - Added: Controller tab in the top nav - opens the last-viewed Controller plugin in a fullscreen play surface with arrow buttons + dropdown to switch between instances; per-device last-viewed remembered via localStorage
