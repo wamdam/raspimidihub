@@ -1395,6 +1395,80 @@ Biggest user-visible win for performance.
 2. **Preview mode**. Ghost indicators on cells.
 3. Whatever the MVP usage in Phase 4 surfaced.
 
+### Phase 5.5 — Transient WiFi for updates (≈ 0.5 sprint)
+
+Slotted in after Phase 5 because the building blocks already exist
+(AP/client mode switching in `wifi.py`, the update flow in
+`scripts/raspimidihub-update.sh` running outside the service so it
+survives a dpkg restart) and the feature unblocks the "Pi sitting on
+guest WiFi 24/7" privacy concern.
+
+**User story:** I want to store a real-WiFi SSID + password, hit
+"Check for updates", let the Pi temporarily join that WiFi to fetch
++ install the deb, then come back to AP mode automatically. With an
+opt-in setting for "stay on the real WiFi forever" (today's
+behaviour) so I don't lose anything.
+
+**Config shape**: add `client_persistence: "permanent" | "update_only"`
+to the stored WiFi config. Default `permanent` for users who already
+configured client mode. Setting it to `update_only` keeps the
+credentials but skips client connect on boot.
+
+**Trigger flow** (manual only in v1; scheduled auto-update is a future
+follow-up):
+1. User taps "Check for updates" in Settings.
+2. **Confirmation dialog with a visible 60–90 s countdown timer**:
+   "The Pi will go offline for up to 90 seconds while it joins your
+   home WiFi to check. Your phone will lose its connection to the Pi
+   during this window — that's expected. Reconnect to the
+   `RaspiMIDIHub-XXXX` AP afterwards."
+3. User confirms → Pi switches to client mode, runs update-check, and
+   if a deb is available downloads + installs it (which auto-reboots
+   into AP mode since `update_only` skips client on boot). If no
+   update is available, Pi explicitly switches back to AP after the
+   check.
+4. **UI handles the disconnection window**: client side starts a
+   timer at confirmation; while the SSE connection is down, the page
+   shows a "checking for updates… (Xs remaining)" indicator.
+5. **If the timer expires and the Pi is still unreachable**, the UI
+   swaps to a help card: "Can't reach the Pi. Check your phone's
+   WiFi is connected to `RaspiMIDIHub-XXXX` and reload this page."
+   Crucially: when the user does reconnect to the AP, the page
+   auto-updates without a manual reload — the existing SSE
+   reconnect logic detects the new connection and fires the
+   refresh.
+6. **Hard watchdog on the Pi (3 min budget)**: an independent
+   process (systemd one-shot or `at`-scheduled job) that *always*
+   forces the Pi back to AP mode regardless of what failed — wrong
+   creds, no internet, GitHub down, download interrupted. Without
+   this watchdog, a single failure leaves the user with a Pi stuck
+   on a WiFi they can't see from their phone, and no recourse short
+   of physical access.
+
+**Failure cases the watchdog must cover**:
+- WiFi credentials are wrong → `wpa_supplicant` never associates.
+- WiFi associates but no DHCP lease.
+- DHCP lease but no internet routing.
+- Internet but GitHub API rate-limited or down.
+- Download starts but is interrupted (network drops mid-stream).
+- Download completes but `dpkg -i` fails (signature, dependency).
+
+In every case the watchdog falls back to AP, leaves a status
+breadcrumb in `/run/raspimidihub/update-status` that the AP-mode UI
+can read on reconnect, and surfaces a toast: "Update check failed:
+<reason>".
+
+**Out of scope for v1** (capture as future follow-ups):
+- Scheduled auto-update on a cron (e.g. weekly at 03:00). Easy to
+  add once the manual flow is proven, but invisible to the user
+  during the gap so the watchdog has to be rock-solid first.
+- Multiple stored networks (try home WiFi → fall back to phone
+  hotspot). Single SSID is fine for v1.
+- Background "stayed on AP" check-only mode that polls GitHub via
+  the user's phone WiFi if the phone is providing internet via the
+  AP itself. Architecturally cleaner but needs Pi-as-router
+  changes.
+
 ### Phase 6 — Workflow (≈ 1 sprint)
 
 Quality-of-life, not blocking anything live.
