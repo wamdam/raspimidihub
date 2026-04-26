@@ -1431,8 +1431,15 @@ Biggest user-visible win for performance.
        bidirectional sync. Frontend treats `learn_param` as
        trigger-style (PATCH only, no optimism / watchdog) so the
        server-side reset on capture doesn't loop.
-   - **TODO 4.2.d:** Performance 16 + FX 6 templates (replace
-     throwaway controller_b / controller_c).
+   - ✓ **4.2.d (2026-04-26):** Performance 16 + FX 6 templates
+     shipped as real Controllers (4-wide 16-macro / 4-scene; and
+     6-wide knobs/faders/buttons). All three templates now share a
+     `raspimidihub.controller_base.ControllerBase` class — cell
+     plumbing, drop pad, MIDI Learn, panic all live there;
+     subclasses just declare metadata + a LayoutGrid. Plugin
+     discovery tightened to filter by `__module__` so the imported
+     base class is never picked as a plugin in its own right.
+     Throwaway controller_b / controller_c removed.
 3. **TODO:** Top-nav "Controller" entry, fullscreen mode,
    `localStorage` last-viewed persistence.
 

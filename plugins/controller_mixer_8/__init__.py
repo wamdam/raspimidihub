@@ -1,21 +1,14 @@
-"""Controller — Mixer 8 (Phase 4.2 MVP).
+"""Controller — Mixer 8.
 
 Fixed 8-wide layout: 8 knobs / 8 vertical faders / 8 mute buttons.
-First real Controller plugin from §5 of the roadmap. OUT port emits
-CC on every cell change; IN port silently updates the matching cell
-when an external CC arrives (no re-emit — bidirectional sync without
-feedback loops).
+Defaults to ch 1 / CC 16-39; user can override per cell via the UI's
+edit mode (rename, channel, CC, MIDI Learn).
 
-Default bindings (overridable per cell via the UI's edit mode):
-  - knobs   k0..k7  -> ch 1, CC 16..23
-  - faders  f0..f7  -> ch 1, CC 24..31
-  - buttons m0..m7  -> ch 1, CC 32..39 (sent as 0 / 127)
-
-Each cell stores the user's per-instance overrides under
-`_param_values["cell_bindings"]` as `{cell_name: {"channel": int,
-"cc": int}}` (channel is 0-based internally).
+All the cell ↔ CC plumbing lives in ControllerBase; this file just
+declares metadata + the LayoutGrid template.
 """
 
+from raspimidihub.controller_base import ControllerBase
 from raspimidihub.plugin_api import (
     Button,
     DropPad,
@@ -23,11 +16,10 @@ from raspimidihub.plugin_api import (
     Knob,
     LayoutCell,
     LayoutGrid,
-    PluginBase,
 )
 
 
-class ControllerMixer8(PluginBase):
+class ControllerMixer8(ControllerBase):
     """8-wide mixer-strip controller: 8 knobs / 8 faders / 8 mutes."""
 
     NAME = "Controller — Mixer 8"
@@ -42,7 +34,7 @@ bindings on channel 1:
   - Row 3: mute buttons           -> CC 32..39 (0 / 127)
 
 Tap "Edit names" to override the cell label, channel and CC of any
-cell.
+cell, or arm "L" and twist a hardware knob to capture a binding.
 
 Move any UI cell -> the OUT port emits the matching CC. Wire OUT
 to a synth or other destination in the matrix.
@@ -78,166 +70,4 @@ keep both sides in sync without feedback loops."""
     ]
 
     cc_outputs = list(range(16, 40))  # CC 16..39 ch 1
-    inputs = ["CC (bidirectional sync — silent UI updates, no re-emit)"]
     outputs = ["CC 16..39 on ch 1 — knobs, faders, mute buttons"]
-
-    def on_start(self):
-        """Initialise non-schema state on first start (and after restore)."""
-        self._param_values.setdefault("cell_labels", {})
-        self._param_values.setdefault("cell_bindings", {})
-        self._param_values.setdefault("cell_learn", "")
-        # Cache the schema's default (channel, cc) per cell name. Computed
-        # once per instance from the LayoutGrid in self.params.
-        self._defaults: dict[str, tuple[int, int]] = {}
-        for p in self.__class__.params:
-            if isinstance(p, LayoutGrid):
-                for c in p.cells:
-                    if c.channel is not None and c.cc is not None:
-                        self._defaults[c.param.name] = (c.channel, c.cc)
-
-    def _effective_binding(self, cell_name: str) -> tuple[int, int] | None:
-        """User override (if set + complete) > schema default."""
-        overrides = self._param_values.get("cell_bindings") or {}
-        ov = overrides.get(cell_name)
-        if isinstance(ov, dict):
-            ch = ov.get("channel")
-            cc = ov.get("cc")
-            if isinstance(ch, int) and isinstance(cc, int):
-                return (ch, cc)
-        return self._defaults.get(cell_name)
-
-    def on_param_change(self, name, value):
-        """User moved a UI cell -> emit the matching CC. Or drop-pad
-        fired -> handle the snapshot action."""
-        if name == "pad":
-            self._handle_pad_action(value)
-            return
-        binding = self._effective_binding(name)
-        if binding is None:
-            return
-        ch, cc = binding
-        if isinstance(value, bool):
-            cc_val = 127 if value else 0
-        elif isinstance(value, int):
-            cc_val = max(0, min(127, value))
-        else:
-            return
-        self.send_cc(ch, cc, cc_val)
-
-    # --- Drop pad ---
-
-    def _handle_pad_action(self, action):
-        """Dispatch on the DropPad action value sent by the UI.
-        After processing, reset `pad` to 'captured' (if a snapshot
-        exists) or 'idle'."""
-        if action == "fire":
-            self._fire_snapshot()
-        elif action == "capture":
-            self._capture_snapshot()
-        else:
-            return  # 'idle' / 'captured' echoed back from server, no-op
-        new_state = "captured" if self._param_values.get("pad_snapshot") else "idle"
-        self.set_param("pad", new_state)
-
-    def _capture_snapshot(self):
-        """Read every bound cell's current value into pad_snapshot."""
-        snap = {}
-        for cell_name in self._defaults:
-            v = self._param_values.get(cell_name)
-            if v is not None:
-                snap[cell_name] = v
-        self._param_values["pad_snapshot"] = snap
-
-    def _fire_snapshot(self):
-        """Re-emit each captured CC + snap on-screen cells to the
-        captured value. No-op if no snapshot has been taken yet."""
-        snap = self._param_values.get("pad_snapshot") or {}
-        if not snap:
-            return
-        for cell_name, v in snap.items():
-            binding = self._effective_binding(cell_name)
-            if binding is None:
-                continue
-            ch, cc = binding
-            if isinstance(v, bool):
-                cc_val = 127 if v else 0
-            elif isinstance(v, int):
-                cc_val = max(0, min(127, v))
-            else:
-                continue
-            self.send_cc(ch, cc, cc_val)
-            # Snap UI to captured value (set + notify, no re-emit
-            # since on_param_change is bypassed by direct write).
-            if self._param_values.get(cell_name) != v:
-                self._param_values[cell_name] = v
-                if self._notify_param_change:
-                    try:
-                        self._notify_param_change(cell_name, v)
-                    except Exception:
-                        pass
-
-    def on_cc(self, channel, cc, value):
-        """If MIDI Learn is armed for a cell, the next incoming CC
-        captures that cell's binding and clears the learn state.
-        Otherwise: bidirectional sync — external CC silently updates the
-        matching cell. Does NOT re-emit on OUT (no feedback loops)."""
-        learn_target = self._param_values.get("cell_learn") or ""
-        if learn_target and learn_target in self._defaults:
-            bindings = dict(self._param_values.get("cell_bindings") or {})
-            bindings[learn_target] = {"channel": channel, "cc": cc}
-            self.set_param("cell_bindings", bindings)
-            self.set_param("cell_learn", "")
-            return
-        for name in self._defaults:
-            binding = self._effective_binding(name)
-            if binding is None:
-                continue
-            ch, cn = binding
-            if ch != channel or cn != cc:
-                continue
-            # Translate the incoming CC value to the cell's value type.
-            if name.startswith("m"):
-                new_val = value >= 64
-            else:
-                new_val = value
-            # Direct write + notify, bypassing on_param_change so we
-            # don't immediately re-emit our own input.
-            if self._param_values.get(name) == new_val:
-                return
-            self._param_values[name] = new_val
-            if self._notify_param_change:
-                try:
-                    self._notify_param_change(name, new_val)
-                except Exception:
-                    pass
-            return
-
-    # No-op handlers for the other event types — Controller only cares
-    # about CC. Note / pitchbend / aftertouch / pgm / clock pass right
-    # through unprocessed (the matrix routes them however it's wired).
-
-    def on_note_on(self, channel, note, velocity): pass
-    def on_note_off(self, channel, note): pass
-    def on_pitchbend(self, channel, value): pass
-    def on_aftertouch(self, channel, value): pass
-    def on_program_change(self, channel, program): pass
-
-    def panic(self):
-        """Reset all cells to default values + emit corresponding CCs."""
-        for name in self._defaults:
-            binding = self._effective_binding(name)
-            if binding is None:
-                continue
-            ch, cc = binding
-            cur = self._param_values.get(name)
-            default = False if name.startswith("m") else 64
-            if cur == default:
-                continue
-            self._param_values[name] = default
-            cc_val = 127 if default is True else (0 if default is False else default)
-            self.send_cc(ch, cc, cc_val)
-            if self._notify_param_change:
-                try:
-                    self._notify_param_change(name, default)
-                except Exception:
-                    pass

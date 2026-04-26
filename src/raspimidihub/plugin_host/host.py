@@ -88,8 +88,9 @@ class PluginHost:
     # Imports allowed for plugins (sandbox)
     _ALLOWED_IMPORTS = frozenset({
         "math", "random", "collections", "dataclasses", "enum",
-        "threading", "time", "queue",
+        "threading", "time", "queue", "typing",
         "raspimidihub.plugin_api",
+        "raspimidihub.controller_base",
     })
 
     def _load_plugin_class(self, type_name: str, init_file: Path) -> type[PluginBase] | None:
@@ -117,11 +118,15 @@ class PluginHost:
         sys.modules[module_name] = module
         spec.loader.exec_module(module)
 
-        # Find the PluginBase subclass
+        # Find the PluginBase subclass — restrict to classes actually
+        # defined in this plugin's __init__.py, otherwise an imported
+        # base class (e.g. raspimidihub.controller_base.ControllerBase)
+        # would be picked up as the plugin instead of its subclass.
         for attr_name in dir(module):
             obj = getattr(module, attr_name)
             if (isinstance(obj, type) and issubclass(obj, PluginBase)
-                    and obj is not PluginBase):
+                    and obj is not PluginBase
+                    and obj.__module__ == module.__name__):
                 return obj
 
         return None
