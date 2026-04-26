@@ -60,6 +60,11 @@ function ControllerSurface({ instance, pluginData, pluginDisplays }) {
 export function ControllerPage({ pluginDisplays, showToast, selectedId, onSelect }) {
     const [instances, setInstances] = useState([]);
     const [pluginData, setPluginData] = useState(null);
+    // null = haven't fetched yet; true = fetched at least once. Lets us
+    // tell "really empty" apart from "the API is still loading", so we
+    // don't flash "No Controller plugins yet" while the fetch is in
+    // flight on a slow Pi.
+    const [loaded, setLoaded] = useState(false);
 
     // Public setter: notifies the router; the URL update flows back as
     // a new selectedId prop on the next render.
@@ -74,6 +79,7 @@ export function ControllerPage({ pluginDisplays, showToast, selectedId, onSelect
                 .filter((i) => (i.type || '').startsWith('controller_'))
                 .sort((a, b) => (a.id < b.id ? -1 : 1));
             setInstances(controllers);
+            setLoaded(true);
             if (controllers.length === 0) {
                 setPluginData(null);
                 return;
@@ -84,7 +90,9 @@ export function ControllerPage({ pluginDisplays, showToast, selectedId, onSelect
             if (!haveValid && onSelect) {
                 onSelect(controllers[0].id, { replace: true });
             }
-        } catch {}
+        } catch {
+            setLoaded(true);  // even on failure, show empty state rather than spin forever
+        }
     }, [selectedId, onSelect]);
 
     useEffect(() => { refreshList(); }, [refreshList]);
@@ -98,6 +106,12 @@ export function ControllerPage({ pluginDisplays, showToast, selectedId, onSelect
             .catch(() => setPluginData(null));
     }, [selectedId]);
 
+    // --- Loading: fetch in flight, don't flash the empty state.
+    if (!loaded) {
+        return html`<div class="page controller-page">
+            <div class="controller-loading">Loading…</div>
+        </div>`;
+    }
     // --- Empty state: no controllers yet.
     if (instances.length === 0) {
         return html`<div class="page controller-page">
