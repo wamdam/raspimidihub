@@ -1353,13 +1353,22 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
             return Response.not_found()
 
     # 500 ms TTL cache for the list endpoint. The contents only change
-    # on plugin add/remove/rename — it's safe to serve a slightly stale
-    # body to back-to-back GETs. This protects the server from a buggy
-    # or stale-cached frontend tab that re-fetches /plugins/instances
-    # on every render (we've been bitten by exactly this loop). The
-    # cached bytes are pre-encoded so cache hits skip json.dumps too.
+    # on plugin add / remove / rename — but those mutations explicitly
+    # invalidate the cache (see _invalidate_instances_cache below) so
+    # the dropdown always reflects the latest state immediately. The
+    # cache exists to protect the server from a buggy / stale-cached
+    # frontend re-fetching /plugins/instances on every render (we've
+    # been bitten by that loop). Pre-encoded bytes mean cache hits
+    # skip json.dumps too.
     import time as _time
     _instances_cache = {"body": None, "ts": 0.0}
+
+    def _invalidate_instances_cache():
+        """Drop the cached body so the next GET rebuilds from live state.
+        Called after any mutation that changes the list (create, delete,
+        rename, status change)."""
+        _instances_cache["body"] = None
+        _instances_cache["ts"] = 0.0
 
     @server.route("GET", "/api/plugins/instances")
     async def api_plugins_instances(req: Request) -> Response:
@@ -1413,6 +1422,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         # other plugins.
         engine.handle_plugin_added()
 
+        _invalidate_instances_cache()
         data = engine._plugin_host.get_instance_data(instance.id)
         return Response.json(data, status=201)
 
@@ -1440,6 +1450,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         body = req.json
         if "name" in body:
             engine._plugin_host.rename_instance(instance_id, body["name"])
+            _invalidate_instances_cache()
         if "params" in body:
             engine._plugin_host.set_params(instance_id, body["params"])
 
@@ -1473,4 +1484,5 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         else:
             engine.handle_plugin_added()  # fall back to a plain refresh
 
+        _invalidate_instances_cache()
         return Response.json({"status": "deleted"})
