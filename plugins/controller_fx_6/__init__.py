@@ -12,6 +12,7 @@ from raspimidihub.plugin_api import (
     Knob,
     LayoutCell,
     LayoutGrid,
+    Radio,
 )
 
 
@@ -33,6 +34,7 @@ cell, or arm "L" and twist a hardware knob to capture a binding."""
 
     params = [
         DropPad("pad", "DROP"),
+        Radio("bg", "Background", ControllerBase.BG_OPTIONS, default="Default", config_only=True),
         LayoutGrid(
             "controller", "",
             cols=6, rows=3,

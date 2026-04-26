@@ -44,6 +44,10 @@ class Param:
     # Grid-column footprint in the param-row. Default 1u; set to 2/3/4
     # for wider controls (e.g. a fat horizontal fader spanning the row).
     span: int = field(default=1, kw_only=True)
+    # If True, this param is shown only in the device-config panel
+    # (Routing tab) and hidden on play surfaces (Controller fullscreen
+    # page). Used for instance-level meta config like background colour.
+    config_only: bool = field(default=False, kw_only=True)
 
     def to_dict(self) -> dict:
         d = {"type": self.__class__.__name__.lower(), "name": self.name, "label": self.label}
@@ -51,6 +55,8 @@ class Param:
             d["visible_when"] = {"param": self.visible_when[0], "value": self.visible_when[1]}
         if self.span and self.span > 1:
             d["span"] = self.span
+        if self.config_only:
+            d["config_only"] = True
         return d
 
 

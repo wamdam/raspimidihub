@@ -16,6 +16,7 @@ from raspimidihub.plugin_api import (
     Knob,
     LayoutCell,
     LayoutGrid,
+    Radio,
 )
 
 
@@ -46,6 +47,7 @@ keep both sides in sync without feedback loops."""
 
     params = [
         DropPad("pad", "DROP"),
+        Radio("bg", "Background", ControllerBase.BG_OPTIONS, default="Default", config_only=True),
         LayoutGrid(
             "controller", "",
             cols=8, rows=3,

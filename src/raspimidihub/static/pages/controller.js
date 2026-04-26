@@ -144,7 +144,12 @@ export function ControllerPage({ pluginDisplays, showToast }) {
         else if (dx > 0 && prev) setSelectedId(prev.id);
     }, [prev, next, setSelectedId]);
 
-    return html`<div class="page controller-page"
+    // Read the per-instance background choice off the SSE-broadcast
+    // params (avoids waiting for the slower instance fetch to land).
+    const sseParams = (pluginDisplays && pluginDisplays['_params_' + selected.id]) || {};
+    const bgChoice = (sseParams.bg || 'Default').toString().toLowerCase();
+
+    return html`<div class="page controller-page bg-${bgChoice}"
             ontouchstart=${onTouchStart}
             ontouchend=${onTouchEnd}
             ontouchcancel=${onTouchEnd}>

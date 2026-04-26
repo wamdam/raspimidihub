@@ -130,7 +130,9 @@ export function renderParamGroup(items, values, onChange, displayCtx, cols) {
         else result.push(html`<div class="param-row">${inlineRun}</div>`);
         inlineRun = [];
     };
+    const playOnly = !!(displayCtx && displayCtx.playOnly);
     for (const p of items) {
+        if (playOnly && p.config_only) continue;
         const rendered = renderParam(p, values, onChange, values, displayCtx);
         if (!rendered) continue;
         if (INLINE_TYPES.has(p.type)) inlineRun.push(applySpan(rendered, p.span));
@@ -142,8 +144,10 @@ export function renderParamGroup(items, values, onChange, displayCtx, cols) {
 
 export function renderParamList(params, values, onChange, displayCtx) {
     if (!params) return null;
+    const playOnly = !!(displayCtx && displayCtx.playOnly);
     const expanded = [];
     for (const p of params) {
+        if (playOnly && p.config_only) continue;
         if (p.type === 'group') expanded.push({ _isGroup: true, title: p.title, children: p.children, cols: p.cols });
         else expanded.push(p);
     }

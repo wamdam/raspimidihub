@@ -14,6 +14,7 @@ from raspimidihub.plugin_api import (
     Knob,
     LayoutCell,
     LayoutGrid,
+    Radio,
 )
 
 
@@ -43,6 +44,7 @@ on-screen cell."""
 
     params = [
         DropPad("pad", "DROP"),
+        Radio("bg", "Background", ControllerBase.BG_OPTIONS, default="Default", config_only=True),
         LayoutGrid(
             "controller", "",
             cols=4, rows=5,

@@ -32,6 +32,11 @@ class ControllerBase(PluginBase):
     inputs = ["CC (bidirectional sync — silent UI updates, no re-emit)"]
     outputs = ["CC per cell — see HELP for default channel/cc bindings"]
 
+    # Eight predefined dark backgrounds the user can pick per instance.
+    # Strings are user-facing; the JS lower-cases them to derive a
+    # `.bg-<name>` class on the Controller page surface.
+    BG_OPTIONS = ["Default", "Navy", "Forest", "Wine", "Plum", "Teal", "Sienna", "Slate"]
+
     def on_start(self):
         """Initialise non-schema state on first start (and after restore).
 
@@ -40,6 +45,7 @@ class ControllerBase(PluginBase):
         self._param_values.setdefault("cell_labels", {})
         self._param_values.setdefault("cell_bindings", {})
         self._param_values.setdefault("cell_learn", "")
+        self._param_values.setdefault("bg", "Default")
         # Derived from the schema once per instance.
         self._defaults: dict[str, tuple[int, int]] = {}
         self._cell_types: dict[str, str] = {}

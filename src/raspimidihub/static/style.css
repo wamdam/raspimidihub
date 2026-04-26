@@ -847,7 +847,29 @@ body {
 .controller-page {
     padding: 8px 12px 16px;
     overflow: hidden;
+    /* Fill the available .main area so the bg theme covers the whole
+       surface, including the empty space below the cells. */
+    min-height: 100%;
+    box-sizing: border-box;
+    /* Negative margins cancel .main's padding so the theme bleeds to
+       the actual edges. */
+    margin: calc(-1 * var(--gap));
+    margin-bottom: -72px;
+    padding-bottom: 80px;  /* push content above the fixed bottom nav */
+    background: var(--bg);  /* default: matches the rest of the app */
 }
+/* Eight per-instance dark backgrounds. Picked via the Radio param
+   "bg" on each Controller; the JS lower-cases the choice and tags
+   .controller-page with `.bg-<name>`. All gradients stay deep so cell
+   metalwork keeps its contrast. */
+.controller-page.bg-default { background: var(--bg); }
+.controller-page.bg-navy    { background: linear-gradient(180deg, #0a1838 0%, #050a18 100%); }
+.controller-page.bg-forest  { background: linear-gradient(180deg, #0e2a1c 0%, #051208 100%); }
+.controller-page.bg-wine    { background: linear-gradient(180deg, #2a0f18 0%, #14060c 100%); }
+.controller-page.bg-plum    { background: linear-gradient(180deg, #20102a 0%, #0e0618 100%); }
+.controller-page.bg-teal    { background: linear-gradient(180deg, #0a2a2c 0%, #061214 100%); }
+.controller-page.bg-sienna  { background: linear-gradient(180deg, #2a1810 0%, #14080a 100%); }
+.controller-page.bg-slate   { background: linear-gradient(180deg, #1f2630 0%, #0c1018 100%); }
 .controller-bar {
     display: flex; align-items: center; gap: 8px; margin-bottom: 12px;
     background: var(--surface);
