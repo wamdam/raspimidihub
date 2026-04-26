@@ -74,6 +74,37 @@ async def loop_lag_meter(server) -> None:
         expected = now + interval
 
 
+async def sse_heartbeat(server, interval: float = 30.0) -> None:
+    """Push a comment line into every SSE outbox every `interval` seconds.
+
+    Two reasons:
+    - Browsers (and intermediate proxies) drop idle SSE streams. A
+      keepalive every 30 s holds them open even when the client
+      subscribed to events that don't fire often.
+    - Without a write attempt, _handle_sse's queue.get() would block
+      forever on a dead socket — the writer.drain() failure that
+      triggers cleanup never fires. With the per-view subscription
+      model, a connection on Settings / Presets receives no events at
+      all, so dead-socket detection used to wait until the client
+      reconnected. The heartbeat write surfaces dead sockets within
+      one interval and lets _sse_connections shed them.
+
+    The line `:hb` is an SSE comment — browsers ignore it; servers
+    write it through the existing per-conn queue + drain machinery.
+    """
+    msg = ":hb\n\n"
+    while True:
+        await asyncio.sleep(interval)
+        for conn in list(server._sse_connections.values()):
+            try:
+                conn.queue.put_nowait(msg)
+            except asyncio.QueueFull:
+                # Outbox is saturated — the connection isn't draining
+                # anyway, so the next failed write will surface the
+                # dead socket. Skip silently.
+                pass
+
+
 async def watchdog_ping(interval: float, notify_fn) -> None:
     """Periodically tell systemd we're alive. `notify_fn` is the
     sd_notify wrapper from __main__."""

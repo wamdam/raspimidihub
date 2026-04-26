@@ -6,50 +6,43 @@ hashes. Tags: Added, Improved, Fix, Changed, Removed.
 
 Unreleased
 
-- Improved: Server stays responsive under heavy hardware-controller load - 4 simultaneous LaunchControl faders mirroring into Mixer 8 used to pin the asyncio loop at 100+% CPU with 50-75 ms loop lag and laggy playback; the same load now sits at ~80% CPU with single-digit-ms loop lag and zero SSE backlog. Wins came from: trailing-edge coalescer on plugin-param + plugin-display SSE (1478 ev/s -> ~115), persistent ALSA fd reader (was add/remove per iteration), LED sysfs writes off the asyncio loop, midi-blink rate cap from 20 Hz to 1 Hz, cached plugin-client-id set, batched SSE writes per drain, removal of per-CC INFO log, light /plugins/instances list shape with cache + invalidation
-- Fix: Renamed plugin instances now show their custom name in the Controller dropdown - the dropdown read instance.name (default, not persisted) instead of the device-registry custom name. Single source of truth via device_names config
-- Fix: Hardware fader actually moves on-screen Mixer 8 cells - plugin-event closures were capturing the transient instance ID assigned at create time, so post-restore events went out tagged with a no-longer-listed ID and the frontend dropped them. Existing config (CC bindings, snapshots) was always intact - only the runtime event labelling was wrong
-- Added: Top-bar version badge "v2.0.9.<build-token>" with an orange "stale, reload" link when the server has been redeployed since this tab loaded - kills "is my browser running stale code?" guesswork
-- Added: XY Pad cell config - separate Ch + CC inputs for X and Y axes (Y channel defaults to X). Lets you route the two axes to different synths or different MIDI channels on the same synth. Learn captures the X axis only; type Y manually
-- Added: Settings - Loop lag, MIDI in -> SSE out, MIDI in -> MIDI out and Control in -> MIDI out latency probes (windowed-max ms over the last second), plus process CPU% as percent-of-one-core. Loop lag is the single best signal that the server is keeping up with itself
-- Fix: Controller fullscreen + filtered MIDI no longer pinned the asyncio loop. Inline onSelect arrow recreated per render fired the list-fetch effect on every SSE event - typing /api/plugins/instances 20x/s, each call re-serialising every plugin's full schema. Stable callback identity + light list endpoint shape; server CPU dropped from 99% to ~30% with 4 clients
-- Fix: Controller plugins no longer pin the asyncio loop at 80-98% CPU when external CC streams in - plugin PATCH responses no longer re-serialise the full instance schema, and the schema is now cached per class. Page load went from >2 s to ~10 ms; the system stays responsive while a fader is moving
-- Added: Settings - SSE backlog stat shows per-client outbox queue depth so a stuck phone is immediately visible
-- Added: Settings - SSE / sec stat alongside Load + CPU temp; ticks live every 2 s and shows current connected client count
-- Improved: SSE traffic cut roughly in half - Clock events stop double-emitting through midi-activity, plugin display callbacks throttled to 10 Hz with same-value dedup, ui_demo scope/meter halved to 10 / 5 Hz
 - Added: Controller tab in the top nav - opens the last-viewed Controller plugin in a fullscreen play surface with arrow buttons + dropdown to switch between instances; per-device last-viewed remembered via localStorage
-- Added: Controller - Performance 16 plugin: 4-wide layout with 16 macro knobs + 4 colored scene buttons; defaults CC 16-35 ch 1
-- Added: Controller - FX 6 plugin: 6-wide layout with 6 knobs / 6 faders / 6 buttons; defaults CC 16-33 ch 1
-- Added: Controller - Mixer 8: per-cell MIDI Learn - in edit mode each cell has a small "L" button; tap and twist a knob on any device wired to the Controller's IN port and the next CC becomes that cell's binding (channel + CC captured automatically)
-- Added: Controller - Mixer 8: per-cell channel + CC rebind - in edit mode each cell now also shows a small ch and cc input, override defaults per cell so you can route different cells to different synths on different channels
-- Added: Controller - Mixer 8: per-cell rename - tap "Edit names" to swap every cell for an inline text input, type a friendly name (e.g. "Cutoff" instead of "K1"), names persist per-instance
-- Added: Controller - Mixer 8: drop pad row above the grid; long-press (500 ms with progress ring) captures the current state of every cell; short-press snaps every cell back to the captured state and re-emits the corresponding CCs in one go
 - Added: Controller - Mixer 8 plugin: 8 knobs / 8 vertical faders / 8 mute buttons, OUT port emits CC 16-39 ch 1, IN port silently mirrors external CCs back into the on-screen cells (no feedback loops)
-- Added: XY Pad control - square touch surface with a draggable dot; emits two values (x, y) for use as a dual-CC source
-- Added: LayoutGrid - fixed-position param container that lets a plugin declare cells in explicit (col, row) slots with multi-cell spans; ground floor for the upcoming Controller plugin
-- Improved: Plugin controls - multi-touch fixed; two fingers on different knobs or wheels now track independently instead of both following the first finger
-- Improved: Panic - momentary trigger button that flashes red when fired and clears itself when the all-notes-off completes (replaces the latching toggle)
-- Improved: Switch-style toggles unified into LED buttons - same behaviour, color-coded (green = on, red = destructive), more compact in dense grids
-- Added: Plugin panel - section titles can be hidden for tighter dense layouts
+- Added: Controller - Mixer 8: drop pad row above the grid; long-press (500 ms with progress ring) captures the current state of every cell; short-press snaps every cell back to the captured state and re-emits the corresponding CCs in one go
+- Added: Controller - Mixer 8: per-cell rename - tap "Edit names" to swap every cell for an inline text input, type a friendly name (e.g. "Cutoff" instead of "K1"), names persist per-instance
+- Added: Controller - Mixer 8: per-cell channel + CC rebind - in edit mode each cell now also shows a small ch and cc input, override defaults per cell so you can route different cells to different synths on different channels
+- Added: Controller - Mixer 8: per-cell MIDI Learn - in edit mode each cell has a small "L" button; tap and twist a knob on any device wired to the Controller's IN port and the next CC becomes that cell's binding (channel + CC captured automatically)
+- Added: Controller - FX 6 plugin: 6-wide layout with 6 knobs / 6 faders / 6 buttons; defaults CC 16-33 ch 1
+- Added: Controller - Performance 16 plugin: 4-wide layout with 16 macro knobs + 4 colored scene buttons; defaults CC 16-35 ch 1
+- Added: XY Pad control - square touch surface with a draggable dot; emits two values (x, y) for use as a dual-CC source. Cell config exposes separate Ch + CC inputs for X and Y axes (Y channel defaults to X) so the two axes can drive different synths or different channels on the same synth; Learn captures the X axis only, type Y manually
+- Added: LayoutGrid - fixed-position param container that lets a plugin declare cells in explicit (col, row) slots with multi-cell spans; ground floor for the Controller plugins
 - Added: Knob control - round body with rotating indicator, LED arc that lights up to the current value, value text in the centre; drag sensitivity scales with the value range so labelled / few-step knobs aren't twitchy
+- Added: Param span - any wheel / knob / fader / toggle / button can declare it occupies 1, 2, 3 or 4 cells of the row (e.g. a fat "Master" fader spanning the row)
+- Added: Plugin panel - section titles can be hidden for tighter dense layouts
+- Added: Matrix clock indicator - pulses in time with the source's quarter notes instead of running a generic loop
 - Added: Clock Divider plugin - emits one MIDI Clock for every N received (2..32); passes notes / CC / etc. through unchanged
 - Added: UI Demo plugin - drop-in showcase of every UI control type, makes no MIDI
 - Added: Panic - second tap upgrades to "All Sound Off" (Elektron-style); first tap leaves delay / reverb tails ringing
-- Added: Matrix clock indicator - pulses in time with the source's quarter notes instead of running a generic loop
-- Added: Param span - any wheel / knob / fader / toggle / button can declare it occupies 1, 2, 3 or 4 cells of the row (e.g. a fat "Master" fader spanning the row)
+- Added: Top-bar version badge "v2.0.9.<build-token>" with an orange "stale, reload" link when the server has been redeployed since this tab loaded - kills "is my browser running stale code?" guesswork
+- Added: Settings - Loop lag, MIDI in -> SSE out, MIDI in -> MIDI out and Control in -> MIDI out latency probes (windowed-max ms over the last second), plus process CPU% as percent-of-one-core. Loop lag is the single best signal that the server is keeping up with itself
+- Added: Settings - SSE backlog stat shows per-client outbox queue depth so a stuck phone is immediately visible
+- Added: Settings - SSE / sec stat alongside Load + CPU temp; ticks live every 2 s and shows current connected client count
+- Improved: Server stays responsive under heavy hardware-controller load - 4 simultaneous LaunchControl faders mirroring into Mixer 8 used to pin the asyncio loop at 100+% CPU with 50-75 ms loop lag and laggy playback; the same load now sits at ~80% CPU with single-digit-ms loop lag and zero SSE backlog. Wins came from: trailing-edge coalescer on plugin-param + plugin-display SSE (1478 ev/s -> ~115), persistent ALSA fd reader (was add/remove per iteration), LED sysfs writes off the asyncio loop, midi-blink rate cap from 20 Hz to 1 Hz, cached plugin-client-id set, batched SSE writes per drain, removal of per-CC INFO log, light /plugins/instances list shape with cache + invalidation, stable Controller onSelect callback identity (no more list-fetch on every SSE event), plugin schema cached per class so PATCH responses don't re-serialise
+- Improved: SSE traffic cut roughly in half - Clock events stop double-emitting through midi-activity, plugin display callbacks throttled to 10 Hz with same-value dedup, ui_demo scope/meter halved to 10 / 5 Hz
+- Improved: Plugin controls - multi-touch fixed; two fingers on different knobs or wheels now track independently instead of both following the first finger
+- Improved: Plugin controls - drag and scroll feel smoother; the wheel / fader / knob thumb no longer jitters back to a stale value mid-move
+- Improved: Plugin controls - param values now stay in sync across all open browsers / phones via a self-healing watchdog (handles fast drags, rate limits, and dropped events)
 - Improved: Plugin panel - 4-column responsive grid that fits even on a 360 px phone; controls share a uniform 1u footprint so a row of mixed wheels, faders, knobs, toggles, buttons all line up
 - Improved: Plugin panel - cards have a brushed-metal gradient that reads as raised housings against the matrix-coloured panel background
 - Improved: Meter display - now a read-only green-LED knob instead of a flat bar
+- Improved: Switch-style toggles unified into LED buttons - same behaviour, color-coded (green = on, red = destructive), more compact in dense grids
 - Improved: Toggles + buttons - slimmer 44 px height to match the wheel / fader visual weight
-- Improved: Plugin controls - drag and scroll feel smoother; the wheel / fader / knob thumb no longer jitters back to a stale value mid-move
-- Improved: Plugin controls - param values now stay in sync across all open browsers / phones via a self-healing watchdog (handles fast drags, rate limits, and dropped events)
+- Improved: Panic - momentary trigger button that flashes red when fired and clears itself when the all-notes-off completes (replaces the latching toggle)
 - Improved: MIDI Delay - Delay (ms) is now a Fader; sync rate covers 4 bars down to 1/16 with triplets
+- Improved: CC LFO - slow clock-sync rates added (up to 8 bars)
 - Improved: Disconnect - destinations get a clean Note Off when a connection is removed mid-note, so notes don't stick
 - Improved: Load Config - reapplies only the connections that actually changed; unrelated routing keeps flowing without interruption
-- Improved: CC LFO - slow clock-sync rates added (up to 8 bars)
 - Improved: Multi-tab support - several phones / browsers can be open at once without the SSE connection cap pushing one of them out
-- Fix: Clock Divider - silent when nothing is wired to it (was ticking from any clock the system happened to see)
-- Fix: Clock Divider - dividing by 4 or higher now actually divides correctly
 - Fix: Plugin panel - turning a wheel / knob no longer slides the panel away
 - Fix: Radio buttons - the active pill no longer shifts its neighbours by 1 px when toggled
 - Fix: Note wheel - active value now centred on the indicator

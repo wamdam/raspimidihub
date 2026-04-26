@@ -19,6 +19,7 @@ from .runtime.loops import (
     loop_lag_meter,
     pending_param_flusher,
     rate_meter,
+    sse_heartbeat,
     watchdog_ping,
     wifi_watchdog,
 )
@@ -270,6 +271,12 @@ async def async_main() -> None:
         # streaming hardware fader fanned out across multiple Controller
         # plugins listening on the same CC range.
         asyncio.ensure_future(pending_param_flusher(plugin_host))
+
+        # SSE keep-alive: pushes a comment every 30 s so dead sockets
+        # surface (the per-view subscription model means a connection
+        # on a quiet view receives no events otherwise, and the dead
+        # socket would never be detected until reconnect).
+        asyncio.ensure_future(sse_heartbeat(server))
 
         try:
             await engine.run_event_loop()
