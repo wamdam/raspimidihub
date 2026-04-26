@@ -112,11 +112,14 @@ export function PluginDropPad({ name, label, value, onChange }) {
         };
     }, [name]);
 
+    const text = pressing ? 'HOLD TO LEARN'
+        : armed ? 'Learned'
+        : (label || 'DROP');
+
     return html`<div class="droppad-row">
         <div class="droppad ${pressing ? 'pressing' : ''} ${armed ? 'armed' : ''}" ref=${padRef}>
-            <span class="droppad-label">${label || 'DROP'}</span>
+            <span class="droppad-label">${text}</span>
             ${pressing ? html`<div class="droppad-progress" style="width: ${progress * 100}%"></div>` : null}
-            ${armed && !pressing ? html`<span class="droppad-armed">✓ captured</span>` : null}
         </div>
     </div>`;
 }
