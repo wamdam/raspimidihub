@@ -6,6 +6,7 @@
 import { useState, useEffect } from '../lib/hooks.module.js';
 import { html, api } from '../ui/common.js';
 import { UPDATE_LABELS } from '../state/constants.js';
+import { getSoundsEnabled, setSoundsEnabled } from '../components/common.js';
 
 function NetworkCard({ iface, showToast }) {
     const [method, setMethod] = useState(iface.method || 'auto');
@@ -280,6 +281,7 @@ export function SettingsPage({ showToast, showMidiBar, toggleMidiBar }) {
     const [sys, setSys] = useState(null);
     const [defaultRouting, setDefaultRouting] = useState('all');
     const [isUpgrading, setIsUpgrading] = useState(false);
+    const [soundsOn, setSoundsOn] = useState(getSoundsEnabled());
     useEffect(() => { api('/network').then(setIfaces).catch(() => {}); }, []);
     useEffect(() => { api('/system').then(s => { setSys(s); setDefaultRouting(s.default_routing || 'all'); }).catch(() => {}); }, []);
 
@@ -337,6 +339,11 @@ export function SettingsPage({ showToast, showMidiBar, toggleMidiBar }) {
             <label class="msg-toggle">
                 <input type="checkbox" checked=${showMidiBar} onchange=${toggleMidiBar} />
                 <span>MIDI activity bar</span>
+            </label>
+            <label class="msg-toggle">
+                <input type="checkbox" checked=${soundsOn}
+                    onchange=${e => { setSoundsEnabled(e.target.checked); setSoundsOn(e.target.checked); }} />
+                <span>Knob / wheel tick sounds</span>
             </label>
         </div>
         <${UpgradeCard} showToast=${showToast} onUpdatingChange=${setIsUpgrading} />

@@ -15,7 +15,16 @@ function ensureAudio() {
     return audioCtx;
 }
 
+// User-disable-able tick / thud sounds. Persisted in localStorage so
+// the toggle survives reloads. Default ON (matches prior behaviour).
+const SOUND_KEY = 'raspimidihub:soundsEnabled';
+function soundsEnabled() {
+    try { return localStorage.getItem(SOUND_KEY) !== '0'; }
+    catch { return true; }
+}
+
 export function tickFeedback() {
+    if (!soundsEnabled()) { try { navigator.vibrate(2); } catch {} return; }
     try {
         const ctx = ensureAudio();
         const osc = ctx.createOscillator();
@@ -30,6 +39,7 @@ export function tickFeedback() {
 }
 
 export function thudFeedback() {
+    if (!soundsEnabled()) { try { navigator.vibrate(30); } catch {} return; }
     try {
         const ctx = ensureAudio();
         const osc = ctx.createOscillator();
@@ -42,6 +52,11 @@ export function thudFeedback() {
         osc.start(); osc.stop(ctx.currentTime + 0.08);
     } catch {}
     try { navigator.vibrate(30); } catch {}
+}
+
+export function getSoundsEnabled() { return soundsEnabled(); }
+export function setSoundsEnabled(v) {
+    try { localStorage.setItem(SOUND_KEY, v ? '1' : '0'); } catch {}
 }
 
 const NOTE_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
