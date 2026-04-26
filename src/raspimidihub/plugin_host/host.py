@@ -273,10 +273,14 @@ class PluginHost:
         # name); the latest sample always wins, so a meter sitting at
         # 0 then jumping to 100 lands within 100 ms even if the plugin
         # emitted many intermediate samples.
-        instance_id_d = instance.id
+        # We close over `instance` (not instance.id) so the lookup
+        # honours any later id rekey — restore_instances rekeys after
+        # create_instance, which used to leave the closure pointing at
+        # the dead transient id and SSE events would be tagged wrong.
         host_self_d = self
+        instance_d = instance
         def _on_display(name, value):
-            host_self_d._display_coalescer.submit((instance_id_d, name), value)
+            host_self_d._display_coalescer.submit((instance_d.id, name), value)
         instance.plugin._notify_display = _on_display
 
         # Wire param change callback through the trailing-edge coalescer.
@@ -285,10 +289,13 @@ class PluginHost:
         # emit_now(). Numeric / dict values (fader / knob / XY pad
         # streams) coalesce: latest value wins, drained at 20 Hz by
         # flush_pending_params() on the asyncio loop.
-        instance_id_p = instance.id
+        # Close over `instance` (not instance.id) so the lookup honours
+        # any later rekey — restore_instances rekeys to the saved id
+        # AFTER create_instance, and the closure must follow.
         host_self_p = self
+        instance_p = instance
         def _on_param_change(name, value):
-            key = (instance_id_p, name)
+            key = (instance_p.id, name)
             if isinstance(value, str):
                 host_self_p._param_coalescer.emit_now(
                     key, value, host_self_p._dispatch_param)
