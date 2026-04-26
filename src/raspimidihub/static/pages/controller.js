@@ -6,9 +6,11 @@
  * fullscreen play surface. The drop pad + LayoutGrid fill the page
  * so the user can drive a tablet or phone like dedicated hardware.
  *
- * Last-viewed instance persists in
- * `localStorage["raspimidihub:lastController"]` per device, so
- * coming back to the Controller tab opens the same surface.
+ * Selection lives in the URL (`/controller/<instance_id>`) — the
+ * router is the single source of truth, so reload / back / forward /
+ * bookmark all do the obvious thing. When the URL has no id the page
+ * defaults to the first instance via `replaceState` (no extra history
+ * entry). No localStorage needed any more — the URL preserves state.
  */
 
 import { html, api } from '../ui/common.js';
@@ -21,8 +23,6 @@ import { usePluginParams } from '../ui/plugin-params.js';
 // the vertical movement, finished within a short window.
 const SWIPE_MIN_PX = 50;
 const SWIPE_MAX_MS = 700;
-
-const LAST_KEY = 'raspimidihub:lastController';
 
 function ControllerSurface({ instance, pluginData, pluginDisplays }) {
     const {
@@ -61,15 +61,6 @@ export function ControllerPage({ pluginDisplays, showToast, selectedId, onSelect
     const [instances, setInstances] = useState([]);
     const [pluginData, setPluginData] = useState(null);
 
-    // Persist current selection to localStorage as the "last viewed".
-    // The router URL is the source of truth while navigating; localStorage
-    // is the fallback when the user lands on /controller (no id in URL).
-    useEffect(() => {
-        if (selectedId) {
-            try { localStorage.setItem(LAST_KEY, selectedId); } catch {}
-        }
-    }, [selectedId]);
-
     // Public setter: notifies the router; the URL update flows back as
     // a new selectedId prop on the next render.
     const setSelectedId = useCallback((id) => {
@@ -87,16 +78,11 @@ export function ControllerPage({ pluginDisplays, showToast, selectedId, onSelect
                 setPluginData(null);
                 return;
             }
-            // If the URL has no id (or an id not in the list), fall back
-            // to the last-viewed in localStorage, then the first instance.
+            // If the URL has no id (or an id not in the list), default to
+            // the first instance via replaceState — no new history entry.
             const haveValid = selectedId && controllers.some((c) => c.id === selectedId);
-            if (!haveValid) {
-                const stored = (() => { try { return localStorage.getItem(LAST_KEY); } catch { return null; } })();
-                const hasStored = stored && controllers.some((c) => c.id === stored);
-                const id = hasStored ? stored : controllers[0].id;
-                // Auto-default → replace, not push. User-driven selection
-                // via the dropdown / arrows pushes (default behaviour).
-                if (onSelect) onSelect(id, { replace: true });
+            if (!haveValid && onSelect) {
+                onSelect(controllers[0].id, { replace: true });
             }
         } catch {}
     }, [selectedId, onSelect]);

@@ -186,10 +186,7 @@ function App() {
             onClose=${() => { setSelectedDeviceId(null); refresh(); }}
             showToast=${showToast} refresh=${refresh}
             pluginDisplays=${pluginDisplays}
-            onJumpToController=${(instanceId) => {
-                try { localStorage.setItem('raspimidihub:lastController', instanceId); } catch {}
-                navigate({ tab: 'controller', controllerId: instanceId });
-            }} />`}
+            onJumpToController=${(instanceId) => navigate({ tab: 'controller', controllerId: instanceId })} />`}
         <${Toast} message=${toast} />
     `;
 }

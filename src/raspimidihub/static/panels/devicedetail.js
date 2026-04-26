@@ -309,14 +309,16 @@ export function DeviceDetailPanel({ device, onClose, showToast, refresh, pluginD
                     description AND the Inputs descriptor list at the bottom. */ ''}
                 ${isPlugin && pluginData && html`
                     <div class="card">
-                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:6px">
-                            <h3 style="margin:0;flex:1">Plugin Config</h3>
-                            ${pluginData.type && pluginData.type.startsWith('controller_') && onJumpToController && html`<button
-                                style="width:24px;height:24px;border-radius:50%;border:1px solid var(--text-dim);background:none;color:var(--text-dim);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0"
-                                title="Open in fullscreen Controller view"
-                                onclick=${() => onJumpToController(device.plugin_instance_id)}>${IconMaximize}</button>`}
-                            ${(pluginData.help || (pluginData.inputs && pluginData.inputs.length)) && html`<button style="width:24px;height:24px;border-radius:50%;border:1px solid var(--text-dim);background:none;color:var(--text-dim);font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center"
-                                onclick=${() => setShowHelp(h => !h)}>?</button>`}
+                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+                            <h3 style="margin:0;line-height:24px">Plugin Config</h3>
+                            <div style="display:flex;align-items:center;gap:6px">
+                                ${pluginData.type && pluginData.type.startsWith('controller_') && onJumpToController && html`<button
+                                    style="width:24px;height:24px;border-radius:50%;border:1px solid var(--text-dim);background:none;color:var(--text-dim);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;flex:0 0 auto"
+                                    title="Open in fullscreen Controller view"
+                                    onclick=${() => onJumpToController(device.plugin_instance_id)}>${IconMaximize}</button>`}
+                                ${(pluginData.help || (pluginData.inputs && pluginData.inputs.length)) && html`<button style="width:24px;height:24px;border-radius:50%;border:1px solid var(--text-dim);background:none;color:var(--text-dim);font-size:13px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;flex:0 0 auto"
+                                    onclick=${() => setShowHelp(h => !h)}>?</button>`}
+                            </div>
                         </div>
                         ${showHelp && html`
                             <div style="background:var(--bg);padding:10px;border-radius:6px;margin-bottom:12px">
