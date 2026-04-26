@@ -12,9 +12,15 @@
  */
 
 import { html, api } from '../ui/common.js';
-import { useEffect, useState, useCallback } from '../lib/hooks.module.js';
+import { useEffect, useState, useCallback, useRef } from '../lib/hooks.module.js';
 import { renderParamList } from '../components/renderparam.js';
 import { usePluginParams } from '../ui/plugin-params.js';
+
+// Horizontal-swipe thresholds for instance switching. Need a clear
+// horizontal intent: at least SWIPE_MIN px sideways AND more than 2x
+// the vertical movement, finished within a short window.
+const SWIPE_MIN_PX = 50;
+const SWIPE_MAX_MS = 700;
 
 const LAST_KEY = 'raspimidihub:lastController';
 
@@ -111,7 +117,37 @@ export function ControllerPage({ pluginDisplays, showToast }) {
     const prev = tabIndex > 0 ? instances[tabIndex - 1] : null;
     const next = tabIndex < instances.length - 1 ? instances[tabIndex + 1] : null;
 
-    return html`<div class="page controller-page">
+    // Page-level horizontal swipe to switch instances. Knobs / faders /
+    // buttons / wheels all stopPropagation in their own touchstart, so
+    // a touch that starts on a control never reaches this handler —
+    // adjusting a control wins over swiping. Empty space, the controller
+    // bar, and the surface around cells all bubble up here.
+    const swipeRef = useRef({ x: 0, y: 0, t: 0, active: false });
+    const onTouchStart = useCallback((e) => {
+        const t = e.changedTouches && e.changedTouches[0];
+        if (!t) return;
+        swipeRef.current = { x: t.clientX, y: t.clientY, t: Date.now(), active: true };
+    }, []);
+    const onTouchEnd = useCallback((e) => {
+        const s = swipeRef.current;
+        if (!s.active) return;
+        s.active = false;
+        const t = e.changedTouches && e.changedTouches[0];
+        if (!t) return;
+        const dx = t.clientX - s.x;
+        const dy = t.clientY - s.y;
+        const dt = Date.now() - s.t;
+        if (dt > SWIPE_MAX_MS) return;
+        if (Math.abs(dx) < SWIPE_MIN_PX) return;
+        if (Math.abs(dx) < Math.abs(dy) * 2) return;
+        if (dx < 0 && next) setSelectedId(next.id);
+        else if (dx > 0 && prev) setSelectedId(prev.id);
+    }, [prev, next, setSelectedId]);
+
+    return html`<div class="page controller-page"
+            ontouchstart=${onTouchStart}
+            ontouchend=${onTouchEnd}
+            ontouchcancel=${onTouchEnd}>
         <div class="controller-bar">
             <button class="controller-arrow" disabled=${!prev}
                 onclick=${() => prev && setSelectedId(prev.id)}>‹</button>

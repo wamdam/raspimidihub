@@ -28,7 +28,14 @@ body {
 #app {
     display: flex;
     flex-direction: column;
-    min-height: 100vh;
+    /* Cap at viewport so .main becomes the scroll container (instead
+       of the document). Lets the Controller page suppress its own
+       scrolling without leaking to the document. */
+    height: 100dvh;
+    height: 100vh;  /* fallback for browsers without dvh */
+}
+@supports (height: 100dvh) {
+    #app { height: 100dvh; }
 }
 
 /* --- Header --- */
@@ -59,6 +66,11 @@ body {
     padding-bottom: 72px; /* space for bottom nav */
     overflow-y: auto;
 }
+/* When the Controller page is the active route, suppress vertical
+   scrolling on .main so that finger drags on knobs/wheels can't slide
+   the page, and so the horizontal-swipe gesture for switching
+   instances has unambiguous axis ownership. */
+.main:has(> .controller-page) { overflow: hidden; }
 
 /* --- Bottom Nav --- */
 .bottom-nav {
@@ -828,8 +840,14 @@ body {
 .fader-track.vertical .fader-thumb-val { top: 2px; }
 .fader-track.vertical .fader-fill { left: 50%; bottom: 12px; width: 4px; height: auto; top: auto; margin-left: -2px; margin-top: 0; }
 
-/* Controller fullscreen page */
-.controller-page { padding: 8px 12px 16px; }
+/* Controller fullscreen page — see .main:has(> .controller-page) above
+   for the scroll-suppress on the parent. .controller-page itself just
+   clips so any layout that exceeds the viewport gets cut off rather
+   than scrolling under the user's finger. */
+.controller-page {
+    padding: 8px 12px 16px;
+    overflow: hidden;
+}
 .controller-bar {
     display: flex; align-items: center; gap: 8px; margin-bottom: 12px;
     background: var(--surface);
