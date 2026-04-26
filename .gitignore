@@ -57,3 +57,4 @@ node_modules/
 # Screenshots (allow docs/screenshots/)
 *.png
 !docs/screenshots/*.png
+masquerade.sh
