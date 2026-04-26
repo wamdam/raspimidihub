@@ -21,9 +21,10 @@ WIFI_FAIL_THRESHOLD = 3  # consecutive failures before fallback
 
 async def rate_meter(engine, server) -> None:
     """Broadcast per-port MIDI message rates and CC observatory deltas
-    every second."""
+    every second, and snapshot the SSE broadcast rate for /api/system."""
     while True:
         await asyncio.sleep(1.0)
+        server.sample_sse_rate()
         rates = engine.snapshot_rates()
         if rates:
             await server.send_sse("midi-rates", rates)

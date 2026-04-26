@@ -184,6 +184,8 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
             "hostname": hostname, "version": __version__,
             "ip_addresses": ips, "cpu_temp_c": temp, "ram": ram,
             "uptime_seconds": uptime, "load1": load1,
+            "sse_per_sec": server._sse_per_sec,
+            "sse_clients": len(server._sse_queues),
             "config_fallback": config.fallback_active,
             "default_routing": config.default_routing,
         })

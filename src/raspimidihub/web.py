@@ -103,6 +103,11 @@ class WebServer:
         self.port = port
         self.routes: list[Route] = []
         self._sse_queues: list[asyncio.Queue] = []
+        # SSE traffic meter — incremented per broadcast (one per send_sse,
+        # not per recipient), sampled to _sse_per_sec each second by
+        # runtime.loops.rate_meter so /api/system can report it cheaply.
+        self._sse_count_window = 0
+        self._sse_per_sec = 0
         self._rate_counts: dict[str, list[float]] = defaultdict(list)
         self._server: asyncio.AbstractServer | None = None
     def route(self, method: str, path: str, exact: bool = True):
@@ -122,6 +127,7 @@ class WebServer:
         phone updating while the others sat stale until refresh.
         """
         msg = f"event: {event}\ndata: {json.dumps(data)}\n\n"
+        self._sse_count_window += 1
         for q in self._sse_queues:
             try:
                 q.put_nowait(msg)
@@ -136,6 +142,13 @@ class WebServer:
                     # Still full somehow (race) — skip this event for this client
                     # rather than dropping the client.
                     pass
+
+    def sample_sse_rate(self) -> None:
+        """Roll the broadcast-event counter into _sse_per_sec. Called once
+        per second from runtime.loops.rate_meter so /api/system can read
+        the latest value without doing any work itself."""
+        self._sse_per_sec = self._sse_count_window
+        self._sse_count_window = 0
 
     def _check_rate_limit(self, client: str) -> bool:
         """Returns True if request should be rate-limited."""

@@ -283,7 +283,22 @@ export function SettingsPage({ showToast, showMidiBar, toggleMidiBar }) {
     const [isUpgrading, setIsUpgrading] = useState(false);
     const [soundsOn, setSoundsOn] = useState(getSoundsEnabled());
     useEffect(() => { api('/network').then(setIfaces).catch(() => {}); }, []);
-    useEffect(() => { api('/system').then(s => { setSys(s); setDefaultRouting(s.default_routing || 'all'); }).catch(() => {}); }, []);
+    useEffect(() => {
+        let cancelled = false;
+        const tick = () => {
+            api('/system').then(s => {
+                if (cancelled) return;
+                setSys(s);
+                setDefaultRouting(s.default_routing || 'all');
+            }).catch(() => {});
+        };
+        tick();
+        // Re-poll while Settings is open so the SSE/sec + load gauges
+        // tick live. 2s is slow enough not to add noticeable load,
+        // fast enough to feel responsive.
+        const id = setInterval(tick, 2000);
+        return () => { cancelled = true; clearInterval(id); };
+    }, []);
 
     const changeDefaultRouting = async (val) => {
         setDefaultRouting(val);
@@ -313,6 +328,7 @@ export function SettingsPage({ showToast, showMidiBar, toggleMidiBar }) {
                     <div class="stat"><div class="label">Uptime</div><div class="value">${uptimeStr}</div></div>
                     ${sys.load1 != null && html`<div class="stat"><div class="label">Load (1m)</div><div class="value">${sys.load1}</div></div>`}
                     <div class="stat"><div class="label">RAM</div><div class="value">${sys.ram.available_mb || '?'} / ${sys.ram.total_mb || '?'} MB</div></div>
+                    ${sys.sse_per_sec != null && html`<div class="stat"><div class="label">SSE / sec</div><div class="value">${sys.sse_per_sec}${sys.sse_clients ? html` <span style="color:var(--text-dim);font-size:11px">×${sys.sse_clients}</span>` : ''}</div></div>`}
                     ${(sys.ip_addresses || []).map(ip => html`
                         <div class="stat"><div class="label">${ip.interface}</div><div class="value">${ip.address}</div></div>
                     `)}
