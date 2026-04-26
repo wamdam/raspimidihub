@@ -190,14 +190,8 @@ export function PluginConfigPanel({ instanceId, paramsSchema, params, onParamCha
     return html`<div class=${editing && bgChoice ? `plugin-config-preview bg-${bgChoice}` : ''}>
         ${renderParamList(paramsSchema, params, onParamChange, displayCtx)}
 
-        ${inputs && inputs.length > 0 && html`
-            <div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--surface2)">
-                <div style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--text-dim);margin-bottom:6px">Inputs</div>
-                <div style="font-size:12px;color:var(--text)">${inputs.join(', ')}</div>
-            </div>
-        `}
         ${outputs && outputs.length > 0 && html`
-            <div style="margin-top:8px">
+            <div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--surface2)">
                 <div style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--text-dim);margin-bottom:6px">Outputs</div>
                 <div style="font-size:12px;color:var(--text)">${outputs.join(', ')}</div>
             </div>

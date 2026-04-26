@@ -181,6 +181,8 @@ export function DeviceDetailPanel({ device, onClose, showToast, refresh, pluginD
     const isPlugin = !!device.is_plugin;
     const [pluginData, setPluginData] = useState(null);
     const [showHelp, setShowHelp] = useState(false);
+    const [showSender, setShowSender] = useState(false);
+    const [showMonitor, setShowMonitor] = useState(false);
     const {
         params: pluginParams,
         setParams: setPluginParams,
@@ -301,24 +303,27 @@ export function DeviceDetailPanel({ device, onClose, showToast, refresh, pluginD
                     <button class="panel-close" onclick=${close}>\u2715</button>
                 </div>
 
-                ${isPlugin && html`
-                    <div class="card">
-                        <h3>Ports</h3>
-                        ${device.ports.map(p => html`
-                            <${PortRenameRow} device=${device} port=${p} showToast=${showToast} />
-                        `)}
-                    </div>
-                `}
-
+                ${/* Plugin Config — first for plugins. Help button reveals plugin
+                    description AND the Inputs descriptor list at the bottom. */ ''}
                 ${isPlugin && pluginData && html`
                     <div class="card">
                         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
                             <h3 style="margin:0">Plugin Config</h3>
-                            ${pluginData.help && html`<button style="width:24px;height:24px;border-radius:50%;border:1px solid var(--text-dim);background:none;color:var(--text-dim);font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center"
+                            ${(pluginData.help || (pluginData.inputs && pluginData.inputs.length)) && html`<button style="width:24px;height:24px;border-radius:50%;border:1px solid var(--text-dim);background:none;color:var(--text-dim);font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center"
                                 onclick=${() => setShowHelp(h => !h)}>?</button>`}
                         </div>
-                        ${showHelp && pluginData.help && html`
-                            <div style="font-size:12px;color:var(--text-dim);background:var(--bg);padding:10px;border-radius:6px;margin-bottom:12px;white-space:pre-wrap;line-height:1.5">${pluginData.help}</div>
+                        ${showHelp && html`
+                            <div style="background:var(--bg);padding:10px;border-radius:6px;margin-bottom:12px">
+                                ${pluginData.help && html`
+                                    <div style="font-size:12px;color:var(--text-dim);white-space:pre-wrap;line-height:1.5">${pluginData.help}</div>
+                                `}
+                                ${pluginData.inputs && pluginData.inputs.length > 0 && html`
+                                    <div style="margin-top:${pluginData.help ? '12px' : '0'};padding-top:${pluginData.help ? '10px' : '0'};${pluginData.help ? 'border-top:1px solid var(--surface2);' : ''}">
+                                        <div style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--text-dim);margin-bottom:6px">Inputs</div>
+                                        <div style="font-size:12px;color:var(--text)">${pluginData.inputs.join(', ')}</div>
+                                    </div>
+                                `}
+                            </div>
                         `}
                         <${PluginConfigPanel}
                             instanceId=${device.plugin_instance_id}
@@ -333,6 +338,16 @@ export function DeviceDetailPanel({ device, onClose, showToast, refresh, pluginD
                     </div>
                 `}
 
+                ${/* Ports — second for plugins, first (and only) for hardware
+                    devices with multiple ports. */ ''}
+                ${isPlugin && html`
+                    <div class="card">
+                        <h3>Ports</h3>
+                        ${device.ports.map(p => html`
+                            <${PortRenameRow} device=${device} port=${p} showToast=${showToast} />
+                        `)}
+                    </div>
+                `}
                 ${!isPlugin && device.ports.length > 1 && html`
                     <div class="card">
                         <h3>Ports</h3>
@@ -342,39 +357,56 @@ export function DeviceDetailPanel({ device, onClose, showToast, refresh, pluginD
                     </div>
                 `}
 
+                ${/* MIDI Test Sender — collapsed by default (rarely used during
+                    play; expand on demand). */ ''}
                 ${outPorts.length > 0 && html`
                     <div class="card">
-                        <h3>MIDI Test Sender</h3>
-                        <div style="display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap;margin-bottom:8px">
-                            <${PluginWheel} name="ch" label="Channel" min=${1} max=${16}
-                                value=${sendChannel + 1} onChange=${(_, v) => setSendChannel(v - 1)} />
-                            ${outPorts.length > 1 ? html`
-                                <div class="form-group">
-                                    <label style="font-size:12px;color:var(--text-dim)">Port</label>
-                                    <select value=${sendPort} onChange=${e => setSendPort(+e.target.value)}>
-                                        ${outPorts.map(p => html`<option value=${p.port_id}>${p.name}</option>`)}
-                                    </select>
+                        <button style="background:none;border:none;color:var(--text);font-size:14px;font-weight:600;cursor:pointer;padding:0;display:flex;align-items:center;gap:6px;width:100%;text-transform:uppercase;letter-spacing:1px"
+                            onclick=${() => setShowSender(s => !s)}>
+                            <span style="color:var(--text-dim);font-size:11px">${showSender ? '▼' : '▶'}</span>
+                            <span>MIDI Test Sender</span>
+                        </button>
+                        ${showSender && html`
+                            <div style="margin-top:12px">
+                                <div style="display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap;margin-bottom:8px">
+                                    <${PluginWheel} name="ch" label="Channel" min=${1} max=${16}
+                                        value=${sendChannel + 1} onChange=${(_, v) => setSendChannel(v - 1)} />
+                                    ${outPorts.length > 1 ? html`
+                                        <div class="form-group">
+                                            <label style="font-size:12px;color:var(--text-dim)">Port</label>
+                                            <select value=${sendPort} onChange=${e => setSendPort(+e.target.value)}>
+                                                ${outPorts.map(p => html`<option value=${p.port_id}>${p.name}</option>`)}
+                                            </select>
+                                        </div>
+                                    ` : ''}
                                 </div>
-                            ` : ''}
-                        </div>
-
-                        <${ScrollablePiano} heldNotes=${heldNotes}
-                            onNoteDown=${pianoNoteDown} onNoteUp=${pianoNoteUp}
-                            pianoKeys=${pianoKeys} />
-
-                        <div style="display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap">
-                            <${PluginWheel} name="cc" label="CC #" min=${0} max=${127}
-                                value=${ccNum} onChange=${(_, v) => setCcNum(v)} />
-                            <${PluginFader} name="ccval" label="Value" min=${0} max=${127}
-                                value=${ccVal} onChange=${(_, v) => sendCC(v)} />
-                        </div>
+                                <${ScrollablePiano} heldNotes=${heldNotes}
+                                    onNoteDown=${pianoNoteDown} onNoteUp=${pianoNoteUp}
+                                    pianoKeys=${pianoKeys} />
+                                <div style="display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap">
+                                    <${PluginWheel} name="cc" label="CC #" min=${0} max=${127}
+                                        value=${ccNum} onChange=${(_, v) => setCcNum(v)} />
+                                    <${PluginFader} name="ccval" label="Value" min=${0} max=${127}
+                                        value=${ccVal} onChange=${(_, v) => sendCC(v)} />
+                                </div>
+                            </div>
+                        `}
                     </div>
                 `}
 
+                ${/* MIDI Monitor — collapsed by default. */ ''}
                 <div class="card">
-                    <h3>MIDI Monitor</h3>
-                    <div class="midi-last" ref=${lastEventRef}>Waiting for MIDI...</div>
-                    <div class="midi-monitor" ref=${monitorRef}></div>
+                    <button style="background:none;border:none;color:var(--text);font-size:14px;font-weight:600;cursor:pointer;padding:0;display:flex;align-items:center;gap:6px;width:100%;text-transform:uppercase;letter-spacing:1px"
+                        onclick=${() => setShowMonitor(m => !m)}>
+                        <span style="color:var(--text-dim);font-size:11px">${showMonitor ? '▼' : '▶'}</span>
+                        <span>MIDI Monitor</span>
+                    </button>
+                    ${showMonitor && html`
+                        <div style="margin-top:12px">
+                            <div class="midi-last" ref=${lastEventRef}>Waiting for MIDI...</div>
+                            <div class="midi-monitor" ref=${monitorRef}></div>
+                        </div>
+                    `}
                 </div>
 
                 ${isPlugin && html`
