@@ -33,11 +33,9 @@ cell, or arm "L" and twist a hardware knob to capture a binding."""
 
     params = [
         DropPad("pad", "DROP"),
-        Button("edit_labels", "Edit names", color="blue"),
         LayoutGrid(
             "controller", "",
             cols=6, rows=3,
-            edit_param="edit_labels",
             labels_param="cell_labels",
             bindings_param="cell_bindings",
             learn_param="cell_learn",

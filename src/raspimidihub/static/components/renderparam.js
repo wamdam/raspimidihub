@@ -15,6 +15,7 @@ import { PluginCurveEditor } from './curveeditor.js';
 import { PluginNoteSelect } from './noteselect.js';
 import { PluginChannelSelect } from './channelselect.js';
 import { PluginGroup } from './group.js';
+import { PluginLayoutGrid } from './layoutgrid.js';
 import { DisplayMeter, DisplayScope } from './display.js';
 
 // =======================================================================
@@ -98,84 +99,10 @@ export function renderParam(param, values, onChange, allValues, displayCtx) {
                 min=${param.min} max=${param.max} value=${xy}
                 onChange=${onChange} />`;
         }
-        case 'layoutgrid': {
-            const editing = param.edit_param ? !!values[param.edit_param] : false;
-            const labels = (param.labels_param && values[param.labels_param]) || {};
-            const bindings = (param.bindings_param && values[param.bindings_param]) || {};
-            const learnTarget = (param.learn_param && values[param.learn_param]) || '';
-            const setLabel = (cellName, newLabel) => {
-                const updated = { ...labels, [cellName]: newLabel };
-                onChange(param.labels_param, updated);
-            };
-            const setBinding = (cellName, key, raw) => {
-                const cur = bindings[cellName] || {};
-                const parsed = parseInt(raw, 10);
-                const next = { ...cur, [key]: Number.isFinite(parsed) ? parsed : null };
-                onChange(param.bindings_param, { ...bindings, [cellName]: next });
-            };
-            const toggleLearn = (cellName) => {
-                onChange(param.learn_param, learnTarget === cellName ? '' : cellName);
-            };
-
-            // Edit mode renders a flat scrollable list — one row per cell.
-            // Trying to cram name + ch + cc + L into the play-mode grid
-            // (typically 8 columns wide on a phone) produced unreadable
-            // 5-px-wide inputs. The flat list gives each row full width.
-            if (editing && param.labels_param) {
-                return html`<div class="layout-grid-editing">
-                    ${param.cells.map(c => {
-                        const labelOv = labels[c.param.name];
-                        const effectiveLabel = labelOv != null && labelOv !== '' ? labelOv : c.param.label;
-                        const bindOv = bindings[c.param.name] || {};
-                        const defCh = c.channel != null ? c.channel + 1 : null;
-                        const defCc = c.cc;
-                        const ovCh = (bindOv.channel != null && bindOv.channel !== '') ? bindOv.channel + 1 : null;
-                        const ovCc = (bindOv.cc != null && bindOv.cc !== '') ? bindOv.cc : null;
-                        const isLearning = learnTarget === c.param.name;
-                        return html`<div class="layout-edit-row ${isLearning ? 'learning' : ''}">
-                            <span class="layout-edit-default" title=${`Default: ${c.param.label}`}>${c.param.label}</span>
-                            <input class="layout-edit-name" type="text"
-                                value=${effectiveLabel === c.param.label ? '' : effectiveLabel}
-                                placeholder=${c.param.label}
-                                onInput=${(e) => setLabel(c.param.name, e.target.value)} />
-                            ${param.bindings_param && (defCh != null || defCc != null) ? html`
-                                <input class="layout-edit-bind" type="number" min="1" max="16"
-                                    value=${ovCh != null ? ovCh : ''}
-                                    placeholder=${defCh != null ? `${defCh}` : 'ch'}
-                                    title="Channel (1-16)"
-                                    onInput=${(e) => setBinding(c.param.name, 'channel',
-                                        e.target.value === '' ? null : (parseInt(e.target.value, 10) - 1))} />
-                                <input class="layout-edit-bind" type="number" min="0" max="127"
-                                    value=${ovCc != null ? ovCc : ''}
-                                    placeholder=${defCc != null ? `${defCc}` : 'cc'}
-                                    title="CC (0-127)"
-                                    onInput=${(e) => setBinding(c.param.name, 'cc',
-                                        e.target.value === '' ? null : parseInt(e.target.value, 10))} />
-                                ${param.learn_param ? html`
-                                    <button type="button" class="layout-edit-learn ${isLearning ? 'on' : ''}"
-                                        title=${isLearning ? 'Listening — tap to cancel' : 'MIDI Learn'}
-                                        onclick=${() => toggleLearn(c.param.name)}>${isLearning ? '…' : 'L'}</button>` : null}
-                            ` : null}
-                        </div>`;
-                    })}
-                </div>`;
-            }
-
-            // Play mode: positioned grid with optional label overrides.
-            const gridStyle = `display:grid;grid-template-columns:repeat(${param.cols}, minmax(0, 1fr));grid-template-rows:repeat(${param.rows}, auto);gap:6px`;
-            return html`<div class="layout-grid" style=${gridStyle}>
-                ${param.cells.map(c => {
-                    const cellStyle = `grid-column: ${c.col} / span ${c.span_cols}; grid-row: ${c.row} / span ${c.span_rows}; min-width: 0`;
-                    const labelOv = labels[c.param.name];
-                    const patchedParam = labelOv != null && labelOv !== ''
-                        ? { ...c.param, label: labelOv }
-                        : c.param;
-                    return html`<div class="layout-cell" style=${cellStyle}>
-                        ${renderParam(patchedParam, values, onChange, allValues, displayCtx)}
-                    </div>`;
-                })}
-            </div>`;
-        }
+        case 'layoutgrid':
+            return html`<${PluginLayoutGrid} param=${param} values=${values}
+                onChange=${onChange} displayCtx=${displayCtx}
+                renderParam=${renderParam} />`;
         default:
             return html`<div style="color:var(--text-dim);font-size:12px">Unknown: ${param.type}</div>`;
     }

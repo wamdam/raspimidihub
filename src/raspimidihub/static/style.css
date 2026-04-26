@@ -967,6 +967,37 @@ body {
 }
 .layout-cell .fader-group { width: 100%; }
 .layout-cell .rubber-btn, .layout-cell .wheel-container { width: 100%; }
+/* Wrap so the small Edit toggle can sit at the bottom-right of the
+   grid without disturbing the cell positioning. */
+.layout-grid-wrap { display: flex; flex-direction: column; align-items: stretch; gap: 6px; }
+.layout-edit-toggle {
+    align-self: flex-end;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.10);
+    border-radius: 4px;
+    color: var(--text-dim);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    padding: 4px 10px;
+    cursor: pointer;
+}
+.layout-edit-toggle:hover { color: var(--text); border-color: rgba(255,255,255,0.2); }
+.layout-edit-done {
+    align-self: stretch;
+    background: var(--accent);
+    border: 1px solid rgba(255,255,255,0.18);
+    border-radius: 4px;
+    color: #1a0808;
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    padding: 8px;
+    cursor: pointer;
+    margin-top: 6px;
+}
+
 /* Edit mode: flat scrollable list, one row per cell. The play-mode
    grid is too narrow on phones to fit name + ch + cc + L inline per
    cell — they collapse to unreadable squares. The flat list gives

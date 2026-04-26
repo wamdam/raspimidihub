@@ -43,11 +43,9 @@ on-screen cell."""
 
     params = [
         DropPad("pad", "DROP"),
-        Button("edit_labels", "Edit names", color="blue"),
         LayoutGrid(
             "controller", "",
             cols=4, rows=5,
-            edit_param="edit_labels",
             labels_param="cell_labels",
             bindings_param="cell_bindings",
             learn_param="cell_learn",

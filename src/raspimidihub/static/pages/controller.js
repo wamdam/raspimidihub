@@ -42,6 +42,9 @@ function ControllerSurface({ instance, pluginData, pluginDisplays }) {
     const displayCtx = {
         outputs: pluginData.display_outputs,
         values: (pluginDisplays && pluginDisplays[instance.id]) || {},
+        // ControllerPage is a play surface — never show the LayoutGrid's
+        // edit toggle. Editing happens in the device-detail panel.
+        playOnly: true,
     };
     return html`<div class="controller-surface">
         ${renderParamList(pluginData.params_schema, pluginParams, onPluginParamChange, displayCtx)}

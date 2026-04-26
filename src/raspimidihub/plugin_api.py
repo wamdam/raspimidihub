@@ -296,19 +296,17 @@ class LayoutGrid:
     dispatcher — LayoutGrid is a structural container, not a value-
     holding param.
 
-    `edit_param` / `labels_param`: optional param names the renderer
-    consults so the user can rename cells inline. When the bool param
-    `edit_param` is true, each cell renders as a text input bound to
-    `labels_param[cell.param.name]` (a dict of cell_name -> override
-    label). In display mode, the override label is shown over the
-    schema label when present.
+    `labels_param` / `bindings_param` / `learn_param`: optional names of
+    sibling params holding per-cell user overrides — these ARE server-
+    stored (so renames + rebinds + Learn captures sync across browsers).
+    Edit-mode is purely local React state owned by the JS component, so
+    toggling "Edit cells" on one browser does NOT propagate.
     """
     name: str
     label: str
     cols: int = 8
     rows: int = 4
     cells: list = field(default_factory=list)  # list[LayoutCell]
-    edit_param: str | None = None
     labels_param: str | None = None
     bindings_param: str | None = None
     learn_param: str | None = None  # str-valued: "" idle, "<cell_name>" learning
@@ -331,8 +329,6 @@ class LayoutGrid:
                 for c in self.cells
             ],
         }
-        if self.edit_param:
-            d["edit_param"] = self.edit_param
         if self.labels_param:
             d["labels_param"] = self.labels_param
         if self.bindings_param:
