@@ -1,7 +1,7 @@
 """Controller — FX 6.
 
-Middle-ground 6-wide layout: 6 knobs / 6 vertical faders / 6 buttons.
-Defaults to ch 1 / CC 16-33; overridable per cell.
+6-wide layout: 3 rows of FX knobs / 6 vertical faders / 6 buttons
+(5 rows total). Defaults to ch 1 / CC 16-45; overridable per cell.
 """
 
 from raspimidihub.controller_base import ControllerBase
@@ -17,44 +17,54 @@ from raspimidihub.plugin_api import (
 
 
 class ControllerFx6(ControllerBase):
-    """6-wide FX controller: 6 knobs / 6 faders / 6 buttons."""
+    """6-wide FX controller: 18 knobs / 6 faders / 6 buttons."""
 
     NAME = "Controller — FX 6"
-    DESCRIPTION = "6-wide FX: 6 knobs / 6 faders / 6 buttons (defaults CC 16-33 ch 1)"
+    DESCRIPTION = "6-wide FX: 18 knobs / 6 faders / 6 buttons (defaults CC 16-45 ch 1)"
     AUTHOR = "RaspiMIDIHub"
-    VERSION = "1.0"
+    VERSION = "1.1"
     HELP = """\
-6-wide FX controller. Default bindings on channel 1:
-  - Row 1: 6 FX knobs (FX1..FX6)   -> CC 16..21
-  - Row 2: 6 vertical faders (S1..S6) -> CC 22..27
-  - Row 3: 6 buttons (B1..B6)      -> CC 28..33 (0 / 127)
+6-wide FX controller. Five rows of 6 cells with default bindings on
+channel 1:
+  - Row 1: knobs row A (FX1..FX6)    -> CC 16..21
+  - Row 2: knobs row B (FX7..FX12)   -> CC 22..27
+  - Row 3: knobs row C (FX13..FX18)  -> CC 28..33
+  - Row 4: vertical faders (S1..S6)  -> CC 34..39
+  - Row 5: buttons (B1..B6)          -> CC 40..45 (0 / 127)
 
-Tap "Edit names" to override the cell label, channel and CC of any
-cell, or arm "L" and twist a hardware knob to capture a binding."""
+Tap the EDIT button below the grid to override the cell label,
+channel, CC and (for buttons) the on / off CC values; or tap Learn
+on a row and twist a hardware knob to capture its binding."""
 
     params = [
         DropPad("pad", "DROP"),
         Radio("bg", "Background", ControllerBase.BG_OPTIONS, default="Default", config_only=True),
         LayoutGrid(
             "controller", "",
-            cols=6, rows=3,
+            cols=6, rows=5,
             labels_param="cell_labels",
             bindings_param="cell_bindings",
             learn_param="cell_learn",
             cells=[
-                # Row 1: 6 FX knobs, ch 1 CC 16..21.
+                # Row 1: knobs A — ch 1, CC 16..21.
                 *[LayoutCell(Knob(f"fx{i}", f"FX{i+1}", min=0, max=127, default=64),
                              col=i+1, row=1, channel=0, cc=16+i) for i in range(6)],
-                # Row 2: 6 vertical faders, ch 1 CC 22..27.
+                # Row 2: knobs B — ch 1, CC 22..27.
+                *[LayoutCell(Knob(f"fx{i+6}", f"FX{i+7}", min=0, max=127, default=64),
+                             col=i+1, row=2, channel=0, cc=22+i) for i in range(6)],
+                # Row 3: knobs C — ch 1, CC 28..33.
+                *[LayoutCell(Knob(f"fx{i+12}", f"FX{i+13}", min=0, max=127, default=64),
+                             col=i+1, row=3, channel=0, cc=28+i) for i in range(6)],
+                # Row 4: vertical faders — ch 1, CC 34..39.
                 *[LayoutCell(Fader(f"s{i}", f"S{i+1}", min=0, max=127,
                                    default=80, vertical=True),
-                             col=i+1, row=2, channel=0, cc=22+i) for i in range(6)],
-                # Row 3: 6 buttons, ch 1 CC 28..33.
+                             col=i+1, row=4, channel=0, cc=34+i) for i in range(6)],
+                # Row 5: buttons — ch 1, CC 40..45.
                 *[LayoutCell(Button(f"b{i}", f"B{i+1}", color="green"),
-                             col=i+1, row=3, channel=0, cc=28+i) for i in range(6)],
+                             col=i+1, row=5, channel=0, cc=40+i) for i in range(6)],
             ],
         ),
     ]
 
-    cc_outputs = list(range(16, 34))  # CC 16..33 ch 1
-    outputs = ["CC 16..33 on ch 1 — FX knobs, faders, buttons"]
+    cc_outputs = list(range(16, 46))  # CC 16..45 ch 1
+    outputs = ["CC 16..45 on ch 1 — 18 knobs, 6 faders, 6 buttons"]

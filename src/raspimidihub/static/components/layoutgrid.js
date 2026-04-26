@@ -84,15 +84,13 @@ export function PluginLayoutGrid({ param, values, onChange, displayCtx, renderPa
                     ${hasBindings ? html`<div class="cell-edit-row">
                         <span class="cell-edit-fieldlabel">Ch</span>
                         <input class="cell-edit-num" type="number" min="1" max="16"
-                            value=${ovCh != null ? ovCh : ''}
-                            placeholder=${defCh != null ? `${defCh}` : ''}
+                            value=${ovCh != null ? ovCh : (defCh != null ? defCh : '')}
                             title="Channel (1-16)"
                             onInput=${(e) => setBinding(c.param.name, 'channel',
                                 e.target.value === '' ? null : (parseInt(e.target.value, 10) - 1))} />
                         <span class="cell-edit-fieldlabel">CC</span>
                         <input class="cell-edit-num" type="number" min="0" max="127"
-                            value=${ovCc != null ? ovCc : ''}
-                            placeholder=${defCc != null ? `${defCc}` : ''}
+                            value=${ovCc != null ? ovCc : (defCc != null ? defCc : '')}
                             title="CC (0-127)"
                             onInput=${(e) => setBinding(c.param.name, 'cc',
                                 e.target.value === '' ? null : parseInt(e.target.value, 10))} />
@@ -104,15 +102,13 @@ export function PluginLayoutGrid({ param, values, onChange, displayCtx, renderPa
                     ${isButton && hasBindings ? html`<div class="cell-edit-row">
                         <span class="cell-edit-fieldlabel">On</span>
                         <input class="cell-edit-num" type="number" min="0" max="127"
-                            value=${ovOn != null ? ovOn : ''}
-                            placeholder="127"
+                            value=${ovOn != null ? ovOn : 127}
                             title="CC value when the button is ON (0-127)"
                             onInput=${(e) => setBinding(c.param.name, 'on',
                                 e.target.value === '' ? null : parseInt(e.target.value, 10))} />
                         <span class="cell-edit-fieldlabel">Off</span>
                         <input class="cell-edit-num" type="number" min="0" max="127"
-                            value=${ovOff != null ? ovOff : ''}
-                            placeholder="0"
+                            value=${ovOff != null ? ovOff : 0}
                             title="CC value when the button is OFF (0-127)"
                             onInput=${(e) => setBinding(c.param.name, 'off',
                                 e.target.value === '' ? null : parseInt(e.target.value, 10))} />
