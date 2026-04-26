@@ -1133,9 +1133,10 @@ body {
     cursor: pointer;
 }
 .cell-edit-swap {
+    /* Sits directly to the right of the Off input so it visually
+       belongs with the On / Off pair, not as a row-end action. */
     flex: 0 0 auto;
-    margin-left: auto;
-    width: 36px;
+    width: 30px;
     height: 30px;
     padding: 0;
     background: rgba(0,0,0,0.3);
