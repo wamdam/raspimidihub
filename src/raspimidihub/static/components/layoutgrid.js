@@ -44,10 +44,20 @@ export function PluginLayoutGrid({ param, values, onChange, displayCtx, renderPa
         onChange(param.learn_param, learnTarget === cellName ? '' : cellName);
     };
 
-    // Flat config list — shown in the device-detail panel for any
-    // LayoutGrid that opted in by declaring labels_param / bindings_param
-    // / learn_param. Live cells live on the Controller page.
+    // Config view — shown in the device-detail panel for any LayoutGrid
+    // that opted in by declaring labels_param / bindings_param /
+    // learn_param. Each cell becomes a multi-line card:
+    //
+    //   Knob   [name input]
+    //   Ch [_]  CC [__]                              Learn
+    //
+    //   Button [name input]
+    //   Ch [_]  CC [__]                              Learn
+    //   On [__]  Off [__]
+    //
+    // Live cells live on the Controller page (playOnly).
     if (!playOnly && hasConfigSurface) {
+        const TYPE_LABEL = { knob: 'Knob', fader: 'Fader', button: 'Button', wheel: 'Wheel', xypad: 'XY Pad' };
         return html`<div class="layout-grid-editing">
             ${param.cells.map((c) => {
                 const labelOv = labels[c.param.name];
@@ -59,46 +69,54 @@ export function PluginLayoutGrid({ param, values, onChange, displayCtx, renderPa
                 const ovCc = (bindOv.cc != null && bindOv.cc !== '') ? bindOv.cc : null;
                 const isLearning = learnTarget === c.param.name;
                 const isButton = c.param.type === 'button';
+                const typeLabel = TYPE_LABEL[c.param.type] || c.param.type;
                 const ovOn  = (bindOv.on  != null && bindOv.on  !== '') ? bindOv.on  : null;
                 const ovOff = (bindOv.off != null && bindOv.off !== '') ? bindOv.off : null;
-                return html`<div class="layout-edit-row ${isLearning ? 'learning' : ''}">
-                    <span class="layout-edit-default" title=${`Default: ${c.param.label}`}>${c.param.label}</span>
-                    <input class="layout-edit-name" type="text"
-                        value=${effectiveLabel === c.param.label ? '' : effectiveLabel}
-                        placeholder=${c.param.label}
-                        onInput=${(e) => setLabel(c.param.name, e.target.value)} />
-                    ${param.bindings_param && (defCh != null || defCc != null) ? html`
-                        <input class="layout-edit-bind" type="number" min="1" max="16"
+                const hasBindings = param.bindings_param && (defCh != null || defCc != null);
+                return html`<div class="cell-edit ${isLearning ? 'learning' : ''}">
+                    <div class="cell-edit-row">
+                        <span class="cell-edit-type">${typeLabel}</span>
+                        <input class="cell-edit-name" type="text"
+                            value=${effectiveLabel === c.param.label ? '' : effectiveLabel}
+                            placeholder=${c.param.label}
+                            onInput=${(e) => setLabel(c.param.name, e.target.value)} />
+                    </div>
+                    ${hasBindings ? html`<div class="cell-edit-row">
+                        <span class="cell-edit-fieldlabel">Ch</span>
+                        <input class="cell-edit-num" type="number" min="1" max="16"
                             value=${ovCh != null ? ovCh : ''}
-                            placeholder=${defCh != null ? `${defCh}` : 'ch'}
+                            placeholder=${defCh != null ? `${defCh}` : ''}
                             title="Channel (1-16)"
                             onInput=${(e) => setBinding(c.param.name, 'channel',
                                 e.target.value === '' ? null : (parseInt(e.target.value, 10) - 1))} />
-                        <input class="layout-edit-bind" type="number" min="0" max="127"
+                        <span class="cell-edit-fieldlabel">CC</span>
+                        <input class="cell-edit-num" type="number" min="0" max="127"
                             value=${ovCc != null ? ovCc : ''}
-                            placeholder=${defCc != null ? `${defCc}` : 'cc'}
+                            placeholder=${defCc != null ? `${defCc}` : ''}
                             title="CC (0-127)"
                             onInput=${(e) => setBinding(c.param.name, 'cc',
                                 e.target.value === '' ? null : parseInt(e.target.value, 10))} />
-                        ${isButton ? html`
-                            <input class="layout-edit-bind" type="number" min="0" max="127"
-                                value=${ovOn != null ? ovOn : ''}
-                                placeholder="on 127"
-                                title="CC value when button is ON (0-127)"
-                                onInput=${(e) => setBinding(c.param.name, 'on',
-                                    e.target.value === '' ? null : parseInt(e.target.value, 10))} />
-                            <input class="layout-edit-bind" type="number" min="0" max="127"
-                                value=${ovOff != null ? ovOff : ''}
-                                placeholder="off 0"
-                                title="CC value when button is OFF (0-127)"
-                                onInput=${(e) => setBinding(c.param.name, 'off',
-                                    e.target.value === '' ? null : parseInt(e.target.value, 10))} />
-                        ` : null}
                         ${param.learn_param ? html`
-                            <button type="button" class="layout-edit-learn ${isLearning ? 'on' : ''}"
-                                title=${isLearning ? 'Listening — tap to cancel' : 'MIDI Learn'}
-                                onclick=${() => toggleLearn(c.param.name)}>${isLearning ? '…' : 'L'}</button>` : null}
-                    ` : null}
+                            <button type="button" class="cell-edit-learn ${isLearning ? 'on' : ''}"
+                                title=${isLearning ? 'Listening for incoming CC — tap to cancel' : 'Tap, then twist a hardware knob to capture its (channel, cc)'}
+                                onclick=${() => toggleLearn(c.param.name)}>${isLearning ? 'Listening…' : 'Learn'}</button>` : null}
+                    </div>` : null}
+                    ${isButton && hasBindings ? html`<div class="cell-edit-row">
+                        <span class="cell-edit-fieldlabel">On</span>
+                        <input class="cell-edit-num" type="number" min="0" max="127"
+                            value=${ovOn != null ? ovOn : ''}
+                            placeholder="127"
+                            title="CC value when the button is ON (0-127)"
+                            onInput=${(e) => setBinding(c.param.name, 'on',
+                                e.target.value === '' ? null : parseInt(e.target.value, 10))} />
+                        <span class="cell-edit-fieldlabel">Off</span>
+                        <input class="cell-edit-num" type="number" min="0" max="127"
+                            value=${ovOff != null ? ovOff : ''}
+                            placeholder="0"
+                            title="CC value when the button is OFF (0-127)"
+                            onInput=${(e) => setBinding(c.param.name, 'off',
+                                e.target.value === '' ? null : parseInt(e.target.value, 10))} />
+                    </div>` : null}
                 </div>`;
             })}
         </div>`;
