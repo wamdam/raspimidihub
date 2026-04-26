@@ -2,6 +2,7 @@
  * Render dispatcher — turns a param schema into the right component.
  */
 
+import { useState } from '../lib/hooks.module.js';
 import { html } from './common.js';
 import { PluginWheel } from './wheel.js';
 import { PluginKnob } from './knob.js';
@@ -131,8 +132,12 @@ export function renderParamGroup(items, values, onChange, displayCtx, cols) {
         inlineRun = [];
     };
     const playOnly = !!(displayCtx && displayCtx.playOnly);
+    const editing = !!(displayCtx && displayCtx.editing);
     for (const p of items) {
-        if (playOnly && p.config_only) continue;
+        // config_only params (e.g. background colour picker) are visible
+        // only while the user is in Edit mode in the device-detail panel.
+        // Hidden in play mode AND in normal-view config panel.
+        if (p.config_only && !editing) continue;
         const rendered = renderParam(p, values, onChange, values, displayCtx);
         if (!rendered) continue;
         if (INLINE_TYPES.has(p.type)) inlineRun.push(applySpan(rendered, p.span));
@@ -144,10 +149,10 @@ export function renderParamGroup(items, values, onChange, displayCtx, cols) {
 
 export function renderParamList(params, values, onChange, displayCtx) {
     if (!params) return null;
-    const playOnly = !!(displayCtx && displayCtx.playOnly);
+    const editing = !!(displayCtx && displayCtx.editing);
     const expanded = [];
     for (const p of params) {
-        if (playOnly && p.config_only) continue;
+        if (p.config_only && !editing) continue;
         if (p.type === 'group') expanded.push({ _isGroup: true, title: p.title, children: p.children, cols: p.cols });
         else expanded.push(p);
     }
@@ -177,8 +182,12 @@ export function renderParamList(params, values, onChange, displayCtx) {
 }
 
 export function PluginConfigPanel({ instanceId, paramsSchema, params, onParamChange, inputs, outputs, ccInputs, displayOutputs, displayValues }) {
-    const displayCtx = { outputs: displayOutputs, values: displayValues };
-    return html`<div>
+    const [editing, setEditing] = useState(false);
+    // Live preview of the per-instance background while editing — apply
+    // the same .bg-<name> class the Controller fullscreen page uses.
+    const bgChoice = editing ? ((params && params.bg) || 'Default').toString().toLowerCase() : '';
+    const displayCtx = { outputs: displayOutputs, values: displayValues, editing, setEditing };
+    return html`<div class=${editing && bgChoice ? `plugin-config-preview bg-${bgChoice}` : ''}>
         ${renderParamList(paramsSchema, params, onParamChange, displayCtx)}
 
         ${inputs && inputs.length > 0 && html`

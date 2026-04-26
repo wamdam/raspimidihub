@@ -860,16 +860,26 @@ body {
 }
 /* Eight per-instance dark backgrounds. Picked via the Radio param
    "bg" on each Controller; the JS lower-cases the choice and tags
-   .controller-page with `.bg-<name>`. All gradients stay deep so cell
-   metalwork keeps its contrast. */
-.controller-page.bg-default { background: var(--bg); }
-.controller-page.bg-navy    { background: linear-gradient(180deg, #0a1838 0%, #050a18 100%); }
-.controller-page.bg-forest  { background: linear-gradient(180deg, #0e2a1c 0%, #051208 100%); }
-.controller-page.bg-wine    { background: linear-gradient(180deg, #2a0f18 0%, #14060c 100%); }
-.controller-page.bg-plum    { background: linear-gradient(180deg, #20102a 0%, #0e0618 100%); }
-.controller-page.bg-teal    { background: linear-gradient(180deg, #0a2a2c 0%, #061214 100%); }
-.controller-page.bg-sienna  { background: linear-gradient(180deg, #2a1810 0%, #14080a 100%); }
-.controller-page.bg-slate   { background: linear-gradient(180deg, #1f2630 0%, #0c1018 100%); }
+   the surface element with `.bg-<name>`. The gradient is published
+   on a CSS custom property so any surface (Controller fullscreen
+   page OR the device-detail panel's edit-mode preview) can pick it
+   up with the same one-liner: `background: var(--bg-theme, var(--bg));`. */
+.bg-default { --bg-theme: var(--bg); }
+.bg-navy    { --bg-theme: linear-gradient(180deg, #0a1838 0%, #050a18 100%); }
+.bg-forest  { --bg-theme: linear-gradient(180deg, #0e2a1c 0%, #051208 100%); }
+.bg-wine    { --bg-theme: linear-gradient(180deg, #2a0f18 0%, #14060c 100%); }
+.bg-plum    { --bg-theme: linear-gradient(180deg, #20102a 0%, #0e0618 100%); }
+.bg-teal    { --bg-theme: linear-gradient(180deg, #0a2a2c 0%, #061214 100%); }
+.bg-sienna  { --bg-theme: linear-gradient(180deg, #2a1810 0%, #14080a 100%); }
+.bg-slate   { --bg-theme: linear-gradient(180deg, #1f2630 0%, #0c1018 100%); }
+.controller-page[class*="bg-"]      { background: var(--bg-theme, var(--bg)); }
+.plugin-config-preview[class*="bg-"] {
+    background: var(--bg-theme, var(--bg));
+    border-radius: 6px;
+    padding: 8px;
+    margin: -8px;
+    transition: background 0.15s ease;
+}
 .controller-bar {
     display: flex; align-items: center; gap: 8px; margin-bottom: 12px;
     background: var(--surface);

@@ -3,23 +3,28 @@
  * Button / XYPad) with an in-place "Edit" mode that swaps the grid for
  * a flat scrollable list of cell-rename / channel / cc / Learn rows.
  *
- * Edit mode is local React state, not a server-stored param — toggling
- * it on this browser does NOT propagate to other connected browsers
- * (UI mode, not data). Renames / rebinds / Learn captures still flow
- * through `labels_param` / `bindings_param` / `learn_param` which ARE
- * server-stored, so those changes propagate.
+ * Edit state is owned by `PluginConfigPanel` and threaded through
+ * `displayCtx.editing` + `displayCtx.setEditing`. That way the panel
+ * can simultaneously show config_only params (e.g. background colour)
+ * and apply a live bg preview, while LayoutGrid still owns the Edit /
+ * Save toggle visually. The state is panel-local, so toggling on this
+ * browser does NOT propagate to other connected browsers — UI mode,
+ * not data. Renames / rebinds / Learn captures DO propagate through
+ * the server-stored `labels_param` / `bindings_param` / `learn_param`.
  *
- * The `playOnly` prop (passed via `displayCtx.playOnly`) suppresses the
- * Edit toggle entirely — used by the Controller fullscreen page where
- * the goal is performance, not configuration.
+ * `displayCtx.playOnly` suppresses the Edit toggle entirely — used by
+ * the Controller fullscreen page where the goal is performance.
  */
 
-import { useState } from '../lib/hooks.module.js';
 import { html } from './common.js';
 
 export function PluginLayoutGrid({ param, values, onChange, displayCtx, renderParam }) {
     const playOnly = !!(displayCtx && displayCtx.playOnly);
-    const [editing, setEditing] = useState(false);
+    // Edit state is owned by PluginConfigPanel (so it can show/hide
+    // config_only params and apply the bg preview). LayoutGrid just
+    // reads the flag and toggles via the setter.
+    const editing = !!(displayCtx && displayCtx.editing);
+    const setEditing = displayCtx && displayCtx.setEditing;
 
     const labels = (param.labels_param && values[param.labels_param]) || {};
     const bindings = (param.bindings_param && values[param.bindings_param]) || {};
@@ -41,7 +46,7 @@ export function PluginLayoutGrid({ param, values, onChange, displayCtx, renderPa
         onChange(param.learn_param, learnTarget === cellName ? '' : cellName);
     };
 
-    const canEdit = !playOnly && (param.labels_param || param.bindings_param || param.learn_param);
+    const canEdit = !playOnly && setEditing && (param.labels_param || param.bindings_param || param.learn_param);
 
     // Edit mode: flat list, full-width rows.
     if (editing && canEdit) {
@@ -81,7 +86,7 @@ export function PluginLayoutGrid({ param, values, onChange, displayCtx, renderPa
                     ` : null}
                 </div>`;
             })}
-            <button type="button" class="layout-edit-done" onclick=${() => setEditing(false)}>Done</button>
+            <button type="button" class="layout-edit-done" onclick=${() => setEditing(false)}>Save</button>
         </div>`;
     }
 
