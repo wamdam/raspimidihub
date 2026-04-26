@@ -278,6 +278,56 @@ no-hosts
             log.error("%s pids %s survived SIGKILL", executable,
                       cls._find_pids(executable, required_arg))
 
+    @staticmethod
+    def _claim_wlan0_for_ap() -> None:
+        """Detach wlan0 from NetworkManager and assign the AP IP.
+
+        Idempotent — safe to call multiple times. Used both on the first
+        bring-up and during the retry path when the initial hostapd
+        spawn loses a race with wpa_supplicant releasing the interface.
+        """
+        _run(["nmcli", "device", "set", WLAN_IFACE, "managed", "no"], check=False)
+        _run(["ip", "addr", "flush", "dev", WLAN_IFACE], check=False)
+        _run(["ip", "addr", "add", f"{AP_IP}/24", "dev", WLAN_IFACE], check=False)
+        _run(["ip", "link", "set", WLAN_IFACE, "up"], check=False)
+
+    @classmethod
+    def _spawn_hostapd(cls) -> bool:
+        """Start hostapd in background mode. Returns True iff wlan0 enters
+        type=AP within 3 s of the spawn returning.
+
+        On any failure (non-zero exit, silent death, wlan0 stuck in
+        managed) the captured stderr is logged — without this the parent
+        process sees a clean return and we get a mystery dead AP.
+        """
+        try:
+            r = subprocess.run(
+                ["hostapd", "-B", str(HOSTAPD_CONF)],
+                capture_output=True, text=True, timeout=10,
+            )
+        except subprocess.TimeoutExpired:
+            log.error("hostapd -B timed out — interface likely stuck")
+            return False
+
+        if r.returncode != 0:
+            log.error("hostapd exited %d during spawn — stderr: %s",
+                      r.returncode,
+                      (r.stderr or "").strip() or "(empty)")
+            return False
+
+        # `hostapd -B` daemonizes only after init succeeds; even so, the
+        # kernel mode flip happens asynchronously. Poll until wlan0
+        # reports type=AP, or give up after 3 s.
+        deadline = time.monotonic() + 3.0
+        while time.monotonic() < deadline:
+            if cls._wlan_mode() == "AP":
+                return True
+            time.sleep(0.1)
+
+        log.error("hostapd reported success but wlan0 stayed in mode=%r",
+                  cls._wlan_mode())
+        return False
+
     def start_ap(self, ssid: str = "", password: str = "midihub1"):
         """Bring up WiFi AP mode. Idempotent.
 
@@ -342,10 +392,7 @@ no-hosts
         # restarted. Replacing dnsmasq alone shouldn't blink the IP — that
         # would make avahi withdraw + re-register and confuse clients.
         if not hostapd_ok:
-            _run(["nmcli", "device", "set", WLAN_IFACE, "managed", "no"], check=False)
-            _run(["ip", "addr", "flush", "dev", WLAN_IFACE], check=False)
-            _run(["ip", "addr", "add", f"{AP_IP}/24", "dev", WLAN_IFACE], check=False)
-            _run(["ip", "link", "set", WLAN_IFACE, "up"], check=False)
+            self._claim_wlan0_for_ap()
 
             HOSTAPD_CONF.parent.mkdir(parents=True, exist_ok=True)
             HOSTAPD_CONF.write_text(candidate_hostapd)
@@ -356,19 +403,19 @@ no-hosts
             # daemonized hostapd (and any extra strays).
             _run(["systemctl", "stop", "hostapd"], check=False)
             self._kill_and_wait("hostapd", str(HOSTAPD_CONF))
-            _run(["hostapd", "-B", str(HOSTAPD_CONF)], check=False)
 
-            # Verify the new hostapd actually drove wlan0 into AP mode.
-            # If it didn't, the spawn silently failed and we'd have been
-            # back to "phone connects then immediately disconnects".
-            deadline = time.monotonic() + 3.0
-            while time.monotonic() < deadline:
-                if self._wlan_mode() == "AP":
-                    break
-                time.sleep(0.1)
-            else:
-                log.error("hostapd spawned but wlan0 stayed in mode=%r after 3 s",
-                          self._wlan_mode())
+            if not self._spawn_hostapd():
+                # First attempt failed — most likely because NM /
+                # wpa_supplicant hadn't finished releasing wlan0 yet
+                # (visible at fresh boot only). Bounce the interface,
+                # let NM settle, and try once more.
+                log.warning("hostapd first spawn failed; bouncing wlan0 and retrying")
+                self._kill_and_wait("hostapd", str(HOSTAPD_CONF))
+                _run(["ip", "link", "set", WLAN_IFACE, "down"], check=False)
+                time.sleep(1.5)
+                self._claim_wlan0_for_ap()
+                if not self._spawn_hostapd():
+                    log.error("hostapd retry also failed — AP is not running")
 
         if not dnsmasq_ok:
             DNSMASQ_AP_CONF.parent.mkdir(parents=True, exist_ok=True)

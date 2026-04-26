@@ -329,8 +329,10 @@ def fake_fs(tmp_path, monkeypatch):
 
 
 def _stub_helpers(monkeypatch, hostapd_pids: list[int],
-                  dnsmasq_pids: list[int], wlan_mode: str):
-    """Pin _find_pids / _wlan_mode return values for start_ap tests."""
+                  dnsmasq_pids: list[int], wlan_mode: str,
+                  spawn_ok: bool = True):
+    """Pin _find_pids / _wlan_mode / _spawn_hostapd return values for
+    start_ap tests."""
     def find(executable, required_arg, **kw):
         if executable == "hostapd":
             return list(hostapd_pids)
@@ -341,6 +343,8 @@ def _stub_helpers(monkeypatch, hostapd_pids: list[int],
     monkeypatch.setattr(WifiManager, "_find_pids", staticmethod(find))
     monkeypatch.setattr(WifiManager, "_wlan_mode",
                         staticmethod(lambda: wlan_mode))
+    monkeypatch.setattr(WifiManager, "_spawn_hostapd",
+                        classmethod(lambda cls: spawn_ok))
     # Each call advances monotonic by 1 s — guarantees every wait loop
     # exits within a handful of iterations regardless of its deadline.
     clock = {"t": 0.0}
@@ -387,14 +391,16 @@ class TestStartApRestartPath:
         fake_fs.dnsmasq.write_text(m._render_dnsmasq_conf())
 
         # Reproduces "no hostapd / wlan0=managed" — the user's exact failure
+        spawned = {"n": 0}
         _stub_helpers(monkeypatch, hostapd_pids=[],
                       dnsmasq_pids=[101], wlan_mode="managed")
+        monkeypatch.setattr(WifiManager, "_spawn_hostapd",
+                            classmethod(lambda cls: spawned.update(n=spawned["n"] + 1) or True))
 
         m.start_ap(ssid="MyAP", password="midihub1")
 
         assert ("hostapd", str(fake_fs.hostapd)) in stub_kill
-        assert any(c[:2] == ["hostapd", "-B"] for c in stub_run), \
-            "expected fresh hostapd spawn"
+        assert spawned["n"] == 1, "expected fresh hostapd spawn via _spawn_hostapd"
 
     def test_restarts_when_wlan_in_managed_even_if_pid_present(
             self, monkeypatch, fake_fs, stub_run, stub_kill):
@@ -422,15 +428,18 @@ class TestStartApRestartPath:
             m._render_hostapd_conf("MyAP", "midihub1", 11))
         fake_fs.dnsmasq.write_text(m._render_dnsmasq_conf())
 
+        spawned = {"n": 0}
         _stub_helpers(monkeypatch, hostapd_pids=[100, 101],
                       dnsmasq_pids=[200], wlan_mode="AP")
+        monkeypatch.setattr(WifiManager, "_spawn_hostapd",
+                            classmethod(lambda cls: spawned.update(n=spawned["n"] + 1) or True))
 
         m.start_ap(ssid="MyAP", password="midihub1")
 
         assert ("hostapd", str(fake_fs.hostapd)) in stub_kill
         # Both old pids must be killed before respawn — _kill_and_wait
         # iterates over _find_pids which we stubbed to return both.
-        assert any(c[:2] == ["hostapd", "-B"] for c in stub_run)
+        assert spawned["n"] == 1
 
     def test_restarts_when_config_changed(
             self, monkeypatch, fake_fs, stub_run, stub_kill):
@@ -484,6 +493,122 @@ class TestStartApRestartPath:
         assert "channel=6" in fake_fs.hostapd.read_text()
         assert ("hostapd", str(fake_fs.hostapd)) in stub_kill
         assert ("dnsmasq", str(fake_fs.dnsmasq)) in stub_kill
+
+
+class TestSpawnHostapd:
+    """The fresh-boot fix: hostapd may silently fail to take wlan0 if NM
+    is still releasing it. We need stderr surfaced and a wlan-mode check."""
+
+    def _stub_run(self, monkeypatch, returncode=0, stderr=""):
+        seen: list[list[str]] = []
+
+        def fake_run(cmd, **kw):
+            seen.append(list(cmd))
+            return SimpleNamespace(returncode=returncode, stdout="", stderr=stderr)
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
+        return seen
+
+    def test_returns_true_when_wlan_enters_ap_mode(self, monkeypatch):
+        self._stub_run(monkeypatch)
+        monkeypatch.setattr(WifiManager, "_wlan_mode",
+                            staticmethod(lambda: "AP"))
+        monkeypatch.setattr(wifi.time, "sleep", lambda s: None)
+        monkeypatch.setattr(wifi.time, "monotonic", lambda: 0.0)
+        assert WifiManager._spawn_hostapd() is True
+
+    def test_returns_false_when_hostapd_exits_nonzero(self, monkeypatch, caplog):
+        self._stub_run(monkeypatch, returncode=1,
+                       stderr="Could not set interface to AP mode")
+        with caplog.at_level("ERROR", logger="raspimidihub.wifi"):
+            assert WifiManager._spawn_hostapd() is False
+        # The stderr must surface in the log — that's the whole point
+        assert any("Could not set interface to AP mode" in r.message
+                   for r in caplog.records)
+
+    def test_returns_false_when_wlan_never_enters_ap(self, monkeypatch, caplog):
+        self._stub_run(monkeypatch)
+        monkeypatch.setattr(WifiManager, "_wlan_mode",
+                            staticmethod(lambda: "managed"))
+        monkeypatch.setattr(wifi.time, "sleep", lambda s: None)
+        # Increment monotonic so the loop terminates
+        clock = {"t": 0.0}
+        monkeypatch.setattr(wifi.time, "monotonic",
+                            lambda: clock.update(t=clock["t"] + 1.0) or clock["t"])
+        with caplog.at_level("ERROR", logger="raspimidihub.wifi"):
+            assert WifiManager._spawn_hostapd() is False
+        assert any("stayed in mode" in r.message for r in caplog.records)
+
+    def test_returns_false_on_spawn_timeout(self, monkeypatch, caplog):
+        def boom(*a, **kw):
+            raise subprocess.TimeoutExpired(cmd="hostapd", timeout=10)
+        monkeypatch.setattr(subprocess, "run", boom)
+        with caplog.at_level("ERROR", logger="raspimidihub.wifi"):
+            assert WifiManager._spawn_hostapd() is False
+
+
+class TestStartApRetryPath:
+    """At fresh boot, hostapd's first spawn can lose a race with NM /
+    wpa_supplicant releasing wlan0. start_ap must retry once after
+    bouncing the interface."""
+
+    def test_retries_when_first_spawn_fails(
+            self, monkeypatch, fake_fs, stub_run, stub_kill):
+        m = WifiManager()
+        # No existing config — fresh boot path
+        monkeypatch.setattr(m, "survey_ap_channel", lambda: 11)
+        _stub_helpers(monkeypatch, hostapd_pids=[],
+                      dnsmasq_pids=[], wlan_mode="managed")
+
+        # First _spawn_hostapd → False, second → True
+        attempts = {"n": 0}
+
+        def fake_spawn(cls=None):  # classmethod
+            attempts["n"] += 1
+            return attempts["n"] >= 2
+
+        monkeypatch.setattr(WifiManager, "_spawn_hostapd",
+                            classmethod(lambda cls: fake_spawn()))
+
+        m.start_ap(ssid="MyAP", password="midihub1")
+
+        assert attempts["n"] == 2, "expected exactly one retry on first failure"
+        # The retry must bounce wlan0 down before respawning
+        assert any(c[:5] == ["ip", "link", "set", "wlan0", "down"]
+                   for c in stub_run), "retry must bounce wlan0 down"
+
+    def test_logs_error_when_retry_also_fails(
+            self, monkeypatch, fake_fs, stub_run, stub_kill, caplog):
+        m = WifiManager()
+        monkeypatch.setattr(m, "survey_ap_channel", lambda: 11)
+        _stub_helpers(monkeypatch, hostapd_pids=[],
+                      dnsmasq_pids=[], wlan_mode="managed")
+
+        monkeypatch.setattr(WifiManager, "_spawn_hostapd",
+                            classmethod(lambda cls: False))
+
+        with caplog.at_level("ERROR", logger="raspimidihub.wifi"):
+            m.start_ap(ssid="MyAP", password="midihub1")
+        assert any("retry also failed" in r.message for r in caplog.records)
+
+    def test_no_retry_when_first_spawn_succeeds(
+            self, monkeypatch, fake_fs, stub_run, stub_kill):
+        m = WifiManager()
+        monkeypatch.setattr(m, "survey_ap_channel", lambda: 11)
+        _stub_helpers(monkeypatch, hostapd_pids=[],
+                      dnsmasq_pids=[], wlan_mode="managed")
+
+        attempts = {"n": 0}
+
+        def fake_spawn(cls=None):
+            attempts["n"] += 1
+            return True
+
+        monkeypatch.setattr(WifiManager, "_spawn_hostapd",
+                            classmethod(lambda cls: fake_spawn()))
+
+        m.start_ap(ssid="MyAP", password="midihub1")
+        assert attempts["n"] == 1, "no retry when first spawn succeeds"
 
 
 class TestStopAp:

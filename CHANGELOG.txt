@@ -29,6 +29,7 @@ Unreleased
 - Fix: Radio buttons - the active pill no longer shifts its neighbours by 1 px when toggled
 - Fix: Note wheel - active value now centred on the indicator
 - Fix: WiFi AP - service restart now heals "no AP" / "two hostapds racing" states (was sometimes leaving the SSID dead or letting clients connect-then-immediately-disconnect)
+- Fix: WiFi AP - first hostapd spawn that loses the race against NetworkManager releasing wlan0 (boot, or switching client → AP) now retries automatically; hostapd's stderr is logged on failure instead of dying silently
 
 
 2026-04-25 - Version 2.0.9
