@@ -15,7 +15,13 @@ from .config import Config
 from .led import LedController
 from .midi_engine import MidiEngine
 from .plugin_host import PluginHost
-from .runtime.loops import loop_lag_meter, rate_meter, watchdog_ping, wifi_watchdog
+from .runtime.loops import (
+    loop_lag_meter,
+    pending_param_flusher,
+    rate_meter,
+    watchdog_ping,
+    wifi_watchdog,
+)
 from .web import WebServer
 from .wifi import WifiManager
 
@@ -258,6 +264,12 @@ async def async_main() -> None:
         # asyncio loop-lag probe — single best signal for "server
         # keeping up with itself", visible as Loop lag in Settings.
         asyncio.ensure_future(loop_lag_meter(server))
+
+        # Drain the plugin host's trailing-edge param coalescer at 20 Hz
+        # so SSE plugin-param traffic stays UI-paced even under a
+        # streaming hardware fader fanned out across multiple Controller
+        # plugins listening on the same CC range.
+        asyncio.ensure_future(pending_param_flusher(plugin_host))
 
         try:
             await engine.run_event_loop()

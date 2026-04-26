@@ -41,6 +41,23 @@ async def rate_meter(engine, server) -> None:
             await server.send_sse("cc-changes", cc_changes)
 
 
+async def pending_param_flusher(plugin_host) -> None:
+    """Drain the plugin host's trailing-edge param coalescer at 20 Hz
+    and the display coalescer at 10 Hz. Plugin threads submit the
+    latest value per (instance, name); these loops fan them out to
+    SSE on the asyncio thread, with the latest value always winning.
+    String-typed param values (DropPad fire→idle and similar state
+    transitions) bypass the queue entirely via emit_now(), so every
+    transition still reaches the UI immediately."""
+    tick = 0
+    while True:
+        await asyncio.sleep(0.05)
+        plugin_host.flush_pending_params()
+        tick += 1
+        if tick % 2 == 0:
+            plugin_host.flush_pending_displays()
+
+
 async def loop_lag_meter(server) -> None:
     """Schedule a wake-up 100 ms out and measure how late the asyncio
     loop actually serviced it. A healthy loop wakes 0-3 ms late;

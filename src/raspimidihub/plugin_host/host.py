@@ -18,6 +18,7 @@ from ..plugin_api import (
     get_defaults,
     params_to_dicts,
 )
+from ..runtime.coalesce import TrailingCoalescer
 from .alsa_client import PluginAlsaClient
 from .clock_bus import ClockBus
 from .instance import PluginInstance
@@ -54,6 +55,15 @@ class PluginHost:
         self._on_display_callback = None  # (instance_id, name, value) -> None
         self._on_param_change_callback = None  # (instance_id, name, value) -> None
         self._latency_cb = None  # set by __main__ to server.record_latency
+        # Trailing-edge coalescer for plugin param + display updates.
+        # See runtime.coalesce.TrailingCoalescer — plugin threads
+        # submit() the latest value; flush_pending_*() runs on the
+        # asyncio loop at 20 Hz / 10 Hz and drains it. Caps SSE
+        # plugin-param / plugin-display traffic per cell to its flusher
+        # rate while guaranteeing the trailing value reaches the UI
+        # within one flush interval of input ceasing.
+        self._param_coalescer = TrailingCoalescer()
+        self._display_coalescer = TrailingCoalescer()
 
     # --- Discovery ---
 
@@ -257,39 +267,33 @@ class PluginHost:
         instance.plugin._send_stop = lambda: _send_transport(MidiEventType.STOP, MIDI_STOP)
         instance.plugin._send_continue = lambda: _send_transport(MidiEventType.CONTINUE, MIDI_CONTINUE)
 
-        # Wire display output callback (throttled — plugins may call this rapidly).
-        # Two-stage filter: identical samples are always dropped (dedup), and
-        # changed samples are rate-capped to 10 Hz per name. With ~3 browsers
-        # connected, every push fans out to 3 socket writes + N json.dumps,
-        # so dropping no-op samples is the cheapest big win.
-        import time as _time
-        _last_display = {}  # name -> (last_time, last_value)
+        # Wire display output through the trailing-edge coalescer.
+        # Plugins may call _notify_display rapidly (a sine-wave scope
+        # sampling at any rate) — coalesced to 10 Hz per (instance,
+        # name); the latest sample always wins, so a meter sitting at
+        # 0 then jumping to 100 lands within 100 ms even if the plugin
+        # emitted many intermediate samples.
+        instance_id_d = instance.id
+        host_self_d = self
         def _on_display(name, value):
-            last_time, last_val = _last_display.get(name, (0.0, object()))
-            if value == last_val:
-                return
-            now = _time.monotonic()
-            if now - last_time < 0.1:
-                return
-            _last_display[name] = (now, value)
-            if self._on_display_callback:
-                self._on_display_callback(instance.id, name, value)
+            host_self_d._display_coalescer.submit((instance_id_d, name), value)
         instance.plugin._notify_display = _on_display
 
-        # Wire param change callback for CC automation UI updates.
-        # Throttle dedupe-style: drop consecutive updates with the same
-        # value within 50 ms (CC-automation flood control). A different
-        # value always passes through immediately so trigger-style
-        # True→False resets aren't swallowed.
-        _last_param = {}
+        # Wire param change callback through the trailing-edge coalescer.
+        # String values (DropPad fire/idle, radio choices) are state-
+        # machine transitions — deliver every change immediately via
+        # emit_now(). Numeric / dict values (fader / knob / XY pad
+        # streams) coalesce: latest value wins, drained at 20 Hz by
+        # flush_pending_params() on the asyncio loop.
+        instance_id_p = instance.id
+        host_self_p = self
         def _on_param_change(name, value):
-            now = _time.monotonic()
-            last_time, last_val = _last_param.get(name, (0.0, object()))
-            if value == last_val and now - last_time < 0.05:
-                return
-            _last_param[name] = (now, value)
-            if self._on_param_change_callback:
-                self._on_param_change_callback(instance.id, name, value)
+            key = (instance_id_p, name)
+            if isinstance(value, str):
+                host_self_p._param_coalescer.emit_now(
+                    key, value, host_self_p._dispatch_param)
+            else:
+                host_self_p._param_coalescer.submit(key, value)
         instance.plugin._notify_param_change = _on_param_change
 
         # Every instance gets a tick/transport queue so on_transport_start/stop
@@ -540,6 +544,33 @@ class PluginHost:
 
     def get_instance(self, instance_id: str) -> PluginInstance | None:
         return self._instances.get(instance_id)
+
+    def _dispatch_param(self, key, value) -> None:
+        """Coalescer emit callback — fan out to the registered
+        plugin-param SSE handler. Key is (instance_id, name)."""
+        cb = self._on_param_change_callback
+        if cb:
+            cb(key[0], key[1], value)
+
+    def _dispatch_display(self, key, value) -> None:
+        """Coalescer emit callback for plugin-display."""
+        cb = self._on_display_callback
+        if cb:
+            cb(key[0], key[1], value)
+
+    def flush_pending_params(self) -> None:
+        """Drain the param coalescer. Called at 20 Hz from
+        runtime.loops.pending_param_flusher. Each call broadcasts the
+        latest queued value per (instance_id, name) — older queued
+        values dropped (UI couldn't render them anyway), but the
+        freshest value always wins, so a sweeping fader's final
+        position lands within 50 ms even when 1000 intermediate
+        updates were skipped."""
+        self._param_coalescer.flush(self._dispatch_param)
+
+    def flush_pending_displays(self) -> None:
+        """Drain the display coalescer. Called at 10 Hz."""
+        self._display_coalescer.flush(self._dispatch_display)
 
     def get_instances(self) -> list[PluginInstance]:
         return list(self._instances.values())

@@ -122,6 +122,12 @@ class WebServer:
         # multi-thread is summing).
         self._cpu_percent = 0.0
         self._cpu_last_snapshot: tuple[float, int] | None = None
+        # Per-restart cache-bust token. Substituted into index.html's
+        # entry script + stylesheet hrefs (?v=...) so two deploys of
+        # the same package version still bust browser caches — without
+        # this, an in-place upgrade serves identical URLs and stale
+        # tabs keep running old JS.
+        self._build_token = format(int(time.time()), "x")
         self._rate_counts: dict[str, list[float]] = defaultdict(list)
         self._server: asyncio.AbstractServer | None = None
     def route(self, method: str, path: str, exact: bool = True):
@@ -338,7 +344,8 @@ class WebServer:
         body = file_path.read_bytes()
         if is_index:
             from . import __version__
-            body = body.replace(b"__VERSION__", __version__.encode())
+            stamp = f"{__version__}-{self._build_token}"
+            body = body.replace(b"__VERSION__", stamp.encode())
         return Response(body=body, content_type=content_type,
                         headers={"ETag": etag,
                                  "Cache-Control": "no-cache, must-revalidate"})
