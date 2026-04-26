@@ -60,6 +60,11 @@ export function PluginLayoutGrid({ param, values, onChange, displayCtx, renderPa
                 const ovCh = (bindOv.channel != null && bindOv.channel !== '') ? bindOv.channel + 1 : null;
                 const ovCc = (bindOv.cc != null && bindOv.cc !== '') ? bindOv.cc : null;
                 const isLearning = learnTarget === c.param.name;
+                const isButton = c.param.type === 'button';
+                // Button cells gain on / off CC value columns. Defaults
+                // are 127 / 0 server-side; the placeholder shows that.
+                const ovOn  = (bindOv.on  != null && bindOv.on  !== '') ? bindOv.on  : null;
+                const ovOff = (bindOv.off != null && bindOv.off !== '') ? bindOv.off : null;
                 return html`<div class="layout-edit-row ${isLearning ? 'learning' : ''}">
                     <span class="layout-edit-default" title=${`Default: ${c.param.label}`}>${c.param.label}</span>
                     <input class="layout-edit-name" type="text"
@@ -79,6 +84,20 @@ export function PluginLayoutGrid({ param, values, onChange, displayCtx, renderPa
                             title="CC (0-127)"
                             onInput=${(e) => setBinding(c.param.name, 'cc',
                                 e.target.value === '' ? null : parseInt(e.target.value, 10))} />
+                        ${isButton ? html`
+                            <input class="layout-edit-bind" type="number" min="0" max="127"
+                                value=${ovOn != null ? ovOn : ''}
+                                placeholder="on 127"
+                                title="CC value when button is ON (0-127)"
+                                onInput=${(e) => setBinding(c.param.name, 'on',
+                                    e.target.value === '' ? null : parseInt(e.target.value, 10))} />
+                            <input class="layout-edit-bind" type="number" min="0" max="127"
+                                value=${ovOff != null ? ovOff : ''}
+                                placeholder="off 0"
+                                title="CC value when button is OFF (0-127)"
+                                onInput=${(e) => setBinding(c.param.name, 'off',
+                                    e.target.value === '' ? null : parseInt(e.target.value, 10))} />
+                        ` : null}
                         ${param.learn_param ? html`
                             <button type="button" class="layout-edit-learn ${isLearning ? 'on' : ''}"
                                 title=${isLearning ? 'Listening — tap to cancel' : 'MIDI Learn'}

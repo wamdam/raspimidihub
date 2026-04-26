@@ -62,33 +62,56 @@ class ControllerBase(PluginBase):
 
     # --- Helpers ---
 
-    def _effective_binding(self, cell_name: str) -> tuple[int, int] | None:
-        """User override (if set + complete) > schema default."""
-        overrides = self._param_values.get("cell_bindings") or {}
-        ov = overrides.get(cell_name)
-        if isinstance(ov, dict):
-            ch = ov.get("channel")
-            cc = ov.get("cc")
-            if isinstance(ch, int) and isinstance(cc, int):
-                return (ch, cc)
-        return self._defaults.get(cell_name)
+    # Default on / off CC values for button cells. The user can override
+    # both per cell via the edit-mode UI (e.g. on=64, off=0 for a partial
+    # toggle, or 0/127 to invert the polarity).
+    _BUTTON_DEFAULT_ON = 127
+    _BUTTON_DEFAULT_OFF = 0
 
-    @staticmethod
-    def _cell_value_to_cc(cell_type: str, value: Any) -> int | None:
+    def _effective_binding(self, cell_name: str) -> dict | None:
+        """Return a dict `{channel, cc, [on, off for buttons]}` with the
+        user's per-cell override layered over the schema's default. Only
+        complete overrides take effect — partial dicts fall back."""
+        default = self._defaults.get(cell_name)
+        if default is None:
+            return None
+        ch, cc = default
+        is_button = self._cell_types.get(cell_name) == "button"
+        binding: dict = {"channel": ch, "cc": cc}
+        if is_button:
+            binding["on"] = self._BUTTON_DEFAULT_ON
+            binding["off"] = self._BUTTON_DEFAULT_OFF
+        ov = (self._param_values.get("cell_bindings") or {}).get(cell_name)
+        if isinstance(ov, dict):
+            if isinstance(ov.get("channel"), int):
+                binding["channel"] = ov["channel"]
+            if isinstance(ov.get("cc"), int):
+                binding["cc"] = ov["cc"]
+            if is_button:
+                if isinstance(ov.get("on"), int):
+                    binding["on"] = max(0, min(127, ov["on"]))
+                if isinstance(ov.get("off"), int):
+                    binding["off"] = max(0, min(127, ov["off"]))
+        return binding
+
+    def _cell_value_to_cc(self, cell_name: str, value: Any, binding: dict) -> int | None:
         """Translate a cell's stored value to a 0..127 CC byte."""
-        if cell_type == "button":
-            return 127 if bool(value) else 0
+        if self._cell_types.get(cell_name) == "button":
+            return binding["on"] if bool(value) else binding["off"]
         if isinstance(value, bool):
             return 127 if value else 0
         if isinstance(value, int):
             return max(0, min(127, value))
         return None
 
-    def _store_cc_into_cell(self, cell_name: str, cc_value: int) -> Any:
+    def _store_cc_into_cell(self, cell_name: str, cc_value: int, binding: dict) -> Any:
         """Translate an incoming CC byte into the right Python type for
-        a cell's stored value."""
+        a cell's stored value. For buttons, "closer to on or off?" wins —
+        so it works whether the user picks 0/127 or e.g. 0/64."""
         if self._cell_types.get(cell_name) == "button":
-            return cc_value >= 64
+            on = binding.get("on", self._BUTTON_DEFAULT_ON)
+            off = binding.get("off", self._BUTTON_DEFAULT_OFF)
+            return abs(cc_value - on) < abs(cc_value - off)
         return cc_value
 
     # --- Event handlers ---
@@ -101,11 +124,10 @@ class ControllerBase(PluginBase):
         binding = self._effective_binding(name)
         if binding is None:
             return
-        cc_val = self._cell_value_to_cc(self._cell_types.get(name, ""), value)
+        cc_val = self._cell_value_to_cc(name, value, binding)
         if cc_val is None:
             return
-        ch, cc = binding
-        self.send_cc(ch, cc, cc_val)
+        self.send_cc(binding["channel"], binding["cc"], cc_val)
 
     def on_cc(self, channel, cc, value):
         """MIDI Learn capture (if armed for a cell), else bidirectional
@@ -121,10 +143,9 @@ class ControllerBase(PluginBase):
             binding = self._effective_binding(name)
             if binding is None:
                 continue
-            ch, cn = binding
-            if ch != channel or cn != cc:
+            if binding["channel"] != channel or binding["cc"] != cc:
                 continue
-            new_val = self._store_cc_into_cell(name, value)
+            new_val = self._store_cc_into_cell(name, value, binding)
             if self._param_values.get(name) == new_val:
                 return
             self._param_values[name] = new_val
@@ -176,11 +197,10 @@ class ControllerBase(PluginBase):
             binding = self._effective_binding(cell_name)
             if binding is None:
                 continue
-            ch, cc = binding
-            cc_val = self._cell_value_to_cc(self._cell_types.get(cell_name, ""), v)
+            cc_val = self._cell_value_to_cc(cell_name, v, binding)
             if cc_val is None:
                 continue
-            self.send_cc(ch, cc, cc_val)
+            self.send_cc(binding["channel"], binding["cc"], cc_val)
             if self._param_values.get(cell_name) != v:
                 self._param_values[cell_name] = v
                 if self._notify_param_change:
@@ -197,14 +217,13 @@ class ControllerBase(PluginBase):
             binding = self._effective_binding(name)
             if binding is None:
                 continue
-            ch, cc = binding
             default = self._cell_default_values.get(name, 0)
             if self._param_values.get(name) == default:
                 continue
             self._param_values[name] = default
-            cc_val = self._cell_value_to_cc(self._cell_types.get(name, ""), default)
+            cc_val = self._cell_value_to_cc(name, default, binding)
             if cc_val is not None:
-                self.send_cc(ch, cc, cc_val)
+                self.send_cc(binding["channel"], binding["cc"], cc_val)
             if self._notify_param_change:
                 try:
                     self._notify_param_change(name, default)
