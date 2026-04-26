@@ -145,21 +145,27 @@ class LedController:
         self._midi_task = asyncio.ensure_future(self._clock_pulse_cycle())
 
     async def _midi_blink_cycle(self) -> None:
+        # /sys writes block on the kernel sysfs handler (1-2 ms each on
+        # a Pi); under heavy MIDI input the per-blink writes were ~5%
+        # of the asyncio loop's CPU budget. Off-load each write to the
+        # default thread executor so the loop just pays the dispatch.
+        loop = asyncio.get_event_loop()
         try:
-            self._write("none", "0")
+            await loop.run_in_executor(None, self._write, "none", "0")
             await asyncio.sleep(0.03)
             if self._state == LedState.STEADY:
-                self._write("none", "1")
+                await loop.run_in_executor(None, self._write, "none", "1")
         except asyncio.CancelledError:
             pass
 
     async def _clock_pulse_cycle(self) -> None:
         """Longer, gentler off-on for clock beat — looks like breathing."""
+        loop = asyncio.get_event_loop()
         try:
-            self._write("none", "0")
+            await loop.run_in_executor(None, self._write, "none", "0")
             await asyncio.sleep(0.08)
             if self._state == LedState.STEADY:
-                self._write("none", "1")
+                await loop.run_in_executor(None, self._write, "none", "1")
         except asyncio.CancelledError:
             pass
 

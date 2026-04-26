@@ -622,36 +622,44 @@ class MidiEngine:
         self._notify_change()
 
     async def run_event_loop(self) -> None:
-        """Async event loop listening for ALSA sequencer events."""
+        """Async event loop listening for ALSA sequencer events.
+
+        Single persistent fd reader + asyncio.Event signal. The earlier
+        version did add_reader / remove_reader per iteration, which was
+        ~7.5% of CPU under heavy MIDI input — selectors do real work
+        on each register / unregister. Now the reader is wired once at
+        startup; readable.set() fires from the IO callback, the loop
+        drains pending events, clears, and waits again."""
         if not self._seq:
             raise RuntimeError("Engine not started")
 
         self._running = True
         loop = asyncio.get_event_loop()
         fd = self._seq.fileno()
-
+        readable = asyncio.Event()
+        loop.add_reader(fd, readable.set)
         log.info("Listening for MIDI hotplug events on fd %d", fd)
 
+        try:
+            await self._drain_alsa_events(readable, max_events=256)
+        finally:
+            loop.remove_reader(fd)
+
+    async def _drain_alsa_events(self, readable: asyncio.Event,
+                                  max_events: int) -> None:
+        """Inner ALSA-event loop. Extracted only so run_event_loop's
+        try/finally can guarantee remove_reader on shutdown without
+        deeply nested control flow."""
         while self._running:
-            # Wait for the fd to become readable
-            future = loop.create_future()
-
-            def _on_readable(fut=future):
-                if not fut.done():
-                    fut.set_result(None)
-
-            loop.add_reader(fd, _on_readable)
-            try:
-                await future
-            finally:
-                loop.remove_reader(fd)
-
+            await readable.wait()
+            readable.clear()
             if not self._running:
                 break
 
-            # Drain pending events (max batch to avoid starving asyncio)
+            # Drain pending events. max_events comes from the caller —
+            # bounded so a hot ALSA queue can't starve the asyncio loop
+            # of other work for too long.
             hotplug = False
-            max_events = 256
             for _ in range(max_events):
                 ev = self._seq.read_event()
                 if ev is None:
