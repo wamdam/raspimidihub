@@ -4,6 +4,7 @@ Registers all /api/* handlers on the WebServer instance.
 """
 
 import asyncio
+import json
 import logging
 import os
 import socket
@@ -1351,6 +1352,15 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         except OSError:
             return Response.not_found()
 
+    # 500 ms TTL cache for the list endpoint. The contents only change
+    # on plugin add/remove/rename — it's safe to serve a slightly stale
+    # body to back-to-back GETs. This protects the server from a buggy
+    # or stale-cached frontend tab that re-fetches /plugins/instances
+    # on every render (we've been bitten by exactly this loop). The
+    # cached bytes are pre-encoded so cache hits skip json.dumps too.
+    import time as _time
+    _instances_cache = {"body": None, "ts": 0.0}
+
     @server.route("GET", "/api/plugins/instances")
     async def api_plugins_instances(req: Request) -> Response:
         """List running plugin instances. Returns a *light* row per
@@ -1362,6 +1372,12 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         the asyncio loop."""
         if not engine._plugin_host:
             return Response.json([])
+        now = _time.monotonic()
+        if _instances_cache["body"] is not None and now - _instances_cache["ts"] < 0.5:
+            return Response(
+                status=200, body=_instances_cache["body"],
+                content_type="application/json",
+            )
         rows = []
         for inst in engine._plugin_host.get_instances():
             rows.append({
@@ -1370,7 +1386,10 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
                 "name": inst.name,
                 "status": "crashed" if inst.crashed else ("running" if inst.running else "stopped"),
             })
-        return Response.json(rows)
+        body = json.dumps(rows).encode()
+        _instances_cache["body"] = body
+        _instances_cache["ts"] = now
+        return Response(status=200, body=body, content_type="application/json")
 
     @server.route("POST", "/api/plugins/instances")
     async def api_plugins_create(req: Request) -> Response:

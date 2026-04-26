@@ -183,9 +183,12 @@ async def async_main() -> None:
             )
         plugin_host._on_display_callback = _on_plugin_display
 
-        # Wire plugin param changes to SSE (for CC automation UI)
+        # Wire plugin param changes to SSE (for CC automation UI).
+        # No logging here — this fires for every CC mirrored from the
+        # plugin host (incl. controllers reflecting an external fader),
+        # so an INFO log per call generated 30+ journald writes/sec
+        # under heavy MIDI input. Use DEBUG if you need to trace it.
         def _on_plugin_param_change(instance_id, name, value):
-            log.info("CC automation: %s.%s = %s", instance_id, name, value)
             _loop.call_soon_threadsafe(
                 asyncio.ensure_future,
                 server.send_sse("plugin-param", {

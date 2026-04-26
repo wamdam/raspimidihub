@@ -272,8 +272,20 @@ class WebServer:
             except Exception:
                 pass
 
-    async def _serve_static(self, path: str) -> Response:
+    async def _serve_static(self, path: str, if_none_match: str | None = None) -> Response:
         """Serve a static file from the static directory.
+
+        Sends an ETag based on file size + mtime; honours If-None-Match
+        with a 304 Not Modified so already-loaded modules avoid
+        re-downloading the body on every revalidation pass. The
+        no-cache + must-revalidate headers force the browser to
+        revalidate, but the round-trip itself is now cheap.
+
+        index.html gets `__VERSION__` substituted with the live package
+        version on every serve — that lets the entry script + stylesheet
+        load with `?v={version}` query strings, so a fresh deploy busts
+        all the per-module sub-imports automatically (the modules are
+        re-fetched under a new URL space).
 
         SPA fallback: paths without a file extension (e.g. /controller,
         /routing/d/42) fall through to index.html so the JS router can
@@ -288,6 +300,7 @@ class WebServer:
         if not str(file_path).startswith(str(STATIC_DIR.resolve())):
             return Response.not_found()
 
+        is_index = False
         if not file_path.is_file():
             # SPA fallback for extensionless paths — serve index.html so
             # client-side routing can take over. Anything with a "."
@@ -297,18 +310,38 @@ class WebServer:
             if "." not in last_segment:
                 fallback = (STATIC_DIR / "index.html").resolve()
                 if fallback.is_file():
-                    body = fallback.read_bytes()
-                    return Response(body=body, content_type="text/html",
-                                    headers={"Cache-Control": "no-cache, must-revalidate"})
+                    file_path = fallback
+                    is_index = True
+            if not file_path.is_file():
+                return Response.not_found()
+        elif file_path.name == "index.html":
+            is_index = True
+
+        try:
+            stat = file_path.stat()
+        except OSError:
             return Response.not_found()
+
+        # ETag: file size + mtime ns. Cheap to compute, stable across
+        # restarts unless the file changes; weak ETag is fine here since
+        # we never want byte-exact match guarantees.
+        etag = f'W/"{stat.st_size:x}-{stat.st_mtime_ns:x}"'
+        if if_none_match and if_none_match == etag:
+            return Response(status=304, body=b"",
+                            headers={"ETag": etag,
+                                     "Cache-Control": "no-cache, must-revalidate"})
 
         content_type, _ = mimetypes.guess_type(str(file_path))
         if content_type is None:
             content_type = "application/octet-stream"
 
         body = file_path.read_bytes()
+        if is_index:
+            from . import __version__
+            body = body.replace(b"__VERSION__", __version__.encode())
         return Response(body=body, content_type=content_type,
-                        headers={"Cache-Control": "no-cache, must-revalidate"})
+                        headers={"ETag": etag,
+                                 "Cache-Control": "no-cache, must-revalidate"})
 
     def _match_route(self, method: str, path: str) -> tuple[callable, bool] | None:
         """Find matching route handler. Returns (handler, exact_match)."""
@@ -393,8 +426,8 @@ class WebServer:
                     log.exception("Handler error for %s %s", method, path)
                     resp = Response.error("Internal server error", 500)
             elif method == "GET":
-                # Try static files
-                resp = await self._serve_static(path)
+                # Try static files (pass If-None-Match for ETag/304)
+                resp = await self._serve_static(path, headers.get("if-none-match"))
             else:
                 resp = Response.not_found()
 
