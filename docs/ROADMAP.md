@@ -1419,33 +1419,47 @@ follow-up):
 1. User taps "Check for updates" in Settings.
 2. **Confirmation dialog with a visible 60–90 s countdown timer**:
    "The Pi will go offline for up to 90 seconds while it joins your
-   home WiFi to check. Your phone will lose its connection to the Pi
-   during this window — that's expected. Reconnect to the
-   `RaspiMIDIHub-XXXX` AP afterwards."
-3. User confirms → Pi switches to client mode, runs update-check, and
-   if a deb is available downloads + installs it (which auto-reboots
-   into AP mode since `update_only` skips client on boot). If no
-   update is available, Pi explicitly switches back to AP after the
-   check.
-4. **UI handles the disconnection window**: client side starts a
-   timer at confirmation; while the SSE connection is down, the page
-   shows a "checking for updates… (Xs remaining)" indicator.
+   home WiFi to check. Your phone will lose its connection to the
+   Pi during this window — that's expected. Reconnect to the
+   `RaspiMIDIHub-XXXX` AP afterwards. Don't close this tab — the
+   result appears here automatically when the Pi is back."
+3. User confirms → Pi switches to client mode, runs update-check,
+   and if a deb is available downloads + installs it (which
+   auto-reboots into AP mode since `update_only` skips client on
+   boot). If no update is available, Pi explicitly switches back to
+   AP after the check.
+4. **UI persists through the disconnection window** — must keep the
+   "checking…" surface mounted until a result arrives. The user is
+   instructed to wait through the timeout without navigating away.
+   While SSE is down, the page shows a live countdown: "checking
+   for updates… (Xs remaining)" so the wait feels deterministic.
 5. **If the timer expires and the Pi is still unreachable**, the UI
    swaps to a help card: "Can't reach the Pi. Check your phone's
    WiFi is connected to `RaspiMIDIHub-XXXX` and reload this page."
-   Crucially: when the user does reconnect to the AP, the page
-   auto-updates without a manual reload — the existing SSE
-   reconnect logic detects the new connection and fires the
-   refresh.
-6. **Hard watchdog on the Pi (3 min budget)**: an independent
+   Crucially: when the user reconnects to the AP, the page
+   auto-updates without a manual reload — existing SSE reconnect
+   logic detects the new connection and fires a refresh.
+6. **On AP-return the UI MUST surface a clear, specific outcome**.
+   Either success ("Updated to v2.0.10" or "Already up to date —
+   v2.0.9") or a *concrete* error stating what failed:
+     - `Couldn't join "HomeWiFi": wrong password`
+     - `Joined "HomeWiFi" but no IP address (DHCP failed)`
+     - `Got an IP but no internet — check the router`
+     - `GitHub unreachable (timeout) — try again later`
+     - `Download interrupted at 45 % — check your connection`
+     - `Install failed: <dpkg error excerpt>`
+   Never a generic "update failed" toast. The user must know which
+   step broke so they can fix it (re-enter password / move closer to
+   the router / wait and retry).
+7. **Hard watchdog on the Pi (3 min budget)**: an independent
    process (systemd one-shot or `at`-scheduled job) that *always*
-   forces the Pi back to AP mode regardless of what failed — wrong
-   creds, no internet, GitHub down, download interrupted. Without
+   forces the Pi back to AP mode regardless of what failed. Without
    this watchdog, a single failure leaves the user with a Pi stuck
    on a WiFi they can't see from their phone, and no recourse short
    of physical access.
 
-**Failure cases the watchdog must cover**:
+**Failure cases the watchdog must cover** (each must produce a
+distinct, surfaceable error string per step 6):
 - WiFi credentials are wrong → `wpa_supplicant` never associates.
 - WiFi associates but no DHCP lease.
 - DHCP lease but no internet routing.
@@ -1453,10 +1467,10 @@ follow-up):
 - Download starts but is interrupted (network drops mid-stream).
 - Download completes but `dpkg -i` fails (signature, dependency).
 
-In every case the watchdog falls back to AP, leaves a status
-breadcrumb in `/run/raspimidihub/update-status` that the AP-mode UI
-can read on reconnect, and surfaces a toast: "Update check failed:
-<reason>".
+In every case the watchdog falls back to AP, leaves a structured
+status breadcrumb (e.g. JSON `{step: "wifi_assoc", error: "auth
+failed"}`) in `/run/raspimidihub/update-status` that the AP-mode UI
+reads on reconnect to render the per-step message above.
 
 **Out of scope for v1** (capture as future follow-ups):
 - Scheduled auto-update on a cron (e.g. weekly at 03:00). Easy to
