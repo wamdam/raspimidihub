@@ -1,30 +1,28 @@
 /**
  * PluginLayoutGrid — renders a positioned grid of cells (Knob / Fader /
- * Button / XYPad) with an in-place "Edit" mode that swaps the grid for
- * a flat scrollable list of cell-rename / channel / cc / Learn rows.
+ * Button / XYPad) on play surfaces, OR a flat config list (one row per
+ * cell with name / channel / cc / on / off / Learn) in the device-
+ * detail panel.
  *
- * Edit state is owned by `PluginConfigPanel` and threaded through
- * `displayCtx.editing` + `displayCtx.setEditing`. That way the panel
- * can simultaneously show config_only params (e.g. background colour)
- * and apply a live bg preview, while LayoutGrid still owns the Edit /
- * Save toggle visually. The state is panel-local, so toggling on this
- * browser does NOT propagate to other connected browsers — UI mode,
- * not data. Renames / rebinds / Learn captures DO propagate through
- * the server-stored `labels_param` / `bindings_param` / `learn_param`.
+ * Mode is decided by `displayCtx.playOnly`:
  *
- * `displayCtx.playOnly` suppresses the Edit toggle entirely — used by
- * the Controller fullscreen page where the goal is performance.
+ *   - playOnly === true  → live positioned cells (Controller page).
+ *   - playOnly !== true  → flat config list, IF the LayoutGrid declares
+ *                          any of `labels_param` / `bindings_param` /
+ *                          `learn_param`. Without those, falls back to
+ *                          the live grid (used by `ui_demo`).
+ *
+ * Renames / rebinds / Learn captures all auto-save through the normal
+ * onChange → PATCH pipeline; there's no separate Save button. The
+ * server-stored `labels_param` / `bindings_param` / `learn_param`
+ * propagate via SSE so other browsers see the changes immediately.
  */
 
 import { html } from './common.js';
 
 export function PluginLayoutGrid({ param, values, onChange, displayCtx, renderParam }) {
     const playOnly = !!(displayCtx && displayCtx.playOnly);
-    // Edit state is owned by PluginConfigPanel (so it can show/hide
-    // config_only params and apply the bg preview). LayoutGrid just
-    // reads the flag and toggles via the setter.
-    const editing = !!(displayCtx && displayCtx.editing);
-    const setEditing = displayCtx && displayCtx.setEditing;
+    const hasConfigSurface = param.labels_param || param.bindings_param || param.learn_param;
 
     const labels = (param.labels_param && values[param.labels_param]) || {};
     const bindings = (param.bindings_param && values[param.bindings_param]) || {};
@@ -46,10 +44,10 @@ export function PluginLayoutGrid({ param, values, onChange, displayCtx, renderPa
         onChange(param.learn_param, learnTarget === cellName ? '' : cellName);
     };
 
-    const canEdit = !playOnly && setEditing && (param.labels_param || param.bindings_param || param.learn_param);
-
-    // Edit mode: flat list, full-width rows.
-    if (editing && canEdit) {
+    // Flat config list — shown in the device-detail panel for any
+    // LayoutGrid that opted in by declaring labels_param / bindings_param
+    // / learn_param. Live cells live on the Controller page.
+    if (!playOnly && hasConfigSurface) {
         return html`<div class="layout-grid-editing">
             ${param.cells.map((c) => {
                 const labelOv = labels[c.param.name];
@@ -61,8 +59,6 @@ export function PluginLayoutGrid({ param, values, onChange, displayCtx, renderPa
                 const ovCc = (bindOv.cc != null && bindOv.cc !== '') ? bindOv.cc : null;
                 const isLearning = learnTarget === c.param.name;
                 const isButton = c.param.type === 'button';
-                // Button cells gain on / off CC value columns. Defaults
-                // are 127 / 0 server-side; the placeholder shows that.
                 const ovOn  = (bindOv.on  != null && bindOv.on  !== '') ? bindOv.on  : null;
                 const ovOff = (bindOv.off != null && bindOv.off !== '') ? bindOv.off : null;
                 return html`<div class="layout-edit-row ${isLearning ? 'learning' : ''}">
@@ -105,26 +101,21 @@ export function PluginLayoutGrid({ param, values, onChange, displayCtx, renderPa
                     ` : null}
                 </div>`;
             })}
-            <button type="button" class="layout-edit-done" onclick=${() => setEditing(false)}>Save</button>
         </div>`;
     }
 
-    // Play mode: positioned grid + (optionally) an inline "Edit" button.
+    // Play mode: positioned grid of live cells.
     const gridStyle = `display:grid;grid-template-columns:repeat(${param.cols}, minmax(0, 1fr));grid-template-rows:repeat(${param.rows}, auto);gap:6px`;
-    return html`<div class="layout-grid-wrap">
-        <div class="layout-grid" style=${gridStyle}>
-            ${param.cells.map((c) => {
-                const cellStyle = `grid-column: ${c.col} / span ${c.span_cols}; grid-row: ${c.row} / span ${c.span_rows}; min-width: 0`;
-                const labelOv = labels[c.param.name];
-                const patchedParam = labelOv != null && labelOv !== ''
-                    ? { ...c.param, label: labelOv }
-                    : c.param;
-                return html`<div class="layout-cell" style=${cellStyle}>
-                    ${renderParam(patchedParam, values, onChange, values, displayCtx)}
-                </div>`;
-            })}
-        </div>
-        ${canEdit ? html`<button type="button" class="layout-edit-toggle"
-            onclick=${() => setEditing(true)}>Edit</button>` : null}
+    return html`<div class="layout-grid" style=${gridStyle}>
+        ${param.cells.map((c) => {
+            const cellStyle = `grid-column: ${c.col} / span ${c.span_cols}; grid-row: ${c.row} / span ${c.span_rows}; min-width: 0`;
+            const labelOv = labels[c.param.name];
+            const patchedParam = labelOv != null && labelOv !== ''
+                ? { ...c.param, label: labelOv }
+                : c.param;
+            return html`<div class="layout-cell" style=${cellStyle}>
+                ${renderParam(patchedParam, values, onChange, values, displayCtx)}
+            </div>`;
+        })}
     </div>`;
 }

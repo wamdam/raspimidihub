@@ -174,7 +174,12 @@ function App() {
         ${selectedDevice && html`<${DeviceDetailPanel} key=${selectedDeviceId} device=${selectedDevice}
             onClose=${() => { setSelectedDeviceId(null); refresh(); }}
             showToast=${showToast} refresh=${refresh}
-            pluginDisplays=${pluginDisplays} />`}
+            pluginDisplays=${pluginDisplays}
+            onJumpToController=${(instanceId) => {
+                try { localStorage.setItem('raspimidihub:lastController', instanceId); } catch {}
+                setSelectedDeviceId(null);
+                setTab('controller');
+            }} />`}
         <${Toast} message=${toast} />
     `;
 }

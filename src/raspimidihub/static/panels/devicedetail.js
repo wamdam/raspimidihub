@@ -8,6 +8,7 @@ import { html, api, animateClose, useEscapeClose, useSwipeDismiss } from '../ui/
 import { noteName } from '../state/constants.js';
 import { PluginConfigPanel, PluginWheel, PluginFader } from '../plugin-controls.js';
 import { usePluginParams } from '../ui/plugin-params.js';
+import { IconMaximize } from '../ui/icons.js';
 
 export function PortRenameRow({ device, port, showToast }) {
     const [name, setName] = useState(port.name);
@@ -161,7 +162,7 @@ export function ScrollablePiano({ heldNotes, onNoteDown, onNoteUp, pianoKeys }) 
     </div>`;
 }
 
-export function DeviceDetailPanel({ device, onClose, showToast, refresh, pluginDisplays }) {
+export function DeviceDetailPanel({ device, onClose, showToast, refresh, pluginDisplays, onJumpToController }) {
     const panelRef = { current: null };
     const close = () => animateClose(panelRef.current, onClose);
     const swipe = useSwipeDismiss(close, panelRef);
@@ -307,8 +308,12 @@ export function DeviceDetailPanel({ device, onClose, showToast, refresh, pluginD
                     description AND the Inputs descriptor list at the bottom. */ ''}
                 ${isPlugin && pluginData && html`
                     <div class="card">
-                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-                            <h3 style="margin:0">Plugin Config</h3>
+                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:6px">
+                            <h3 style="margin:0;flex:1">Plugin Config</h3>
+                            ${pluginData.type && pluginData.type.startsWith('controller_') && onJumpToController && html`<button
+                                style="width:24px;height:24px;border-radius:50%;border:1px solid var(--text-dim);background:none;color:var(--text-dim);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0"
+                                title="Open in fullscreen Controller view"
+                                onclick=${() => onJumpToController(device.plugin_instance_id)}>${IconMaximize}</button>`}
                             ${(pluginData.help || (pluginData.inputs && pluginData.inputs.length)) && html`<button style="width:24px;height:24px;border-radius:50%;border:1px solid var(--text-dim);background:none;color:var(--text-dim);font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center"
                                 onclick=${() => setShowHelp(h => !h)}>?</button>`}
                         </div>
