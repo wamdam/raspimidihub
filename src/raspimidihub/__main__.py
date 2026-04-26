@@ -109,6 +109,10 @@ async def async_main() -> None:
                     "src_port": ev.source.port,
                 }))
             _clock_counts[ckey] = c
+            # Don't broadcast a midi-activity for clock — clock-quarter
+            # already drives the visual pulse, and clock at 24 PPQN ×
+            # active sources is a noticeable share of SSE traffic.
+            return
         elif ev.type == 30:  # START — re-phase that source's quarter counter
             _clock_counts[f"{ev.source.client}:{ev.source.port}"] = 0
         else:

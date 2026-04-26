@@ -188,7 +188,7 @@ updates are flowing."""
     ]
 
     # Cap emit rate at 20 Hz to avoid flooding SSE.
-    _EMIT_HZ = 20
+    _EMIT_HZ = 10
 
     def on_start(self):
         self._running = True
@@ -234,7 +234,7 @@ updates are flowing."""
     # --- Internal display drivers ---
 
     def _scope_loop(self):
-        """Emit a slow sine into the scope at ~20 Hz."""
+        """Emit a slow sine into the scope at ~10 Hz."""
         interval = 1.0 / self._EMIT_HZ
         # ~0.25 Hz sine — one full sweep every 4 seconds.
         cycle_seconds = 4.0
@@ -249,8 +249,8 @@ updates are flowing."""
             time.sleep(interval)
 
     def _meter_loop(self):
-        """Emit a smoothly drifting value into the meter at ~10 Hz."""
-        interval = 1.0 / 10  # half the scope rate — keeps SSE light
+        """Emit a smoothly drifting value into the meter at ~5 Hz."""
+        interval = 1.0 / 5  # half the scope rate — keeps SSE light
         while self._running:
             # Random walk, clamped to range — looks like a VU bouncing.
             self._meter_value += random.randint(-12, 12)

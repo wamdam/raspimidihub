@@ -238,14 +238,21 @@ class PluginHost:
         instance.plugin._send_stop = lambda: _send_transport(MidiEventType.STOP, MIDI_STOP)
         instance.plugin._send_continue = lambda: _send_transport(MidiEventType.CONTINUE, MIDI_CONTINUE)
 
-        # Wire display output callback (throttled — plugins may call this rapidly)
+        # Wire display output callback (throttled — plugins may call this rapidly).
+        # Two-stage filter: identical samples are always dropped (dedup), and
+        # changed samples are rate-capped to 10 Hz per name. With ~3 browsers
+        # connected, every push fans out to 3 socket writes + N json.dumps,
+        # so dropping no-op samples is the cheapest big win.
         import time as _time
-        _last_display = {}
+        _last_display = {}  # name -> (last_time, last_value)
         def _on_display(name, value):
-            now = _time.monotonic()
-            if now - _last_display.get(name, 0) < 0.05:  # 20 Hz max per display output
+            last_time, last_val = _last_display.get(name, (0.0, object()))
+            if value == last_val:
                 return
-            _last_display[name] = now
+            now = _time.monotonic()
+            if now - last_time < 0.1:
+                return
+            _last_display[name] = (now, value)
             if self._on_display_callback:
                 self._on_display_callback(instance.id, name, value)
         instance.plugin._notify_display = _on_display
