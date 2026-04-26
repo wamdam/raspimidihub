@@ -12,10 +12,11 @@
 import { render } from './lib/preact.module.js';
 import { useState, useEffect, useRef, useCallback } from './lib/hooks.module.js';
 import { html, api, useSSE, Toast, MidiBar } from './ui/common.js';
-import { IconRouting, IconPreset, IconSettings } from './ui/icons.js';
+import { IconRouting, IconController, IconPreset, IconSettings } from './ui/icons.js';
 import { noteName } from './state/constants.js';
 import { DeviceDetailPanel } from './panels/devicedetail.js';
 import { RoutingPage } from './pages/routing.js';
+import { ControllerPage } from './pages/controller.js';
 import { PresetsPage } from './pages/presets.js';
 import { SettingsPage } from './pages/settings.js';
 
@@ -145,6 +146,9 @@ function App() {
             page = html`<${RoutingPage} devices=${devices} connections=${connections} refresh=${refresh} showToast=${showToast} clockSources=${clockSources} clockQuarters=${clockQuarters} midiRates=${midiRates}
                 onDeviceOpen=${(clientId) => setSelectedDeviceId(clientId)} />`;
             break;
+        case 'controller':
+            page = html`<${ControllerPage} pluginDisplays=${pluginDisplays} showToast=${showToast} />`;
+            break;
         case 'presets':
             page = html`<${PresetsPage} refresh=${refresh} showToast=${showToast} />`;
             break;
@@ -163,6 +167,7 @@ function App() {
         ${showMidiBar && html`<${MidiBar} events=${midiEvents} />`}
         <nav class="bottom-nav">
             <button class=${tab === 'routing' ? 'active' : ''} onclick=${() => setTab('routing')}>${IconRouting}<span>Routing</span></button>
+            <button class=${tab === 'controller' ? 'active' : ''} onclick=${() => setTab('controller')}>${IconController}<span>Controller</span></button>
             <button class=${tab === 'presets' ? 'active' : ''} onclick=${() => setTab('presets')}>${IconPreset}<span>Presets</span></button>
             <button class=${tab === 'settings' ? 'active' : ''} onclick=${() => setTab('settings')}>${IconSettings}<span>Settings</span></button>
         </nav>

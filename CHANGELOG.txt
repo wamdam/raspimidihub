@@ -6,6 +6,7 @@ hashes. Tags: Added, Improved, Fix, Changed, Removed.
 
 Unreleased
 
+- Added: Controller tab in the top nav - opens the last-viewed Controller plugin in a fullscreen play surface with arrow buttons + dropdown to switch between instances; per-device last-viewed remembered via localStorage
 - Added: Controller - Performance 16 plugin: 4-wide layout with 16 macro knobs + 4 colored scene buttons; defaults CC 16-35 ch 1
 - Added: Controller - FX 6 plugin: 6-wide layout with 6 knobs / 6 faders / 6 buttons; defaults CC 16-33 ch 1
 - Added: Controller - Mixer 8: per-cell MIDI Learn - in edit mode each cell has a small "L" button; tap and twist a knob on any device wired to the Controller's IN port and the next CC becomes that cell's binding (channel + CC captured automatically)

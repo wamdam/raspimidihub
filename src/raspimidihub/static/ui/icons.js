@@ -6,6 +6,7 @@ import { html } from './common.js';
 import { useEffect, useState } from '../lib/hooks.module.js';
 
 export const IconRouting = html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h4l4 6-4 6H4"/><path d="M20 6h-4l-4 6 4 6h4"/></svg>`;
+export const IconController = html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="7" r="2"/><circle cx="12" cy="7" r="2"/><circle cx="18" cy="7" r="2"/><line x1="6" y1="12" x2="6" y2="17" stroke-linecap="round"/><line x1="12" y1="12" x2="12" y2="17" stroke-linecap="round"/><line x1="18" y1="12" x2="18" y2="17" stroke-linecap="round"/><rect x="4" y="20" width="4" height="2" rx="0.5"/><rect x="10" y="20" width="4" height="2" rx="0.5"/><rect x="16" y="20" width="4" height="2" rx="0.5"/></svg>`;
 export const IconPreset = html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>`;
 export const IconSettings = html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v2m0 18v2m-9-11h2m16 0h2m-3.64-6.36l-1.42 1.42M6.06 17.94l-1.42 1.42m0-12.72l1.42 1.42m11.88 11.88l1.42 1.42"/></svg>`;
 

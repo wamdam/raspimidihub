@@ -1440,8 +1440,15 @@ Biggest user-visible win for performance.
      discovery tightened to filter by `__module__` so the imported
      base class is never picked as a plugin in its own right.
      Throwaway controller_b / controller_c removed.
-3. **TODO:** Top-nav "Controller" entry, fullscreen mode,
-   `localStorage` last-viewed persistence.
+3. ✓ **Done (2026-04-26):** Top-nav "Controller" entry, fullscreen
+   mode, `localStorage` last-viewed persistence. Implementation
+   used a dropdown + ‹ › arrow buttons for instance switching
+   (Phase 4 MVP); horizontal-swipe-between-instances and a
+   true-fullscreen "no app chrome" mode are deferred polish for
+   Phase 5. Param management extracted into a shared
+   `usePluginParams` hook so the Controller page and the device
+   panel both go through the same coalesced PATCH + SSE settle
+   pipeline.
 
 ### Phase 5 — Controller polish (≈ 0.5 sprint)
 

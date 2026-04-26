@@ -3,10 +3,11 @@
  * the user taps a device row in the matrix.
  */
 
-import { useState, useEffect, useRef, useCallback, useMemo } from '../lib/hooks.module.js';
+import { useState, useEffect, useRef } from '../lib/hooks.module.js';
 import { html, api, animateClose, useEscapeClose, useSwipeDismiss } from '../ui/common.js';
 import { noteName } from '../state/constants.js';
 import { PluginConfigPanel, PluginWheel, PluginFader } from '../plugin-controls.js';
+import { usePluginParams } from '../ui/plugin-params.js';
 
 export function PortRenameRow({ device, port, showToast }) {
     const [name, setName] = useState(port.name);
@@ -160,15 +161,6 @@ export function ScrollablePiano({ heldNotes, onNoteDown, onNoteUp, pianoKeys }) 
     </div>`;
 }
 
-// Deep-equality check that's safe for dict-valued plugin params (e.g.
-// cell_labels). Identity (!==) is always true for fresh dicts even when
-// their contents match, which loops the eventually-consistent watchdog.
-function paramsEqual(a, b) {
-    if (a === b) return true;
-    if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null) return false;
-    try { return JSON.stringify(a) === JSON.stringify(b); } catch { return false; }
-}
-
 export function DeviceDetailPanel({ device, onClose, showToast, refresh, pluginDisplays }) {
     const panelRef = { current: null };
     const close = () => animateClose(panelRef.current, onClose);
@@ -189,7 +181,15 @@ export function DeviceDetailPanel({ device, onClose, showToast, refresh, pluginD
     const isPlugin = !!device.is_plugin;
     const [pluginData, setPluginData] = useState(null);
     const [showHelp, setShowHelp] = useState(false);
-    const [pluginParams, setPluginParams] = useState({});
+    const {
+        params: pluginParams,
+        setParams: setPluginParams,
+        onParamChange: onPluginParamChange,
+    } = usePluginParams({
+        instanceId: device.plugin_instance_id,
+        paramsSchema: pluginData?.params_schema,
+        pluginDisplays,
+    });
     useEffect(() => {
         if (isPlugin && device.plugin_instance_id) {
             api(`/plugins/instances/${device.plugin_instance_id}`)
@@ -199,166 +199,6 @@ export function DeviceDetailPanel({ device, onClose, showToast, refresh, pluginD
     }, [device.plugin_instance_id]);
 
     const displayValues = (pluginDisplays && device.plugin_instance_id) ? pluginDisplays[device.plugin_instance_id] || {} : {};
-
-    // Param updates are rAF-coalesced AND serialized over the wire (only
-    // one PATCH in flight at a time). Without serialization the browser
-    // can multiplex onto multiple HTTP/1.1 connections and a fast drag's
-    // PATCHes land at the server out of order — the user releases the
-    // knob at max but the server sees an earlier intermediate value as
-    // its final state, and that's what gets broadcast.
-    //
-    // The SSE echo is also suppressed for params the user is actively
-    // dragging on this client, so the server-side broadcast doesn't
-    // snap the thumb backwards mid-drag.
-    const pendingPatchesRef = useRef(new Map());     // name -> latest value queued for PATCH
-    const inFlightRef = useRef(new Map());           // name -> timeout id; presence = "user is dragging this"
-    const rafIdRef = useRef(null);
-    const patchInFlightRef = useRef(false);          // a PATCH is currently on the wire
-    const IN_FLIGHT_RELEASE_MS = 250;
-
-    // Refs that track the latest local + server view of params, so the
-    // settle-check below can compare them outside of a render closure.
-    const pluginParamsRef = useRef(pluginParams);
-    pluginParamsRef.current = pluginParams;
-    const pluginDisplaysRef = useRef(pluginDisplays);
-    pluginDisplaysRef.current = pluginDisplays;
-
-    const flushPending = useCallback(() => {
-        rafIdRef.current = null;
-        if (patchInFlightRef.current) return;        // queued; will fire after current PATCH finishes
-        const map = pendingPatchesRef.current;
-        if (map.size === 0) return;
-        if (!device.plugin_instance_id) return;
-
-        const params = Object.fromEntries(map);
-        map.clear();
-        patchInFlightRef.current = true;
-        // Use fetch directly so we can detect 429 (rate limit) and re-queue
-        // the params instead of silently dropping them. api() resolves on
-        // 4xx because it just calls res.json() — the helpful path here is
-        // to inspect res.status ourselves.
-        fetch(`/api/plugins/instances/${device.plugin_instance_id}`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ params }),
-        }).then(res => {
-            if (!res.ok) {
-                // Re-queue values we tried to send (fresher onChanges already
-                // in pending take precedence — only restore keys that aren't
-                // already queued with a newer value).
-                for (const [k, v] of Object.entries(params)) {
-                    if (!pendingPatchesRef.current.has(k)) {
-                        pendingPatchesRef.current.set(k, v);
-                    }
-                }
-            }
-        }).catch(() => {
-            // Network error — same retry policy as a 4xx.
-            for (const [k, v] of Object.entries(params)) {
-                if (!pendingPatchesRef.current.has(k)) {
-                    pendingPatchesRef.current.set(k, v);
-                }
-            }
-        }).finally(() => {
-            patchInFlightRef.current = false;
-            if (pendingPatchesRef.current.size > 0) {
-                // Small backoff so a sustained 429 storm doesn't busy-loop.
-                setTimeout(flushPending, 30);
-            }
-        });
-    }, [device.plugin_instance_id]);
-
-    useEffect(() => () => {
-        if (rafIdRef.current !== null) cancelAnimationFrame(rafIdRef.current);
-        for (const t of inFlightRef.current.values()) clearTimeout(t);
-        inFlightRef.current.clear();
-        pendingPatchesRef.current.clear();
-    }, []);
-
-    const sseParamsKey = pluginDisplays && device.plugin_instance_id ? '_params_' + device.plugin_instance_id : null;
-    const sseParams = sseParamsKey ? pluginDisplays[sseParamsKey] : null;
-    const sseParamsRef = useRef(null);
-    if (sseParams && sseParams !== sseParamsRef.current) {
-        sseParamsRef.current = sseParams;
-        const filtered = {};
-        for (const [k, v] of Object.entries(sseParams)) {
-            if (inFlightRef.current.has(k)) continue;
-            if (!paramsEqual(pluginParams[k], v)) filtered[k] = v;
-        }
-        if (Object.keys(filtered).length > 0) {
-            setTimeout(() => setPluginParams(prev => ({ ...prev, ...filtered })), 0);
-        }
-    }
-
-    // Trigger-style param names from the schema (DropPad, Button trigger=true).
-    // Server intentionally cycles their value (fire -> idle, capture -> captured),
-    // so we must NOT optimistically commit the user's input or run the watchdog
-    // re-queue logic — both would fight the server's authoritative state.
-    const triggerParams = useMemo(() => {
-        const s = new Set();
-        const walk = (items) => {
-            if (!items) return;
-            for (const p of items) {
-                if (p.type === 'group') walk(p.children);
-                else if (p.type === 'layoutgrid') {
-                    walk((p.cells || []).map(c => c.param));
-                    // learn_param self-resets on the server after a CC capture,
-                    // so it has the same fire-and-forget shape as DropPad: PATCH
-                    // only, no optimistic local commit, no watchdog re-queue.
-                    if (p.learn_param) s.add(p.learn_param);
-                }
-                else if (p.type === 'droppad') s.add(p.name);
-                else if (p.type === 'button' && p.trigger) s.add(p.name);
-            }
-        };
-        walk(pluginData?.params_schema);
-        return s;
-    }, [pluginData?.params_schema]);
-
-    const onPluginParamChange = useCallback((name, value) => {
-        if (triggerParams.has(name)) {
-            // Fire-and-forget: PATCH only, no local optimism, no watchdog.
-            // The server's authoritative state arrives via SSE.
-            if (!device.plugin_instance_id) return;
-            pendingPatchesRef.current.set(name, value);
-            if (rafIdRef.current === null) {
-                rafIdRef.current = requestAnimationFrame(flushPending);
-            }
-            return;
-        }
-        setPluginParams(prev => prev[name] === value ? prev : { ...prev, [name]: value });
-        if (!device.plugin_instance_id) return;
-
-        pendingPatchesRef.current.set(name, value);
-        if (rafIdRef.current === null) {
-            rafIdRef.current = requestAnimationFrame(flushPending);
-        }
-
-        const existing = inFlightRef.current.get(name);
-        if (existing) clearTimeout(existing);
-        inFlightRef.current.set(name, setTimeout(() => {
-            inFlightRef.current.delete(name);
-            // Eventually-consistent watchdog. After the user idles for
-            // IN_FLIGHT_RELEASE_MS, compare our optimistic local state
-            // for this param against the most recent server value seen
-            // via SSE. If they disagree the final PATCH didn't land —
-            // re-queue our local value as the authoritative one and
-            // flush. The retry-on-429 + serialised flush logic above
-            // takes it from there until SSE finally echoes back.
-            const ssp = pluginDisplaysRef.current
-                && pluginDisplaysRef.current['_params_' + device.plugin_instance_id];
-            const localVal = pluginParamsRef.current[name];
-            if (device.plugin_instance_id && ssp
-                    && ssp[name] !== undefined
-                    && !paramsEqual(ssp[name], localVal)
-                    && !paramsEqual(pendingPatchesRef.current.get(name), localVal)) {
-                pendingPatchesRef.current.set(name, localVal);
-                if (rafIdRef.current === null && !patchInFlightRef.current) {
-                    rafIdRef.current = requestAnimationFrame(flushPending);
-                }
-            }
-        }, IN_FLIGHT_RELEASE_MS));
-    }, [device.plugin_instance_id, flushPending, triggerParams]);
 
     const deletePlugin = async () => {
         if (!confirm('Delete this virtual device?')) return;
