@@ -847,10 +847,12 @@ body {
     transition: background 0.1s, box-shadow 0.1s;
     box-shadow: inset 0 1px 2px rgba(0,0,0,0.6), 0 1px 2px rgba(255,255,255,0.04);
 }
-.droppad.armed {
-    border-color: rgba(255,160,80,0.35);
-    background: linear-gradient(180deg, #3a2030 0%, #281018 100%);
+.droppad.flashing {
+    background: linear-gradient(180deg, #ffaa55 0%, #ff8833 100%);
+    border-color: rgba(255,200,140,0.6);
+    box-shadow: 0 0 14px rgba(255,160,80,0.7), inset 0 1px 2px rgba(255,255,255,0.2);
 }
+.droppad.flashing .droppad-label { color: #1a0808; text-shadow: none; }
 .droppad.pressing {
     transform: translateY(1px);
     box-shadow: inset 0 2px 4px rgba(0,0,0,0.8);
@@ -870,14 +872,6 @@ body {
     box-shadow: 0 0 8px var(--accent);
     transition: none;
     pointer-events: none;
-}
-.droppad-armed {
-    position: absolute;
-    top: 4px; right: 8px;
-    font-size: 9px;
-    color: #ffd0b0;
-    pointer-events: none;
-    letter-spacing: 0.5px;
 }
 
 /* XYPad */

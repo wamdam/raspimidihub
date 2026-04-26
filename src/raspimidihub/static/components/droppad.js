@@ -19,15 +19,40 @@ export function PluginDropPad({ name, label, value, onChange }) {
     const onChangeRef = useRef(onChange);
     onChangeRef.current = onChange;
 
-    // 'fire' is the brief intermediate state right after a short-press
-    // when a snapshot exists — server resets to 'captured' within ~10 ms.
-    // Treat it as still-armed to avoid a visible flash to the default label.
-    const armed = value === 'captured' || value === 'fire';
     const [pressing, setPressing] = useState(false);
     const [progress, setProgress] = useState(0);  // 0..1
+    // Brief lighter flash when the server confirms a capture or fire,
+    // as visual feedback (the audible drop already covers fire's "did
+    // it work" question, but a flash matches both actions cheaply).
+    const [flashing, setFlashing] = useState(false);
+    const prevValue = useRef(value);
+    const flashTimer = useRef(null);
     const pressState = useRef({
         startTs: 0, longFired: false, rafId: null, activeTouchId: null,
     });
+
+    useEffect(() => {
+        if (value !== prevValue.current) {
+            // Flash on transitions INTO an action-completed state.
+            // Skips the 'idle' / 'capture' / 'fire' intermediate values —
+            // we only blink when the server confirms 'captured' (after a
+            // capture) or right after the brief 'fire' state.
+            if (value === 'captured' && prevValue.current !== 'fire') {
+                setFlashing(true);
+                if (flashTimer.current) clearTimeout(flashTimer.current);
+                flashTimer.current = setTimeout(() => setFlashing(false), 200);
+            } else if (value === 'fire') {
+                setFlashing(true);
+                if (flashTimer.current) clearTimeout(flashTimer.current);
+                flashTimer.current = setTimeout(() => setFlashing(false), 200);
+            }
+            prevValue.current = value;
+        }
+    }, [value]);
+
+    useEffect(() => () => {
+        if (flashTimer.current) clearTimeout(flashTimer.current);
+    }, []);
 
     useEffect(() => {
         const el = padRef.current;
@@ -115,12 +140,10 @@ export function PluginDropPad({ name, label, value, onChange }) {
         };
     }, [name]);
 
-    const text = pressing ? 'HOLD TO LEARN'
-        : armed ? 'Learned'
-        : (label || 'DROP');
+    const text = pressing ? 'HOLD TO LEARN' : (label || 'DROP');
 
     return html`<div class="droppad-row">
-        <div class="droppad ${pressing ? 'pressing' : ''} ${armed ? 'armed' : ''}" ref=${padRef}>
+        <div class="droppad ${pressing ? 'pressing' : ''} ${flashing ? 'flashing' : ''}" ref=${padRef}>
             <span class="droppad-label">${text}</span>
             ${pressing ? html`<div class="droppad-progress" style="width: ${progress * 100}%"></div>` : null}
         </div>
