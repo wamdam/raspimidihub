@@ -121,21 +121,30 @@ export function usePluginParams({ instanceId, paramsSchema, pluginDisplays }) {
     }, []);
 
     // Settle: pull SSE-broadcasted values into local state for params
-    // not currently being dragged on this client.
+    // not currently being dragged on this client. Runs in a real
+    // useEffect (post-commit) and uses functional setParams so the
+    // comparison reads the latest committed local state — earlier
+    // versions used setTimeout + closure-captured `params` and could
+    // race two consecutive SSE updates: the second update would see
+    // its sseParamsRef bumped, find the old `params` matching, no-op,
+    // and the first update's deferred setParams would then commit a
+    // stale value as final.
     const sseParamsKey = pluginDisplays && instanceId ? '_params_' + instanceId : null;
     const sseParams = sseParamsKey ? pluginDisplays[sseParamsKey] : null;
-    const sseParamsRef = useRef(null);
-    if (sseParams && sseParams !== sseParamsRef.current) {
-        sseParamsRef.current = sseParams;
-        const filtered = {};
-        for (const [k, v] of Object.entries(sseParams)) {
-            if (inFlightRef.current.has(k)) continue;
-            if (!paramsEqual(params[k], v)) filtered[k] = v;
-        }
-        if (Object.keys(filtered).length > 0) {
-            setTimeout(() => setParams((prev) => ({ ...prev, ...filtered })), 0);
-        }
-    }
+    useEffect(() => {
+        if (!sseParams) return;
+        setParams((prev) => {
+            let next = null;
+            for (const [k, v] of Object.entries(sseParams)) {
+                if (inFlightRef.current.has(k)) continue;
+                if (!paramsEqual(prev[k], v)) {
+                    if (next === null) next = { ...prev };
+                    next[k] = v;
+                }
+            }
+            return next || prev;
+        });
+    }, [sseParams]);
 
     const onParamChange = useCallback((name, value) => {
         if (triggerParams.has(name)) {
