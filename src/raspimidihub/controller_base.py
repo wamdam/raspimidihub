@@ -46,6 +46,15 @@ class ControllerBase(PluginBase):
         self._param_values.setdefault("cell_bindings", {})
         self._param_values.setdefault("cell_learn", "")
         self._param_values.setdefault("bg", "Default")
+        self._param_values.setdefault("pad_snapshot", {})
+        # The pad value reflects whether a snapshot is currently loaded.
+        # Derive it from pad_snapshot on every start so the armed-glow on
+        # the UI matches reality from the moment the plugin instance comes
+        # back up — no surprising "tap reveals a stale snapshot" jump.
+        # Snapshots themselves persist across Save Config / restart, which
+        # is what the user wants ("I'd not like to always have to rebuild
+        # these").
+        self._param_values["pad"] = "captured" if self._param_values["pad_snapshot"] else "idle"
         # Derived from the schema once per instance.
         self._defaults: dict[str, tuple[int, int]] = {}
         self._cell_types: dict[str, str] = {}
