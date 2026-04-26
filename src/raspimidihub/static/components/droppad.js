@@ -19,7 +19,10 @@ export function PluginDropPad({ name, label, value, onChange }) {
     const onChangeRef = useRef(onChange);
     onChangeRef.current = onChange;
 
-    const armed = value === 'captured';
+    // 'fire' is the brief intermediate state right after a short-press
+    // when a snapshot exists — server resets to 'captured' within ~10 ms.
+    // Treat it as still-armed to avoid a visible flash to the default label.
+    const armed = value === 'captured' || value === 'fire';
     const [pressing, setPressing] = useState(false);
     const [progress, setProgress] = useState(0);  // 0..1
     const pressState = useRef({

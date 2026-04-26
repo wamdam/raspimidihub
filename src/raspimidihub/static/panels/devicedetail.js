@@ -3,7 +3,7 @@
  * the user taps a device row in the matrix.
  */
 
-import { useState, useEffect, useRef, useCallback } from '../lib/hooks.module.js';
+import { useState, useEffect, useRef, useCallback, useMemo } from '../lib/hooks.module.js';
 import { html, api, animateClose, useEscapeClose, useSwipeDismiss } from '../ui/common.js';
 import { noteName } from '../state/constants.js';
 import { PluginConfigPanel, PluginWheel, PluginFader } from '../plugin-controls.js';
@@ -281,7 +281,36 @@ export function DeviceDetailPanel({ device, onClose, showToast, refresh, pluginD
         }
     }
 
+    // Trigger-style param names from the schema (DropPad, Button trigger=true).
+    // Server intentionally cycles their value (fire -> idle, capture -> captured),
+    // so we must NOT optimistically commit the user's input or run the watchdog
+    // re-queue logic — both would fight the server's authoritative state.
+    const triggerParams = useMemo(() => {
+        const s = new Set();
+        const walk = (items) => {
+            if (!items) return;
+            for (const p of items) {
+                if (p.type === 'group') walk(p.children);
+                else if (p.type === 'layoutgrid') walk((p.cells || []).map(c => c.param));
+                else if (p.type === 'droppad') s.add(p.name);
+                else if (p.type === 'button' && p.trigger) s.add(p.name);
+            }
+        };
+        walk(pluginData?.params_schema);
+        return s;
+    }, [pluginData?.params_schema]);
+
     const onPluginParamChange = useCallback((name, value) => {
+        if (triggerParams.has(name)) {
+            // Fire-and-forget: PATCH only, no local optimism, no watchdog.
+            // The server's authoritative state arrives via SSE.
+            if (!device.plugin_instance_id) return;
+            pendingPatchesRef.current.set(name, value);
+            if (rafIdRef.current === null) {
+                rafIdRef.current = requestAnimationFrame(flushPending);
+            }
+            return;
+        }
         setPluginParams(prev => prev[name] === value ? prev : { ...prev, [name]: value });
         if (!device.plugin_instance_id) return;
 
@@ -314,7 +343,7 @@ export function DeviceDetailPanel({ device, onClose, showToast, refresh, pluginD
                 }
             }
         }, IN_FLIGHT_RELEASE_MS));
-    }, [device.plugin_instance_id, flushPending]);
+    }, [device.plugin_instance_id, flushPending, triggerParams]);
 
     const deletePlugin = async () => {
         if (!confirm('Delete this virtual device?')) return;
