@@ -194,6 +194,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         latency_max = {k: round(v, 1) for k, v in server._latency_max.items()}
         return Response.json({
             "hostname": hostname, "version": __version__,
+            "build_token": server._build_token,
             "ip_addresses": ips, "cpu_temp_c": temp, "ram": ram,
             "uptime_seconds": uptime, "load1": load1,
             "cpu_percent": server._cpu_percent,

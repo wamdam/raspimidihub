@@ -22,6 +22,23 @@ import { ControllerPage } from './pages/controller.js';
 import { PresetsPage } from './pages/presets.js';
 import { SettingsPage } from './pages/settings.js';
 
+// Header badge: "v2.0.9·a1b2c3d4" plus a "stale, reload" warning when
+// the loaded JS bundle's build token differs from the server's current
+// one. Lets the user verify they're running fresh code at a glance.
+function VersionBadge({ version, loadedBuild, serverBuild }) {
+    if (!version) return html`<h1>RaspiMIDIHub</h1>`;
+    const shortBuild = loadedBuild ? loadedBuild.split('-').pop() : '';
+    const stale = serverBuild && loadedBuild && serverBuild !== loadedBuild;
+    return html`<h1>RaspiMIDIHub
+        <span style="font-size:11px;font-weight:400;color:var(--text-dim)">
+            v${version}${shortBuild ? '·' + shortBuild : ''}
+            ${stale ? html`<span style="color:#f80;cursor:pointer;margin-left:6px"
+                title="Server has been redeployed since this tab loaded — click to reload"
+                onclick=${() => location.reload()}>· stale, reload</span>` : ''}
+        </span>
+    </h1>`;
+}
+
 function App() {
     const { route, navigate } = useRouter();
     const tab = route.tab;
@@ -33,6 +50,23 @@ function App() {
     const [toast, setToast] = useState('');
     const [configFallback, setConfigFallback] = useState(false);
     const [version, setVersion] = useState('');
+    // Server's current build token vs the one this JS bundle was loaded
+    // against. They diverge after a redeploy → user needs to reload to
+    // pick up new JS. The badge in the header makes that visible at a
+    // glance instead of "is my browser running stale code?" guesswork.
+    const [serverBuild, setServerBuild] = useState('');
+    // The build token in our entry script URL (?v=…). Window.location
+    // doesn't carry it; we read it from the script tag we were loaded
+    // from. The header script tag is the one that matches /app.js.
+    const loadedBuild = (() => {
+        try {
+            for (const s of document.querySelectorAll('script[src*="app.js"]')) {
+                const m = s.getAttribute('src').match(/[?&]v=([^&]+)/);
+                if (m) return decodeURIComponent(m[1]);
+            }
+        } catch {}
+        return '';
+    })();
     // Device-detail panel open state lives in the URL — opening / closing
     // the panel pushes a new history entry, so the back button closes it.
     const selectedDeviceId = route.deviceId != null ? Number(route.deviceId) : null;
@@ -69,7 +103,11 @@ function App() {
 
     useEffect(() => {
         refresh();
-        api('/system').then(s => { setConfigFallback(s.config_fallback); setVersion(s.version || ''); });
+        api('/system').then(s => {
+            setConfigFallback(s.config_fallback);
+            setVersion(s.version || '');
+            setServerBuild(s.build_token || '');
+        });
         // Expire stale clock sources and midi events
         const expireTimer = setInterval(() => {
             const now = Date.now();
@@ -179,7 +217,7 @@ function App() {
 
     return html`
         <div class="header">
-            <h1>RaspiMIDIHub${version ? html` <span style="font-size:11px;font-weight:400;color:var(--text-dim)">v${version}</span>` : ''}</h1>
+            <${VersionBadge} version=${version} loadedBuild=${loadedBuild} serverBuild=${serverBuild} />
             <span class="status ${sseConnected ? (devices.length > 0 ? 'ok' : '') : 'err'}">${sseConnected ? `${devices.length} device${devices.length !== 1 ? 's' : ''}` : 'Connection lost'}</span>
         </div>
         ${configFallback && html`<div class="banner">Config unreadable — using default all-to-all routing. Save to fix.</div>`}
