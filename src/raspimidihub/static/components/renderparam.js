@@ -99,7 +99,6 @@ export function renderParam(param, values, onChange, allValues, displayCtx) {
                 onChange=${onChange} />`;
         }
         case 'layoutgrid': {
-            const gridStyle = `display:grid;grid-template-columns:repeat(${param.cols}, minmax(0, 1fr));grid-template-rows:repeat(${param.rows}, auto);gap:6px`;
             const editing = param.edit_param ? !!values[param.edit_param] : false;
             const labels = (param.labels_param && values[param.labels_param]) || {};
             const bindings = (param.bindings_param && values[param.bindings_param]) || {};
@@ -117,44 +116,57 @@ export function renderParam(param, values, onChange, allValues, displayCtx) {
             const toggleLearn = (cellName) => {
                 onChange(param.learn_param, learnTarget === cellName ? '' : cellName);
             };
+
+            // Edit mode renders a flat scrollable list — one row per cell.
+            // Trying to cram name + ch + cc + L into the play-mode grid
+            // (typically 8 columns wide on a phone) produced unreadable
+            // 5-px-wide inputs. The flat list gives each row full width.
+            if (editing && param.labels_param) {
+                return html`<div class="layout-grid-editing">
+                    ${param.cells.map(c => {
+                        const labelOv = labels[c.param.name];
+                        const effectiveLabel = labelOv != null && labelOv !== '' ? labelOv : c.param.label;
+                        const bindOv = bindings[c.param.name] || {};
+                        const defCh = c.channel != null ? c.channel + 1 : null;
+                        const defCc = c.cc;
+                        const ovCh = (bindOv.channel != null && bindOv.channel !== '') ? bindOv.channel + 1 : null;
+                        const ovCc = (bindOv.cc != null && bindOv.cc !== '') ? bindOv.cc : null;
+                        const isLearning = learnTarget === c.param.name;
+                        return html`<div class="layout-edit-row ${isLearning ? 'learning' : ''}">
+                            <span class="layout-edit-default" title=${`Default: ${c.param.label}`}>${c.param.label}</span>
+                            <input class="layout-edit-name" type="text"
+                                value=${effectiveLabel === c.param.label ? '' : effectiveLabel}
+                                placeholder=${c.param.label}
+                                onInput=${(e) => setLabel(c.param.name, e.target.value)} />
+                            ${param.bindings_param && (defCh != null || defCc != null) ? html`
+                                <input class="layout-edit-bind" type="number" min="1" max="16"
+                                    value=${ovCh != null ? ovCh : ''}
+                                    placeholder=${defCh != null ? `${defCh}` : 'ch'}
+                                    title="Channel (1-16)"
+                                    onInput=${(e) => setBinding(c.param.name, 'channel',
+                                        e.target.value === '' ? null : (parseInt(e.target.value, 10) - 1))} />
+                                <input class="layout-edit-bind" type="number" min="0" max="127"
+                                    value=${ovCc != null ? ovCc : ''}
+                                    placeholder=${defCc != null ? `${defCc}` : 'cc'}
+                                    title="CC (0-127)"
+                                    onInput=${(e) => setBinding(c.param.name, 'cc',
+                                        e.target.value === '' ? null : parseInt(e.target.value, 10))} />
+                                ${param.learn_param ? html`
+                                    <button type="button" class="layout-edit-learn ${isLearning ? 'on' : ''}"
+                                        title=${isLearning ? 'Listening — tap to cancel' : 'MIDI Learn'}
+                                        onclick=${() => toggleLearn(c.param.name)}>${isLearning ? '…' : 'L'}</button>` : null}
+                            ` : null}
+                        </div>`;
+                    })}
+                </div>`;
+            }
+
+            // Play mode: positioned grid with optional label overrides.
+            const gridStyle = `display:grid;grid-template-columns:repeat(${param.cols}, minmax(0, 1fr));grid-template-rows:repeat(${param.rows}, auto);gap:6px`;
             return html`<div class="layout-grid" style=${gridStyle}>
                 ${param.cells.map(c => {
                     const cellStyle = `grid-column: ${c.col} / span ${c.span_cols}; grid-row: ${c.row} / span ${c.span_rows}; min-width: 0`;
                     const labelOv = labels[c.param.name];
-                    const effectiveLabel = labelOv != null && labelOv !== '' ? labelOv : c.param.label;
-                    const bindOv = bindings[c.param.name] || {};
-                    // Defaults from the schema (LayoutCell.channel/cc; channel is 0-based internally).
-                    // UI shows / accepts 1-based channels so they match what musicians see on hardware.
-                    const defCh = c.channel != null ? c.channel + 1 : null;
-                    const defCc = c.cc;
-                    const ovCh = (bindOv.channel != null && bindOv.channel !== '') ? bindOv.channel + 1 : null;
-                    const ovCc = (bindOv.cc != null && bindOv.cc !== '') ? bindOv.cc : null;
-                    if (editing && param.labels_param) {
-                        const isLearning = learnTarget === c.param.name;
-                        return html`<div class="layout-cell layout-cell-editing ${isLearning ? 'learning' : ''}" style=${cellStyle}>
-                            <input class="layout-cell-rename" type="text"
-                                value=${effectiveLabel}
-                                placeholder=${c.param.label}
-                                onInput=${(e) => setLabel(c.param.name, e.target.value)} />
-                            ${param.bindings_param && (defCh != null || defCc != null) ? html`
-                                <div class="layout-cell-binding">
-                                    <input class="layout-cell-bind" type="number" min="1" max="16"
-                                        value=${ovCh != null ? ovCh : ''}
-                                        placeholder=${defCh != null ? `ch ${defCh}` : 'ch'}
-                                        onInput=${(e) => setBinding(c.param.name, 'channel',
-                                            e.target.value === '' ? null : (parseInt(e.target.value, 10) - 1))} />
-                                    <input class="layout-cell-bind" type="number" min="0" max="127"
-                                        value=${ovCc != null ? ovCc : ''}
-                                        placeholder=${defCc != null ? `cc ${defCc}` : 'cc'}
-                                        onInput=${(e) => setBinding(c.param.name, 'cc',
-                                            e.target.value === '' ? null : parseInt(e.target.value, 10))} />
-                                    ${param.learn_param ? html`
-                                        <button type="button" class="layout-cell-learn ${isLearning ? 'on' : ''}"
-                                            title=${isLearning ? 'Listening for CC… (tap to cancel)' : 'MIDI Learn'}
-                                            onclick=${() => toggleLearn(c.param.name)}>L</button>` : null}
-                                </div>` : null}
-                        </div>`;
-                    }
                     const patchedParam = labelOv != null && labelOv !== ''
                         ? { ...c.param, label: labelOv }
                         : c.param;

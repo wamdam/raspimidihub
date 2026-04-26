@@ -87,8 +87,11 @@ export function PluginFader({ name, label, min, max, value, onChange, vertical, 
     const thumbStyle = vertical
         ? { bottom: `calc(3px + ${ratio} * (100% - 28px))` }
         : { left: `calc(2px + ${ratio} * (100% - 44px))` };
+    // Vertical track has a 12px inset at top + bottom (the rounded ends),
+    // so the fill must scale into the inner ~156px not the full 180px,
+    // otherwise at ratio=1 it overshoots the top of the track.
     const fillStyle = vertical
-        ? { height: `${ratio * 100}%` }
+        ? { height: `calc(${ratio} * (100% - 24px))` }
         : { width: `calc(22px + ${ratio} * (100% - 44px))` };
 
     return html`<div class="fader-group ${vertical ? 'vertical' : ''}">

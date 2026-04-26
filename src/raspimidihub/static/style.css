@@ -967,62 +967,71 @@ body {
 }
 .layout-cell .fader-group { width: 100%; }
 .layout-cell .rubber-btn, .layout-cell .wheel-container { width: 100%; }
-.layout-cell-editing {
-    display: flex; flex-direction: column; align-items: stretch; gap: 3px;
-    background: rgba(80, 130, 200, 0.12);
-    border: 1px dashed rgba(120, 170, 220, 0.4);
+/* Edit mode: flat scrollable list, one row per cell. The play-mode
+   grid is too narrow on phones to fit name + ch + cc + L inline per
+   cell — they collapse to unreadable squares. The flat list gives
+   each row full width and stays readable. */
+.layout-grid-editing { display: flex; flex-direction: column; gap: 4px; }
+.layout-edit-row {
+    display: flex; flex-direction: row; align-items: center; gap: 6px;
+    padding: 4px 6px;
+    background: rgba(80, 130, 200, 0.10);
+    border: 1px solid rgba(120, 170, 220, 0.25);
     border-radius: 4px;
-    padding: 4px;
-    min-height: 44px;
+    min-height: 36px;
 }
-.layout-cell-rename, .layout-cell-bind {
-    width: 100%;
+.layout-edit-row.learning {
+    border-color: rgba(255,180,100,0.7);
+    background: rgba(255,160,80,0.10);
+}
+.layout-edit-default {
+    flex: 0 0 38px;
+    font-size: 11px;
+    color: var(--text-dim);
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+}
+.layout-edit-name, .layout-edit-bind {
     background: rgba(0,0,0,0.3);
     border: 1px solid rgba(255,255,255,0.12);
     border-radius: 3px;
     color: var(--text);
-    font-size: 11px;
-    padding: 3px 4px;
-    text-align: center;
+    font-size: 12px;
+    padding: 4px 6px;
     box-sizing: border-box;
     -moz-appearance: textfield;
 }
-.layout-cell-bind::-webkit-outer-spin-button,
-.layout-cell-bind::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-.layout-cell-rename:focus, .layout-cell-bind:focus {
+.layout-edit-name { flex: 1 1 auto; min-width: 0; }
+.layout-edit-bind { flex: 0 0 44px; text-align: center; -webkit-appearance: none; }
+.layout-edit-bind::-webkit-outer-spin-button,
+.layout-edit-bind::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.layout-edit-name:focus, .layout-edit-bind:focus {
     outline: none;
     border-color: var(--accent);
     background: rgba(0,0,0,0.5);
 }
-.layout-cell-binding { display: flex; gap: 2px; align-items: stretch; }
-.layout-cell-binding .layout-cell-bind { flex: 1; min-width: 0; }
-.layout-cell-learn {
-    flex: 0 0 auto;
-    width: 22px;
+.layout-edit-learn {
+    flex: 0 0 36px;
+    height: 28px;
     background: rgba(0,0,0,0.3);
     border: 1px solid rgba(255,255,255,0.18);
     border-radius: 3px;
     color: var(--text-dim);
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 600;
     cursor: pointer;
     padding: 0;
-    line-height: 1;
 }
-.layout-cell-learn:hover { color: var(--text); border-color: rgba(255,255,255,0.3); }
-.layout-cell-learn.on {
+.layout-edit-learn:hover { color: var(--text); border-color: rgba(255,255,255,0.3); }
+.layout-edit-learn.on {
     background: rgba(255,160,80,0.25);
     border-color: rgba(255,180,100,0.7);
     color: #ffe0c0;
-    animation: layout-cell-learn-pulse 1.2s ease-in-out infinite;
+    animation: layout-edit-learn-pulse 1.2s ease-in-out infinite;
 }
-@keyframes layout-cell-learn-pulse {
+@keyframes layout-edit-learn-pulse {
     0%, 100% { box-shadow: 0 0 0 rgba(255,160,80,0); }
     50%      { box-shadow: 0 0 8px rgba(255,160,80,0.7); }
-}
-.layout-cell-editing.learning {
-    border-color: rgba(255,180,100,0.7);
-    background: rgba(255,160,80,0.10);
 }
 
 /* Radio group */
