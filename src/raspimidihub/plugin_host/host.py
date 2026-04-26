@@ -485,17 +485,21 @@ class PluginHost:
 
         instance.plugin._param_values[name] = value
 
-        try:
-            instance.plugin.on_param_change(name, value)
-        except Exception as e:
-            log.warning("Plugin %s on_param_change error: %s", instance.name, e)
-
-        # Notify UI via callback (set by API layer)
+        # Broadcast to the UI BEFORE running on_param_change. The plugin
+        # may synchronously call its own set_param() inside the handler
+        # (e.g. DropPad fires 'fire' then resets to 'idle'); broadcasting
+        # the incoming value first keeps the order on the wire correct
+        # so the plugin's correction lands second and wins.
         if instance.plugin._notify_param_change:
             try:
                 instance.plugin._notify_param_change(name, value)
             except Exception:
                 pass
+
+        try:
+            instance.plugin.on_param_change(name, value)
+        except Exception as e:
+            log.warning("Plugin %s on_param_change error: %s", instance.name, e)
 
     def set_params(self, instance_id: str, params: dict[str, Any]) -> None:
         """Update multiple parameters at once."""
