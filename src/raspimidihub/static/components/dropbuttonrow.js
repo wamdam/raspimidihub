@@ -221,10 +221,10 @@ function DropButton({ index, label, state, mode, progress, isScheduled,
     }, [index, paramName]);
 
     // Visual classes:
-    //   armed   — has a snapshot loaded (state === 'captured' / 'scheduled' / 'firing')
-    //   pressing — finger / mouse down right now (long-press progress bar visible)
+    //   armed     — snapshot loaded (state in 'captured'|'scheduled'|'firing')
+    //   pressing  — finger/mouse down right now (long-press in flight)
     //   scheduled — server says this button is the scheduled one
-    //   firing   — brief flash on actual fire
+    //   firing    — brief flash on actual fire
     const armed = state !== 'idle';
     const cls = [
         'dropbtn',
@@ -235,29 +235,88 @@ function DropButton({ index, label, state, mode, progress, isScheduled,
         state === 'firing' ? 'firing' : '',
     ].filter(Boolean).join(' ');
 
-    // Mode badge ("1" / "4") in a corner; nothing for immediately mode.
+    // Mode badge ("1"/"4"/"8"/"16") in a corner; blank for immediately.
     const modeBadge = MODE_BADGES[mode] || '';
 
-    // SVG ring at 0..1 progress (clockwise from top). Only shown
-    // while THIS button is the scheduled one.
-    const ringRadius = 18;
-    const ringCirc = 2 * Math.PI * ringRadius;
-    const ringDashOff = ringCirc * (1 - progress);
+    // Two distinct progress visuals — different gestures, different
+    // languages:
+    //  - Long-press capture → full-button vertical fill from the
+    //    bottom (the "learning bar"). Goes 0 → 1 over 500 ms; on
+    //    completion the snapshot is captured and the fill collapses.
+    //  - Bar-quantised schedule → segmented ring around the button,
+    //    always rendered (4 dim arc segments with quarter gaps), fills
+    //    clockwise from the top with cycle-relative progress.
+    // The ring's segmented outline is visible even when no schedule
+    // is active, so the "musical quarters of a cycle" cue is always
+    // present once the gestures themselves are familiar.
+    const ringFill = isScheduled ? progress : 0;
 
     return html`<div class=${cls} ref=${elRef}>
-        ${isScheduled ? html`
-            <svg class="dropbtn-ring" viewBox="0 0 40 40">
-                <circle cx="20" cy="20" r=${ringRadius}
-                    fill="none" stroke="currentColor" stroke-width="2"
-                    stroke-linecap="round"
-                    stroke-dasharray=${ringCirc}
-                    stroke-dashoffset=${ringDashOff}
-                    transform="rotate(-90 20 20)" />
-            </svg>` : null}
+        <${SegmentedRing} fill=${ringFill}
+            bright=${isScheduled || state === 'firing'}
+            buttonId=${index} />
+        ${pressing ? html`
+            <div class="dropbtn-pressfill"
+                style="height: ${pressProgress * 100}%"></div>` : null}
         <span class="dropbtn-label">${label}</span>
         ${modeBadge ? html`<span class="dropbtn-mode">${modeBadge}</span>` : null}
-        ${pressing ? html`
-            <div class="dropbtn-pressbar"
-                style="width: ${pressProgress * 100}%"></div>` : null}
     </div>`;
+}
+
+// 4-segment progress ring with small quarter gaps. Background segments
+// always shown muted; foreground (bright) clipped to a wedge from the
+// top, sweeping clockwise to `fill` (0..1). One unique clipPath ID per
+// button so multiple rings on the page don't collide.
+function SegmentedRing({ fill, bright, buttonId }) {
+    const cx = 20, cy = 20, r = 18;
+    const stroke = 2.5;
+    const circ = 2 * Math.PI * r;
+    // 4 dashes / 4 gaps. gap ≈ 4 % of perimeter — visible but tight.
+    const gapLen = circ * 0.04;
+    const dashLen = (circ - 4 * gapLen) / 4;
+    const dasharray = `${dashLen} ${gapLen}`;
+    // SVG default circle starts at 3 o'clock; rotate -90° so dash 1
+    // begins at 12 o'clock (musically beat 1).
+    const rotate = `rotate(-90 ${cx} ${cy})`;
+    // The wedge from 12 o'clock to (fill * 360°) clockwise. For
+    // fill=0 nothing is shown; for fill=1 the whole circle clips
+    // through (use a generous square that covers everything).
+    const clipId = `dropring-clip-${buttonId}`;
+    let wedge = '';
+    if (fill > 0.001) {
+        if (fill >= 0.999) {
+            // Cover the whole svg box.
+            wedge = `M 0 0 L 40 0 L 40 40 L 0 40 Z`;
+        } else {
+            const a = fill * 2 * Math.PI - Math.PI / 2;  // start at top, clockwise
+            const ex = cx + (r + stroke) * Math.cos(a);
+            const ey = cy + (r + stroke) * Math.sin(a);
+            const largeArc = fill > 0.5 ? 1 : 0;
+            wedge =
+                `M ${cx} ${cy} ` +
+                `L ${cx} ${cy - (r + stroke)} ` +
+                `A ${r + stroke} ${r + stroke} 0 ${largeArc} 1 ${ex} ${ey} ` +
+                `Z`;
+        }
+    }
+    return html`<svg class="dropbtn-ring" viewBox="0 0 40 40">
+        <defs>
+            <clipPath id=${clipId}>
+                <path d=${wedge} />
+            </clipPath>
+        </defs>
+        <!-- BG segments — always muted dim outline -->
+        <circle cx=${cx} cy=${cy} r=${r} fill="none"
+            stroke-width=${stroke} stroke-linecap="butt"
+            stroke=${bright ? 'rgba(255,170,90,0.30)' : 'rgba(255,170,90,0.18)'}
+            stroke-dasharray=${dasharray}
+            transform=${rotate} />
+        <!-- FG progress — same shape, bright color, clipped to wedge -->
+        ${fill > 0.001 ? html`<circle cx=${cx} cy=${cy} r=${r} fill="none"
+            stroke="rgba(255,200,140,0.95)" stroke-width=${stroke}
+            stroke-linecap="butt"
+            stroke-dasharray=${dasharray}
+            transform=${rotate}
+            clip-path=${`url(#${clipId})`} />` : null}
+    </svg>`;
 }

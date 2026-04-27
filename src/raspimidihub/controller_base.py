@@ -369,11 +369,23 @@ class ControllerBase(PluginBase):
                 self._param_values.get("drop_snapshots") or {}).get(other_sid) else "idle"
         states[sid] = "scheduled"
         self.set_param("drop_states", states)
+        # Cycle-relative progress: the ring starts at the position the
+        # bar is on within the upcoming cycle, not at 0%. So pressing
+        # halfway through bar 5 with mode='4bar' starts the ring at
+        # ~38 % (1.5 of 4 bars elapsed), filling smoothly to 100 %
+        # at bar 8. Without this, the ring would jump back to 0 every
+        # press and not match the live music position.
+        fire_at_tick = now_tick + ticks_left
+        cycle_total = every_n_bars * bus._ticks_per_bar
+        cycle_start_tick = fire_at_tick - cycle_total
+        progress = round((now_tick - cycle_start_tick) / cycle_total, 2)
         self.set_param("drop_schedule", {
             "button_id": int(sid),
             "set_at_tick": now_tick,
-            "fire_at_tick": now_tick + ticks_left,
-            "progress": 0.0,
+            "fire_at_tick": fire_at_tick,
+            "cycle_start_tick": cycle_start_tick,
+            "every_n_bars": every_n_bars,
+            "progress": progress,
         })
 
     def _cancel_drop(self, sid: str) -> None:
