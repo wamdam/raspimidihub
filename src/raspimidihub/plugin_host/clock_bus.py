@@ -35,13 +35,28 @@ DIVISION_TICKS = {
 
 
 class ClockBus:
-    """Counts incoming MIDI clock ticks and fires on_tick() at musical divisions."""
+    """Counts incoming MIDI clock ticks and fires on_tick() at musical divisions.
+
+    Also exposes a bar counter for plugins that need to schedule on
+    musical-bar boundaries (e.g. drop-button "fire after 1 bar"):
+    `bar_position()` returns `(bar, tick_in_bar, ticks_per_bar)` so
+    plugins can compute "ticks until next bar". Time signature is
+    fixed at 4/4 (96 ticks/bar at 24 PPQN); a future Master Clock
+    `time_signature` param can feed `_ticks_per_bar` if odd-time
+    material is needed.
+    """
+
+    # 24 PPQN × 4 quarters = 96 ticks per bar in 4/4. Plugins read
+    # this via bar_position() rather than hard-coding so a future
+    # time_signature param can change it.
+    TICKS_PER_BAR_DEFAULT = 96
 
     def __init__(self):
         self._tick_count = 0
         self._running = False  # transport running (Start received)
         self._subscribers: list[tuple[PluginInstance, set[str]]] = []
         self._lock = threading.Lock()
+        self._ticks_per_bar = self.TICKS_PER_BAR_DEFAULT
 
     def subscribe(self, instance: PluginInstance, divisions: list[str]) -> None:
         with self._lock:
@@ -50,6 +65,34 @@ class ClockBus:
     def unsubscribe(self, instance: PluginInstance) -> None:
         with self._lock:
             self._subscribers = [(i, d) for i, d in self._subscribers if i is not instance]
+
+    def bar_position(self) -> tuple[int, int, int]:
+        """Return `(bar, tick_in_bar, ticks_per_bar)` based on the
+        running tick count.
+
+        Bar 0 starts at tick 0 (the first tick after the most recent
+        MIDI Start, or the very first tick if no Start was seen).
+        `tick_in_bar` is in [0, ticks_per_bar). Reading is lock-free —
+        the values may shift by a tick under concurrent on_clock_tick,
+        which is fine for "ticks until next bar boundary" arithmetic
+        (the caller rounds up to the boundary anyway)."""
+        tc = self._tick_count
+        tpb = self._ticks_per_bar
+        bar = tc // tpb
+        tick_in_bar = tc % tpb
+        return (bar, tick_in_bar, tpb)
+
+    def ticks_until_next_bar(self, bars_ahead: int = 1) -> int:
+        """How many clock ticks until the start of the bar that lands
+        `bars_ahead` bars from NOW. `bars_ahead=1` = next bar
+        boundary; `bars_ahead=4` = boundary 4 bars from the next one.
+        Returns `ticks_per_bar` if bars_ahead <= 0 (treat as "next
+        bar")."""
+        bars_ahead = max(1, bars_ahead)
+        tc = self._tick_count
+        tpb = self._ticks_per_bar
+        next_boundary = ((tc // tpb) + bars_ahead) * tpb
+        return next_boundary - tc
 
     def on_clock_tick(self) -> None:
         """Called by the engine for each MIDI Clock message (24 PPQ).
