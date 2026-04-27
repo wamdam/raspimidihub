@@ -38,10 +38,48 @@ Output files land in `dist/`.
 | `/usr/lib/python3/dist-packages/raspimidihub/` | Python source + static web assets |
 | `/lib/systemd/system/raspimidihub.service` | Systemd service unit |
 | `/lib/udev/rules.d/90-raspimidihub.rules` | Udev rules for MIDI device events |
-| `/DEBIAN/postinst` | Sets hostname, unmasks hostapd, enables service |
+| `/usr/local/bin/raspimidihub-system-prepare` | Trim services + reserve CPU 3 (see below) |
+| `/usr/local/bin/raspimidihub-system-revert` | Undo the prepare changes |
+| `/usr/local/bin/reset-wifi` | Wipe stored WiFi credentials |
+| `/DEBIAN/postinst` | Sets hostname, unmasks hostapd, enables service, runs `system-prepare` |
 | `/DEBIAN/postrm` | Disables and removes service on purge |
 
 **Dependencies:** `python3 (>= 3.9)`, `libasound2t64 | libasound2`, `alsa-utils`, `avahi-daemon`, `hostapd`, `dnsmasq`
+
+#### System prepare: service trim + CPU isolation
+
+`raspimidihub-system-prepare` runs from postinst on every install / upgrade
+(idempotent). It encodes the assumption "this Pi only does MIDI" — anything
+else uses the **rosetup** package instead, which is generic.
+
+**Pass 1 — disable services + timers:** `bluealsa`, `bluealsa-aplay`,
+`bluetooth`, `ModemManager`, `cloud-init` (×4 units), `udisks2`, `cron`,
+`sshswitch`, `e2scrub_reap`, plus the `e2scrub_all`, `fstrim`,
+`dpkg-db-backup`, `logrotate`, `rpi-zram-writeback` timers. Each is silently
+skipped if the unit isn't installed on the running Pi-OS variant.
+
+**Pass 2a — kernel cmdline:** appends `isolcpus=3 nohz_full=3 rcu_nocbs=3`
+to `/boot/firmware/cmdline.txt` (auto-remounts `/boot/firmware` rw, edits,
+restores ro). Removes CPU 3 from the general scheduler, suppresses its
+periodic timer tick, offloads RCU callbacks. Takes effect on **next reboot**.
+
+**Pass 2b — systemd drop-in:** writes `/etc/systemd/system/raspimidihub.service.d/cpu-affinity.conf`
+with `AllowedCPUs=3` and `Nice=-5`. Pins the asyncio Python process to the
+isolated core. Takes effect on **next service restart** (postinst already
+restarts the service).
+
+**Goal:** the asyncio main loop sits on a quiet core that no kernel timer,
+no RCU callback, and no other userland process can preempt — latency spikes
+from external influence stop being possible by construction. Cost: a Pi 4
+loses ~1 / 4 of its compute budget; the asyncio loop never used more than
+one core anyway, so this is a free win for MIDI latency.
+
+**Backups:** every system file edited is copied to
+`/var/lib/raspimidihub-prepare/backup/` first.
+
+**Revert:** `sudo raspimidihub-system-revert` re-enables the services and
+strips the kernel cmdline params and the drop-in. Reboot to release CPU 3
+back to the general scheduler.
 
 ### raspimidihub-rosetup
 
