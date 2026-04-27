@@ -2,12 +2,12 @@
 
 Each Controller template (Mixer 8, Performance 16, FX 6, …) is a thin
 subclass that just declares NAME / DESCRIPTION / HELP and a `params`
-list containing one LayoutGrid + the standard DropPad + edit Button
-siblings. All the cell ↔ CC plumbing lives here:
+list containing one LayoutGrid + the standard DropButtonRow siblings.
+All the cell ↔ CC plumbing lives here:
 
   - on_param_change → emit CC for the cell's effective binding
   - on_cc → MIDI Learn capture (if armed) or bidirectional sync
-  - drop pad capture / fire across every bound cell
+  - drop button capture / fire / schedule across every bound cell
   - panic resets every cell to its declared default + emits the CC
 
 The plugin loader filters discovered classes by `__module__` so this
@@ -21,13 +21,15 @@ from raspimidihub.plugin_api import LayoutGrid, PluginBase
 
 
 class ControllerBase(PluginBase):
-    """Common cell/binding/drop-pad logic for §5 Controller templates.
+    """Common cell/binding/drop-button logic for §5 Controller templates.
 
     Subclasses override metadata (NAME / DESCRIPTION / HELP / VERSION /
     AUTHOR) and `params`. `params` MUST contain exactly one LayoutGrid
     whose cells declare `channel` and `cc` defaults; the LayoutGrid
     SHOULD point at sibling params named `cell_labels`, `cell_bindings`,
-    `cell_learn` and `pad` (a DropPad) for full functionality."""
+    `cell_learn`, plus a `DropButtonRow` (whose auxiliary params are
+    `drop_states`, `drop_snapshots`, `drop_modes`, `drop_labels`,
+    `drop_schedule`) for full functionality."""
 
     inputs = ["CC (bidirectional sync — silent UI updates, no re-emit)"]
     outputs = ["CC per cell — see HELP for default channel/cc bindings"]

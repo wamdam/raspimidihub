@@ -46,9 +46,9 @@ async def pending_param_flusher(plugin_host) -> None:
     and the display coalescer at 10 Hz. Plugin threads submit the
     latest value per (instance, name); these loops fan them out to
     SSE on the asyncio thread, with the latest value always winning.
-    String-typed param values (DropPad fire→idle and similar state
-    transitions) bypass the queue entirely via emit_now(), so every
-    transition still reaches the UI immediately."""
+    String-typed param values (DropButtonRow drops.action cycling and
+    similar state transitions) bypass the queue entirely via
+    emit_now(), so every transition still reaches the UI immediately."""
     tick = 0
     while True:
         await asyncio.sleep(0.05)

@@ -27,14 +27,13 @@ function paramsEqual(a, b) {
 }
 
 // Walk a params schema and collect names of trigger-style params:
-//   - DropPad
 //   - DropButtonRow
 //   - Button(trigger=true)
 //   - LayoutGrid.learn_param
 // These intentionally cycle their value on the server (fire -> idle,
-// capture -> captured, learn -> "", drops.action -> 'idle'), so the
-// frontend must NOT optimistically commit OR run the watchdog
-// re-queue — both would fight the server's authoritative state.
+// learn -> "", drops.action -> 'idle'), so the frontend must NOT
+// optimistically commit OR run the watchdog re-queue — both would
+// fight the server's authoritative state.
 export function collectTriggerParams(schema) {
     const s = new Set();
     const walk = (items) => {
@@ -44,8 +43,7 @@ export function collectTriggerParams(schema) {
             else if (p.type === 'layoutgrid') {
                 walk((p.cells || []).map((c) => c.param));
                 if (p.learn_param) s.add(p.learn_param);
-            } else if (p.type === 'droppad') s.add(p.name);
-            else if (p.type === 'dropbuttonrow') s.add(p.name);
+            } else if (p.type === 'dropbuttonrow') s.add(p.name);
             else if (p.type === 'button' && p.trigger) s.add(p.name);
         }
     };

@@ -237,27 +237,6 @@ class Group:
 
 
 @dataclass
-class DropPad(Param):
-    """Single big snapshot pad with short-press fire / long-press capture.
-
-    Value is one of: 'idle' (no snapshot yet), 'fire' (UI requesting a
-    fire — server resets after handling), 'capture' (UI requesting a
-    capture), 'captured' (a snapshot exists). Long-press threshold is
-    500 ms with a visible progress ring on the pad.
-
-    Used by the §5 Controller plugin as a one-shot performance trigger:
-    long-press during setup to memorise the current state, then
-    short-press during a build-up to snap every cell back to that state
-    and emit the corresponding CCs in one go."""
-    default: str = "idle"
-
-    def to_dict(self) -> dict:
-        d = super().to_dict()
-        d["default"] = self.default
-        return d
-
-
-@dataclass
 class DropButtonRow(Param):
     """Row of N quarter-width snapshot buttons with per-button mode.
 

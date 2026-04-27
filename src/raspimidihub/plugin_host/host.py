@@ -288,10 +288,11 @@ class PluginHost:
         instance.plugin._notify_display = _on_display
 
         # Wire param change callback through the trailing-edge coalescer.
-        # String values (DropPad fire/idle, radio choices) are state-
-        # machine transitions — deliver every change immediately via
-        # emit_now(). Numeric / dict values (fader / knob / XY pad
-        # streams) coalesce: latest value wins, drained at 20 Hz by
+        # String values (radio choices, drop button action signals
+        # cycling through fire/capture/idle) are state-machine
+        # transitions — deliver every change immediately via emit_now().
+        # Numeric / dict values (fader / knob / XY pad streams)
+        # coalesce: latest value wins, drained at 20 Hz by
         # flush_pending_params() on the asyncio loop.
         # Close over `instance` (not instance.id) so the lookup honours
         # any later rekey — restore_instances rekeys to the saved id
@@ -537,9 +538,10 @@ class PluginHost:
 
         # Broadcast to the UI BEFORE running on_param_change. The plugin
         # may synchronously call its own set_param() inside the handler
-        # (e.g. DropPad fires 'fire' then resets to 'idle'); broadcasting
-        # the incoming value first keeps the order on the wire correct
-        # so the plugin's correction lands second and wins.
+        # (e.g. DropButtonRow's drops.action cycles fire → idle as soon
+        # as the action is processed); broadcasting the incoming value
+        # first keeps the order on the wire correct so the plugin's
+        # correction lands second and wins.
         if instance.plugin._notify_param_change:
             try:
                 instance.plugin._notify_param_change(name, value)

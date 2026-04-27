@@ -13,7 +13,6 @@ export { PluginFader } from './components/fader.js';
 export { PluginRadio } from './components/radio.js';
 export { PluginButton } from './components/button.js';
 export { PluginXYPad } from './components/xypad.js';
-export { PluginDropPad } from './components/droppad.js';
 export { PluginStepEditor } from './components/stepeditor.js';
 export { PluginCurveEditor } from './components/curveeditor.js';
 export { PluginNoteSelect } from './components/noteselect.js';

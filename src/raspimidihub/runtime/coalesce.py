@@ -86,8 +86,9 @@ class TrailingCoalescer:
         """Bypass the queue and emit synchronously; stamp _sent so
         future submits with the same value get deduped, and clear
         any pending queued value for the same key. Use this for
-        state-machine transitions (DropPad fire→idle, button
-        press→release) where every change must reach the UI."""
+        state-machine transitions (DropButtonRow drops.action cycling
+        through fire / capture / idle, trigger button press→release)
+        where every change must reach the UI."""
         with self._lock:
             if self._sent.get(key) == value:
                 return
