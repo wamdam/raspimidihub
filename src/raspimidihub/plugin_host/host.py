@@ -314,6 +314,10 @@ class PluginHost:
         instance._tick_pipe = os.pipe()
         os.set_blocking(instance._tick_pipe[0], False)
         os.set_blocking(instance._tick_pipe[1], False)
+        # Hand the plugin a back-reference to the clock bus so plugins
+        # that need bar/tick arithmetic (Controller drop scheduling)
+        # can read it. Most plugins don't touch this attribute.
+        instance.plugin._clock_bus = self.clock_bus
         self.clock_bus.subscribe(instance, instance.plugin.clock_divisions)
 
         # Start plugin thread

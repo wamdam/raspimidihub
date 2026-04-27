@@ -7,7 +7,7 @@
 from raspimidihub.controller_base import ControllerBase
 from raspimidihub.plugin_api import (
     Button,
-    DropPad,
+    DropButtonRow,
     Fader,
     Knob,
     LayoutCell,
@@ -37,7 +37,15 @@ channel, CC and (for buttons) the on / off CC values; or tap Learn
 on a row and twist a hardware knob to capture its binding."""
 
     params = [
-        DropPad("pad", "DROP"),
+        DropButtonRow(
+            "drops", "DROPS",
+            count=ControllerBase.DROP_BUTTON_COUNT,
+            states_param="drop_states",
+            snapshots_param="drop_snapshots",
+            modes_param="drop_modes",
+            labels_param="drop_labels",
+            schedule_param="drop_schedule",
+        ),
         Radio("bg", "Background", ControllerBase.BG_OPTIONS, default="Default", config_only=True),
         LayoutGrid(
             "controller", "",

@@ -10,7 +10,7 @@ Defaults to ch 1 / CC 16-35; overridable per cell.
 from raspimidihub.controller_base import ControllerBase
 from raspimidihub.plugin_api import (
     Button,
-    DropPad,
+    DropButtonRow,
     Knob,
     LayoutCell,
     LayoutGrid,
@@ -43,7 +43,15 @@ External CC arriving on the IN port silently updates the matching
 on-screen cell."""
 
     params = [
-        DropPad("pad", "DROP"),
+        DropButtonRow(
+            "drops", "DROPS",
+            count=ControllerBase.DROP_BUTTON_COUNT,
+            states_param="drop_states",
+            snapshots_param="drop_snapshots",
+            modes_param="drop_modes",
+            labels_param="drop_labels",
+            schedule_param="drop_schedule",
+        ),
         Radio("bg", "Background", ControllerBase.BG_OPTIONS, default="Default", config_only=True),
         LayoutGrid(
             "controller", "",

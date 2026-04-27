@@ -37,6 +37,15 @@ class ControllerBase(PluginBase):
     # `.bg-<name>` class on the Controller page surface.
     BG_OPTIONS = ["Default", "Navy", "Forest", "Wine", "Plum", "Teal", "Sienna", "Slate"]
 
+    # Number of drop buttons on every Controller. Mirrored by the
+    # DropButtonRow's `count` attribute in the schema.
+    DROP_BUTTON_COUNT = 4
+
+    # Allowed mode values per button. Wheel UI exposes these labels
+    # in left-to-right order — keep this list aligned with the
+    # plugin schema's wheel labels.
+    DROP_MODES = ("immediately", "bar", "4bar")
+
     def on_start(self):
         """Initialise non-schema state on first start (and after restore).
 
@@ -46,15 +55,30 @@ class ControllerBase(PluginBase):
         self._param_values.setdefault("cell_bindings", {})
         self._param_values.setdefault("cell_learn", "")
         self._param_values.setdefault("bg", "Default")
-        self._param_values.setdefault("pad_snapshot", {})
-        # The pad value reflects whether a snapshot is currently loaded.
-        # Derive it from pad_snapshot on every start so the armed-glow on
-        # the UI matches reality from the moment the plugin instance comes
-        # back up — no surprising "tap reveals a stale snapshot" jump.
-        # Snapshots themselves persist across Save Config / restart, which
-        # is what the user wants ("I'd not like to always have to rebuild
-        # these").
-        self._param_values["pad"] = "captured" if self._param_values["pad_snapshot"] else "idle"
+        # Per-button drop state. Keys are stringified ids (0..N-1) so
+        # the dicts round-trip cleanly through JSON.
+        self._param_values.setdefault("drop_snapshots", {})
+        self._param_values.setdefault("drop_modes",
+                                       {str(i): "immediately"
+                                        for i in range(self.DROP_BUTTON_COUNT)})
+        self._param_values.setdefault("drop_labels",
+                                       {str(i): chr(ord("A") + i)
+                                        for i in range(self.DROP_BUTTON_COUNT)})
+        # Derived: button is 'captured' iff its snapshot is non-empty,
+        # else 'idle'. Scheduled state is layered on by _handle_drop_action.
+        snaps = self._param_values["drop_snapshots"]
+        self._param_values["drop_states"] = {
+            str(i): ("captured" if snaps.get(str(i)) else "idle")
+            for i in range(self.DROP_BUTTON_COUNT)
+        }
+        # Controller-wide schedule reference. None when nothing is
+        # pending; otherwise dict {button_id, set_at_tick, fire_at_tick,
+        # progress: 0..1}. Only one entry can exist at a time —
+        # scheduling on any button cancels the previous.
+        self._param_values["drop_schedule"] = None
+        # Action signal sent FROM the UI to the server: {action, button_id}.
+        # Reset to {"action": "idle"} after handling.
+        self._param_values["drops"] = {"action": "idle"}
         # Derived from the schema once per instance.
         self._defaults: dict[str, tuple[int, int]] = {}
         self._defaults_y: dict[str, int] = {}  # XY-pad Y-axis CC
@@ -151,9 +175,9 @@ class ControllerBase(PluginBase):
     # --- Event handlers ---
 
     def on_param_change(self, name, value):
-        """User moved a cell -> emit its CC, OR drop pad fired -> dispatch."""
-        if name == "pad":
-            self._handle_pad_action(value)
+        """User moved a cell -> emit its CC, OR drop button fired -> dispatch."""
+        if name == "drops":
+            self._handle_drop_action(value)
             return
         binding = self._effective_binding(name)
         if binding is None:
@@ -250,35 +274,115 @@ class ControllerBase(PluginBase):
     def on_aftertouch(self, channel, value): pass
     def on_program_change(self, channel, program): pass
 
-    # --- Drop pad ---
+    # --- Drop buttons ---
 
-    def _handle_pad_action(self, action):
-        """Dispatch on the DropPad action value sent by the UI. After
-        processing, reset `pad` to 'captured' (snapshot exists) or 'idle'."""
-        if action == "fire":
-            self._fire_snapshot()
-        elif action == "capture":
-            self._capture_snapshot()
-        else:
-            return  # 'idle' / 'captured' echoed back from server, no-op
-        new_state = "captured" if self._param_values.get("pad_snapshot") else "idle"
-        self.set_param("pad", new_state)
+    def _handle_drop_action(self, value):
+        """Dispatch a drop-button action. `value` shape:
+        `{action: 'fire'|'capture'|'cancel', button_id: 0..N-1}`.
+        After handling, reset `drops` to {action: 'idle'}."""
+        if not isinstance(value, dict):
+            return
+        action = value.get("action")
+        bid = value.get("button_id")
+        if action in ("fire", "capture", "cancel") and isinstance(bid, int):
+            sid = str(bid)
+            if 0 <= bid < self.DROP_BUTTON_COUNT:
+                if action == "capture":
+                    self._capture_drop(sid)
+                elif action == "fire":
+                    self._fire_drop(sid)
+                elif action == "cancel":
+                    self._cancel_drop(sid)
+        # Reset the action signal so the next press is a fresh edge.
+        self.set_param("drops", {"action": "idle"})
 
-    def _capture_snapshot(self):
-        """Read every bound cell's current value into pad_snapshot."""
+    def _capture_drop(self, sid: str) -> None:
+        """Snapshot every bound cell's current value into drop[sid]."""
         snap = {}
         for cell_name in self._defaults:
             v = self._param_values.get(cell_name)
             if v is not None:
                 snap[cell_name] = v
-        self._param_values["pad_snapshot"] = snap
+        snaps = dict(self._param_values.get("drop_snapshots") or {})
+        snaps[sid] = snap
+        self.set_param("drop_snapshots", snaps)
+        states = dict(self._param_values.get("drop_states") or {})
+        # If this button was scheduled, capturing replaces its snapshot
+        # but keeps it scheduled — fire still happens at the planned bar.
+        if states.get(sid) != "scheduled":
+            states[sid] = "captured"
+            self.set_param("drop_states", states)
 
-    def _fire_snapshot(self):
-        """Re-emit each captured CC + snap on-screen cells to the
-        captured value. No-op if no snapshot has been taken yet."""
-        snap = self._param_values.get("pad_snapshot") or {}
-        if not snap:
+    def _fire_drop(self, sid: str) -> None:
+        """Press semantics:
+        - if THIS button is currently scheduled, treat as cancel.
+        - else, the button's mode decides:
+          - immediately: fire now.
+          - bar / 4bar: cancel any other scheduled drop, schedule
+            this one at the next bar / 4-bar boundary.
+        - empty (no snapshot): no-op.
+        """
+        states = dict(self._param_values.get("drop_states") or {})
+        if states.get(sid) == "scheduled":
+            self._cancel_drop(sid)
             return
+        snap = (self._param_values.get("drop_snapshots") or {}).get(sid)
+        if not snap:
+            return  # nothing captured
+        modes = self._param_values.get("drop_modes") or {}
+        mode = modes.get(sid, "immediately")
+        if mode == "immediately":
+            self._apply_snapshot(snap)
+            # Brief 'firing' flash then back to captured.
+            states[sid] = "firing"
+            self.set_param("drop_states", states)
+            states[sid] = "captured"
+            self.set_param("drop_states", states)
+            return
+        # Schedule at the next bar / 4-bar boundary.
+        bus = self._plugin_clock_bus()
+        if bus is None:
+            # No clock running — fall back to immediate fire so the
+            # drop still works even without a master clock.
+            self._apply_snapshot(snap)
+            states[sid] = "captured"
+            self.set_param("drop_states", states)
+            return
+        bars_ahead = 4 if mode == "4bar" else 1
+        try:
+            ticks_left = bus.ticks_until_next_bar(bars_ahead)
+            now_tick = bus._tick_count  # OK to read; lock-free is fine for arithmetic
+        except AttributeError:
+            self._apply_snapshot(snap)
+            return
+        # Cancel any other scheduled drop FIRST — only one schedule per controller.
+        sched = self._param_values.get("drop_schedule")
+        if sched and sched.get("button_id") != int(sid):
+            other_sid = str(sched["button_id"])
+            states[other_sid] = "captured" if (
+                self._param_values.get("drop_snapshots") or {}).get(other_sid) else "idle"
+        states[sid] = "scheduled"
+        self.set_param("drop_states", states)
+        self.set_param("drop_schedule", {
+            "button_id": int(sid),
+            "set_at_tick": now_tick,
+            "fire_at_tick": now_tick + ticks_left,
+            "progress": 0.0,
+        })
+
+    def _cancel_drop(self, sid: str) -> None:
+        sched = self._param_values.get("drop_schedule")
+        if not sched or sched.get("button_id") != int(sid):
+            return
+        self.set_param("drop_schedule", None)
+        states = dict(self._param_values.get("drop_states") or {})
+        snaps = self._param_values.get("drop_snapshots") or {}
+        states[sid] = "captured" if snaps.get(sid) else "idle"
+        self.set_param("drop_states", states)
+
+    def _apply_snapshot(self, snap: dict) -> None:
+        """Re-emit each captured CC + snap on-screen cells to the
+        captured value. Used by both immediate-fire and scheduled-fire."""
         for cell_name, v in snap.items():
             binding = self._effective_binding(cell_name)
             if binding is None:
@@ -297,6 +401,55 @@ class ControllerBase(PluginBase):
                         self._notify_param_change(cell_name, v)
                     except Exception:
                         pass
+
+    def _plugin_clock_bus(self):
+        """Return the host's ClockBus or None if not yet wired. Set by
+        the plugin host on _start_instance."""
+        return getattr(self, "_clock_bus", None)
+
+    # --- Clock-bus hooks (drives the schedule countdown) ---
+
+    # Subscribe to 1/16 ticks for progress updates (16 ticks/bar at
+    # 24 PPQN... wait that's wrong). 1/16 = every 6 ticks at 24 PPQN.
+    # 96/6 = 16 progress updates per bar — smooth enough for the
+    # circular border, light enough for SSE.
+    clock_divisions = ["1/16"]
+
+    def on_tick(self, division: str) -> None:
+        """Drive the scheduled-drop countdown. Also lets subclasses
+        hook other divisions if they override."""
+        if division != "1/16":
+            return
+        sched = self._param_values.get("drop_schedule")
+        if not sched:
+            return
+        bus = self._plugin_clock_bus()
+        if bus is None:
+            return
+        now_tick = bus._tick_count
+        set_at = sched.get("set_at_tick", now_tick)
+        fire_at = sched.get("fire_at_tick", now_tick)
+        if now_tick >= fire_at:
+            # Fire it.
+            sid = str(sched["button_id"])
+            snap = (self._param_values.get("drop_snapshots") or {}).get(sid)
+            self.set_param("drop_schedule", None)
+            states = dict(self._param_values.get("drop_states") or {})
+            if snap:
+                self._apply_snapshot(snap)
+            states[sid] = "firing"
+            self.set_param("drop_states", states)
+            states[sid] = "captured" if snap else "idle"
+            self.set_param("drop_states", states)
+            return
+        # Update progress 0..1.
+        total = max(1, fire_at - set_at)
+        prog = max(0.0, min(1.0, (now_tick - set_at) / total))
+        # Round to 2 dp so identical values dedup in the coalescer.
+        new_sched = dict(sched)
+        new_sched["progress"] = round(prog, 2)
+        if new_sched != sched:
+            self.set_param("drop_schedule", new_sched)
 
     # --- Panic ---
 

@@ -978,6 +978,101 @@ body {
     pointer-events: none;
 }
 
+/* Drop-button row — 4 quarter-width buttons replacing the single
+ * drop pad. Each button reuses the .droppad colour story (unarmed
+ * grey, armed warm-orange, firing flash) but at button scale; a
+ * .scheduled state adds a clockwise SVG progress ring on top. */
+.droprow {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+    margin-bottom: 12px;
+}
+.dropbtn {
+    position: relative;
+    height: 56px;
+    background: linear-gradient(180deg, #2a2a30 0%, #16161a 100%);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 6px;
+    cursor: pointer;
+    user-select: none;
+    touch-action: none;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s, box-shadow 0.15s, border-color 0.15s;
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.6);
+    color: var(--accent);  /* used by the SVG ring's currentColor */
+}
+.dropbtn-label {
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    color: rgba(220,220,220,0.45);
+    text-shadow: none;
+    z-index: 1;
+    transition: color 0.15s, text-shadow 0.15s;
+}
+.dropbtn-mode {
+    position: absolute;
+    top: 4px; right: 6px;
+    font-size: 10px;
+    font-weight: 600;
+    color: rgba(255,170,90,0.55);
+    letter-spacing: 0;
+    pointer-events: none;
+    z-index: 2;
+}
+.dropbtn.armed {
+    border-color: rgba(255,170,90,0.55);
+    background: linear-gradient(180deg, #3a2330 0%, #1f1018 100%);
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.6), 0 0 12px rgba(255,160,80,0.36);
+}
+.dropbtn.armed .dropbtn-label {
+    color: #ffe0c0;
+    text-shadow: 0 0 6px rgba(255,160,80,0.6);
+}
+.dropbtn.scheduled {
+    border-color: rgba(255,170,90,0.85);
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.6), 0 0 18px rgba(255,160,80,0.55);
+}
+.dropbtn.scheduled .dropbtn-mode { color: rgba(255,200,140,0.9); }
+.dropbtn.firing,
+.dropbtn.flashing {
+    background: linear-gradient(180deg, #ffaa55 0%, #ff8833 100%);
+    border-color: rgba(255,200,140,0.7);
+    box-shadow: 0 0 16px rgba(255,160,80,0.8), inset 0 1px 2px rgba(255,255,255,0.2);
+}
+.dropbtn.firing .dropbtn-label,
+.dropbtn.flashing .dropbtn-label {
+    color: #1a0808;
+    text-shadow: none;
+}
+.dropbtn.pressing {
+    transform: translateY(1px);
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.8);
+}
+.dropbtn-pressbar {
+    position: absolute;
+    left: 0; bottom: 0; height: 3px;
+    background: var(--accent);
+    box-shadow: 0 0 8px var(--accent);
+    pointer-events: none;
+    transition: none;
+}
+.dropbtn-ring {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 0;
+    /* Slight inset so the stroke doesn't hit the rounded corners. */
+    padding: 3px;
+    box-sizing: border-box;
+}
+
 /* XYPad */
 .xypad-group { display: flex; flex-direction: column; align-items: stretch; gap: 4px; margin-bottom: 12px; min-width: 0; }
 .xypad-label { font-size: 12px; color: var(--text-dim); }

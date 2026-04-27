@@ -258,6 +258,48 @@ class DropPad(Param):
 
 
 @dataclass
+class DropButtonRow(Param):
+    """Row of N quarter-width snapshot buttons with per-button mode.
+
+    Replaces DropPad on the §5 Controller plugins. Each button:
+      - long-press → capture current state into THIS button's snapshot
+      - short-press →
+          mode=immediately: fire snapshot now
+          mode=bar / 4bar: schedule fire at next bar / 4-bar boundary
+      - second short-press while scheduled → cancel
+    Only one drop on the controller can be `scheduled` at a time;
+    scheduling on any button cancels the others' schedules.
+
+    Wire format: the param's value is an action signal of shape
+    `{"button_id": 0..N-1, "action": "fire" | "capture" | "cancel"}`.
+    Server resets to `{"action": "idle"}` after handling. The actual
+    per-button state (idle / captured / scheduled / firing), labels,
+    modes, snapshots, and the controller-wide schedule reference live
+    in sibling auxiliary params (see ControllerBase setup).
+    """
+    count: int = 4
+    default: dict = field(default_factory=lambda: {"action": "idle"})
+    # Names of sibling params that hold per-button auxiliary state.
+    # The frontend reads these to render labels, modes, captured flags
+    # and the currently-scheduled button + progress.
+    states_param: str | None = None       # dict[str(id) -> 'idle'|'captured'|'scheduled'|'firing']
+    snapshots_param: str | None = None    # dict[str(id) -> {cell_name: value}]
+    modes_param: str | None = None        # dict[str(id) -> 'immediately'|'bar'|'4bar']
+    labels_param: str | None = None       # dict[str(id) -> str (display name)]
+    schedule_param: str | None = None     # {button_id, set_at_tick, fire_at_tick, progress}|null
+
+    def to_dict(self) -> dict:
+        d = super().to_dict()
+        d["count"] = self.count
+        if self.states_param: d["states_param"] = self.states_param
+        if self.snapshots_param: d["snapshots_param"] = self.snapshots_param
+        if self.modes_param: d["modes_param"] = self.modes_param
+        if self.labels_param: d["labels_param"] = self.labels_param
+        if self.schedule_param: d["schedule_param"] = self.schedule_param
+        return d
+
+
+@dataclass
 class XYPad(Param):
     """Square pad with a draggable dot. Two-axis value stored as
     `{"x": int, "y": int}`. Used inside LayoutGrid templates as a touch-

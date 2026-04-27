@@ -10,6 +10,7 @@ import { PluginRadio } from './radio.js';
 import { PluginButton } from './button.js';
 import { PluginXYPad } from './xypad.js';
 import { PluginDropPad } from './droppad.js';
+import { PluginDropButtonRow } from './dropbuttonrow.js';
 import { PluginStepEditor } from './stepeditor.js';
 import { PluginCurveEditor } from './curveeditor.js';
 import { PluginNoteSelect } from './noteselect.js';
@@ -92,6 +93,10 @@ export function renderParam(param, values, onChange, allValues, displayCtx) {
         case 'droppad': {
             return html`<${PluginDropPad} name=${param.name} label=${param.label}
                 value=${val != null ? val : 'idle'} onChange=${onChange} />`;
+        }
+        case 'dropbuttonrow': {
+            return html`<${PluginDropButtonRow} param=${param}
+                values=${allValues} onChange=${onChange} />`;
         }
         case 'xypad': {
             const xy = val != null ? val : { x: param.default_x, y: param.default_y };
