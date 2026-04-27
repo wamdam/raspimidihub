@@ -54,6 +54,15 @@ class ClockBus:
     def __init__(self):
         self._tick_count = 0
         self._running = False  # transport running (Start received)
+        # Many MIDI clock masters keep sending clock ticks even after a
+        # Stop message — that's how Continue can resume from where Stop
+        # left off. Without this flag, the auto-start logic in
+        # on_clock_tick would flip _running back to True on the very
+        # next tick, masking the Stop. Set on Stop, cleared on Start /
+        # Continue. Only suppresses auto-start; it does NOT block tick
+        # delivery to subscribers (plugins keep getting their division
+        # callbacks regardless).
+        self._stopped_explicitly = False
         self._subscribers: list[tuple[PluginInstance, set[str]]] = []
         self._lock = threading.Lock()
         self._ticks_per_bar = self.TICKS_PER_BAR_DEFAULT
@@ -115,7 +124,7 @@ class ClockBus:
         Queues tick divisions for plugin threads instead of calling
         on_tick directly — avoids blocking the asyncio event loop.
         """
-        if not self._running:
+        if not self._running and not self._stopped_explicitly:
             self._running = True
             self._tick_count = 0
             log.info("Clock bus: auto-started on first clock tick")
@@ -154,6 +163,7 @@ class ClockBus:
         first on_clock_tick increments to 1, and divisions fire cleanly."""
         self._tick_count = 0
         self._running = True
+        self._stopped_explicitly = False
         # Flush stale ticks from plugin queues before sending transport
         with self._lock:
             for instance, _ in self._subscribers:
@@ -171,12 +181,18 @@ class ClockBus:
         """MIDI Continue received — resumes from current position without
         resetting the tick counter (unlike Start)."""
         self._running = True
+        self._stopped_explicitly = False
         self._notify_transport("_continue")
         self._fire_position_callback()
 
     def on_stop(self) -> None:
-        """MIDI Stop received."""
+        """MIDI Stop received. Setting _stopped_explicitly=True is what
+        makes Stop sticky — many clock masters keep sending ticks after
+        a Stop (so Continue can resume), and without this flag
+        on_clock_tick's auto-start branch would silently flip _running
+        back to True on the very next tick."""
         self._running = False
+        self._stopped_explicitly = True
         self._notify_transport("_stop")
         # One final position event with running=False so the frontend
         # can freeze its always-running drop-button rings.

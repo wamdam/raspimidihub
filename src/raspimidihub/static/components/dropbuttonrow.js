@@ -27,11 +27,10 @@ import { useEffect, useRef, useState } from '../lib/hooks.module.js';
 import { html, tickFeedback, thudFeedback } from './common.js';
 import { PluginWheel } from './wheel.js';
 
-// Tick the component re-render rate while a clock is running, so the
-// dead-reckoned tick estimate advances on screen between SSE events.
-// 20 Hz = 50 ms — finer than human perception of segment transitions
-// at any tempo we'd run, cheap on a Pi 4 (4 buttons × 1 SVG each).
-const VISUAL_TICK_MS = 50;
+// Visual tick rate while a clock is running. requestAnimationFrame
+// (~16 ms / 60 Hz on most browsers) keeps the dead-reckoned tick
+// in sync with the audio to within one frame; setInterval at 50 ms
+// added 50 ms of perceived lag on top of network jitter.
 
 const LONG_PRESS_MS = 500;
 const MODE_BADGES = { immediately: '', bar: '1', '4bar': '4', '8bar': '8', '16bar': '16' };
@@ -64,18 +63,22 @@ export function PluginDropButtonRow({ param, values, onChange, displayCtx }) {
     const playOnly = !!(displayCtx && displayCtx.playOnly);
     const clockPosition = displayCtx && displayCtx.clockPosition;
 
-    // Drive periodic re-renders so dead-reckoned segment transitions
-    // are visible between SSE events. Only runs while transport is
-    // active — pauses when stopped (no clock = nothing to animate).
-    // Single hook in the parent re-renders all 4 buttons together.
+    // Drive re-renders via requestAnimationFrame so dead-reckoned
+    // segment transitions are visible at frame rate (~16 ms / 60 Hz)
+    // between SSE events — setInterval at 50 ms added 50 ms of stale
+    // display on top of network lag. Only runs while transport is
+    // active. Single hook in the parent re-renders all 4 buttons.
     const [, setVisualTick] = useState(0);
     const transportRunning = !!(clockPosition && clockPosition.running);
     useEffect(() => {
         if (playOnly !== true || !transportRunning) return;
-        const id = setInterval(
-            () => setVisualTick(t => (t + 1) & 0x7fff),
-            VISUAL_TICK_MS);
-        return () => clearInterval(id);
+        let rafId = 0;
+        const loop = () => {
+            setVisualTick(t => (t + 1) & 0x7fff);
+            rafId = requestAnimationFrame(loop);
+        };
+        rafId = requestAnimationFrame(loop);
+        return () => cancelAnimationFrame(rafId);
     }, [playOnly, transportRunning]);
 
     // Config branch — one card per button with a name input + mode
@@ -303,10 +306,18 @@ function DropButton({ index, label, state, mode, schedule,
         }
     }
 
+    // Beat number for the ring's pulse animation. Changes at every
+    // 24-tick boundary; the SegmentedRing re-triggers its CSS
+    // pulse animation on each change. Only fed when isScheduled and
+    // running — idle ring stays still.
+    const beatNumber = (transportRunning && liveTick != null)
+        ? Math.floor(liveTick / 24) : 0;
+
     return html`<div class=${cls} ref=${elRef}>
         <${SegmentedRing} mode=${mode}
             progress=${ringProgress}
-            lit=${ringProgress > 0 || isScheduled}
+            isScheduled=${isScheduled}
+            beatNumber=${beatNumber}
             buttonId=${index} />
         ${pressing ? html`
             <div class="dropbtn-pressfill"
@@ -327,31 +338,38 @@ const MODE_SEGMENTS = {
     '8bar': 32,
     '16bar': 64,
 };
-const SEGMENT_COLOR_LIT = 'rgba(255,200,140,0.95)';
-const SEGMENT_COLOR_DIM = 'rgba(255,170,90,0.20)';
+// Idle (no schedule active) — the ring's just-living-here ambient
+// colour. Distinctly more muted than the scheduled state so the
+// difference reads as "armed and counting down" vs "just waiting".
+const SEGMENT_COLOR_LIT = 'rgba(255,170,90,0.55)';
+const SEGMENT_COLOR_DIM = 'rgba(255,170,90,0.10)';
+// Active (scheduled) — neon-bright peach. CSS adds a drop-shadow
+// glow on `.dropbtn-ring.active` and a beat-aligned pulse animation.
+const SEGMENT_COLOR_LIT_ACTIVE = 'rgba(255,220,170,1.00)';
+const SEGMENT_COLOR_DIM_ACTIVE = 'rgba(255,170,90,0.22)';
 
-// Discrete segmented ring: N equal arc segments around the button.
-// Each is fully lit or fully dim; nothing is partially filled. So
-// pressing exactly on beat 2 of a 1-bar button lights segment 1
-// immediately (1 quarter has elapsed in the cycle), rather than
-// showing a fractional fill that confuses the eye.
+// Discrete segmented ring. N equal arc segments around the button;
+// each is fully lit or fully dim. When scheduled the ring uses the
+// neon-bright "active" colour and pulses out on every beat (4ths)
+// with an exponential decay (sharp peak, slow drop). When idle it
+// sits in a more muted colour with no pulse.
 //
-// `mode`     — the button's configured mode (segment count = MODE_SEGMENTS[mode]).
-// `progress` — 0..1, cycle-relative; only meaningful when scheduled.
-// `lit`      — overall: are any segments currently in the bright state?
-function SegmentedRing({ mode, progress, lit, buttonId }) {
+// `mode`        — segment count (MODE_SEGMENTS[mode]).
+// `progress`    — 0..1, cycle-relative.
+// `isScheduled` — switches to bright + pulse mode.
+// `beatNumber`  — integer, increments on every 24-tick boundary;
+//                 used as a React key on the wrapper so the CSS
+//                 pulse animation re-triggers cleanly each beat.
+function SegmentedRing({ mode, progress, isScheduled, beatNumber, buttonId }) {
     const totalSegs = MODE_SEGMENTS[mode] || 0;
     if (totalSegs === 0) return null;
     const cx = 20, cy = 20, r = 18;
     const stroke = 2.5;
-    // Gap visible but proportionally smaller for higher segment counts
-    // (otherwise the ring becomes mostly gap at 64 segments).
     const gapDeg = totalSegs <= 16 ? 4 : (totalSegs <= 32 ? 2 : 1);
     const segDeg = (360 - totalSegs * gapDeg) / totalSegs;
-    const litCount = lit ? Math.floor(progress * totalSegs) : 0;
+    const litCount = Math.floor(clamp01(progress) * totalSegs);
 
     function arcPath(startDeg, sweepDeg) {
-        // -90 makes 0° = 12 o'clock; clockwise sweep.
         const sa = (startDeg - 90) * Math.PI / 180;
         const ea = (startDeg + sweepDeg - 90) * Math.PI / 180;
         const sx = cx + r * Math.cos(sa);
@@ -362,13 +380,23 @@ function SegmentedRing({ mode, progress, lit, buttonId }) {
         return `M ${sx} ${sy} A ${r} ${r} 0 ${largeArc} 1 ${ex} ${ey}`;
     }
 
+    const litColor = isScheduled ? SEGMENT_COLOR_LIT_ACTIVE : SEGMENT_COLOR_LIT;
+    const dimColor = isScheduled ? SEGMENT_COLOR_DIM_ACTIVE : SEGMENT_COLOR_DIM;
+
     const segs = [];
     for (let i = 0; i < totalSegs; i++) {
         const start = i * (segDeg + gapDeg) + gapDeg / 2;
         const isLit = i < litCount;
         segs.push(html`<path key=${i} d=${arcPath(start, segDeg)}
-            fill="none" stroke=${isLit ? SEGMENT_COLOR_LIT : SEGMENT_COLOR_DIM}
+            fill="none" stroke=${isLit ? litColor : dimColor}
             stroke-width=${stroke} stroke-linecap="butt" />`);
     }
-    return html`<svg class="dropbtn-ring" viewBox="0 0 40 40">${segs}</svg>`;
+    // Re-mount the SVG each beat (key change) so the CSS pulse
+    // animation re-runs from frame 0 — "exponential on 1, dropping
+    // slowly". When idle, the key is stable; no animation re-runs.
+    const wrapperKey = isScheduled ? `${buttonId}-b${beatNumber}` : `${buttonId}-idle`;
+    const cls = `dropbtn-ring${isScheduled ? ' active' : ' idle'}`;
+    return html`<svg class=${cls} viewBox="0 0 40 40" key=${wrapperKey}>
+        ${segs}
+    </svg>`;
 }
