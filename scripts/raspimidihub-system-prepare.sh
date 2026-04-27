@@ -185,15 +185,16 @@ ensure_dropin() {
 # Slight nice bump — the asyncio loop is the most latency-sensitive
 # thing on the Pi.
 Nice=-5
-# NOTE: we deliberately do NOT set AllowedCPUs= here. That would be a
-# cgroup cpuset and propagate to every subprocess raspimidihub spawns
-# — including the daemonized hostapd and dnsmasq. With nohz_full=3
-# suppressing the periodic timer tick on CPU 3, hostapd's beacon
-# scheduling falls apart and clients can't see / stay on the AP.
-# Instead, the Python process pins ITSELF to CPU 3 via
-# os.sched_setaffinity in __main__, and wifi.py prefixes the
-# hostapd / dnsmasq spawns with `taskset -c 0-2` so those daemons
-# explicitly run on the non-isolated cores.
+# Allow all 4 CPUs (including the kernel-isolated core 3). With
+# isolcpus=3 in the kernel cmdline, system.slice defaults to
+# AllowedCPUs=0-2 — services inherit that and CAN'T pin themselves
+# to CPU 3 even with sched_setaffinity. Setting 0-3 here re-grants
+# access. Python then pins itself to {3} in __main__.pin_to_isolated_cpu;
+# subprocesses (hostapd / dnsmasq) inherit {3} from the parent but
+# wifi.py wraps their spawns in `taskset -c 0-2` so they end up on
+# the non-isolated cores. The asyncio loop has CPU 3 to itself and
+# WiFi daemons stay on cores with normal timer ticks.
+AllowedCPUs=0-3
 EOF
     systemctl daemon-reload
     log "wrote $DROPIN_FILE; raspimidihub.service will pick up on next start"
