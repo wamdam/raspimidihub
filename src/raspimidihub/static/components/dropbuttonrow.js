@@ -25,17 +25,77 @@
 
 import { useEffect, useRef, useState } from '../lib/hooks.module.js';
 import { html, tickFeedback, thudFeedback } from './common.js';
+import { PluginWheel } from './wheel.js';
 
 const LONG_PRESS_MS = 500;
 const MODE_BADGES = { immediately: '', bar: '1', '4bar': '4' };
+const MODE_ORDER = ['immediately', 'bar', '4bar'];
+const MODE_LABELS = ['Now', '1 bar', '4 bars'];
 
-export function PluginDropButtonRow({ param, values, onChange }) {
+export function PluginDropButtonRow({ param, values, onChange, displayCtx }) {
     const count = param.count || 4;
     const states = values[param.states_param] || {};
     const labels = values[param.labels_param] || {};
     const modes = values[param.modes_param] || {};
     const schedule = values[param.schedule_param] || null;
+    const playOnly = !!(displayCtx && displayCtx.playOnly);
 
+    // Config branch — one card per button with a name input + mode
+    // wheel + capture / clear hint. Lives in the device-detail panel
+    // (Routing tab → tap the controller).
+    if (!playOnly) {
+        return html`<div class="droprow-config">
+            ${Array.from({ length: count }, (_, i) => {
+                const sid = String(i);
+                const label = labels[sid] || String.fromCharCode(65 + i);
+                const mode = modes[sid] || 'immediately';
+                const stateText = states[sid] === 'captured' ? 'Loaded' :
+                                  states[sid] === 'scheduled' ? 'Scheduled' :
+                                  states[sid] === 'firing' ? 'Firing' : 'Empty';
+                const setLabel = (v) => {
+                    onChange(param.labels_param, { ...labels, [sid]: v });
+                };
+                const setMode = (_n, idx) => {
+                    onChange(param.modes_param,
+                        { ...modes, [sid]: MODE_ORDER[idx] || 'immediately' });
+                };
+                const clearSnapshot = () => {
+                    const snaps = values[param.snapshots_param] || {};
+                    const next = { ...snaps };
+                    delete next[sid];
+                    onChange(param.snapshots_param, next);
+                };
+                return html`<div class="dropbtn-edit ${states[sid] === 'captured' ? 'loaded' : ''}" key=${i}>
+                    <div class="dropbtn-edit-row">
+                        <span class="dropbtn-edit-tag">Drop ${i + 1}</span>
+                        <input class="dropbtn-edit-name" type="text"
+                            value=${label === String.fromCharCode(65 + i) ? '' : label}
+                            placeholder=${String.fromCharCode(65 + i)}
+                            onInput=${(e) => setLabel(e.target.value)} />
+                        <span class="dropbtn-edit-state">${stateText}</span>
+                    </div>
+                    <div class="dropbtn-edit-row">
+                        <span class="dropbtn-edit-fieldlabel">Fire</span>
+                        <div class="dropbtn-edit-wheel">
+                            <${PluginWheel}
+                                name=${'mode_' + sid}
+                                label=""
+                                min=${0} max=${MODE_ORDER.length - 1}
+                                value=${Math.max(0, MODE_ORDER.indexOf(mode))}
+                                labels=${MODE_LABELS}
+                                onChange=${setMode} />
+                        </div>
+                        ${states[sid] === 'captured' ? html`
+                            <button type="button" class="dropbtn-edit-clear"
+                                title="Clear this button's snapshot"
+                                onclick=${clearSnapshot}>Clear</button>` : null}
+                    </div>
+                </div>`;
+            })}
+        </div>`;
+    }
+
+    // Play branch — the row of 4 quarter-width buttons.
     return html`<div class="droprow">
         ${Array.from({ length: count }, (_, i) => {
             const sid = String(i);

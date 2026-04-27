@@ -96,7 +96,8 @@ export function renderParam(param, values, onChange, allValues, displayCtx) {
         }
         case 'dropbuttonrow': {
             return html`<${PluginDropButtonRow} param=${param}
-                values=${allValues} onChange=${onChange} />`;
+                values=${allValues} onChange=${onChange}
+                displayCtx=${displayCtx} />`;
         }
         case 'xypad': {
             const xy = val != null ? val : { x: param.default_x, y: param.default_y };

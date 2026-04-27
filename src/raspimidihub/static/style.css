@@ -1073,6 +1073,88 @@ body {
     box-sizing: border-box;
 }
 
+/* Drop-button config cards — shown in device-detail panel.
+ * Per-button: name input + mode wheel + clear-snapshot affordance.
+ * Visual language matches .cell-edit but in the warm orange family
+ * (drop pads are warm-orange in the surface UI, so keep the cue). */
+.droprow-config {
+    display: flex; flex-direction: column; gap: 6px;
+    margin-bottom: 12px;
+}
+.dropbtn-edit {
+    display: flex; flex-direction: column; gap: 6px;
+    padding: 8px 10px;
+    background: rgba(255,170,90,0.06);
+    border: 1px solid rgba(255,170,90,0.18);
+    border-radius: 6px;
+}
+.dropbtn-edit.loaded {
+    border-color: rgba(255,170,90,0.55);
+    background: rgba(255,170,90,0.10);
+}
+.dropbtn-edit-row {
+    display: flex; flex-direction: row; align-items: center; gap: 8px;
+}
+.dropbtn-edit-tag {
+    flex: 0 0 auto;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: rgba(255,200,140,0.85);
+    min-width: 56px;
+}
+.dropbtn-edit-name {
+    flex: 1 1 auto; min-width: 0;
+    background: rgba(0,0,0,0.3);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 3px;
+    color: var(--text);
+    font-size: 13px;
+    padding: 6px 8px;
+    box-sizing: border-box;
+}
+.dropbtn-edit-name:focus {
+    outline: none;
+    border-color: var(--accent);
+    background: rgba(0,0,0,0.5);
+}
+.dropbtn-edit-state {
+    flex: 0 0 auto;
+    font-size: 11px;
+    color: var(--text-dim);
+}
+.dropbtn-edit-fieldlabel {
+    flex: 0 0 auto;
+    font-size: 11px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    min-width: 56px;
+}
+.dropbtn-edit-wheel {
+    flex: 1 1 auto;
+    /* Wheel needs explicit width to size; bound it so it shares
+     * the row with the Clear button cleanly. */
+    max-width: 180px;
+}
+.dropbtn-edit-clear {
+    flex: 0 0 auto;
+    margin-left: auto;
+    height: 30px;
+    padding: 0 12px;
+    background: rgba(0,0,0,0.3);
+    border: 1px solid rgba(255,170,90,0.30);
+    border-radius: 3px;
+    color: rgba(255,200,140,0.85);
+    font-size: 12px;
+    cursor: pointer;
+}
+.dropbtn-edit-clear:hover {
+    background: rgba(0,0,0,0.45);
+    border-color: rgba(255,170,90,0.55);
+}
+
 /* XYPad */
 .xypad-group { display: flex; flex-direction: column; align-items: stretch; gap: 4px; margin-bottom: 12px; min-width: 0; }
 .xypad-label { font-size: 12px; color: var(--text-dim); }
