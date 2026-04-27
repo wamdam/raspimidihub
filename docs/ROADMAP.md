@@ -1819,6 +1819,47 @@ before implementation.
   2026-04-25 — refresh?"* with a manual refresh that requires
   client-mode WiFi (ties in with Phase 5.5 Transient WiFi).
 
+  **Automap from ALSA device name (verified).** midi.guide's CSVs
+  carry no USB VID/PID or alias columns — just `manufacturer` +
+  `device` strings, mirrored in the path `<Vendor>/<Device>.csv`.
+  The good news: ALSA's `default_name` (the original USB product
+  string, before any user rename) usually matches that shape
+  directly. Verified on the test Pi:
+
+  | ALSA default_name        | match           | path                                |
+  | ------------------------ | --------------- | ----------------------------------- |
+  | `Elektron Digitone II`   | exact           | `Elektron/Digitone II.csv`          |
+  | `S-1`                    | device-only     | `Roland/S-1.csv`                    |
+  | `LCXL3 1`                | none (intended) | (controller — not a CC destination) |
+  | `Impact GX49`            | none (intended) | (controller)                        |
+  | `U6MIDI Pro`             | none (intended) | (USB MIDI interface)                |
+
+  **Algorithm:**
+  1. Build a sorted-longest-first list of all vendor dir names in
+     the library (one-time, at startup, from `index.json`).
+  2. For each newly-seen ALSA device, run on its `default_name`
+     (NOT `name` — `name` may be the user's custom rename):
+     - **Vendor-prefix match**: if name starts with a known vendor
+       V (case-insensitive, longest match wins so "Modal
+       Electronics" beats "Modal"), candidate is
+       `<V>/<rest of name>.csv`. Match if file exists.
+     - **Device-only match**: name has no recognised vendor prefix.
+       Look up the bare name in a `device → [vendors...]` index;
+       single hit auto-applies, multiple hits become a "Pick the
+       right one" prompt in the device-detail panel.
+     - **No match**: silent — picker stays empty, user can pick
+       manually. Don't be noisy; controllers / interfaces
+       legitimately have no profile.
+  3. Auto-applied profiles are still recorded in
+     `config.data.devices[stable_id].instrument_profile` so the
+     user can override or clear them.
+
+  **VID/PID upgrade path (deferred).** A separate `usb.ids`-based
+  lookup would be more reliable than name parsing for edge cases
+  (renamed firmware, generic USB-MIDI bridges). Not worth the
+  complexity for v1 — name-based automap covers the common case
+  and a manual picker covers the rest.
+
   **NRPN + sysex coverage** is rich in midi.guide and would be
   useful for §7 (CC Curve LFO destinations) and a future SysEx
   sender plugin, but out of scope for v1 — start with CC only and
