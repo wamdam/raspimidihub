@@ -28,9 +28,9 @@ import { html, tickFeedback, thudFeedback } from './common.js';
 import { PluginWheel } from './wheel.js';
 
 const LONG_PRESS_MS = 500;
-const MODE_BADGES = { immediately: '', bar: '1', '4bar': '4' };
-const MODE_ORDER = ['immediately', 'bar', '4bar'];
-const MODE_LABELS = ['Now', '1 bar', '4 bars'];
+const MODE_BADGES = { immediately: '', bar: '1', '4bar': '4', '8bar': '8', '16bar': '16' };
+const MODE_ORDER = ['immediately', 'bar', '4bar', '8bar', '16bar'];
+const MODE_LABELS = ['Now', 'Bar', '4-Bar', '8-Bar', '16-Bar'];
 
 export function PluginDropButtonRow({ param, values, onChange, displayCtx }) {
     const count = param.count || 4;
@@ -82,7 +82,7 @@ export function PluginDropButtonRow({ param, values, onChange, displayCtx }) {
                                 label=""
                                 min=${0} max=${MODE_ORDER.length - 1}
                                 value=${Math.max(0, MODE_ORDER.indexOf(mode))}
-                                labels=${MODE_LABELS}
+                                tickLabel=${(i) => MODE_LABELS[i] || String(i)}
                                 onChange=${setMode} />
                         </div>
                         ${states[sid] === 'captured' ? html`

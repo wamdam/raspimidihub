@@ -82,17 +82,25 @@ class ClockBus:
         tick_in_bar = tc % tpb
         return (bar, tick_in_bar, tpb)
 
-    def ticks_until_next_bar(self, bars_ahead: int = 1) -> int:
-        """How many clock ticks until the start of the bar that lands
-        `bars_ahead` bars from NOW. `bars_ahead=1` = next bar
-        boundary; `bars_ahead=4` = boundary 4 bars from the next one.
-        Returns `ticks_per_bar` if bars_ahead <= 0 (treat as "next
-        bar")."""
-        bars_ahead = max(1, bars_ahead)
+    def ticks_until_next_grid(self, every_n_bars: int = 1) -> int:
+        """How many ticks until the next bar boundary that lies on the
+        N-bar musical grid (quantised, NOT "from now").
+
+            every_n_bars=1  → next bar boundary       (bars 0, 1, 2, 3, …)
+            every_n_bars=4  → next 4-bar grid line    (bars 0, 4, 8, 12, …)
+            every_n_bars=8  → next 8-bar grid line    (bars 0, 8, 16, …)
+
+        The returned boundary is strictly in the future: pressing
+        exactly on a grid line schedules to the NEXT one, never to
+        the current tick. Used by Controller drop scheduling so
+        "4 bars" reads as "wait for the next musical 4-bar downbeat",
+        not "delay by 4 bars of wall time"."""
+        n = max(1, every_n_bars)
         tc = self._tick_count
         tpb = self._ticks_per_bar
-        next_boundary = ((tc // tpb) + bars_ahead) * tpb
-        return next_boundary - tc
+        current_bar = tc // tpb
+        next_grid_bar = ((current_bar // n) + 1) * n
+        return next_grid_bar * tpb - tc
 
     def on_clock_tick(self) -> None:
         """Called by the engine for each MIDI Clock message (24 PPQ).

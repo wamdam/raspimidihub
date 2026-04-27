@@ -41,10 +41,12 @@ class ControllerBase(PluginBase):
     # DropButtonRow's `count` attribute in the schema.
     DROP_BUTTON_COUNT = 4
 
-    # Allowed mode values per button. Wheel UI exposes these labels
-    # in left-to-right order — keep this list aligned with the
-    # plugin schema's wheel labels.
-    DROP_MODES = ("immediately", "bar", "4bar")
+    # Allowed mode values per button. Wheel UI exposes these in
+    # left-to-right order. The bar-modes are musical-grid-quantised
+    # (NOT "wait N bars"): pressing during bar 5 with mode='4bar'
+    # fires at bar 8 (the next 4-bar downbeat), not bar 9.
+    DROP_MODES = ("immediately", "bar", "4bar", "8bar", "16bar")
+    DROP_MODE_GRID_BARS = {"bar": 1, "4bar": 4, "8bar": 8, "16bar": 16}
 
     def on_start(self):
         """Initialise non-schema state on first start (and after restore).
@@ -348,9 +350,13 @@ class ControllerBase(PluginBase):
             states[sid] = "captured"
             self.set_param("drop_states", states)
             return
-        bars_ahead = 4 if mode == "4bar" else 1
+        # Quantize to the next bar boundary that lies on the
+        # configured musical grid (1 = every bar; 4/8/16 = every
+        # 4/8/16-bar downbeat). NOT "wait N bars" — pressing during
+        # bar 5 with mode='4bar' fires at bar 8, not bar 9.
+        every_n_bars = self.DROP_MODE_GRID_BARS.get(mode, 1)
         try:
-            ticks_left = bus.ticks_until_next_bar(bars_ahead)
+            ticks_left = bus.ticks_until_next_grid(every_n_bars)
             now_tick = bus._tick_count  # OK to read; lock-free is fine for arithmetic
         except AttributeError:
             self._apply_snapshot(snap)
