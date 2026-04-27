@@ -45,8 +45,8 @@ class ControllerBase(PluginBase):
     # left-to-right order. The bar-modes are musical-grid-quantised
     # (NOT "wait N bars"): pressing during bar 5 with mode='4bar'
     # fires at bar 8 (the next 4-bar downbeat), not bar 9.
-    DROP_MODES = ("immediately", "bar", "4bar", "8bar", "16bar")
-    DROP_MODE_GRID_BARS = {"bar": 1, "4bar": 4, "8bar": 8, "16bar": 16}
+    DROP_MODES = ("immediately", "bar", "2bar", "4bar", "8bar", "16bar")
+    DROP_MODE_GRID_BARS = {"bar": 1, "2bar": 2, "4bar": 4, "8bar": 8, "16bar": 16}
 
     def on_start(self):
         """Initialise non-schema state on first start (and after restore).

@@ -92,10 +92,14 @@ class TestBarPosition:
         bus._tick_count = 7 * self.TPB + 90  # bar 7, tick 90 (6 to bar 8)
         assert bus.ticks_until_next_grid(4) == 6
 
-    def test_ticks_until_next_grid_8_and_16_bar(self):
+    def test_ticks_until_next_grid_2_8_and_16_bar(self):
         bus = ClockBus()
-        # Bar 5: 8-bar grid lines at 0, 8, 16 → next = 8. 16-bar at 0, 16 → 16.
+        # Bar 5:
+        #   2-bar grid lines  at 0, 2, 4, 6  → next = 6.
+        #   8-bar  at 0, 8, 16            → next = 8.
+        #   16-bar at 0, 16, 32           → next = 16.
         bus._tick_count = 5 * self.TPB
+        assert bus.ticks_until_next_grid(2) == 1 * self.TPB
         assert bus.ticks_until_next_grid(8) == 3 * self.TPB
         assert bus.ticks_until_next_grid(16) == 11 * self.TPB
 

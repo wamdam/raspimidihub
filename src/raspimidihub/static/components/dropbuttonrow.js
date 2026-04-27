@@ -33,9 +33,9 @@ import { PluginWheel } from './wheel.js';
 // added 50 ms of perceived lag on top of network jitter.
 
 const LONG_PRESS_MS = 500;
-const MODE_BADGES = { immediately: '', bar: '1', '4bar': '4', '8bar': '8', '16bar': '16' };
-const MODE_ORDER = ['immediately', 'bar', '4bar', '8bar', '16bar'];
-const MODE_LABELS = ['Now', 'Bar', '4-Bar', '8-Bar', '16-Bar'];
+const MODE_BADGES = { immediately: '', bar: '1', '2bar': '2', '4bar': '4', '8bar': '8', '16bar': '16' };
+const MODE_ORDER = ['immediately', 'bar', '2bar', '4bar', '8bar', '16bar'];
+const MODE_LABELS = ['Now', 'Bar', '2-Bar', '4-Bar', '8-Bar', '16-Bar'];
 
 const clamp01 = (v) => v < 0 ? 0 : (v > 1 ? 1 : v);
 
@@ -334,6 +334,7 @@ function DropButton({ index, label, state, mode, schedule,
 const MODE_SEGMENTS = {
     immediately: 0,
     bar: 4,
+    '2bar': 8,
     '4bar': 16,
     '8bar': 32,
     '16bar': 64,
