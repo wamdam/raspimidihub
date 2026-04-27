@@ -252,8 +252,10 @@ class ControllerBase(PluginBase):
                 new_val = {**cur, axis: value}
                 self._param_values[name] = new_val
                 if self._notify_param_change:
-                    try: self._notify_param_change(name, new_val)
-                    except Exception: pass
+                    try:
+                        self._notify_param_change(name, new_val)
+                    except Exception:
+                        pass
                 return
             if binding["channel"] != channel or binding["cc"] != cc:
                 continue

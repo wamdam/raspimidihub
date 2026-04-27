@@ -14,9 +14,10 @@ Rules (as agreed):
 import pytest
 
 from raspimidihub.midi_filter import (
-    MappingType, MidiMapping, validate_new_mapping,
+    MappingType,
+    MidiMapping,
+    validate_new_mapping,
 )
-
 
 # ---------------------------------------------------------------------------
 # Factories — keep tests short and readable.
@@ -85,7 +86,7 @@ class TestCcToCcMatrix:
     def test_matrix(self, new, expect_error):
         err = validate_new_mapping([self.EXISTING], new)
         if expect_error:
-            assert err, f"expected rejection, got None"
+            assert err, "expected rejection, got None"
         else:
             assert err is None, f"expected allow, got: {err!r}"
 

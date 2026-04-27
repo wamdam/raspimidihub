@@ -25,7 +25,7 @@ import { usePluginParams } from '../ui/plugin-params.js';
 const SWIPE_MIN_PX = 50;
 const SWIPE_MAX_MS = 700;
 
-function ControllerSurface({ instance, pluginData, pluginDisplays }) {
+function ControllerSurface({ instance, pluginData, pluginDisplays, clockPosition }) {
     const {
         params: pluginParams,
         setParams: setPluginParams,
@@ -52,20 +52,27 @@ function ControllerSurface({ instance, pluginData, pluginDisplays }) {
         // ControllerPage is a play surface — never show the LayoutGrid's
         // edit toggle. Editing happens in the device-detail panel.
         playOnly: true,
+        // Live clock-bus heartbeat (broadcast every quarter); used by
+        // the drop-button rings to advance even when no schedule is
+        // active. Null when no clock is running.
+        clockPosition,
     };
     return html`<div class="controller-surface">
         ${renderParamList(pluginData.params_schema, pluginParams, onPluginParamChange, displayCtx)}
     </div>`;
 }
 
-export function ControllerPage({ pluginDisplays, showToast, selectedId, onSelect }) {
+export function ControllerPage({ pluginDisplays, showToast, selectedId, onSelect, clockPosition }) {
     // Subscribe only to plugin events for the currently-selected
     // instance — that's the only plugin whose cells are visible. Also
     // grab transport-start so the surface can react to global play /
     // stop. App-level baseline already covers plugin-changed for the
     // dropdown.
     useSSESubscription(
-        ['transport-start'],
+        // clock-position drives the always-running drop-button rings —
+        // the controller surface needs the live tick count to advance
+        // their segments in time with the music.
+        ['transport-start', 'clock-position'],
         selectedId ? [selectedId] : [],
     );
     const [instances, setInstances] = useState([]);
@@ -193,6 +200,7 @@ export function ControllerPage({ pluginDisplays, showToast, selectedId, onSelect
             key=${selected.id}
             instance=${selected}
             pluginData=${pluginData && pluginData.id === selected.id ? pluginData : null}
-            pluginDisplays=${pluginDisplays} />
+            pluginDisplays=${pluginDisplays}
+            clockPosition=${clockPosition} />
     </div>`;
 }

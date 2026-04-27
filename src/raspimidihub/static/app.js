@@ -91,6 +91,11 @@ function App() {
     const [midiEvents, setMidiEvents] = useState({});  // src_client -> {name, text}
     const [clockSources, setClockSources] = useState({});  // src_client -> timestamp
     const [clockQuarters, setClockQuarters] = useState({}); // src_client -> ts of last quarter-note tick
+    // Global clock-bus heartbeat — broadcast every quarter from the
+    // server's ClockBus. Drives the Controller drop-button rings
+    // even when no drop is scheduled. {tick, ticks_per_bar, received_at}
+    // (received_at: Date.now() at the moment the SSE arrived).
+    const [clockPosition, setClockPosition] = useState(null);
     const [midiRates, setMidiRates] = useState({});  // "client:port" -> msgs/sec
     const [pluginDisplays, setPluginDisplays] = useState({});  // instance_id -> {name: value}
     const [sseConnected, setSseConnected] = useState(true);
@@ -184,6 +189,13 @@ function App() {
         if (type === 'clock-quarter') {
             setClockQuarters(prev => ({ ...prev, [data.src_client]: Date.now() }));
         }
+        if (type === 'clock-position') {
+            setClockPosition({
+                tick: data.tick,
+                ticks_per_bar: data.ticks_per_bar,
+                received_at: Date.now(),
+            });
+        }
     }, (connected) => {
         setSseConnected(connected);
         if (connected) refresh();
@@ -223,7 +235,8 @@ function App() {
         case 'controller':
             page = html`<${ControllerPage} pluginDisplays=${pluginDisplays} showToast=${showToast}
                 selectedId=${route.controllerId}
-                onSelect=${setControllerId} />`;
+                onSelect=${setControllerId}
+                clockPosition=${clockPosition} />`;
             break;
         case 'presets':
             page = html`<${PresetsPage} refresh=${refresh} showToast=${showToast} />`;

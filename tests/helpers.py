@@ -8,8 +8,11 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "src"))
 sys.path.insert(0, os.path.join(ROOT, "plugins"))
 
-from raspimidihub.alsa_seq import MidiEventType, SndSeqEvent
-from raspimidihub.plugin_api import PluginBase, get_defaults
+from raspimidihub.alsa_seq import (  # noqa: E402  (sys.path setup above must run first)
+    MidiEventType,
+    SndSeqEvent,
+)
+from raspimidihub.plugin_api import PluginBase, get_defaults  # noqa: E402
 
 
 def make_event(

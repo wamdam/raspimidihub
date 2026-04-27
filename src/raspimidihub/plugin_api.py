@@ -291,11 +291,16 @@ class DropButtonRow(Param):
     def to_dict(self) -> dict:
         d = super().to_dict()
         d["count"] = self.count
-        if self.states_param: d["states_param"] = self.states_param
-        if self.snapshots_param: d["snapshots_param"] = self.snapshots_param
-        if self.modes_param: d["modes_param"] = self.modes_param
-        if self.labels_param: d["labels_param"] = self.labels_param
-        if self.schedule_param: d["schedule_param"] = self.schedule_param
+        if self.states_param:
+            d["states_param"] = self.states_param
+        if self.snapshots_param:
+            d["snapshots_param"] = self.snapshots_param
+        if self.modes_param:
+            d["modes_param"] = self.modes_param
+        if self.labels_param:
+            d["labels_param"] = self.labels_param
+        if self.schedule_param:
+            d["schedule_param"] = self.schedule_param
         return d
 
 

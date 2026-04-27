@@ -57,6 +57,12 @@ class ClockBus:
         self._subscribers: list[tuple[PluginInstance, set[str]]] = []
         self._lock = threading.Lock()
         self._ticks_per_bar = self.TICKS_PER_BAR_DEFAULT
+        # Optional callback fired once per musical quarter (24 ticks at
+        # 24 PPQN). Used by __main__ to broadcast a clock-position SSE
+        # so the Controller frontend can run its drop-button rings off
+        # the live tick count even when no schedule is active.
+        # Signature: callback(tick_count: int, ticks_per_bar: int).
+        self._on_quarter_callback = None
 
     def subscribe(self, instance: PluginInstance, divisions: list[str]) -> None:
         with self._lock:
@@ -113,6 +119,15 @@ class ClockBus:
             self._tick_count = 0
             log.info("Clock bus: auto-started on first clock tick")
         self._tick_count += 1
+        # Fire the quarter listener (broadcasts clock-position SSE) so
+        # the frontend's drop-button rings can advance even when no
+        # schedule is active. Cheap — one int compare + at most one
+        # bound-method call per tick.
+        if self._on_quarter_callback and self._tick_count % 24 == 0:
+            try:
+                self._on_quarter_callback(self._tick_count, self._ticks_per_bar)
+            except Exception:
+                log.exception("on_quarter_callback failed")
         with self._lock:
             for instance, divisions in self._subscribers:
                 if not instance.running:

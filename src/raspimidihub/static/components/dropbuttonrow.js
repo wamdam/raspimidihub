@@ -39,6 +39,7 @@ export function PluginDropButtonRow({ param, values, onChange, displayCtx }) {
     const modes = values[param.modes_param] || {};
     const schedule = values[param.schedule_param] || null;
     const playOnly = !!(displayCtx && displayCtx.playOnly);
+    const clockPosition = displayCtx && displayCtx.clockPosition;
 
     // Config branch — one card per button with a name input + mode
     // wheel + capture / clear hint. Lives in the device-detail panel
@@ -112,6 +113,7 @@ export function PluginDropButtonRow({ param, values, onChange, displayCtx }) {
                 mode=${mode}
                 progress=${progress}
                 isScheduled=${isScheduled}
+                clockPosition=${clockPosition}
                 onChange=${onChange}
                 paramName=${param.name} />`;
         })}
@@ -121,7 +123,7 @@ export function PluginDropButtonRow({ param, values, onChange, displayCtx }) {
 // One quarter-width button in the row. Owns its own press / progress
 // gesture state; reads display state from props.
 function DropButton({ index, label, state, mode, progress, isScheduled,
-                     onChange, paramName }) {
+                     clockPosition, onChange, paramName }) {
     const elRef = useRef(null);
     const onChangeRef = useRef(onChange);
     onChangeRef.current = onChange;
@@ -238,22 +240,29 @@ function DropButton({ index, label, state, mode, progress, isScheduled,
     // Mode badge ("1"/"4"/"8"/"16") in a corner; blank for immediately.
     const modeBadge = MODE_BADGES[mode] || '';
 
-    // Two distinct progress visuals — different gestures, different
-    // languages:
-    //  - Long-press capture → full-button vertical fill from the
-    //    bottom (the "learning bar"). Goes 0 → 1 over 500 ms; on
-    //    completion the snapshot is captured and the fill collapses.
-    //  - Bar-quantised schedule → segmented ring around the button,
-    //    always rendered (4 dim arc segments with quarter gaps), fills
-    //    clockwise from the top with cycle-relative progress.
-    // The ring's segmented outline is visible even when no schedule
-    // is active, so the "musical quarters of a cycle" cue is always
-    // present once the gestures themselves are familiar.
-    const ringFill = isScheduled ? progress : 0;
+    // Compute the ring's progress (0..1) — three sources:
+    //   isScheduled  → server's cycle-relative progress (filling toward fire)
+    //   clockPosition → live music position within this button's mode cycle
+    //                   (always running while a master clock is up, so the
+    //                   ring is never frozen at "0" pre-press)
+    //   neither      → 0 (no clock running)
+    // Both compute the same thing visually when in the same cycle —
+    // pressing to schedule is a no-op for the ring's lit count if you
+    // press exactly on a grid boundary.
+    let ringProgress = 0;
+    if (isScheduled) {
+        ringProgress = progress;
+    } else if (clockPosition && MODE_SEGMENTS[mode]) {
+        const cycleTotalTicks = MODE_SEGMENTS[mode] * (clockPosition.ticks_per_bar / 4);
+        if (cycleTotalTicks > 0) {
+            ringProgress = (clockPosition.tick % cycleTotalTicks) / cycleTotalTicks;
+        }
+    }
 
     return html`<div class=${cls} ref=${elRef}>
-        <${SegmentedRing} fill=${ringFill}
-            bright=${isScheduled || state === 'firing'}
+        <${SegmentedRing} mode=${mode}
+            progress=${ringProgress}
+            lit=${ringProgress > 0 || isScheduled}
             buttonId=${index} />
         ${pressing ? html`
             <div class="dropbtn-pressfill"
@@ -263,60 +272,59 @@ function DropButton({ index, label, state, mode, progress, isScheduled,
     </div>`;
 }
 
-// 4-segment progress ring with small quarter gaps. Background segments
-// always shown muted; foreground (bright) clipped to a wedge from the
-// top, sweeping clockwise to `fill` (0..1). One unique clipPath ID per
-// button so multiple rings on the page don't collide.
-function SegmentedRing({ fill, bright, buttonId }) {
+// Segments-per-mode: 4 quarter-notes per bar × bars in the cycle.
+// `immediately` mode shows no ring at all. The configured mode's
+// segment count is used even when nothing is scheduled, so the ring
+// shape always reads as "this is a 1-bar / 4-bar / … button".
+const MODE_SEGMENTS = {
+    immediately: 0,
+    bar: 4,
+    '4bar': 16,
+    '8bar': 32,
+    '16bar': 64,
+};
+const SEGMENT_COLOR_LIT = 'rgba(255,200,140,0.95)';
+const SEGMENT_COLOR_DIM = 'rgba(255,170,90,0.20)';
+
+// Discrete segmented ring: N equal arc segments around the button.
+// Each is fully lit or fully dim; nothing is partially filled. So
+// pressing exactly on beat 2 of a 1-bar button lights segment 1
+// immediately (1 quarter has elapsed in the cycle), rather than
+// showing a fractional fill that confuses the eye.
+//
+// `mode`     — the button's configured mode (segment count = MODE_SEGMENTS[mode]).
+// `progress` — 0..1, cycle-relative; only meaningful when scheduled.
+// `lit`      — overall: are any segments currently in the bright state?
+function SegmentedRing({ mode, progress, lit, buttonId }) {
+    const totalSegs = MODE_SEGMENTS[mode] || 0;
+    if (totalSegs === 0) return null;
     const cx = 20, cy = 20, r = 18;
     const stroke = 2.5;
-    const circ = 2 * Math.PI * r;
-    // 4 dashes / 4 gaps. gap ≈ 4 % of perimeter — visible but tight.
-    const gapLen = circ * 0.04;
-    const dashLen = (circ - 4 * gapLen) / 4;
-    const dasharray = `${dashLen} ${gapLen}`;
-    // SVG default circle starts at 3 o'clock; rotate -90° so dash 1
-    // begins at 12 o'clock (musically beat 1).
-    const rotate = `rotate(-90 ${cx} ${cy})`;
-    // The wedge from 12 o'clock to (fill * 360°) clockwise. For
-    // fill=0 nothing is shown; for fill=1 the whole circle clips
-    // through (use a generous square that covers everything).
-    const clipId = `dropring-clip-${buttonId}`;
-    let wedge = '';
-    if (fill > 0.001) {
-        if (fill >= 0.999) {
-            // Cover the whole svg box.
-            wedge = `M 0 0 L 40 0 L 40 40 L 0 40 Z`;
-        } else {
-            const a = fill * 2 * Math.PI - Math.PI / 2;  // start at top, clockwise
-            const ex = cx + (r + stroke) * Math.cos(a);
-            const ey = cy + (r + stroke) * Math.sin(a);
-            const largeArc = fill > 0.5 ? 1 : 0;
-            wedge =
-                `M ${cx} ${cy} ` +
-                `L ${cx} ${cy - (r + stroke)} ` +
-                `A ${r + stroke} ${r + stroke} 0 ${largeArc} 1 ${ex} ${ey} ` +
-                `Z`;
-        }
+    // Gap visible but proportionally smaller for higher segment counts
+    // (otherwise the ring becomes mostly gap at 64 segments).
+    const gapDeg = totalSegs <= 16 ? 4 : (totalSegs <= 32 ? 2 : 1);
+    const segDeg = (360 - totalSegs * gapDeg) / totalSegs;
+    const litCount = lit ? Math.floor(progress * totalSegs) : 0;
+
+    function arcPath(startDeg, sweepDeg) {
+        // -90 makes 0° = 12 o'clock; clockwise sweep.
+        const sa = (startDeg - 90) * Math.PI / 180;
+        const ea = (startDeg + sweepDeg - 90) * Math.PI / 180;
+        const sx = cx + r * Math.cos(sa);
+        const sy = cy + r * Math.sin(sa);
+        const ex = cx + r * Math.cos(ea);
+        const ey = cy + r * Math.sin(ea);
+        const largeArc = sweepDeg > 180 ? 1 : 0;
+        return `M ${sx} ${sy} A ${r} ${r} 0 ${largeArc} 1 ${ex} ${ey}`;
     }
-    return html`<svg class="dropbtn-ring" viewBox="0 0 40 40">
-        <defs>
-            <clipPath id=${clipId}>
-                <path d=${wedge} />
-            </clipPath>
-        </defs>
-        <!-- BG segments — always muted dim outline -->
-        <circle cx=${cx} cy=${cy} r=${r} fill="none"
-            stroke-width=${stroke} stroke-linecap="butt"
-            stroke=${bright ? 'rgba(255,170,90,0.30)' : 'rgba(255,170,90,0.18)'}
-            stroke-dasharray=${dasharray}
-            transform=${rotate} />
-        <!-- FG progress — same shape, bright color, clipped to wedge -->
-        ${fill > 0.001 ? html`<circle cx=${cx} cy=${cy} r=${r} fill="none"
-            stroke="rgba(255,200,140,0.95)" stroke-width=${stroke}
-            stroke-linecap="butt"
-            stroke-dasharray=${dasharray}
-            transform=${rotate}
-            clip-path=${`url(#${clipId})`} />` : null}
-    </svg>`;
+
+    const segs = [];
+    for (let i = 0; i < totalSegs; i++) {
+        const start = i * (segDeg + gapDeg) + gapDeg / 2;
+        const isLit = i < litCount;
+        segs.push(html`<path key=${i} d=${arcPath(start, segDeg)}
+            fill="none" stroke=${isLit ? SEGMENT_COLOR_LIT : SEGMENT_COLOR_DIM}
+            stroke-width=${stroke} stroke-linecap="butt" />`);
+    }
+    return html`<svg class="dropbtn-ring" viewBox="0 0 40 40">${segs}</svg>`;
 }

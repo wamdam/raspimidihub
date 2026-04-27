@@ -204,6 +204,17 @@ async def async_main() -> None:
         engine._latency_cb = server.record_latency
         plugin_host._latency_cb = server.record_latency
 
+        # Quarter-tick clock heartbeat → SSE. Lets the Controller's
+        # drop-button rings reflect the live music position even when
+        # no schedule is active. ClockBus runs in the asyncio thread
+        # (engine.run_event_loop dispatches to it), so ensure_future is
+        # safe directly. Coalesces nicely — at 120 BPM that's 2 SSE
+        # events / sec, dwarfed by midi-activity etc.
+        def _on_quarter(tick: int, tpb: int) -> None:
+            asyncio.ensure_future(server.send_sse(
+                "clock-position", {"tick": tick, "ticks_per_bar": tpb}))
+        plugin_host.clock_bus._on_quarter_callback = _on_quarter
+
         # Discover available plugins
         plugin_host.discover_plugins()
 

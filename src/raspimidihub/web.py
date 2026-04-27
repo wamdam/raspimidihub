@@ -134,7 +134,7 @@ class WebServer:
         # connections that haven't called /api/sse/subscribe have empty
         # sets and receive nothing. Every view explicitly declares its
         # interest via the useSSESubscription() hook.
-        self._sse_connections: dict[str, "SSEConnection"] = {}
+        self._sse_connections: dict[str, SSEConnection] = {}
         # Kept for shutdown fan-out only — points to the same queue
         # objects held in _sse_connections.
         self._sse_queues: list[asyncio.Queue] = []

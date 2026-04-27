@@ -53,7 +53,8 @@ export function useSSE(onEvent, onConnChange, onConnectionId) {
         for (const ev of [
             'device-connected', 'device-disconnected', 'connection-changed',
             'midi-activity', 'midi-rates', 'plugin-display', 'plugin-param',
-            'clock-quarter', 'transport-start', 'cc-changes', 'panic',
+            'clock-quarter', 'clock-position',
+            'transport-start', 'cc-changes', 'panic',
             'plugin-changed',
         ]) {
             es.addEventListener(ev, handler(ev));

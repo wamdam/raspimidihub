@@ -1,12 +1,15 @@
 """Tests for MIDI filter and mapping logic."""
 
-from raspimidihub.alsa_seq import MidiEventType
-from raspimidihub.midi_filter import (
-    ALL_CHANNELS, ALL_MSG_TYPES, MappingType, MidiFilter, MidiMapping,
-)
-
 from helpers import make_event
 
+from raspimidihub.alsa_seq import MidiEventType
+from raspimidihub.midi_filter import (
+    ALL_CHANNELS,
+    ALL_MSG_TYPES,
+    MappingType,
+    MidiFilter,
+    MidiMapping,
+)
 
 # ---------------------------------------------------------------------------
 # MidiMapping._scale_value

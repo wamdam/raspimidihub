@@ -17,7 +17,6 @@ from raspimidihub.plugin_api import (
     Radio,
 )
 
-
 _SCENE_COLORS = ["green", "yellow", "blue", "red"]
 
 

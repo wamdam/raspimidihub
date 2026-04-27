@@ -1,6 +1,6 @@
 """Tests for device identification and registry."""
 
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 from raspimidihub.device_id import DeviceRegistry, StableDeviceInfo
 

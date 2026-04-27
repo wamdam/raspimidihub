@@ -41,3 +41,115 @@ class TestTransportNotification:
 
         instance._tick_queue.put_nowait.assert_called_once_with("_stop")
         assert bus._running is False
+
+
+class TestBarPosition:
+    """bar_position() and ticks_until_next_grid() drive Controller drop
+    button scheduling. These tests pin down the math so a regression
+    in the cycle-relative + grid-quantised behaviour is caught here
+    rather than at "user notices the drop fires at the wrong bar"."""
+
+    TPB = 96  # 4/4 at 24 PPQN
+
+    def test_bar_position_at_start(self):
+        bus = ClockBus()
+        bus._tick_count = 0
+        assert bus.bar_position() == (0, 0, self.TPB)
+
+    def test_bar_position_mid_bar(self):
+        bus = ClockBus()
+        bus._tick_count = 5 * self.TPB + 30  # bar 5, tick 30 of 96
+        assert bus.bar_position() == (5, 30, self.TPB)
+
+    def test_ticks_until_next_grid_default_one_bar(self):
+        bus = ClockBus()
+        bus._tick_count = 5 * self.TPB + 30
+        # Next bar from bar 5 mid-bar = beginning of bar 6.
+        assert bus.ticks_until_next_grid(1) == self.TPB - 30
+
+    def test_ticks_until_next_grid_4bar_quantises(self):
+        """Pressing during bar 5 with 4-bar mode must fire at bar 8
+        (next 4-bar grid line), NOT bar 9 (4 bars from now)."""
+        bus = ClockBus()
+        bus._tick_count = 5 * self.TPB + 30
+        ticks = bus.ticks_until_next_grid(4)
+        # 4-bar grid lines: 0, 4, 8, 12. Next from bar 5 = 8.
+        assert ticks == 8 * self.TPB - (5 * self.TPB + 30)
+        assert ticks == 3 * self.TPB - 30
+
+    def test_ticks_until_next_grid_at_grid_line_targets_next_one(self):
+        """Pressing exactly on a 4-bar grid line schedules to the NEXT
+        one, never to the current tick. A boundary hit is strictly future."""
+        bus = ClockBus()
+        bus._tick_count = 4 * self.TPB  # exactly on a 4-bar boundary
+        assert bus.ticks_until_next_grid(4) == 4 * self.TPB  # next = bar 8
+
+    def test_ticks_until_next_grid_just_before_boundary(self):
+        """Pressing 6 ticks before the next 4-bar boundary fires in 6
+        ticks — the function must NOT round 'almost there' up to a
+        full grid period."""
+        bus = ClockBus()
+        bus._tick_count = 7 * self.TPB + 90  # bar 7, tick 90 (6 to bar 8)
+        assert bus.ticks_until_next_grid(4) == 6
+
+    def test_ticks_until_next_grid_8_and_16_bar(self):
+        bus = ClockBus()
+        # Bar 5: 8-bar grid lines at 0, 8, 16 → next = 8. 16-bar at 0, 16 → 16.
+        bus._tick_count = 5 * self.TPB
+        assert bus.ticks_until_next_grid(8) == 3 * self.TPB
+        assert bus.ticks_until_next_grid(16) == 11 * self.TPB
+
+    def test_ticks_until_next_grid_clamps_zero_to_one(self):
+        """`every_n_bars=0` is nonsensical; treat as 1 (next bar)."""
+        bus = ClockBus()
+        bus._tick_count = 5 * self.TPB + 30
+        assert bus.ticks_until_next_grid(0) == bus.ticks_until_next_grid(1)
+
+
+class TestQuarterCallback:
+    """The on_quarter_callback fires once per musical quarter (24 ticks
+    at 24 PPQN). __main__.py wires it to broadcast clock-position SSE
+    so frontend drop-button rings can run off the live tick count."""
+
+    def test_callback_fires_on_quarter_boundaries(self):
+        bus = ClockBus()
+        bus._running = True  # skip the auto-start branch
+        calls = []
+        bus._on_quarter_callback = lambda tick, tpb: calls.append((tick, tpb))
+
+        for _ in range(24):
+            bus.on_clock_tick()
+
+        # One callback at tick 24 (first quarter complete).
+        assert calls == [(24, 96)]
+
+    def test_callback_fires_every_24_ticks(self):
+        bus = ClockBus()
+        bus._running = True
+        calls = []
+        bus._on_quarter_callback = lambda tick, tpb: calls.append(tick)
+
+        for _ in range(96):  # one full bar
+            bus.on_clock_tick()
+
+        assert calls == [24, 48, 72, 96]
+
+    def test_callback_silent_until_set(self):
+        bus = ClockBus()
+        bus._running = True
+        # No callback registered → no error, just nothing to call.
+        for _ in range(24):
+            bus.on_clock_tick()
+
+    def test_callback_exception_swallowed(self):
+        """A buggy listener must not break clock dispatch for plugins."""
+        bus = ClockBus()
+        bus._running = True
+
+        def bad(tick, tpb):
+            raise RuntimeError("boom")
+
+        bus._on_quarter_callback = bad
+        # Should not raise.
+        for _ in range(24):
+            bus.on_clock_tick()

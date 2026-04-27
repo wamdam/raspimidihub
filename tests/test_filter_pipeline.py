@@ -5,12 +5,16 @@ These test _apply_mappings with captured output instead of real ALSA.
 
 from unittest.mock import MagicMock
 
-from raspimidihub.alsa_seq import MidiEventType, SndSeqEvent
-from raspimidihub.midi_filter import (
-    FilterEngine, FilteredConnection, MappingType, MidiFilter, MidiMapping,
-)
-
 from helpers import make_event
+
+from raspimidihub.alsa_seq import MidiEventType
+from raspimidihub.midi_filter import (
+    FilteredConnection,
+    FilterEngine,
+    MappingType,
+    MidiFilter,
+    MidiMapping,
+)
 
 
 def _make_engine_and_conn(mappings=None, channel_mask=0xFFFF):
@@ -32,9 +36,6 @@ def _make_engine_and_conn(mappings=None, channel_mask=0xFFFF):
     # Capture forwarded events
     forwarded_cc = []
     forwarded_events = []
-
-    original_forward_cc = engine._forward_cc
-    original_forward_event = engine._forward_event
 
     def capture_cc(fc_, ch, cc, val):
         forwarded_cc.append((ch, cc, val))

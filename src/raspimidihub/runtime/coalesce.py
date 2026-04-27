@@ -24,7 +24,8 @@ slow I/O (SSE fan-out, etc.) without blocking producers.
 from __future__ import annotations
 
 import threading
-from typing import Any, Callable, Hashable
+from collections.abc import Hashable
+from typing import Any, Callable
 
 
 class TrailingCoalescer:
