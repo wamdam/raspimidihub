@@ -1720,6 +1720,76 @@ spec'd, gives us the test bed for the new `tick` plumbing and the
 These have been discussed at idea-level but need another design pass
 before implementation.
 
+- **TODO: midi.guide instrument library** — turn "what does CC 17 do
+  on a JX-08" from a manual lookup into a one-click pick. Surfaced
+  2026-04-27 — user wants to "choose his instrument and select CCs by
+  name / function" instead of typing numbers.
+
+  **Source data:** https://midi.guide is a community-maintained
+  database of synth + drum-machine CC + NRPN + sysex maps. **License
+  must be verified BEFORE any work** — find the upstream repo or
+  authoritative source, confirm the licence (CC0 / CC-BY / GPL?),
+  and decide accordingly:
+  - **CC0 / public domain**: ship a snapshot in the deb under
+    `/usr/share/raspimidihub/midiguide/`, refresh on update.
+  - **CC-BY**: ship + display attribution prominently in the picker
+    UI ("Mappings from midi.guide, CC-BY 4.0") and in the About box.
+  - **GPL / share-alike**: probably can't ship in a permissively
+    licensed deb; consider on-demand fetch instead, with cache, or
+    drop the integration entirely.
+  - **No clear licence**: open an issue with the upstream maintainer,
+    don't proceed until clarified.
+
+  **Data model sketch.** Two layers:
+  1. **Library** (read-only, ships with the app or fetched on
+     install): `instruments/<vendor>__<model>.json` with shape
+     `{vendor, model, version, ccs: [{cc, name, channel?, range?,
+     description?}], nrpns: [...], notes: [{note, name, ...}]}`.
+     Indexed by a top-level `index.json` for fast picker rendering.
+  2. **Per-device assignment** (user state, in `config.data`): each
+     device (or each connection's destination) carries
+     `instrument_profile: "vendor__model"`. Multiple devices may
+     share a profile — only the assignment is per-device, not the
+     data.
+
+  **UX sketch.**
+  - **Routing tab → device-detail panel**: a new "Instrument" row
+    with a picker. Empty by default. Tapping opens a searchable list
+    grouped by vendor; instant search by typing model name. Clearing
+    removes the assignment.
+  - **Controller cell config**: when a binding's destination has an
+    instrument profile assigned, the **CC field becomes a combo box**
+    — type-ahead by CC name (`"Cutoff"`, `"Resonance"`) OR by
+    number; both resolve to the same numeric CC. Cell label
+    pre-fills with the friendly name when a CC is picked from the
+    library, but the user's typed override always wins.
+  - **Tooltip on the CC number input**: if there's a profile, hover
+    shows `"CC 74 — Cutoff (JX-08)"` so existing numeric bindings
+    self-annotate without changing data.
+  - **No profile assigned**: pickers degrade to plain numeric inputs
+    — no regression for users who don't care about the library.
+  - **User overrides**: a "+ Custom CC" entry in the picker lets the
+    user add a name for a CC the library doesn't know (stored in
+    `config.data.user_cc_names[device_id][cc] = "name"`). Future
+    cell pickers see both library + user names.
+
+  **Shipping form.** I'd lean on a snapshot at deb-build time rather
+  than a live fetch — the Pi is often offline (AP mode), and the
+  data churns slowly. Build step pulls from upstream into
+  `data/midiguide/` (gitignored), Make deb copies into the
+  package. Update card in Settings could show "Library: 2026-04-15,
+  342 instruments — refresh?" with a manual refresh that requires
+  client-mode WiFi (ties in with Phase 5.5 Transient WiFi).
+
+  **Open questions:**
+  - Can we contribute corrections back to midi.guide via PR? (good
+    citizen / two-way street).
+  - Does the data cover the user's specific instruments (Digitone II,
+    LCXL3, S-1, Impact GX49)? Quick spot-check before committing.
+  - NRPN + sysex coverage useful for §7 (CC Curve LFO) and a future
+    sysex sender plugin, but probably out of scope for v1 — start
+    with CC only.
+
 - **TODO: `cc_lfo` per-cycle gate pattern** — `StepEditor`-style 1–32
   step pattern that mutes/un-mutes whole LFO cycles for ducking-style
   effects (e.g. `0111` = first cycle off, next three on). Behaviour
