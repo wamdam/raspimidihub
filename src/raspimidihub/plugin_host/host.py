@@ -346,6 +346,19 @@ class PluginHost:
             instance.running = False
             return
 
+        # Strip stranded params left over from older plugin versions
+        # (e.g. the old single-pad's `pad` / `pad_snapshot` keys after
+        # we switched to DropButtonRow). Runs AFTER on_start so the
+        # plugin's setdefault calls have already populated whatever
+        # the current schema declares.
+        try:
+            dropped = plugin.tidy_param_values()
+            if dropped:
+                log.info("Plugin %s: tidied %d stranded params: %s",
+                         instance.name, len(dropped), dropped)
+        except Exception:
+            log.exception("tidy_param_values failed for %s", instance.name)
+
         fd = alsa_client.fileno()
         _logged_types = set()
         tick_queue = instance._tick_queue

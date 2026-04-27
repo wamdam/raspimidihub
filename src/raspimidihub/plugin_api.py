@@ -399,6 +399,54 @@ def get_all_params(params: list) -> list[Param]:
     return result
 
 
+def schema_param_keys(params: list) -> set[str]:
+    """Return every key the schema declares as a valid `_param_values`
+    entry. Used by `PluginBase._tidy_param_values()` to drop strandeed
+    keys carried over from older plugin versions.
+
+    Collects:
+      - Every `Param.name` (top-level + Group children + LayoutGrid cells)
+      - Every auxiliary-pointer attribute (any string attr ending in
+        `_param`, e.g. `labels_param`, `bindings_param`, `learn_param`,
+        `states_param`, `snapshots_param`, `modes_param`,
+        `schedule_param`, `length_param`, …) — these point at sibling
+        param names like `cell_labels`, `drop_states`, etc.
+      - Recursively into Group.children / LayoutGrid.cells.
+    The generic `*_param` walk means new auxiliary patterns added on
+    future Param subclasses are picked up automatically without needing
+    to update this list."""
+    keys: set[str] = set()
+
+    def collect_aux(p: Param) -> None:
+        for attr_name in dir(p):
+            if not attr_name.endswith("_param") or attr_name.startswith("_"):
+                continue
+            try:
+                val = getattr(p, attr_name)
+            except AttributeError:
+                continue
+            if isinstance(val, str) and val:
+                keys.add(val)
+
+    def walk(items: list) -> None:
+        for p in items:
+            if isinstance(p, Group):
+                walk(p.children)
+                continue
+            if isinstance(p, LayoutGrid):
+                # The grid itself doesn't have a single name to track,
+                # but its cells' params and its auxiliary pointers do.
+                collect_aux(p)
+                walk([cell.param for cell in p.cells])
+                continue
+            if isinstance(p, Param):
+                if p.name:
+                    keys.add(p.name)
+                collect_aux(p)
+    walk(params)
+    return keys
+
+
 def get_defaults(params: list) -> dict[str, Any]:
     """Extract default values from all params."""
     defaults = {}
@@ -569,6 +617,25 @@ class PluginBase:
 
     def on_stop(self) -> None:
         pass
+
+    def tidy_param_values(self) -> list[str]:
+        """Drop entries from self._param_values whose key isn't declared
+        by the current schema. Removes stranded state from older plugin
+        versions so the next config save doesn't carry it forward.
+
+        Returns the list of keys removed (empty when nothing was
+        stranded). Called by the plugin host after on_start, so
+        subclasses' setdefault calls run BEFORE we strip — anything
+        the schema doesn't declare is genuinely stranded.
+
+        Subclasses normally don't override this; the helper is
+        schema-driven (`schema_param_keys`) and so handles whatever
+        param mix they declare automatically."""
+        valid = schema_param_keys(type(self).params)
+        dropped = [k for k in self._param_values if k not in valid]
+        for k in dropped:
+            del self._param_values[k]
+        return dropped
 
     def panic(self) -> None:
         """Release all internal state so the plugin stops producing notes.
