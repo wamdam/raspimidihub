@@ -1297,10 +1297,14 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
 
     @server.route("GET", "/api/wifi")
     async def api_wifi_status(req: Request) -> Response:
+        # Expose the saved update-WiFi SSID (NOT the password) so the
+        # Settings UI can show "Update WiFi: HomeWiFi - change?" without
+        # the user re-entering it on every visit.
         return Response.json({
             "mode": wifi.mode,
             "ssid": wifi.ssid,
             "ip": wifi.ip,
+            "saved_client_ssid": config.wifi.get("client_ssid", ""),
         })
 
     @server.route("POST", "/api/wifi/ap")
@@ -1347,6 +1351,32 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
             return Response.json({"status": "connected", "ssid": ssid, "ip": wifi.ip})
         else:
             return Response.error("Connection failed, fell back to AP mode", 502)
+
+    # POST /api/wifi/save-credentials — store SSID + password without
+    # switching modes. Used by the transient-update flow: the Pi stays
+    # in AP mode for normal use, then briefly joins this WiFi to fetch
+    # a new deb when the user clicks "Check for updates".
+    @server.route("POST", "/api/wifi/save-credentials")
+    async def api_wifi_save_credentials(req: Request) -> Response:
+        data = req.json
+        ssid = data.get("ssid", "").strip()
+        # Empty password = keep existing (so the user can change SSID
+        # without re-typing the password). If you really want to clear
+        # the password, send {"password": "", "force_clear_password": true}.
+        password_provided = "password" in data and data.get("password") != ""
+        if not ssid:
+            return Response.error("SSID required")
+        cfg_wifi = config.wifi
+        cfg_wifi["client_ssid"] = ssid
+        if password_provided:
+            cfg_wifi["client_password"] = data["password"]
+        elif data.get("force_clear_password"):
+            cfg_wifi["client_password"] = ""
+        # NOT changing cfg_wifi["mode"] — leave whatever was there
+        # (typically "ap"). The transient-update flow flips mode
+        # temporarily on its own without touching this saved value.
+        await config.asave()
+        return Response.json({"status": "saved", "ssid": ssid})
 
     @server.route("GET", "/api/wifi/scan")
     async def api_wifi_scan(req: Request) -> Response:

@@ -165,6 +165,29 @@ function WiFiCard({ showToast }) {
     const [networks, setNetworks] = useState([]);
     const [scanning, setScanning] = useState(false);
     const [switching, setSwitching] = useState(false);
+    // Update-WiFi credentials — saved without flipping the Pi to client
+    // mode. The transient-update flow uses these to briefly join WiFi
+    // for downloading a new release; the rest of the time the Pi stays
+    // on its AP. Decoupled from the "Join WiFi" action above.
+    const [updSsid, setUpdSsid] = useState('');
+    const [updPassword, setUpdPassword] = useState('');
+    const [savingCreds, setSavingCreds] = useState(false);
+    const saveUpdateCreds = async () => {
+        if (!updSsid) return;
+        setSavingCreds(true);
+        const res = await api('/wifi/save-credentials', {
+            method: 'POST',
+            body: JSON.stringify({ ssid: updSsid, password: updPassword }),
+        });
+        setSavingCreds(false);
+        if (res.error) {
+            showToast('Save failed: ' + res.error);
+        } else {
+            showToast('Update WiFi saved: ' + updSsid);
+            setUpdPassword('');  // don't keep the password in the DOM
+            refresh();
+        }
+    };
 
     const refresh = () => api('/wifi').then(w => { setWifi(w); setWantMode(null); }).catch(() => {});
     useEffect(() => { refresh(); }, []);
@@ -270,6 +293,53 @@ function WiFiCard({ showToast }) {
                         <button class="btn btn-primary" onclick=${switchToClient} disabled=${switching || !clientSsid}>${switching ? 'Connecting...' : 'Connect'}</button>
                     </div>
                     <p style="font-size:11px;color:var(--text-dim);margin-top:6px;text-align:center">After connecting, find this device at <b>http://raspimidihub.local</b></p>
+                `}
+
+                ${wantMode === null && html`
+                    <div style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.08)">
+                        <div style="font-size:13px;color:var(--text-dim);margin-bottom:6px">
+                            <b>Update WiFi</b> ${wifi.saved_client_ssid
+                                ? html`<span data-testid="update-wifi-saved-ssid">: ${wifi.saved_client_ssid}</span>`
+                                : html`<span style="color:var(--text-dim)" data-testid="update-wifi-not-configured"> (not configured)</span>`}
+                        </div>
+                        <p style="font-size:11px;color:var(--text-dim);margin-bottom:8px">
+                            SSID + password the Pi will briefly join to fetch a new release. Stays in AP mode until you click "Check for updates".
+                        </p>
+                        <button class="btn btn-secondary" data-testid="update-wifi-edit"
+                            onclick=${() => { setUpdSsid(wifi.saved_client_ssid || ''); setWantMode('update-creds'); }}>
+                            ${wifi.saved_client_ssid ? 'Change' : 'Set credentials'}
+                        </button>
+                    </div>
+                `}
+
+                ${wantMode === 'update-creds' && html`
+                    <div style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.08)">
+                        <div class="form-group">
+                            <label>WiFi SSID</label>
+                            <input type="text" data-testid="update-wifi-ssid"
+                                value=${updSsid}
+                                onInput=${e => setUpdSsid(e.target.value)}
+                                placeholder="Your home WiFi network name" />
+                        </div>
+                        <div class="form-group">
+                            <label>Password</label>
+                            <input type="password" data-testid="update-wifi-password"
+                                value=${updPassword}
+                                onInput=${e => setUpdPassword(e.target.value)}
+                                placeholder=${wifi.saved_client_ssid ? 'Leave empty to keep current password' : ''} />
+                        </div>
+                        <div class="btn-group">
+                            <button class="btn btn-secondary" onclick=${() => setWantMode(null)}>Cancel</button>
+                            <button class="btn btn-primary" data-testid="update-wifi-save"
+                                onclick=${saveUpdateCreds}
+                                disabled=${savingCreds || !updSsid}>
+                                ${savingCreds ? 'Saving...' : 'Save'}
+                            </button>
+                        </div>
+                        <p style="font-size:11px;color:var(--text-dim);margin-top:6px">
+                            Saved without switching modes — the Pi stays on AP.
+                        </p>
+                    </div>
                 `}
             `}
         </div>
