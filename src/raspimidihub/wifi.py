@@ -301,8 +301,14 @@ no-hosts
         process sees a clean return and we get a mystery dead AP.
         """
         try:
+            # Spawn under taskset -c 0-2 so hostapd lands on a non-
+            # isolated core — the asyncio loop is on CPU 3 and that
+            # core has nohz_full set, which would starve hostapd's
+            # 100 ms beacon timer. Children inherit the parent's
+            # affinity {3} otherwise (raspimidihub.__main__ pins
+            # itself), and we can't share CPU 3 with hostapd anyway.
             r = subprocess.run(
-                ["hostapd", "-B", str(HOSTAPD_CONF)],
+                ["taskset", "-c", "0-2", "hostapd", "-B", str(HOSTAPD_CONF)],
                 capture_output=True, text=True, timeout=10,
             )
         except subprocess.TimeoutExpired:
@@ -424,7 +430,11 @@ no-hosts
 
             _run(["systemctl", "stop", "dnsmasq"], check=False)
             self._kill_and_wait("dnsmasq", str(DNSMASQ_AP_CONF))
-            _run(["dnsmasq", "--conf-file=" + str(DNSMASQ_AP_CONF),
+            # Same reasoning as hostapd above — keep dnsmasq off the
+            # isolated core so it can answer DHCP / DNS without
+            # waiting for the asyncio loop's CPU.
+            _run(["taskset", "-c", "0-2",
+                  "dnsmasq", "--conf-file=" + str(DNSMASQ_AP_CONF),
                   "--pid-file=/run/raspimidihub/dnsmasq.pid"], check=False)
 
         self._mode = "ap"

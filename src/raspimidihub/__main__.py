@@ -38,6 +38,34 @@ def setup_logging() -> None:
     )
 
 
+def pin_to_isolated_cpu() -> None:
+    """Pin THIS process to the kernel-isolated CPU 3 (raspimidihub-system-prepare
+    adds isolcpus=3 nohz_full=3 rcu_nocbs=3 to the kernel cmdline).
+
+    Done at the Python-process level rather than as a systemd cgroup
+    AllowedCPUs= because the latter propagates to every child process —
+    including the daemonized hostapd / dnsmasq — and a hostapd pinned
+    to a nohz_full core can't beacon at the right cadence, breaking
+    the AP. Subprocesses raspimidihub spawns inherit affinity {3}, so
+    the wifi.py spawn paths explicitly prefix `taskset -c 0-2 …` to
+    place those daemons on the non-isolated cores.
+
+    Safe no-op when the kernel didn't isolate CPU 3 (e.g. dev machine
+    or pre-prepare deployment) — we just verify the target CPU is in
+    the current allowed set; if not, we leave affinity alone."""
+    target = {3}
+    try:
+        allowed = os.sched_getaffinity(0)
+        if not target.issubset(allowed):
+            log.info("CPU %s not in allowed set %s — skipping affinity pin",
+                     sorted(target), sorted(allowed))
+            return
+        os.sched_setaffinity(0, target)
+        log.info("Pinned to CPU %s (isolated core)", sorted(target))
+    except (AttributeError, OSError) as e:
+        log.info("Affinity pin not available: %s", e)
+
+
 def notify_systemd(status: str) -> None:
     """Send sd_notify status if running under systemd."""
     import socket
@@ -307,6 +335,7 @@ async def async_main() -> None:
 
 def main() -> None:
     setup_logging()
+    pin_to_isolated_cpu()
 
     async def runner() -> None:
         # Cancel the main task on SIGTERM/SIGINT so async_main's `finally`
