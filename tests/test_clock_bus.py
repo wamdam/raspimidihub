@@ -115,19 +115,20 @@ class TestQuarterCallback:
         bus = ClockBus()
         bus._running = True  # skip the auto-start branch
         calls = []
-        bus._on_quarter_callback = lambda tick, tpb: calls.append((tick, tpb))
+        bus._on_quarter_callback = lambda tick, tpb, running: calls.append(
+            (tick, tpb, running))
 
         for _ in range(24):
             bus.on_clock_tick()
 
         # One callback at tick 24 (first quarter complete).
-        assert calls == [(24, 96)]
+        assert calls == [(24, 96, True)]
 
     def test_callback_fires_every_24_ticks(self):
         bus = ClockBus()
         bus._running = True
         calls = []
-        bus._on_quarter_callback = lambda tick, tpb: calls.append(tick)
+        bus._on_quarter_callback = lambda tick, tpb, running: calls.append(tick)
 
         for _ in range(96):  # one full bar
             bus.on_clock_tick()
@@ -146,10 +147,32 @@ class TestQuarterCallback:
         bus = ClockBus()
         bus._running = True
 
-        def bad(tick, tpb):
+        def bad(tick, tpb, running):
             raise RuntimeError("boom")
 
         bus._on_quarter_callback = bad
         # Should not raise.
         for _ in range(24):
             bus.on_clock_tick()
+
+    def test_callback_fires_on_transport_changes(self):
+        """on_start / on_continue / on_stop must each emit a position
+        callback so the frontend ring freezes promptly on stop and
+        resyncs on start (instead of waiting up to a quarter beat)."""
+        bus = ClockBus()
+        bus._tick_count = 50  # mid-bar
+        calls = []
+        bus._on_quarter_callback = lambda tick, tpb, running: calls.append(
+            (tick, running))
+
+        bus.on_start()
+        # on_start resets tick_count to 0, then calls back with running=True.
+        assert calls[-1] == (0, True)
+
+        bus._tick_count = 30
+        bus.on_continue()
+        assert calls[-1] == (30, True)
+
+        bus._tick_count = 60
+        bus.on_stop()
+        assert calls[-1] == (60, False)

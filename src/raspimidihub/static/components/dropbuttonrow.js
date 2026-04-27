@@ -27,10 +27,33 @@ import { useEffect, useRef, useState } from '../lib/hooks.module.js';
 import { html, tickFeedback, thudFeedback } from './common.js';
 import { PluginWheel } from './wheel.js';
 
+// Tick the component re-render rate while a clock is running, so the
+// dead-reckoned tick estimate advances on screen between SSE events.
+// 20 Hz = 50 ms — finer than human perception of segment transitions
+// at any tempo we'd run, cheap on a Pi 4 (4 buttons × 1 SVG each).
+const VISUAL_TICK_MS = 50;
+
 const LONG_PRESS_MS = 500;
 const MODE_BADGES = { immediately: '', bar: '1', '4bar': '4', '8bar': '8', '16bar': '16' };
 const MODE_ORDER = ['immediately', 'bar', '4bar', '8bar', '16bar'];
 const MODE_LABELS = ['Now', 'Bar', '4-Bar', '8-Bar', '16-Bar'];
+
+const clamp01 = (v) => v < 0 ? 0 : (v > 1 ? 1 : v);
+
+// Dead-reckon the live tick: the server's clock-position SSE arrives
+// every quarter (24 ticks) but with network + asyncio + render lag —
+// blindly using clockPosition.tick lags audible beats by ~1/16 to
+// 1/8 note. We extrapolate forward using the tempo (ms_per_tick)
+// computed from the last received interval, so the displayed tick
+// matches the audible beat wall-time. Returns null if no clock has
+// been seen yet.
+function liveTickEstimate(cp) {
+    if (!cp || cp.tick == null) return null;
+    if (!cp.running) return cp.tick;          // transport stopped — freeze
+    if (!cp.ms_per_tick) return cp.tick;      // first event, no tempo yet
+    const elapsed = Date.now() - cp.received_at;
+    return cp.tick + Math.floor(elapsed / cp.ms_per_tick);
+}
 
 export function PluginDropButtonRow({ param, values, onChange, displayCtx }) {
     const count = param.count || 4;
@@ -40,6 +63,20 @@ export function PluginDropButtonRow({ param, values, onChange, displayCtx }) {
     const schedule = values[param.schedule_param] || null;
     const playOnly = !!(displayCtx && displayCtx.playOnly);
     const clockPosition = displayCtx && displayCtx.clockPosition;
+
+    // Drive periodic re-renders so dead-reckoned segment transitions
+    // are visible between SSE events. Only runs while transport is
+    // active — pauses when stopped (no clock = nothing to animate).
+    // Single hook in the parent re-renders all 4 buttons together.
+    const [, setVisualTick] = useState(0);
+    const transportRunning = !!(clockPosition && clockPosition.running);
+    useEffect(() => {
+        if (playOnly !== true || !transportRunning) return;
+        const id = setInterval(
+            () => setVisualTick(t => (t + 1) & 0x7fff),
+            VISUAL_TICK_MS);
+        return () => clearInterval(id);
+    }, [playOnly, transportRunning]);
 
     // Config branch — one card per button with a name input + mode
     // wheel + capture / clear hint. Lives in the device-detail panel
@@ -104,15 +141,13 @@ export function PluginDropButtonRow({ param, values, onChange, displayCtx }) {
             const label = labels[sid] || String.fromCharCode(65 + i);
             const mode = modes[sid] || 'immediately';
             const isScheduled = schedule && Number(schedule.button_id) === i;
-            const progress = isScheduled ? Number(schedule.progress || 0) : 0;
             return html`<${DropButton}
                 key=${i}
                 index=${i}
                 label=${label}
                 state=${state}
                 mode=${mode}
-                progress=${progress}
-                isScheduled=${isScheduled}
+                schedule=${isScheduled ? schedule : null}
                 clockPosition=${clockPosition}
                 onChange=${onChange}
                 paramName=${param.name} />`;
@@ -122,8 +157,9 @@ export function PluginDropButtonRow({ param, values, onChange, displayCtx }) {
 
 // One quarter-width button in the row. Owns its own press / progress
 // gesture state; reads display state from props.
-function DropButton({ index, label, state, mode, progress, isScheduled,
+function DropButton({ index, label, state, mode, schedule,
                      clockPosition, onChange, paramName }) {
+    const isScheduled = !!schedule;
     const elRef = useRef(null);
     const onChangeRef = useRef(onChange);
     onChangeRef.current = onChange;
@@ -240,22 +276,30 @@ function DropButton({ index, label, state, mode, progress, isScheduled,
     // Mode badge ("1"/"4"/"8"/"16") in a corner; blank for immediately.
     const modeBadge = MODE_BADGES[mode] || '';
 
-    // Compute the ring's progress (0..1) — three sources:
-    //   isScheduled  → server's cycle-relative progress (filling toward fire)
-    //   clockPosition → live music position within this button's mode cycle
-    //                   (always running while a master clock is up, so the
-    //                   ring is never frozen at "0" pre-press)
-    //   neither      → 0 (no clock running)
-    // Both compute the same thing visually when in the same cycle —
-    // pressing to schedule is a no-op for the ring's lit count if you
-    // press exactly on a grid boundary.
+    // Compute the ring's progress (0..1) from a SINGLE source — the
+    // live tick estimate, dead-reckoned forward from the last
+    // clock-position SSE. Driving both idle and scheduled paths from
+    // the same tick avoids the visual restart that happened when the
+    // scheduled-progress snapshot (taken at set_at_tick) was briefly
+    // behind the live tick.
+    //
+    // Idle:      cycle = (current_bar // n) * n .. that bar boundary.
+    // Scheduled: cycle = [schedule.cycle_start_tick, schedule.fire_at_tick).
+    // Both reduce to "(tick - cycle_start) / cycle_total" using the
+    // dead-reckoned tick.
+    const liveTick = liveTickEstimate(clockPosition);
+    const transportRunning = !!(clockPosition && clockPosition.running);
     let ringProgress = 0;
-    if (isScheduled) {
-        ringProgress = progress;
-    } else if (clockPosition && MODE_SEGMENTS[mode]) {
-        const cycleTotalTicks = MODE_SEGMENTS[mode] * (clockPosition.ticks_per_bar / 4);
-        if (cycleTotalTicks > 0) {
-            ringProgress = (clockPosition.tick % cycleTotalTicks) / cycleTotalTicks;
+    if (transportRunning && liveTick != null) {
+        const tpb = clockPosition.ticks_per_bar;
+        if (isScheduled && schedule.cycle_start_tick != null) {
+            const cycleTotal = (schedule.every_n_bars || 1) * tpb;
+            ringProgress = clamp01((liveTick - schedule.cycle_start_tick) / cycleTotal);
+        } else if (MODE_SEGMENTS[mode]) {
+            const cycleTotal = (MODE_SEGMENTS[mode] * tpb) / 4;
+            if (cycleTotal > 0) {
+                ringProgress = (liveTick % cycleTotal) / cycleTotal;
+            }
         }
     }
 

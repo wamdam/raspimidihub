@@ -190,10 +190,31 @@ function App() {
             setClockQuarters(prev => ({ ...prev, [data.src_client]: Date.now() }));
         }
         if (type === 'clock-position') {
-            setClockPosition({
-                tick: data.tick,
-                ticks_per_bar: data.ticks_per_bar,
-                received_at: Date.now(),
+            const now = Date.now();
+            // Track tempo from the interval between successive
+            // clock-position events (server emits every 24 ticks =
+            // 1 quarter). The frontend dead-reckons the live tick
+            // forward from this so visual segments match audible
+            // beats — without it, SSE arrival lag (network + render)
+            // shows as ~1/16-1/8 note visual delay vs the audio.
+            setClockPosition(prev => {
+                let ms_per_tick = prev?.ms_per_tick;
+                // Only re-derive if running and tick advanced; on
+                // restart (tick 0 after Start) the interval is
+                // meaningless.
+                if (prev && prev.running && data.running
+                        && data.tick > prev.tick && now > prev.received_at) {
+                    const dt = now - prev.received_at;
+                    const dticks = data.tick - prev.tick;
+                    ms_per_tick = dt / dticks;
+                }
+                return {
+                    tick: data.tick,
+                    ticks_per_bar: data.ticks_per_bar,
+                    running: !!data.running,
+                    received_at: now,
+                    ms_per_tick,
+                };
             });
         }
     }, (connected) => {

@@ -58,10 +58,11 @@ class ClockBus:
         self._lock = threading.Lock()
         self._ticks_per_bar = self.TICKS_PER_BAR_DEFAULT
         # Optional callback fired once per musical quarter (24 ticks at
-        # 24 PPQN). Used by __main__ to broadcast a clock-position SSE
-        # so the Controller frontend can run its drop-button rings off
-        # the live tick count even when no schedule is active.
-        # Signature: callback(tick_count: int, ticks_per_bar: int).
+        # 24 PPQN) AND on every transport change (start / continue /
+        # stop). Used by __main__ to broadcast a clock-position SSE so
+        # the Controller frontend can run its drop-button rings off
+        # the live tick count and freeze them when the transport stops.
+        # Signature: callback(tick_count: int, ticks_per_bar: int, running: bool).
         self._on_quarter_callback = None
 
     def subscribe(self, instance: PluginInstance, divisions: list[str]) -> None:
@@ -124,10 +125,7 @@ class ClockBus:
         # schedule is active. Cheap — one int compare + at most one
         # bound-method call per tick.
         if self._on_quarter_callback and self._tick_count % 24 == 0:
-            try:
-                self._on_quarter_callback(self._tick_count, self._ticks_per_bar)
-            except Exception:
-                log.exception("on_quarter_callback failed")
+            self._fire_position_callback()
         with self._lock:
             for instance, divisions in self._subscribers:
                 if not instance.running:
@@ -167,17 +165,35 @@ class ClockBus:
                         except Exception:
                             break
         self._notify_transport("_start")
+        self._fire_position_callback()
 
     def on_continue(self) -> None:
         """MIDI Continue received — resumes from current position without
         resetting the tick counter (unlike Start)."""
         self._running = True
         self._notify_transport("_continue")
+        self._fire_position_callback()
 
     def on_stop(self) -> None:
         """MIDI Stop received."""
         self._running = False
         self._notify_transport("_stop")
+        # One final position event with running=False so the frontend
+        # can freeze its always-running drop-button rings.
+        self._fire_position_callback()
+
+    def _fire_position_callback(self) -> None:
+        """Fire the position listener (broadcasts clock-position SSE).
+        Called from on_clock_tick on every quarter boundary AND from
+        each transport-state change so the frontend always sees the
+        latest (tick, running) tuple."""
+        if not self._on_quarter_callback:
+            return
+        try:
+            self._on_quarter_callback(
+                self._tick_count, self._ticks_per_bar, self._running)
+        except Exception:
+            log.exception("on_quarter_callback failed")
 
     def _notify_transport(self, event: str) -> None:
         """Queue a transport event to all subscribed plugin threads."""
