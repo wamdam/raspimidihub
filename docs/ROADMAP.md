@@ -1497,36 +1497,121 @@ Biggest user-visible win for performance.
      single-digit-ms loop lag, ~95 SSE/s (down from 1478),
      zero backlog, even with 7 connected browsers.
 
-### Phase 5 — Controller polish (≈ 0.5 sprint)
+### Phase 5 — Controller polish (≈ 1 sprint)
 
-1. **Autodrop**. Bar-quantized fire scheduling via the existing
-   ClockBus. Free now that 1.1 added the new tick infrastructure.
-2. **Preview / drop-snapshot indicator on the cells themselves**
-   (replaces the original "ghost indicators" sketch with the
-   concrete UX surfaced during Phase 4.2.b review):
-   - **Knobs**: render the captured snapshot value on the LED arc
-     in a contrasting color (turquoise against the live-value's
-     warm accent), so the arc shows BOTH the current value *and*
-     where the drop will jump it. Difference between current and
-     snapshot reads as the in-between arc length.
-   - **Faders**: re-purpose / add a colored bar near the track to
-     mark the snapshot value at the same scale as the thumb.
-   - **Buttons**: less obvious — option A: an extra small dot on
-     the LED in turquoise that only shows if "snap value !=
-     current". Option B: a thin border tint while armed.
-   - **XY pads**: a second faint dot at the snapshot (x, y).
-   - **Wheels**: a coloured tick on the side of the wheel at the
-     captured value (or skip — Wheel is rarely on a Controller,
-     mostly internal-plugin UI).
-   This is a much better "armed" affordance than the per-cell
-   tinting we initially considered, and survives multi-browser
-   (every connected browser reads the same `pad_snapshot` over
-   SSE, so the indicators stay in sync without depending on the
-   user's local action).
-   Surfaced 2026-04-26 during Phase 4.2.b review when the user
-   noticed the drop pad's local flash didn't propagate to other
-   browsers and felt insufficient as the only "this is loaded"
-   cue.
+Reshaped 2026-04-27 around a 4-button drop row that absorbs the
+original "Autodrop" + "Preview indicator" items into one coherent
+UX.
+
+1. **4 drop buttons per controller, replacing the single drop pad.**
+   The pad row at the top of every controller becomes a row of FOUR
+   equal-width buttons (each ¼ horizontal). Each is independently
+   captured and named (existing per-cell rename infrastructure
+   reused). Default labels: `A`, `B`, `C`, `D`.
+
+   **Per-button config** (in the device-detail Plugin Config panel,
+   one row per button):
+   - **Mode**: dropdown — *Drop immediately* (current behaviour) /
+     *After bar* (next bar boundary on the ClockBus) / *After 4 bars*
+     (next 4-bar boundary). Designed to grow — *After ½ bar*, *After
+     8 bars*, *On next downbeat* are obvious additions.
+   - **Name**: free-text label shown on the button face.
+
+   **Per-button state** (server-side, in `_param_values`):
+   - `dropN_snapshot`: the captured `{cell_name → value}` map.
+     Independent per button — capturing on `B` doesn't touch `A`'s
+     snapshot.
+   - `dropN_state`: enum — `idle` / `captured` / `scheduled` / `firing`.
+   - `dropN_fire_at`: optional bar-quantised fire moment (ClockBus
+     bar count + offset). Set when a non-`immediately` button is
+     fired; cleared when the drop fires or is cancelled.
+
+   **Capture** (long-press, 500 ms with progress ring — same
+   gesture as today): captures the current cell values into THIS
+   button's `dropN_snapshot`. State `idle` → `captured`.
+
+   **Fire** (short-press):
+   - Mode = `immediately`: snap cells back to snapshot + re-emit
+     CCs in one go. State briefly flashes `firing` then back to
+     `captured`.
+   - Mode = `bar` / `4bar`: schedule on the ClockBus at the next
+     bar / 4-bar boundary. State `captured` → `scheduled`. The
+     button shows a circular progress border that fills clockwise
+     from "fire requested" to "fire moment". When the fire moment
+     arrives, the border completes (filled circle), cells snap,
+     border resets, state returns to `captured`.
+
+   **One-active-at-a-time**: scheduling a drop on any button cancels
+   any other scheduled drop on the same controller (server-side
+   bookkeeping). Their progress rings reset. This rules out the
+   confusion of two buttons racing each other.
+
+   **Cancel** (second short-press on a `scheduled` button): clears
+   `dropN_fire_at`, state returns to `captured`, progress ring
+   resets. Cells go back to their live values; preview indicators
+   on cells disappear (see preview rule below).
+
+   **Empty button** (state `idle`, never captured): still tappable,
+   but tap does nothing useful — long-press to capture. Visually
+   muted so it reads as "not loaded".
+
+   **Multi-browser**: every browser reads the same
+   `dropN_state` / `dropN_fire_at` over SSE, so progress rings stay
+   in sync wherever the user is looking. Cancel from one browser
+   tears down the schedule everywhere.
+
+2. **Cell preview — only while a drop is `scheduled` (NOT while merely
+   `captured`).** The original Phase 5.2 sketch (always render the
+   captured snapshot value as a ghost mark on the cell once captured)
+   would clutter the surface when 4 different snapshots are loaded —
+   the user could not tell which one is about to fire. Reframed:
+
+   While ANY drop on the controller is `scheduled`, every cell shows
+   how it will change *for that specific drop*. While no drop is
+   scheduled, cells show only their live values — clean surface.
+
+   - **Knobs**: live value on the LED arc in the warm accent
+     colour; ghost arc segment from current to scheduled value in
+     turquoise. The arc reads as "we are HERE, going THERE".
+   - **Faders**: ghost thumb at the scheduled value, on the track
+     opposite the live thumb. Visually clear "from / to" without
+     overdrawing.
+   - **Buttons**: thin coloured border tint while a drop targeting
+     a different on/off state is scheduled. (No ghost dot — too
+     small to read at button size.)
+   - **XY pads**: a second faint dot at the scheduled (x, y), with
+     a fading line between live and ghost to suggest motion.
+   - **Cells unchanged by the drop**: no preview at all — they're
+     not part of the diff, no point drawing.
+
+   Net effect: a glance at the controller surface tells you exactly
+   what the next drop will do, and only then. Less constant clutter
+   than "always visible while captured" — and disambiguates which of
+   four loaded snapshots is on deck.
+
+3. **ClockBus bar counter (server prereq).** The current ClockBus
+   tracks 24-PPQN ticks but doesn't expose a bar counter. Add a
+   `bar`/`tick_in_bar` pair that:
+   - Increments on every 96th tick (4/4 at 24 PPQN).
+   - Resets on `on_start()`.
+   - Is queryable as `clock_bus.bar_position() → (bar, tick_in_bar,
+     ticks_per_bar)` so the controller plugin can compute "ticks
+     until next bar boundary" + the drop fire moment.
+
+   No new wire format; this is internal state on the existing
+   ClockBus singleton. Plugins that subscribe to clock ticks now
+   also see bar transitions if they want them.
+
+   **Open question — time signature.** Default 4/4 fits the
+   electronic-music targets. A future `time_signature` plugin param
+   on the Master Clock could feed the bus's `ticks_per_bar`. Out of
+   scope for v1 of drop-buttons; revisit when needed.
+
+4. **Migration from the old single-drop-pad data model.** Existing
+   instances persist `pad`, `pad_snapshot` in their params. Loader
+   maps them to the new shape: `pad_snapshot` → `drop1_snapshot`,
+   `pad` → `drop1_state` ("captured" / "idle"). Buttons 2-4 start
+   empty. Preserves muscle memory + saved configs.
 3. **Whatever the MVP usage in Phase 4 surfaced.** As of 2026-04-26
    nothing user-facing is open — the day's session ran four
    simultaneous LC faders into Mixer 8 across multiple browsers and
