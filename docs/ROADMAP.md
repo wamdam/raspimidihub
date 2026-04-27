@@ -1503,7 +1503,7 @@ Reshaped 2026-04-27 around a 4-button drop row that absorbs the
 original "Autodrop" + "Preview indicator" items into one coherent
 UX.
 
-1. **4 drop buttons per controller, replacing the single drop pad.**
+1. ✓ **Done (2026-04-27): 4 drop buttons per controller, replacing the single drop pad.**
    The pad row at the top of every controller becomes a row of FOUR
    equal-width buttons (each ¼ horizontal). Each is independently
    captured and named (existing per-cell rename infrastructure
@@ -1559,6 +1559,27 @@ UX.
    `dropN_state` / `dropN_fire_at` over SSE, so progress rings stay
    in sync wherever the user is looking. Cancel from one browser
    tears down the schedule everywhere.
+
+   **As built — refinements over the original sketch:**
+   - 6 modes shipped (immediately / Bar / 2-Bar / 4-Bar / 8-Bar /
+     16-Bar) instead of the planned 3. All bar-modes are musical-
+     grid-quantised: pressing during bar 5 with 4-Bar fires at bar 8.
+   - Always-running segment ring with N = mode * 4 quarter-segments
+     (Bar=4, 2-Bar=8, …, 16-Bar=64). Reads as "where we are in the
+     cycle" even when nothing's scheduled. Frontend dead-reckons
+     between clock-position SSE events using ms_per_tick computed
+     from the inter-event interval, then renders at requestAnimation
+     Frame rate so segments match audible beats within a frame.
+   - Idle ring is muted; scheduled ring switches to a neon-bright
+     peach with a drop-shadow glow and re-triggers a CSS pulse
+     animation on each beat (cubic-bezier(0.05, 0.8, 0.2, 1.0) —
+     exponential-feel spike + slow decay).
+   - ClockBus gained `_stopped_explicitly` so MIDI Stop is sticky:
+     clocks that keep sending ticks after Stop (Elektron, most
+     drum machines) no longer silently flip the bus back to
+     "running" via the auto-start branch. Ring freezes promptly
+     on Stop and resumes on Start / Continue. New SSE event
+     `clock-position` with `running` flag drives this.
 
 2. **Cell preview — only while a drop is `scheduled` (NOT while merely
    `captured`).** The original Phase 5.2 sketch (always render the
