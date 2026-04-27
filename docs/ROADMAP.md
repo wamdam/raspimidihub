@@ -1725,32 +1725,56 @@ before implementation.
   2026-04-27 — user wants to "choose his instrument and select CCs by
   name / function" instead of typing numbers.
 
-  **Source data:** https://midi.guide is a community-maintained
-  database of synth + drum-machine CC + NRPN + sysex maps. **License
-  must be verified BEFORE any work** — find the upstream repo or
-  authoritative source, confirm the licence (CC0 / CC-BY / GPL?),
-  and decide accordingly:
-  - **CC0 / public domain**: ship a snapshot in the deb under
-    `/usr/share/raspimidihub/midiguide/`, refresh on update.
-  - **CC-BY**: ship + display attribution prominently in the picker
-    UI ("Mappings from midi.guide, CC-BY 4.0") and in the About box.
-  - **GPL / share-alike**: probably can't ship in a permissively
-    licensed deb; consider on-demand fetch instead, with cache, or
-    drop the integration entirely.
-  - **No clear licence**: open an issue with the upstream maintainer,
-    don't proceed until clarified.
+  **Source.** https://midi.guide — maintained by Pencil Research as
+  https://github.com/pencilresearch/midi (314 stars, last updated
+  2026-04-25, actively maintained). 110 manufacturers, 376 devices.
+
+  **Licence (verified 2026-04-27).** **CC-BY-SA 4.0**. Repo's GitHub
+  metadata confirms `"licenseInfo.key": "cc-by-sa-4.0"`. Site footer
+  says the same. README adds the standard "portions referring to
+  specific devices may be owned by manufacturers" carve-out — a
+  factual-data disclaimer, not an additional restriction.
+
+  **What CC-BY-SA 4.0 means for us:**
+  - We may ship the unmodified CSVs in our deb. Required: an
+    attribution string visible to the user, e.g. *"MIDI mappings ©
+    MIDI Guide community, used under CC-BY-SA 4.0"* with a link to
+    the upstream repo.
+  - **Share-alike applies to derivative works of THE DATA**, not to
+    raspimidihub's code. Mere aggregation (shipping the CSVs in the
+    same .deb as our GPL/MIT/whatever Python) does not infect the
+    code's licence — that's settled CC-BY-SA practice.
+  - If we transform the data (e.g. CSV → indexed JSON for fast
+    pickers), the **transformed file is itself a derivative work**
+    and must be made available under CC-BY-SA 4.0. Easiest path:
+    publish the transform script + the generated bundle in our
+    public repo, with a clear `LICENSE.midiguide` next to it.
+  - User-authored extensions (their custom CC names for unmapped
+    parameters) are NOT derivative of midi.guide and stay under
+    raspimidihub's licence.
+
+  **Data shape (already nice for us).** One CSV per device at
+  `<Vendor>/<Device>.csv`, e.g. `Elektron/Digitone II.csv`. Columns:
+  `manufacturer, device, section, parameter_name,
+  parameter_description, cc_msb, cc_lsb, cc_min_value, cc_max_value,
+  cc_default_value, nrpn_msb, nrpn_lsb, nrpn_min/max/default,
+  orientation, notes, usage`. The `section` column groups parameters
+  (Track / Trig / Synth / Filter / FX / …) — gives us free
+  categorisation in the picker UI. **Verified the user's gear**:
+  Elektron Digitone II is in the library (Trig / Synth: Generic /
+  Filter / Amp pages, fully populated CC + NRPN).
 
   **Data model sketch.** Two layers:
-  1. **Library** (read-only, ships with the app or fetched on
-     install): `instruments/<vendor>__<model>.json` with shape
-     `{vendor, model, version, ccs: [{cc, name, channel?, range?,
-     description?}], nrpns: [...], notes: [{note, name, ...}]}`.
-     Indexed by a top-level `index.json` for fast picker rendering.
+  1. **Library** (read-only, ships with the app under
+     `/usr/share/raspimidihub/midiguide/`): the upstream CSVs
+     verbatim plus a generated `index.json` mapping
+     `"<vendor>/<device>"` → row counts + section list, for fast
+     picker rendering without parsing every CSV.
   2. **Per-device assignment** (user state, in `config.data`): each
      device (or each connection's destination) carries
-     `instrument_profile: "vendor__model"`. Multiple devices may
-     share a profile — only the assignment is per-device, not the
-     data.
+     `instrument_profile: "Elektron/Digitone II"`. Multiple devices
+     may share a profile — only the assignment is per-device, not
+     the data.
 
   **UX sketch.**
   - **Routing tab → device-detail panel**: a new "Instrument" row
@@ -1759,36 +1783,52 @@ before implementation.
     removes the assignment.
   - **Controller cell config**: when a binding's destination has an
     instrument profile assigned, the **CC field becomes a combo box**
-    — type-ahead by CC name (`"Cutoff"`, `"Resonance"`) OR by
-    number; both resolve to the same numeric CC. Cell label
-    pre-fills with the friendly name when a CC is picked from the
+    — type-ahead by parameter_name (`"Cutoff"`, `"Resonance"`) OR by
+    number; both resolve to the same numeric CC. Section labels
+    (`Filter`, `Amp`, `FX`) appear as group headers in the dropdown.
+    Cell label pre-fills with `parameter_name` when picked from the
     library, but the user's typed override always wins.
   - **Tooltip on the CC number input**: if there's a profile, hover
-    shows `"CC 74 — Cutoff (JX-08)"` so existing numeric bindings
-    self-annotate without changing data.
+    shows `"CC 40 — Page 1 Parameter A (Digitone II / Synth: Generic)"`
+    so existing numeric bindings self-annotate without changing data.
   - **No profile assigned**: pickers degrade to plain numeric inputs
     — no regression for users who don't care about the library.
   - **User overrides**: a "+ Custom CC" entry in the picker lets the
     user add a name for a CC the library doesn't know (stored in
     `config.data.user_cc_names[device_id][cc] = "name"`). Future
-    cell pickers see both library + user names.
+    cell pickers see both library + user names. These overrides are
+    NOT derivative of midi.guide — stay under raspimidihub's licence.
+  - **Attribution surface**: a small footer in the instrument picker
+    *"Mappings: MIDI Guide community, CC-BY-SA 4.0"* linked to the
+    upstream repo. About / Settings page also lists it.
 
-  **Shipping form.** I'd lean on a snapshot at deb-build time rather
-  than a live fetch — the Pi is often offline (AP mode), and the
-  data churns slowly. Build step pulls from upstream into
-  `data/midiguide/` (gitignored), Make deb copies into the
-  package. Update card in Settings could show "Library: 2026-04-15,
-  342 instruments — refresh?" with a manual refresh that requires
+  **Shipping form.** Snapshot at deb-build time rather than live
+  fetch — the Pi is often offline (AP mode), and upstream churns
+  slowly. Build step:
+  ```
+  scripts/refresh-midiguide.sh    # git clone --depth=1 upstream into data/midiguide/
+                                  # generate data/midiguide/index.json
+  ```
+  Then `Makefile` deb step copies `data/midiguide/` →
+  `/usr/share/raspimidihub/midiguide/` plus a `LICENSE.midiguide`
+  (the upstream LICENSE file verbatim). The `data/midiguide/`
+  directory IS committed in our repo — the share-alike clause means
+  if we distribute it (in the deb + GitHub releases), we must also
+  distribute the data publicly, which committing it satisfies.
+  Settings card could show *"Library: 376 devices, snapshot from
+  2026-04-25 — refresh?"* with a manual refresh that requires
   client-mode WiFi (ties in with Phase 5.5 Transient WiFi).
 
-  **Open questions:**
-  - Can we contribute corrections back to midi.guide via PR? (good
-    citizen / two-way street).
-  - Does the data cover the user's specific instruments (Digitone II,
-    LCXL3, S-1, Impact GX49)? Quick spot-check before committing.
-  - NRPN + sysex coverage useful for §7 (CC Curve LFO) and a future
-    sysex sender plugin, but probably out of scope for v1 — start
-    with CC only.
+  **NRPN + sysex coverage** is rich in midi.guide and would be
+  useful for §7 (CC Curve LFO destinations) and a future SysEx
+  sender plugin, but out of scope for v1 — start with CC only and
+  use the same data set for NRPN later.
+
+  **Good-citizen contribution loop.** When the user adds a custom CC
+  name for an instrument that IS in the library (filling a gap),
+  show a "📤 Contribute to MIDI Guide" button that copies the CSV
+  row to clipboard and links to the upstream's "send a CSV by email"
+  form (`midi@midi.guide`) or the GitHub edit URL. Two-way street.
 
 - **TODO: `cc_lfo` per-cycle gate pattern** — `StepEditor`-style 1–32
   step pattern that mutes/un-mutes whole LFO cycles for ducking-style
