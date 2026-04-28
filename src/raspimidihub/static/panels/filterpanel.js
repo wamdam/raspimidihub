@@ -11,24 +11,19 @@
 
 import { useState, useEffect } from '../lib/hooks.module.js';
 import { html, animateClose, useSwipeDismiss } from '../ui/common.js';
-import { useContextTrigger } from '../ui/contextmenu.js';
+import { useTapMenu } from '../ui/contextmenu.js';
 import { MSG_TYPES, MSG_LABELS } from '../state/constants.js';
 import { MappingFormOverlay, mappingDesc } from './mappingform.js';
 
 function MappingRow({ mapping, onEdit, onCopy, onRemove, showContextMenu }) {
-    const trigger = useContextTrigger(showContextMenu, () => [
+    const trigger = useTapMenu(showContextMenu, () => [
         { label: 'Edit', action: onEdit },
         { label: 'Copy', action: onCopy },
         { divider: true },
         { label: 'Remove', danger: true, action: onRemove },
     ]);
     return html`<div class="preset-item" style="cursor:pointer;user-select:none"
-        onClick=${(e) => { if (trigger.wasTriggered()) { e.preventDefault(); return; } onEdit(); }}
-        onContextMenu=${trigger.onContextMenu}
-        onTouchStart=${trigger.onTouchStart} onTouchMove=${trigger.onTouchMove}
-        onTouchEnd=${trigger.onTouchEnd} onTouchCancel=${trigger.onTouchCancel}
-        onMouseDown=${trigger.onMouseDown} onMouseUp=${trigger.onMouseUp}
-        onMouseLeave=${trigger.onMouseLeave}>
+        onClick=${trigger.onClick} onContextMenu=${trigger.onContextMenu}>
         <span class="name" style="font-size:13px">${mappingDesc(mapping)}</span>
     </div>`;
 }

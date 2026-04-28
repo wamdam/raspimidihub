@@ -1,94 +1,54 @@
 /**
  * Matrix context menu — Phase 6.
  *
- * The menu is a single shared popover anchored at the touch / click
- * point the user triggered it from. One menu instance lives at the
- * App level (see App.js), and any cell / header / row that wants to
- * show one calls `showContextMenu(event, items)`.
+ * The menu is a single shared popover anchored at the click point.
+ * One menu instance lives at the App level (see App.js), and any
+ * cell / header / row that wants to show one calls
+ * `showContextMenu(x, y, items)`.
  *
  * ## Triggering
  *
- * - Mobile: long-press (≥500 ms) → `showContextMenu(touch, items)`.
- * - Desktop: native `contextmenu` event → `showContextMenu(e, items)`.
- *
- * Both shapes are produced by the `useContextTrigger` hook below — pass
- * its returned handler dict to any element that wants to host the menu.
+ * Single tap or right-click opens the menu — there is no separate
+ * "primary tap" action anywhere in the matrix any more. Every action
+ * (Add, Remove, Edit, Copy, Paste, Rename, Delete, ...) is a menu
+ * item, which removes the old "tap toggles, long-press opens menu"
+ * dual mode that confused users on phones.
  *
  * ## Items
  *
  * `items: [{ label, action, danger?, disabled? } | { divider: true }]`.
  * `action` is called when the user picks the item; the menu closes
  * automatically afterwards. Pass `disabled: true` for items that show
- * but are not clickable (typical for "Paste" when the clipboard is
- * empty).
+ * but aren't clickable (typical for Paste when the clipboard is empty).
  */
 
 import { useEffect, useRef, useState } from '../lib/hooks.module.js';
 import { html } from './common.js';
 
-// --- Long-press / right-click wiring -------------------------------------
-
-const LONG_PRESS_MS = 500;
-
 /**
- * Returns a set of event handlers to attach to any element that should
- * surface a context menu on long-press OR right-click. The element's
- * normal `onClick` keeps working unless the menu was just triggered
- * (in which case the click is suppressed via `data-suppress-click`
- * — the element's own click handler should ignore the event when the
- * suppression flag is set).
+ * Returns event handlers that open the context menu on click OR
+ * right-click. Spread onto any element you want to host the menu:
  *
- *   const trigger = useContextTrigger(showContextMenu, () => itemsForCell(cell));
- *   <td onClick=${onTap} ...trigger}>...</td>
+ *   const trigger = useTapMenu(showContextMenu, () => itemsForCell(cell));
+ *   <td onClick=${trigger.onClick} onContextMenu=${trigger.onContextMenu}>…</td>
  *
- * For elements that don't have a tap action, just spread the trigger
- * props and ignore the suppression bit.
+ * No long-press timer — single tap is enough. Items list is computed
+ * lazily so it always reflects the latest props/state at trigger time
+ * (clipboard, mapping list, etc.).
  */
-export function useContextTrigger(showContextMenu, getItems) {
-    const timer = useRef(null);
-    const triggered = useRef(false);
-
-    const start = (clientX, clientY) => {
-        triggered.current = false;
-        timer.current = setTimeout(() => {
-            triggered.current = true;
-            timer.current = null;
-            const items = getItems();
-            if (items && items.length) showContextMenu(clientX, clientY, items);
-        }, LONG_PRESS_MS);
+export function useTapMenu(showContextMenu, getItems) {
+    const open = (clientX, clientY) => {
+        const items = getItems();
+        if (items && items.length) showContextMenu(clientX, clientY, items);
     };
-    const cancel = () => {
-        if (timer.current) { clearTimeout(timer.current); timer.current = null; }
-    };
-
     return {
-        onTouchStart: (e) => {
-            const t = e.touches && e.touches[0];
-            if (t) start(t.clientX, t.clientY);
+        onClick: (e) => {
+            e.preventDefault();
+            open(e.clientX, e.clientY);
         },
-        onTouchMove: cancel,
-        onTouchEnd: cancel,
-        onTouchCancel: cancel,
-        onMouseDown: (e) => {
-            // Only react to primary button so right-click goes through
-            // the contextmenu handler below instead of starting a long-
-            // press timer that would then fire alongside it.
-            if (e.button === 0) start(e.clientX, e.clientY);
-        },
-        onMouseUp: cancel,
-        onMouseLeave: cancel,
         onContextMenu: (e) => {
             e.preventDefault();
-            cancel();
-            triggered.current = true;
-            const items = getItems();
-            if (items && items.length) showContextMenu(e.clientX, e.clientY, items);
-        },
-        // Read this on click to know whether to suppress the click.
-        wasTriggered: () => {
-            const v = triggered.current;
-            triggered.current = false;
-            return v;
+            open(e.clientX, e.clientY);
         },
     };
 }

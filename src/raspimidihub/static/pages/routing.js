@@ -386,10 +386,9 @@ export function RoutingPage({ devices, connections, refresh, showToast, clockSou
             clipboard=${clipboard}
             showContextMenu=${showContextMenu}
             srcClientId=${filterConn.src_client} />`}
-        <${ConnectionMatrix} devices=${devices} connections=${connections} onToggle=${onToggle}
-            onRemoveDevice=${onRemoveDevice}
+        <${ConnectionMatrix} devices=${devices} connections=${connections}
             showToast=${showToast} clockSources=${clockSources} clockQuarters=${clockQuarters} midiRates=${midiRates}
-            onDeviceOpen=${onDeviceOpen} onAddPlugin=${() => { loadPluginTypes(); setShowAddPlugin(true); }}
+            onAddPlugin=${() => { loadPluginTypes(); setShowAddPlugin(true); }}
             getCellMenuItems=${cellMenuItems} getHeaderMenuItems=${headerMenuItems}
             showContextMenu=${showContextMenu} />
         <div class="btn-group">
