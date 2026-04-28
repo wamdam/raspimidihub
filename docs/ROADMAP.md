@@ -1659,117 +1659,88 @@ UX.
      reflex check on any new closure added under
      `_create_instance` / `_setup_plugin_callbacks`.
 
-### Phase 5.5 — Transient WiFi for updates (DONE 2026-04-27)
+### Phase 5.5 — Transient WiFi for updates (DONE 2026-04-28)
 
-Shipped as `update_flow.UpdateFetcher` + `/api/system/check-update`
-+ `/api/system/install` + the Settings WiFi-mode radio. Per-step
-status flows through `/run/raspimidihub/update-status`; the watchdog
-is a transient `systemd-run --on-active=180s` unit that restarts
-`raspimidihub.service` if the orchestrator hangs in client mode.
+Pi-as-AP that briefly joins home WiFi to fetch new releases, then
+hops back. Shipped as `update_flow.UpdateFetcher` + a single
+consolidated WiFi card in Settings.
 
 What landed:
-- Storage at `/var/lib/raspimidihub/updates/` (newest 3 retained;
-  per-version `.changelog.md` siblings shown in the UI)
-- Three WiFi modes: `ap_only` (current default), `wifi_for_updates`
-  (transient switch on demand), `wifi_always` (today's permanent
-  client mode behaviour)
-- Smart probe: ethernet path is preferred over WiFi switch when it
-  has internet; the orchestrator only flips wlan0 when needed
-- Install split out from download: dpkg only ever runs against an
-  already-stored deb under an `rw` remount → `dpkg -i` → `ro`
-  remount, with a precise dpkg-stderr excerpt surfaced on failure
-- Actionable error messages per step (`error-no-internet`,
-  `error-wifi-assoc`, `error-no-internet-on-wifi`,
-  `error-download`, `error-install`, `error-watchdog`) — never a
-  generic "update failed"
+- `POST /api/system/check-update` runs the orchestrator as a
+  backgrounded asyncio task and returns immediately — kickoff is
+  ms-fast so the AP can drop without killing the held-open HTTP
+  request from a phone.
+- `download_newer_releases()` pulls the GitHub release list (logged
+  per-version with deb URLs), downloads everything strictly newer
+  than the running version into `/var/lib/raspimidihub/updates/`,
+  prunes back to KEEP_VERSIONS=3.
+- Smart probe-first path: if the current network has internet
+  (typically ethernet), the orchestrator just downloads through it
+  — no wlan0 mode flip. Only switches when the probe fails AND
+  `wifi_mode_pref == "wifi_for_updates"` AND credentials are saved.
+- `systemd-run --on-active=180s` watchdog scheduled before any WiFi
+  switch; restarts the service if the orchestrator hangs in client
+  mode, so a buggy step can't leave the Pi unreachable.
+- Install is offline-only: `POST /api/system/install` shells out to
+  `raspimidihub-install-deb.sh` which `dpkg -i`s an already-stored
+  deb under an rw remount, and surfaces precise dpkg stderr on
+  failure — never a generic "update failed".
+- Actionable error messages per step
+  (`error-no-internet`/`-wifi-assoc`/`-no-internet-on-wifi`/
+  `-download`/`-install`/`-watchdog`).
+- Pi 3 brcmfmac re-enables WiFi power save on every cfg80211 init,
+  which broke new associations on the AP after the first STA→AP
+  cycle. Now `iw dev wlan0 set power_save off` runs after every
+  start_ap (idempotency fast path included). `iw` added to the
+  deb's Depends. Real-world verified: phone reconnects automatically
+  after the orchestrator's WiFi dance.
+
+UI:
+- One Settings WiFi card replaces the older Join WiFi / Switch to AP
+  / AP Settings / Update WiFi button salad. Status badge, mode-pref
+  radio, Home WiFi row, AP password row.
+- Mode-pref radio (`ap_only` / `wifi_for_updates` / `wifi_always`)
+  is the only thing that flips live network state, and only via an
+  explicit Apply button whose label tells the user what'll happen
+  ("Save mode" / "Switch to home WiFi now" / "Stop WiFi client,
+  start AP"). The two WiFi modes grey out when no home WiFi is
+  saved and point the user at the row that fixes it.
+- Network picker: scan dropdown with reload + a trailing
+  "Type SSID manually..." escape hatch for hidden / out-of-range
+  networks. Auto-opens in manual mode if the saved SSID isn't in
+  the current scan.
+- Software Versions card lists every locally-stored deb (newest
+  first) with its changelog and an Install button.
+- Hopping-dot indicator under the status text — single dot hops
+  along five positions at 1 Hz, green when polls are getting
+  through, red when they're failing. Independent of poll cadence
+  so the dot keeps moving during AP outage.
+- After 90 s of failed polls the UI swaps the status text for a
+  help message ("Reconnect to the Pi's AP and reload"). Auto-clears
+  on poll recovery.
+- Verbose journalctl logs across the whole flow: probe outcome
+  with duration + URL, full GitHub release list with each deb URL,
+  per-version skip reason, download bytes + duration, prune list,
+  WiFi state transitions.
 
 What was descoped from the original sketch:
-- 60–90 s confirmation countdown dialog. Not needed because the
-  user driving the UI sits on ethernet during the test setup; for
-  the AP-only-from-phone case the page already surfaces a precise
-  status breadcrumb on reconnect.
-- Scheduled auto-update on cron — still a future follow-up.
+- 60–90 s confirmation countdown dialog before the WiFi switch.
+  The hopping-dot indicator + 90 s stall-help message turned out to
+  be enough — no modal needed.
+- `client_persistence: permanent | update_only` config field. The
+  three-mode `wifi_mode_pref` covers the same intent more clearly.
+
+Open follow-ups (parked, not blocking):
+- Scheduled auto-update on cron (e.g. weekly 03:00). The manual
+  flow is proven; cron is easy to add once we want it.
 - Multiple stored networks (home WiFi → phone hotspot fallback).
-
-**User story:** I want to store a real-WiFi SSID + password, hit
-"Check for updates", let the Pi temporarily join that WiFi to fetch
-+ install the deb, then come back to AP mode automatically. With an
-opt-in setting for "stay on the real WiFi forever" (today's
-behaviour) so I don't lose anything.
-
-**Config shape**: add `client_persistence: "permanent" | "update_only"`
-to the stored WiFi config. Default `permanent` for users who already
-configured client mode. Setting it to `update_only` keeps the
-credentials but skips client connect on boot.
-
-**Trigger flow** (manual only in v1; scheduled auto-update is a future
-follow-up):
-1. User taps "Check for updates" in Settings.
-2. **Confirmation dialog with a visible 60–90 s countdown timer**:
-   "The Pi will go offline for up to 90 seconds while it joins your
-   home WiFi to check. Your phone will lose its connection to the
-   Pi during this window — that's expected. Reconnect to the
-   `RaspiMIDIHub-XXXX` AP afterwards. Don't close this tab — the
-   result appears here automatically when the Pi is back."
-3. User confirms → Pi switches to client mode, runs update-check,
-   and if a deb is available downloads + installs it (which
-   auto-reboots into AP mode since `update_only` skips client on
-   boot). If no update is available, Pi explicitly switches back to
-   AP after the check.
-4. **UI persists through the disconnection window** — must keep the
-   "checking…" surface mounted until a result arrives. The user is
-   instructed to wait through the timeout without navigating away.
-   While SSE is down, the page shows a live countdown: "checking
-   for updates… (Xs remaining)" so the wait feels deterministic.
-5. **If the timer expires and the Pi is still unreachable**, the UI
-   swaps to a help card: "Can't reach the Pi. Check your phone's
-   WiFi is connected to `RaspiMIDIHub-XXXX` and reload this page."
-   Crucially: when the user reconnects to the AP, the page
-   auto-updates without a manual reload — existing SSE reconnect
-   logic detects the new connection and fires a refresh.
-6. **On AP-return the UI MUST surface a clear, specific outcome**.
-   Either success ("Updated to v2.0.10" or "Already up to date —
-   v2.0.9") or a *concrete* error stating what failed:
-     - `Couldn't join "HomeWiFi": wrong password`
-     - `Joined "HomeWiFi" but no IP address (DHCP failed)`
-     - `Got an IP but no internet — check the router`
-     - `GitHub unreachable (timeout) — try again later`
-     - `Download interrupted at 45 % — check your connection`
-     - `Install failed: <dpkg error excerpt>`
-   Never a generic "update failed" toast. The user must know which
-   step broke so they can fix it (re-enter password / move closer to
-   the router / wait and retry).
-7. **Hard watchdog on the Pi (3 min budget)**: an independent
-   process (systemd one-shot or `at`-scheduled job) that *always*
-   forces the Pi back to AP mode regardless of what failed. Without
-   this watchdog, a single failure leaves the user with a Pi stuck
-   on a WiFi they can't see from their phone, and no recourse short
-   of physical access.
-
-**Failure cases the watchdog must cover** (each must produce a
-distinct, surfaceable error string per step 6):
-- WiFi credentials are wrong → `wpa_supplicant` never associates.
-- WiFi associates but no DHCP lease.
-- DHCP lease but no internet routing.
-- Internet but GitHub API rate-limited or down.
-- Download starts but is interrupted (network drops mid-stream).
-- Download completes but `dpkg -i` fails (signature, dependency).
-
-In every case the watchdog falls back to AP, leaves a structured
-status breadcrumb (e.g. JSON `{step: "wifi_assoc", error: "auth
-failed"}`) in `/run/raspimidihub/update-status` that the AP-mode UI
-reads on reconnect to render the per-step message above.
-
-**Out of scope for v1** (capture as future follow-ups):
-- Scheduled auto-update on a cron (e.g. weekly at 03:00). Easy to
-  add once the manual flow is proven, but invisible to the user
-  during the gap so the watchdog has to be rock-solid first.
-- Multiple stored networks (try home WiFi → fall back to phone
-  hotspot). Single SSID is fine for v1.
-- Background "stayed on AP" check-only mode that polls GitHub via
-  the user's phone WiFi if the phone is providing internet via the
-  AP itself. Architecturally cleaner but needs Pi-as-router
-  changes.
+  Single SSID is fine for v1.
+- Persistent default-route on eth0. Currently `ip route add default`
+  is runtime-only and disappears across reboots, so booting on
+  ethernet without a DHCP-served gateway forces the WiFi-switch
+  path. Configure a default route in `/etc/NetworkManager/system-
+  connections/` so ethernet-with-internet works reliably from cold
+  boot.
 
 ### Phase 6 — Workflow (≈ 1 sprint)
 
