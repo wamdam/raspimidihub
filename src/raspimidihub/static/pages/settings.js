@@ -95,13 +95,19 @@ function VersionsCard({ showToast, onUpdatingChange }) {
     const [statusMsg, setStatusMsg] = useState('');
     const [statusErr, setStatusErr] = useState('');
     const [expandedVersion, setExpandedVersion] = useState(null);
-    // pollTick increments on every poll attempt (used to advance the
-    // hopping-dot indicator). pollOk is the latest poll's outcome:
-    // null = never polled, true = succeeded, false = failed. The dot's
-    // colour reflects pollOk so the user can see at a glance whether
-    // polls are getting through or being eaten by an AP outage.
+    // pollTick advances at 1 Hz independent of the actual poll cadence
+    // — the hopping-dot indicator should keep moving even during an AP
+    // outage when fetches throw and no real poll is happening, so the
+    // user sees liveness regardless. pollOk is the latest poll's
+    // outcome (null = none yet, true = success, false = failure) and
+    // drives the dot's colour.
     const [pollTick, setPollTick] = useState(0);
     const [pollOk, setPollOk] = useState(null);
+    useEffect(() => {
+        if (!checking && !installing) return;
+        const id = setInterval(() => setPollTick(t => t + 1), 1000);
+        return () => clearInterval(id);
+    }, [checking, installing]);
     const setUpdatingFlag = (v) => onUpdatingChange && onUpdatingChange(v);
 
     const refresh = async () => {
@@ -134,14 +140,12 @@ function VersionsCard({ showToast, onUpdatingChange }) {
                 const resp = await fetch('/api/system/update-status');
                 s = await resp.json();
                 lastSuccessAt = Date.now();
-                setPollTick(t => t + 1);
                 setPollOk(true);
                 if (stalled) {
                     stalled = false;
                     setStatusErr('');
                 }
             } catch (e) {
-                setPollTick(t => t + 1);
                 setPollOk(false);
                 // Silently keep polling — but if it's been long enough
                 // that the phone has clearly given up on the AP, swap
