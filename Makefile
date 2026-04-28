@@ -47,14 +47,16 @@ $(DEB_FILE): src/raspimidihub/*.py src/raspimidihub/plugin_host/*.py src/raspimi
 	done
 	cp systemd/raspimidihub.service $(BUILD_DIR)/lib/systemd/system/
 	cp udev/90-raspimidihub.rules $(BUILD_DIR)/lib/udev/rules.d/
-	cp scripts/raspimidihub-update.sh $(BUILD_DIR)/usr/lib/raspimidihub/update.sh
-	chmod 755 $(BUILD_DIR)/usr/lib/raspimidihub/update.sh
 	cp scripts/reset-wifi.sh $(BUILD_DIR)/usr/local/bin/reset-wifi
 	chmod 755 $(BUILD_DIR)/usr/local/bin/reset-wifi
 	cp scripts/raspimidihub-system-prepare.sh $(BUILD_DIR)/usr/local/bin/raspimidihub-system-prepare
 	chmod 755 $(BUILD_DIR)/usr/local/bin/raspimidihub-system-prepare
 	cp scripts/raspimidihub-system-revert.sh $(BUILD_DIR)/usr/local/bin/raspimidihub-system-revert
 	chmod 755 $(BUILD_DIR)/usr/local/bin/raspimidihub-system-revert
+	cp scripts/raspimidihub-update-watchdog.sh $(BUILD_DIR)/usr/local/bin/raspimidihub-update-watchdog
+	chmod 755 $(BUILD_DIR)/usr/local/bin/raspimidihub-update-watchdog
+	cp scripts/raspimidihub-install-deb.sh $(BUILD_DIR)/usr/local/bin/raspimidihub-install-deb
+	chmod 755 $(BUILD_DIR)/usr/local/bin/raspimidihub-install-deb
 	@echo "Package: $(PACKAGE)" > $(BUILD_DIR)/DEBIAN/control
 	@echo "Version: $(VERSION)-1" >> $(BUILD_DIR)/DEBIAN/control
 	@echo "Architecture: all" >> $(BUILD_DIR)/DEBIAN/control

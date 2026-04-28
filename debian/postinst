@@ -28,6 +28,12 @@ case "$1" in
         # Create config directory on boot partition
         mkdir -p /boot/firmware/raspimidihub 2>/dev/null || true
 
+        # Phase 5.5 update flow stores downloaded debs here so they
+        # survive across reboots. Created here (not in the Makefile)
+        # because it must exist on the live read-only system, not on
+        # the build host.
+        mkdir -p /var/lib/raspimidihub/updates 2>/dev/null || true
+
         # Trim system services + reserve a CPU core. Idempotent: safe
         # to run on every install / upgrade. Service / timer disable
         # takes effect immediately; CPU pin (AllowedCPUs=3) takes

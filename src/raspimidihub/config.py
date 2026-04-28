@@ -33,6 +33,12 @@ DEFAULT_CONFIG = {
         "ap_password": "midihub1",
         "client_ssid": "",
         "client_password": "",
+        # Phase 5.5: how aggressively the Pi should reach the internet
+        # for update fetches. ap_only = stay AP, fail with actionable
+        # error if no ethernet path. wifi_for_updates = transient switch
+        # to client just for the fetch, then back. wifi_always = stay
+        # in client mode (only useful when no AP clients are present).
+        "wifi_mode_pref": "ap_only",
     },
 }
 

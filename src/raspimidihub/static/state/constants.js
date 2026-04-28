@@ -15,4 +15,19 @@ export const MAPPING_TYPES = [
 export const NOTE_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
 export const noteName = (n) => NOTE_NAMES[n % 12] + (Math.floor(n / 12) - 2);
 
-export const UPDATE_LABELS = { downloading: 'Downloading...', installing: 'Installing...', done: 'Updated! Restarting...' };
+// Phase 5.5 update flow steps (written by update_flow.py + the
+// install / watchdog scripts). Anything missing falls through to the
+// raw step name in the UI, which is fine for unfamiliar errors but
+// noisy for normal-path states — so these cover every step the
+// orchestrator emits.
+export const UPDATE_LABELS = {
+    'idle': '',
+    'probing': 'Checking internet...',
+    'switching-to-client': 'Joining WiFi...',
+    'verifying-internet': 'Verifying internet...',
+    'fetching-release-list': 'Fetching release list...',
+    'downloading': 'Downloading...',
+    'switching-to-ap': 'Returning to AP...',
+    'installing': 'Installing...',
+    'done': 'Done.',
+};

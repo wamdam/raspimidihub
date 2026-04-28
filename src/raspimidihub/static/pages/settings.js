@@ -57,99 +57,197 @@ function NetworkCard({ iface, showToast }) {
     `;
 }
 
-function UpgradeCard({ showToast, onUpdatingChange }) {
-    const [info, setInfo] = useState(null);
+// Phase 5.5 update flow:
+//   - the Pi normally lives in AP mode so phones can reach it
+//   - to fetch a new release it has to talk to the public internet,
+//     which the AP can't do. POST /system/check-update orchestrates
+//     a transient WiFi switch (or stays put if ethernet works).
+//   - downloads land in /var/lib/raspimidihub/updates/ as deb files
+//     plus sibling .changelog.md files. GET /system/versions returns
+//     the list. POST /system/install installs a chosen one.
+function VersionsCard({ showToast, onUpdatingChange }) {
+    const [versions, setVersions] = useState(null);  // {running, stored: [...]}
     const [checking, setChecking] = useState(false);
-    const [updating, _setUpdating] = useState(false);
-    const setUpdating = (v) => { _setUpdating(v); if (onUpdatingChange) onUpdatingChange(v); };
-    const [status, setStatus] = useState('');
-    const [showLog, setShowLog] = useState(false);
-    const [showAll, setShowAll] = useState(false);
+    const [installing, setInstalling] = useState(false);
+    const [statusMsg, setStatusMsg] = useState('');
+    const [statusErr, setStatusErr] = useState('');
+    const [expandedVersion, setExpandedVersion] = useState(null);
+    const setUpdatingFlag = (v) => onUpdatingChange && onUpdatingChange(v);
 
-    const check = async () => {
-        setChecking(true);
-        const res = await api('/system/update-check');
-        setInfo(res);
-        setChecking(false);
+    const refresh = async () => {
+        try {
+            const res = await fetch('/api/system/versions').then(r => r.json());
+            setVersions(res);
+        } catch (e) {}
     };
-    useEffect(() => { check(); }, []);
+    useEffect(() => { refresh(); }, []);
 
-    const installVersion = async (ver, debUrl) => {
-        if (!debUrl) return;
-        const action = ver === info.latest ? 'Update' : 'Install';
-        if (!confirm(`${action} v${ver}? The service will restart.`)) return;
-        setUpdating(true);
-        setStatus('starting');
-        const res = await api('/system/update', { method: 'POST', body: JSON.stringify({ deb_url: debUrl }) });
-        if (res.error) { showToast('Update failed: ' + res.error); setUpdating(false); setStatus(''); return; }
-
-        const startVersion = info.current;
-        const poll = setInterval(async () => {
+    // Watch the orchestrator's status file while a check or install
+    // runs. The orchestrator runs as a backgrounded asyncio task on
+    // the server; the AP may go down mid-flow when we switch to WiFi
+    // client mode. So poll fetches that fail (TypeError on phones
+    // when the AP drops) are silently absorbed — we just keep polling
+    // until the AP is back and a status read succeeds.
+    //
+    // For an install we also detect the running-version flip, which
+    // is the unambiguous "the new deb is live" signal.
+    const pollStatus = (until, startVersion) => {
+        const id = setInterval(async () => {
+            let s = null;
             try {
-                const s = await fetch('/api/system/update-status').then(r => r.json()).catch(() => null);
-                if (s && s.status) setStatus(s.status);
-                if (s && s.status === 'done') setStatus('restarting');
-                if (s && s.status && s.status.startsWith('error')) {
-                    showToast(s.status); setUpdating(false); clearInterval(poll); return;
+                const resp = await fetch('/api/system/update-status');
+                s = await resp.json();
+            } catch (e) {
+                // AP outage — just keep polling.
+                return;
+            }
+            if (!s || !s.status) return;
+            const step = s.status.step || '';
+            if (step.startsWith('error')) {
+                setStatusErr(s.status.message || step);
+                setStatusMsg('');
+                clearInterval(id);
+                setChecking(false); setInstalling(false);
+                setUpdatingFlag(false);
+                if (until === 'check') refresh();
+                return;
+            }
+            setStatusMsg(UPDATE_LABELS[step] || step);
+            if (s.version && startVersion && s.version !== startVersion) {
+                clearInterval(id);
+                location.reload();
+                return;
+            }
+            if (step === 'done' && until === 'check') {
+                clearInterval(id);
+                const newCount = (s.status.newly_downloaded || []).length;
+                if (newCount > 0) {
+                    showToast(`Downloaded ${newCount} new version${newCount === 1 ? '' : 's'}`);
+                } else {
+                    showToast('Already up to date');
                 }
-                if (s && s.version && s.version !== startVersion) {
-                    clearInterval(poll); location.reload(); return;
-                }
-            } catch (e) {}
+                setChecking(false);
+                setStatusMsg('');
+                setUpdatingFlag(false);
+                refresh();
+                return;
+            }
         }, 1500);
+        return id;
     };
 
-    const statusLabel = UPDATE_LABELS[status] || (status.startsWith('error') ? status : status);
+    const checkForUpdates = async () => {
+        setChecking(true);
+        setStatusErr('');
+        setStatusMsg('Starting...');
+        setUpdatingFlag(true);
+        const startVersion = versions ? versions.running : null;
+        const pollId = pollStatus('check', startVersion);
+        // Server kicks off the orchestrator as a background task and
+        // returns "started" immediately — by design, because the AP
+        // may go down once it switches to WiFi client mode and a
+        // long-held HTTP request would die from the phone's side.
+        // The poll loop above carries us through the outage.
+        let res;
+        try {
+            res = await fetch('/api/system/check-update', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: '{}',
+            });
+        } catch (e) {
+            clearInterval(pollId);
+            setStatusErr(String(e));
+            setChecking(false);
+            setUpdatingFlag(false);
+            return;
+        }
+        // 409 = another tab/click already started the orchestrator. The
+        // poll loop tracks the in-flight run, no need to error out.
+        if (res.status === 409) return;
+        const body = await res.json().catch(() => ({}));
+        if (body.error) {
+            clearInterval(pollId);
+            setStatusErr(body.error);
+            setStatusMsg('');
+            setChecking(false);
+            setUpdatingFlag(false);
+            refresh();
+        }
+    };
+
+    const installStored = async (version) => {
+        if (!confirm(`Install v${version}? The service will restart.`)) return;
+        setInstalling(true);
+        setStatusErr('');
+        setStatusMsg('Starting install...');
+        setUpdatingFlag(true);
+        const startVersion = versions ? versions.running : null;
+        pollStatus('install', startVersion);
+        const res = await api('/system/install', {
+            method: 'POST',
+            body: JSON.stringify({ version }),
+        });
+        if (res.error) {
+            setStatusErr(res.error);
+            setStatusMsg('');
+            setInstalling(false);
+            setUpdatingFlag(false);
+        }
+    };
 
     return html`
         <div class="card">
-            <h3>Software Update</h3>
-            ${!info ? html`
-                <p style="color:var(--text-dim)">${checking ? 'Checking for updates...' : ''}</p>
-            ` : html`
+            <h3>Software Versions</h3>
+            ${!versions ? html`<p style="color:var(--text-dim)">Loading...</p>` : html`
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-                    <span style="font-size:13px">Current: <b>v${info.current}</b></span>
-                    ${info.update_available
-                        ? html`<span style="font-size:13px;color:var(--success)">Available: <b>v${info.latest}</b></span>`
-                        : html`<span style="font-size:13px;color:var(--text-dim)">Up to date</span>`}
+                    <span style="font-size:13px">Running: <b>v${versions.running}</b></span>
+                    <span style="font-size:12px;color:var(--text-dim)">${(versions.stored || []).length} stored</span>
                 </div>
-                ${info.update_available && info.changelog && html`
-                    <div style="margin-bottom:8px">
-                        <button style="background:none;border:none;color:var(--accent);font-size:12px;cursor:pointer;padding:0"
-                            onclick=${() => setShowLog(!showLog)}>${showLog ? '\u25bc' : '\u25b6'} Changelog</button>
-                        ${showLog && html`<pre style="font-size:11px;color:var(--text-dim);white-space:pre-wrap;margin-top:4px;max-height:200px;overflow-y:auto;background:var(--bg);padding:8px;border-radius:6px">${info.changelog}</pre>`}
-                    </div>
+                <button class="btn btn-secondary btn-block" data-testid="check-updates"
+                    onclick=${checkForUpdates} disabled=${checking || installing}>
+                    ${checking ? 'Checking...' : 'Check GitHub for newer versions'}
+                </button>
+                ${(statusMsg || statusErr) && html`
+                    <p data-testid="update-status" style="font-size:13px;margin-top:8px;text-align:center;font-weight:500;${statusErr ? 'color:var(--danger)' : 'color:var(--warn)'}">
+                        ${statusErr || statusMsg}
+                    </p>
                 `}
-                ${info.update_available
-                    ? html`<button class="btn btn-success btn-block" onclick=${() => installVersion(info.latest, info.deb_url)} disabled=${updating}>
-                        ${'Install v' + info.latest}</button>`
-                    : html`<button class="btn btn-secondary btn-block" onclick=${check} disabled=${checking}>
-                        ${checking ? 'Checking...' : 'Check for updates'}</button>`}
-                ${updating && html`<p style="font-size:13px;color:var(--warn);margin-top:8px;text-align:center;font-weight:500">${statusLabel || 'Starting...'}</p>`}
-                ${info.offline && html`<p style="font-size:11px;color:var(--text-dim);margin-top:4px">No internet connection — connect to a network to check for updates.</p>`}
 
-                ${info.all_versions && info.all_versions.length > 0 && html`
-                    <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--surface2)">
-                        <button style="background:none;border:none;color:var(--accent);font-size:12px;cursor:pointer;padding:0"
-                            onclick=${() => setShowAll(!showAll)}>${showAll ? '\u25bc' : '\u25b6'} All versions</button>
-                        ${showAll && html`
-                            <div style="margin-top:8px">
-                                ${info.all_versions.map(v => html`
-                                    <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--surface2)">
-                                        <span style="font-size:13px">
-                                            v${v.version}
-                                            ${v.version === info.current ? html` <span style="color:var(--text-dim);font-size:11px">(current)</span>` : ''}
-                                            ${v.prerelease ? html` <span style="color:var(--warn);font-size:11px">pre</span>` : ''}
-                                        </span>
-                                        ${v.version !== info.current && html`
-                                            <button class="btn btn-secondary" style="padding:4px 12px;font-size:12px"
-                                                onclick=${() => installVersion(v.version, v.deb_url)} disabled=${updating}>Install</button>
+                ${(versions.stored || []).length > 0 ? html`
+                    <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--surface2)">
+                        <div style="font-size:12px;color:var(--text-dim);margin-bottom:6px">Downloaded versions (newest first)</div>
+                        ${versions.stored.map(v => html`
+                            <div style="padding:8px 0;border-bottom:1px solid var(--surface2)">
+                                <div style="display:flex;justify-content:space-between;align-items:center">
+                                    <span style="font-size:13px">
+                                        v${v.version}
+                                        ${v.version === versions.running ? html` <span style="color:var(--text-dim);font-size:11px">(current)</span>` : ''}
+                                    </span>
+                                    <div style="display:flex;gap:6px;align-items:center">
+                                        ${v.changelog && html`
+                                            <button style="background:none;border:none;color:var(--accent);font-size:11px;cursor:pointer;padding:2px 6px"
+                                                onclick=${() => setExpandedVersion(expandedVersion === v.version ? null : v.version)}>
+                                                ${expandedVersion === v.version ? 'Hide' : 'Notes'}
+                                            </button>
+                                        `}
+                                        ${v.version !== versions.running && html`
+                                            <button class="btn btn-secondary" data-testid=${'install-' + v.version}
+                                                style="padding:4px 12px;font-size:12px"
+                                                onclick=${() => installStored(v.version)} disabled=${installing || checking}>Install</button>
                                         `}
                                     </div>
-                                `)}
+                                </div>
+                                ${expandedVersion === v.version && v.changelog && html`
+                                    <pre style="font-size:11px;color:var(--text-dim);white-space:pre-wrap;margin-top:6px;max-height:200px;overflow-y:auto;background:var(--bg);padding:8px;border-radius:6px">${v.changelog}</pre>
+                                `}
                             </div>
-                        `}
+                        `)}
                     </div>
+                ` : html`
+                    <p style="font-size:11px;color:var(--text-dim);margin-top:8px">
+                        Click "Check GitHub" to fetch newer versions. They'll be stored locally so you can install them later.
+                    </p>
                 `}
             `}
         </div>
@@ -187,6 +285,22 @@ function WiFiCard({ showToast }) {
             setUpdPassword('');  // don't keep the password in the DOM
             refresh();
         }
+    };
+    // Phase 5.5: how aggressively the Pi reaches for the internet
+    // when the user clicks "Check for updates". ap_only = stay on AP
+    // (only fetch if ethernet has internet). wifi_for_updates = briefly
+    // join the saved WiFi just for the fetch. wifi_always = stay in
+    // client mode (only useful when no AP clients are present).
+    const setWifiPref = async (pref) => {
+        const res = await api('/system/wifi-mode-pref', {
+            method: 'POST', body: JSON.stringify({ pref }),
+        });
+        if (res.error) {
+            showToast('Save failed: ' + res.error);
+            return;
+        }
+        showToast('WiFi mode: ' + pref.replace('_', ' '));
+        refresh();
     };
 
     const refresh = () => api('/wifi').then(w => { setWifi(w); setWantMode(null); }).catch(() => {});
@@ -297,13 +411,34 @@ function WiFiCard({ showToast }) {
 
                 ${wantMode === null && html`
                     <div style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.08)">
+                        <div style="font-size:13px;color:var(--text-dim);margin-bottom:6px"><b>For software updates</b></div>
+                        <div data-testid="wifi-mode-pref" style="display:flex;flex-direction:column;gap:6px;font-size:13px;margin-bottom:10px">
+                            <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+                                <input type="radio" name="wifi-mode-pref" value="ap_only"
+                                    checked=${wifi.wifi_mode_pref === 'ap_only'}
+                                    onChange=${() => setWifiPref('ap_only')} />
+                                <span>AP only (use ethernet for updates if available)</span>
+                            </label>
+                            <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+                                <input type="radio" name="wifi-mode-pref" value="wifi_for_updates"
+                                    checked=${wifi.wifi_mode_pref === 'wifi_for_updates'}
+                                    onChange=${() => setWifiPref('wifi_for_updates')} />
+                                <span>WiFi for updates (briefly join WiFi to fetch, then back to AP)</span>
+                            </label>
+                            <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+                                <input type="radio" name="wifi-mode-pref" value="wifi_always"
+                                    checked=${wifi.wifi_mode_pref === 'wifi_always'}
+                                    onChange=${() => setWifiPref('wifi_always')} />
+                                <span>WiFi always (stay in client mode)</span>
+                            </label>
+                        </div>
                         <div style="font-size:13px;color:var(--text-dim);margin-bottom:6px">
                             <b>Update WiFi</b> ${wifi.saved_client_ssid
                                 ? html`<span data-testid="update-wifi-saved-ssid">: ${wifi.saved_client_ssid}</span>`
                                 : html`<span style="color:var(--text-dim)" data-testid="update-wifi-not-configured"> (not configured)</span>`}
                         </div>
                         <p style="font-size:11px;color:var(--text-dim);margin-bottom:8px">
-                            SSID + password the Pi will briefly join to fetch a new release. Stays in AP mode until you click "Check for updates".
+                            SSID + password the Pi will briefly join to fetch a new release.
                         </p>
                         <button class="btn btn-secondary" data-testid="update-wifi-edit"
                             onclick=${() => { setUpdSsid(wifi.saved_client_ssid || ''); setWantMode('update-creds'); }}>
@@ -461,7 +596,7 @@ export function SettingsPage({ showToast, showMidiBar, toggleMidiBar }) {
                 <span>Knob / wheel tick sounds</span>
             </label>
         </div>
-        <${UpgradeCard} showToast=${showToast} onUpdatingChange=${setIsUpgrading} />
+        <${VersionsCard} showToast=${showToast} onUpdatingChange=${setIsUpgrading} />
         <div class="card">
             <button class="btn btn-secondary btn-block" style="margin-bottom:8px" onclick=${() => location.reload()} disabled=${isUpgrading}>Reload App</button>
             <button class="btn btn-danger btn-block" onclick=${rebootPi} disabled=${isUpgrading}>${isUpgrading ? 'Upgrade in progress...' : 'Reboot Pi'}</button>

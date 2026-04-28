@@ -1659,13 +1659,37 @@ UX.
      reflex check on any new closure added under
      `_create_instance` / `_setup_plugin_callbacks`.
 
-### Phase 5.5 — Transient WiFi for updates (≈ 0.5 sprint)
+### Phase 5.5 — Transient WiFi for updates (DONE 2026-04-27)
 
-Slotted in after Phase 5 because the building blocks already exist
-(AP/client mode switching in `wifi.py`, the update flow in
-`scripts/raspimidihub-update.sh` running outside the service so it
-survives a dpkg restart) and the feature unblocks the "Pi sitting on
-guest WiFi 24/7" privacy concern.
+Shipped as `update_flow.UpdateFetcher` + `/api/system/check-update`
++ `/api/system/install` + the Settings WiFi-mode radio. Per-step
+status flows through `/run/raspimidihub/update-status`; the watchdog
+is a transient `systemd-run --on-active=180s` unit that restarts
+`raspimidihub.service` if the orchestrator hangs in client mode.
+
+What landed:
+- Storage at `/var/lib/raspimidihub/updates/` (newest 3 retained;
+  per-version `.changelog.md` siblings shown in the UI)
+- Three WiFi modes: `ap_only` (current default), `wifi_for_updates`
+  (transient switch on demand), `wifi_always` (today's permanent
+  client mode behaviour)
+- Smart probe: ethernet path is preferred over WiFi switch when it
+  has internet; the orchestrator only flips wlan0 when needed
+- Install split out from download: dpkg only ever runs against an
+  already-stored deb under an `rw` remount → `dpkg -i` → `ro`
+  remount, with a precise dpkg-stderr excerpt surfaced on failure
+- Actionable error messages per step (`error-no-internet`,
+  `error-wifi-assoc`, `error-no-internet-on-wifi`,
+  `error-download`, `error-install`, `error-watchdog`) — never a
+  generic "update failed"
+
+What was descoped from the original sketch:
+- 60–90 s confirmation countdown dialog. Not needed because the
+  user driving the UI sits on ethernet during the test setup; for
+  the AP-only-from-phone case the page already surfaces a precise
+  status breadcrumb on reconnect.
+- Scheduled auto-update on cron — still a future follow-up.
+- Multiple stored networks (home WiFi → phone hotspot fallback).
 
 **User story:** I want to store a real-WiFi SSID + password, hit
 "Check for updates", let the Pi temporarily join that WiFi to fetch

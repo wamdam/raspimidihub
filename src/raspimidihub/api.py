@@ -8,6 +8,7 @@ import json
 import logging
 import os
 import socket
+import subprocess
 from pathlib import Path
 
 from . import __version__
@@ -20,8 +21,18 @@ from .midi_filter import (
     MidiMapping,
     validate_new_mapping,
 )
+from .update_flow import (
+    NoInternetError,
+    UpdateFetcher,
+    download_newer_releases,
+    list_stored_versions,
+    read_status,
+    write_status,
+)
 from .web import Request, Response, WebServer
 from .wifi import WifiManager
+
+INSTALL_DEB_SCRIPT = Path("/usr/local/bin/raspimidihub-install-deb")
 
 log = logging.getLogger(__name__)
 
@@ -1034,119 +1045,102 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         return Response.json({"status": "rebooting"})
 
     # ================================================================
-    # GET /api/system/update-check — check for newer release on GitHub
+    # Phase 5.5 update flow: orchestrator-backed check & install
+    #
+    # Two-stage by design: download is online (transient WiFi switch
+    # when needed), install is offline (just dpkg of an already-stored
+    # deb). Splitting them lets the user install an older stored
+    # version without touching the network, and lets the network dance
+    # run under a watchdog without dpkg sitting on the AP.
+    #
+    # The check kickoff returns immediately (the orchestrator runs as
+    # a backgrounded asyncio task) — otherwise switching to WiFi client
+    # mode tears down the AP and would kill the held-open HTTP request
+    # from a phone. The UI polls GET /api/system/update-status and
+    # silently absorbs fetches that fail during the AP outage.
     # ================================================================
 
-    @server.route("GET", "/api/system/update-check")
-    async def api_update_check(req: Request) -> Response:
-        import json as _json
-        import urllib.request
+    # One in-flight orchestrator task at a time; second click returns
+    # 409 so the UI can ignore it without erroring out.
+    in_flight_check: list = [None]
 
-        loop = asyncio.get_event_loop()
+    @server.route("POST", "/api/system/check-update")
+    async def api_check_update(req: Request) -> Response:
+        if wifi is None:
+            return Response.error("WiFi manager unavailable", 503)
+        if in_flight_check[0] and not in_flight_check[0].done():
+            return Response.error("Update check already running", 409)
 
-        def _parse_ver(s):
-            """Parse version string for comparison. Returns tuple for sorting."""
-            s = s.lstrip("v")
-            # Handle pre-release: "2.0.0-alpha1" → lower than "2.0.0"
-            parts = s.replace("-", ".").split(".")
-            nums = []
-            pre = ""
-            for p in parts:
-                try:
-                    nums.append(int(p))
-                except ValueError:
-                    pre = p
-                    break
-            while len(nums) < 3:
-                nums.append(0)
-            # Pre-release sorts before release: (2,0,0,'') > (2,0,0,'alpha1')
-            return tuple(nums) + (pre or "~",)  # '~' sorts after alpha/beta
+        fetcher = UpdateFetcher(wifi, config)
 
-        def _check():
-            url = "https://api.github.com/repos/wamdam/raspimidihub/releases?per_page=20"
-            rq = urllib.request.Request(url, headers={"Accept": "application/vnd.github+json"})
-            with urllib.request.urlopen(rq, timeout=10) as resp:
-                releases = _json.loads(resp.read())
+        async def run_orchestrator():
+            try:
+                await fetcher.run(
+                    lambda: download_newer_releases(__version__),
+                    version_label="check",
+                )
+            except NoInternetError:
+                # _abort already wrote the actionable status — UI sees it.
+                pass
+            except Exception as e:
+                log.exception("check-update failed")
+                write_status({"step": "error", "message": str(e)})
 
-            current_ver = _parse_ver(__version__)
+        write_status({"step": "starting", "version": "check"})
+        in_flight_check[0] = asyncio.get_event_loop().create_task(run_orchestrator())
+        return Response.json({"status": "started"})
 
-            # Build list of all releases with .deb assets
-            all_versions = []
-            latest_upgrade = None
-            for rel in releases:
-                if rel.get("draft"):
-                    continue
-                tag = rel.get("tag_name", "")
-                ver_str = tag.lstrip("v")
-                ver = _parse_ver(ver_str)
-                deb_url = ""
-                for asset in rel.get("assets", []):
-                    name = asset.get("name", "")
-                    if name.startswith("raspimidihub_") and name.endswith("_all.deb"):
-                        deb_url = asset.get("browser_download_url", "")
-                        break
-                if not deb_url:
-                    continue
-                entry = {"version": ver_str, "changelog": rel.get("body", ""),
-                         "deb_url": deb_url, "prerelease": rel.get("prerelease", False)}
-                all_versions.append(entry)
-                # Track newest upgrade (strictly newer than current)
-                if ver > current_ver and latest_upgrade is None:
-                    latest_upgrade = entry
+    @server.route("GET", "/api/system/versions")
+    async def api_system_versions(req: Request) -> Response:
+        """List stored debs (newest first) plus the running version so
+        the UI can mark which one's currently installed."""
+        return Response.json({
+            "running": __version__,
+            "stored": list_stored_versions(),
+        })
 
-            return {
-                "current": __version__,
-                "latest": latest_upgrade["version"] if latest_upgrade else __version__,
-                "changelog": latest_upgrade["changelog"] if latest_upgrade else "",
-                "deb_url": latest_upgrade["deb_url"] if latest_upgrade else "",
-                "update_available": latest_upgrade is not None,
-                "all_versions": all_versions,
-            }
-
-        try:
-            result = await loop.run_in_executor(None, _check)
-            return Response.json(result)
-        except Exception as e:
-            log.warning("Update check failed: %s", e)
-            return Response.json({"current": __version__, "latest": __version__,
-                                  "changelog": "", "deb_url": "",
-                                  "update_available": False, "all_versions": [],
-                                  "offline": True})
-
-    # ================================================================
-    # POST /api/system/update — download and install latest .deb
-    # ================================================================
-
-    UPDATE_STATUS_FILE = Path("/run/raspimidihub/update-status")
-    UPDATE_SCRIPT = Path("/usr/lib/raspimidihub/update.sh")
-
-    @server.route("POST", "/api/system/update")
-    async def api_update(req: Request) -> Response:
-        import subprocess
-
-        data = req.json
-        deb_url = data.get("deb_url", "")
-        if not deb_url or "github.com" not in deb_url:
-            return Response.error("Invalid download URL")
-
-        if not UPDATE_SCRIPT.is_file():
-            return Response.error("Update script not found", 500)
-
-        # Launch external updater script (survives service restart)
+    @server.route("POST", "/api/system/install")
+    async def api_system_install(req: Request) -> Response:
+        """Install a previously-downloaded deb. Body: {version: "X.Y.Z"}.
+        Runs the install script as a detached subprocess — dpkg will
+        restart raspimidihub.service, so the response goes out before
+        the service dies."""
+        version = req.json.get("version", "")
+        if not version:
+            return Response.error("version required")
+        match = next((v for v in list_stored_versions()
+                      if v["version"] == version), None)
+        if match is None:
+            return Response.error(f"Version {version} not in storage", 404)
+        if not INSTALL_DEB_SCRIPT.is_file():
+            return Response.error("Install script missing", 500)
+        write_status({"step": "installing", "version": version})
         subprocess.Popen(
-            [str(UPDATE_SCRIPT), deb_url],
+            [str(INSTALL_DEB_SCRIPT), match["deb_path"]],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
             start_new_session=True,
         )
-        return Response.json({"status": "started"})
+        return Response.json({"status": "started", "version": version})
+
+    @server.route("POST", "/api/system/wifi-mode-pref")
+    async def api_system_wifi_mode_pref(req: Request) -> Response:
+        """Save which network strategy to use for fetches. One of
+        ap_only / wifi_for_updates / wifi_always."""
+        data = req.json
+        pref = data.get("pref", "")
+        if pref not in ("ap_only", "wifi_for_updates", "wifi_always"):
+            return Response.error("invalid pref")
+        config.wifi["wifi_mode_pref"] = pref
+        await config.asave()
+        return Response.json({"status": "saved", "pref": pref})
 
     @server.route("GET", "/api/system/update-status")
     async def api_update_status(req: Request) -> Response:
-        try:
-            status = UPDATE_STATUS_FILE.read_text().strip()
-        except FileNotFoundError:
-            status = ""
-        return Response.json({"status": status, "version": __version__})
+        """Live state of the most recent update flow. UI polls this for
+        progress + post-mortem error messages. Always returns running
+        version so the UI can detect a successful self-restart after
+        an install."""
+        return Response.json({"status": read_status(), "version": __version__})
 
     # ================================================================
     # POST /api/config/load — reload saved config from disk
@@ -1299,12 +1293,14 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
     async def api_wifi_status(req: Request) -> Response:
         # Expose the saved update-WiFi SSID (NOT the password) so the
         # Settings UI can show "Update WiFi: HomeWiFi - change?" without
-        # the user re-entering it on every visit.
+        # the user re-entering it on every visit. wifi_mode_pref drives
+        # the AP-only / WiFi-for-updates / WiFi-always radio.
         return Response.json({
             "mode": wifi.mode,
             "ssid": wifi.ssid,
             "ip": wifi.ip,
             "saved_client_ssid": config.wifi.get("client_ssid", ""),
+            "wifi_mode_pref": config.wifi.get("wifi_mode_pref", "ap_only"),
         })
 
     @server.route("POST", "/api/wifi/ap")
