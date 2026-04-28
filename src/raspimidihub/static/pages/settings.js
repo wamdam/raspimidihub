@@ -57,6 +57,29 @@ function NetworkCard({ iface, showToast }) {
     `;
 }
 
+// Tiny "we're alive" indicator: a single dot hops along five
+// positions, advancing one slot on every poll. Colour reflects the
+// most recent poll's outcome — green when polls are getting through,
+// red when they're failing (e.g. AP outage with the user's phone on
+// a different WiFi). When polling stops, the dot stops with it, so
+// the user can tell at a glance whether anything's happening.
+const POLL_DOT_COUNT = 5;
+function PollIndicator({ tick, ok }) {
+    const active = tick % POLL_DOT_COUNT;
+    const colour = ok === null ? 'var(--text-dim)'
+                  : ok ? 'var(--success)'
+                  : 'var(--danger)';
+    return html`
+        <div data-testid="poll-indicator"
+            style="display:flex;justify-content:center;gap:6px;margin-top:6px;height:8px;align-items:center"
+            data-poll-tick=${tick}>
+            ${[...Array(POLL_DOT_COUNT)].map((_, i) => html`
+                <span style="width:6px;height:6px;border-radius:50%;background:${i === active ? colour : 'var(--surface2)'};transition:background 200ms"></span>
+            `)}
+        </div>
+    `;
+}
+
 // Phase 5.5 update flow:
 //   - the Pi normally lives in AP mode so phones can reach it
 //   - to fetch a new release it has to talk to the public internet,
@@ -72,6 +95,13 @@ function VersionsCard({ showToast, onUpdatingChange }) {
     const [statusMsg, setStatusMsg] = useState('');
     const [statusErr, setStatusErr] = useState('');
     const [expandedVersion, setExpandedVersion] = useState(null);
+    // pollTick increments on every poll attempt (used to advance the
+    // hopping-dot indicator). pollOk is the latest poll's outcome:
+    // null = never polled, true = succeeded, false = failed. The dot's
+    // colour reflects pollOk so the user can see at a glance whether
+    // polls are getting through or being eaten by an AP outage.
+    const [pollTick, setPollTick] = useState(0);
+    const [pollOk, setPollOk] = useState(null);
     const setUpdatingFlag = (v) => onUpdatingChange && onUpdatingChange(v);
 
     const refresh = async () => {
@@ -104,11 +134,15 @@ function VersionsCard({ showToast, onUpdatingChange }) {
                 const resp = await fetch('/api/system/update-status');
                 s = await resp.json();
                 lastSuccessAt = Date.now();
+                setPollTick(t => t + 1);
+                setPollOk(true);
                 if (stalled) {
                     stalled = false;
                     setStatusErr('');
                 }
             } catch (e) {
+                setPollTick(t => t + 1);
+                setPollOk(false);
                 // Silently keep polling — but if it's been long enough
                 // that the phone has clearly given up on the AP, swap
                 // to a help message. We don't clearInterval; once the
@@ -164,6 +198,8 @@ function VersionsCard({ showToast, onUpdatingChange }) {
         setChecking(true);
         setStatusErr('');
         setStatusMsg('Starting...');
+        setPollTick(0);
+        setPollOk(null);
         setUpdatingFlag(true);
         const startVersion = versions ? versions.running : null;
         const pollId = pollStatus('check', startVersion);
@@ -205,6 +241,8 @@ function VersionsCard({ showToast, onUpdatingChange }) {
         setInstalling(true);
         setStatusErr('');
         setStatusMsg('Starting install...');
+        setPollTick(0);
+        setPollOk(null);
         setUpdatingFlag(true);
         const startVersion = versions ? versions.running : null;
         pollStatus('install', startVersion);
@@ -236,6 +274,9 @@ function VersionsCard({ showToast, onUpdatingChange }) {
                     <p data-testid="update-status" style="font-size:13px;margin-top:8px;text-align:center;font-weight:500;${statusErr ? 'color:var(--danger)' : 'color:var(--warn)'}">
                         ${statusErr || statusMsg}
                     </p>
+                `}
+                ${(checking || installing) && html`
+                    <${PollIndicator} tick=${pollTick} ok=${pollOk} />
                 `}
 
                 ${(versions.stored || []).length > 0 ? html`
