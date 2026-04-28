@@ -1,13 +1,39 @@
 /**
  * Per-connection filter + mappings overlay.
+ *
+ * Phase 6: mapping rows lost their inline Edit/Del buttons. Single-tap
+ * on a row now opens the edit overlay; long-press / right-click pops a
+ * menu (Edit · Copy · Remove). When the App-level clipboard holds a
+ * mapping, a `[ + Paste Mapping ]` button appears next to `[ + Add
+ * Mapping ]`. Paste-with-bump is owned by the parent (RoutingPage) —
+ * it sees the clipboard and the connection id, runs the retry loop.
  */
 
 import { useState, useEffect } from '../lib/hooks.module.js';
 import { html, animateClose, useSwipeDismiss } from '../ui/common.js';
+import { useContextTrigger } from '../ui/contextmenu.js';
 import { MSG_TYPES, MSG_LABELS } from '../state/constants.js';
 import { MappingFormOverlay, mappingDesc } from './mappingform.js';
 
-export function FilterPanel({ connId, filter, mappings, onClose, onApply, onMappingAdd, onMappingDelete, onMappingSave, srcClientId }) {
+function MappingRow({ mapping, onEdit, onCopy, onRemove, showContextMenu }) {
+    const trigger = useContextTrigger(showContextMenu, () => [
+        { label: 'Edit', action: onEdit },
+        { label: 'Copy', action: onCopy },
+        { divider: true },
+        { label: 'Remove', danger: true, action: onRemove },
+    ]);
+    return html`<div class="preset-item" style="cursor:pointer;user-select:none"
+        onClick=${(e) => { if (trigger.wasTriggered()) { e.preventDefault(); return; } onEdit(); }}
+        onContextMenu=${trigger.onContextMenu}
+        onTouchStart=${trigger.onTouchStart} onTouchMove=${trigger.onTouchMove}
+        onTouchEnd=${trigger.onTouchEnd} onTouchCancel=${trigger.onTouchCancel}
+        onMouseDown=${trigger.onMouseDown} onMouseUp=${trigger.onMouseUp}
+        onMouseLeave=${trigger.onMouseLeave}>
+        <span class="name" style="font-size:13px">${mappingDesc(mapping)}</span>
+    </div>`;
+}
+
+export function FilterPanel({ connId, filter, mappings, onClose, onApply, onMappingAdd, onMappingDelete, onMappingSave, onMappingCopy, onMappingPaste, srcClientId, clipboard, showContextMenu }) {
     const panelRef = { current: null };
     const close = () => animateClose(panelRef.current, onClose);
     const [channelMask, setChannelMask] = useState(filter ? filter.channel_mask : 0xFFFF);
@@ -100,13 +126,19 @@ export function FilterPanel({ connId, filter, mappings, onClose, onApply, onMapp
                     ${(!mappings || mappings.length === 0)
                         ? html`<p style="color:var(--text-dim);font-size:13px">No mappings configured</p>`
                         : mappings.map((m, i) => html`
-                            <div class="preset-item">
-                                <span class="name" style="font-size:13px">${mappingDesc(m)}</span>
-                                <button class="btn btn-secondary" onclick=${() => setMappingForm({ editing: m, index: i })}>Edit</button>
-                                <button class="btn btn-danger" onclick=${() => onMappingDelete(i)}>Del</button>
-                            </div>
+                            <${MappingRow} key=${i} mapping=${m}
+                                onEdit=${() => setMappingForm({ editing: m, index: i })}
+                                onCopy=${() => onMappingCopy && onMappingCopy(m)}
+                                onRemove=${() => onMappingDelete(i)}
+                                showContextMenu=${showContextMenu} />
                         `)}
-                    <button class="btn btn-primary btn-block" style="margin-top:8px" onclick=${() => setMappingForm({ editing: null, index: null })}>+ Add Mapping</button>
+                    <div style="display:flex;gap:6px;margin-top:8px">
+                        <button class="btn btn-primary" style="flex:1" onclick=${() => setMappingForm({ editing: null, index: null })}>+ Add Mapping</button>
+                        ${clipboard && clipboard.kind === 'mapping' && html`
+                            <button class="btn btn-secondary" style="flex:1" data-testid="paste-mapping"
+                                onclick=${() => onMappingPaste && onMappingPaste()}>+ Paste Mapping</button>
+                        `}
+                    </div>
                 </div>
             </div>
         </div>

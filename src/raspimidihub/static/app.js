@@ -12,6 +12,7 @@
 import { render } from './lib/preact.module.js';
 import { useState, useEffect, useRef, useCallback } from './lib/hooks.module.js';
 import { html, api, useSSE, Toast, MidiBar } from './ui/common.js';
+import { ContextMenu } from './ui/contextmenu.js';
 import { setSSEConnectionId, useSSESubscription } from './ui/sse-subscriptions.js';
 import { IconRouting, IconController, IconPreset, IconSettings } from './ui/icons.js';
 import { runStorageCleanup } from './ui/storage.js';
@@ -247,11 +248,31 @@ function App() {
         setTimeout(() => setToast(''), 2500);
     };
 
+    // Phase 6: shared client-side clipboard + context menu.
+    //
+    // clipboard is a single typed slot — kind: "connection" | "plugin" |
+    // "mapping". `null` = empty (Paste items disabled wherever they
+    // appear). Lifted to App so any cell, header, or row can read +
+    // write it without prop-drilling through three component layers.
+    //
+    // contextMenu state holds the currently-open menu's anchor + items
+    // (or null = none). showContextMenu is the helper we pass down so
+    // children just call `showContextMenu(x, y, items)` without knowing
+    // about the menu's internals.
+    const [clipboard, setClipboard] = useState(null);
+    const [contextMenu, setContextMenu] = useState(null);
+    const showContextMenu = useCallback((x, y, items) => {
+        setContextMenu({ x, y, items });
+    }, []);
+    const closeContextMenu = useCallback(() => setContextMenu(null), []);
+
     let page;
     switch (tab) {
         case 'routing':
             page = html`<${RoutingPage} devices=${devices} connections=${connections} refresh=${refresh} showToast=${showToast} clockSources=${clockSources} clockQuarters=${clockQuarters} midiRates=${midiRates}
-                onDeviceOpen=${(clientId) => setSelectedDeviceId(clientId)} />`;
+                onDeviceOpen=${(clientId) => setSelectedDeviceId(clientId)}
+                clipboard=${clipboard} setClipboard=${setClipboard}
+                showContextMenu=${showContextMenu} />`;
             break;
         case 'controller':
             page = html`<${ControllerPage} pluginDisplays=${pluginDisplays} showToast=${showToast}
@@ -285,8 +306,11 @@ function App() {
             onClose=${() => { setSelectedDeviceId(null); refresh(); }}
             showToast=${showToast} refresh=${refresh}
             pluginDisplays=${pluginDisplays}
+            clipboard=${clipboard} setClipboard=${setClipboard}
+            showContextMenu=${showContextMenu}
             onJumpToController=${(instanceId) => navigate({ tab: 'controller', controllerId: instanceId })} />`}
         <${Toast} message=${toast} />
+        <${ContextMenu} menu=${contextMenu} onClose=${closeContextMenu} />
     `;
 }
 
