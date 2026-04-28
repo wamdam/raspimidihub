@@ -254,229 +254,343 @@ function VersionsCard({ showToast, onUpdatingChange }) {
     `;
 }
 
+// Consolidated WiFi card (rebuilt from the older multi-button version).
+//
+// State the user can change:
+//   - wifi_mode_pref: ap_only / wifi_for_updates / wifi_always
+//   - home WiFi credentials (SSID + password) — data only, no live impact
+//   - AP password — propagates to hostapd without flipping modes
+//
+// Mode-pref radio is the only thing that drives the live wlan0 state, and
+// it requires explicit Apply (Discard / Apply buttons appear only when
+// dirty). Apply is backgrounded server-side because switching to client
+// mode tears down the AP and would kill the held-open HTTP request from
+// a phone — same pattern as POST /api/system/check-update.
 function WiFiCard({ showToast }) {
     const [wifi, setWifi] = useState(null);
-    const [wantMode, setWantMode] = useState(null); // null = show current, 'ap' or 'client' = show switch form
-    const [apPassword, setApPassword] = useState('');
-    const [clientSsid, setClientSsid] = useState('');
-    const [clientPassword, setClientPassword] = useState('');
-    const [networks, setNetworks] = useState([]);
-    const [scanning, setScanning] = useState(false);
-    const [switching, setSwitching] = useState(false);
-    // Update-WiFi credentials — saved without flipping the Pi to client
-    // mode. The transient-update flow uses these to briefly join WiFi
-    // for downloading a new release; the rest of the time the Pi stays
-    // on its AP. Decoupled from the "Join WiFi" action above.
-    const [updSsid, setUpdSsid] = useState('');
-    const [updPassword, setUpdPassword] = useState('');
-    const [savingCreds, setSavingCreds] = useState(false);
-    const saveUpdateCreds = async () => {
-        if (!updSsid) return;
-        setSavingCreds(true);
-        const res = await api('/wifi/save-credentials', {
-            method: 'POST',
-            body: JSON.stringify({ ssid: updSsid, password: updPassword }),
+    const [pendingPref, setPendingPref] = useState(null);
+    const [editing, setEditing] = useState(null); // null | 'home-wifi' | 'ap-password'
+    const [applying, setApplying] = useState(false);
+
+    const refresh = () => api('/wifi').then(w => {
+        setWifi(w);
+        setPendingPref(null);
+    }).catch(() => {});
+    useEffect(() => { refresh(); }, []);
+
+    if (!wifi) {
+        return html`<div class="card"><h3>WiFi</h3><p style="color:var(--text-dim)">Loading...</p></div>`;
+    }
+
+    const isAp = wifi.mode === 'ap';
+    const hasCreds = !!wifi.saved_client_ssid;
+    const savedPref = wifi.wifi_mode_pref;
+    const dirty = pendingPref !== null && pendingPref !== savedPref;
+    const targetPref = pendingPref ?? savedPref;
+
+    // Apply button label tells the user what's actually about to happen,
+    // so clicking Apply never surprises. Four cases:
+    //   targetPref==wifi_always + currently AP → "Switch to home WiFi now"
+    //   targetPref!=wifi_always + currently client → "Stop client, start AP"
+    //   else → "Save (no mode change)"
+    let applyLabel = 'Save';
+    if (dirty) {
+        if (targetPref === 'wifi_always' && isAp) applyLabel = 'Switch to home WiFi now';
+        else if (targetPref !== 'wifi_always' && !isAp) applyLabel = 'Stop WiFi client, start AP';
+        else applyLabel = 'Save mode';
+    }
+
+    const apply = async () => {
+        setApplying(true);
+        const res = await api('/wifi/apply-mode', {
+            method: 'POST', body: JSON.stringify({ pref: targetPref }),
         });
-        setSavingCreds(false);
+        setApplying(false);
         if (res.error) {
-            showToast('Save failed: ' + res.error);
+            showToast('Apply failed: ' + res.error);
+            return;
+        }
+        showToast(res.switched ? 'Applying mode change...' : 'Mode saved');
+        // Poll /api/wifi a couple of times if a switch was triggered, so
+        // the displayed mode catches up. Otherwise just refresh once.
+        if (res.switched) {
+            setTimeout(refresh, 1500);
+            setTimeout(refresh, 4000);
         } else {
-            showToast('Update WiFi saved: ' + updSsid);
-            setUpdPassword('');  // don't keep the password in the DOM
             refresh();
         }
     };
-    // Phase 5.5: how aggressively the Pi reaches for the internet
-    // when the user clicks "Check for updates". ap_only = stay on AP
-    // (only fetch if ethernet has internet). wifi_for_updates = briefly
-    // join the saved WiFi just for the fetch. wifi_always = stay in
-    // client mode (only useful when no AP clients are present).
-    const setWifiPref = async (pref) => {
-        const res = await api('/system/wifi-mode-pref', {
-            method: 'POST', body: JSON.stringify({ pref }),
-        });
-        if (res.error) {
-            showToast('Save failed: ' + res.error);
-            return;
-        }
-        showToast('WiFi mode: ' + pref.replace('_', ' '));
-        refresh();
-    };
 
-    const refresh = () => api('/wifi').then(w => { setWifi(w); setWantMode(null); }).catch(() => {});
-    useEffect(() => { refresh(); }, []);
-
-    const scanNetworks = async () => {
-        setScanning(true);
-        const nets = await api('/wifi/scan');
-        setNetworks(nets || []);
-        setScanning(false);
+    const ModeRadio = ({ value, label, sub, requiresCreds }) => {
+        const disabled = requiresCreds && !hasCreds;
+        return html`
+            <label data-testid=${'mode-' + value}
+                style="display:flex;align-items:flex-start;gap:8px;padding:6px 0;cursor:${disabled ? 'not-allowed' : 'pointer'};opacity:${disabled ? 0.5 : 1}">
+                <input type="radio" name="wifi-mode-pref" style="margin-top:3px"
+                    checked=${targetPref === value}
+                    disabled=${disabled || applying}
+                    onChange=${() => setPendingPref(value)} />
+                <span style="flex:1">
+                    <div style="font-size:13px;font-weight:500">${label}</div>
+                    <div style="font-size:11px;color:var(--text-dim)">${sub}</div>
+                </span>
+            </label>
+        `;
     };
-
-    const switchToAp = async () => {
-        setSwitching(true);
-        const body = {};
-        if (apPassword) body.password = apPassword;
-        await api('/wifi/ap', { method: 'POST', body: JSON.stringify(body) });
-        setSwitching(false);
-        showToast('Switched to AP mode');
-        refresh();
-    };
-    const switchToClient = async () => {
-        if (!clientSsid) return;
-        setSwitching(true);
-        showToast('Connecting...');
-        const res = await api('/wifi/client', {
-            method: 'POST',
-            body: JSON.stringify({ ssid: clientSsid, password: clientPassword }),
-        });
-        setSwitching(false);
-        if (res.error) showToast('Connection failed: ' + res.error);
-        else showToast('Connected to ' + clientSsid);
-        refresh();
-    };
-
-    const isAp = wifi && wifi.mode === 'ap';
-    const isClient = wifi && wifi.mode === 'client';
 
     return html`
         <div class="card">
             <h3>WiFi</h3>
-            ${!wifi ? html`<p style="color:var(--text-dim)">Loading...</p>` : html`
-                <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;padding:10px;background:var(--bg);border-radius:6px">
-                    <span style="font-size:20px">${isAp ? '\uD83D\uDCE1' : '\uD83D\uDD17'}</span>
-                    <div style="flex:1">
-                        <div style="font-size:15px;font-weight:600">${isAp ? 'Access Point' : 'Client'}: ${wifi.ssid || '-'}</div>
-                        <div style="font-size:12px;color:var(--text-dim)">${wifi.ip || 'No IP'}</div>
-                    </div>
-                    <span style="font-size:11px;padding:3px 8px;border-radius:4px;font-weight:600;${isAp
-                        ? 'background:var(--accent2);color:#fff'
-                        : 'background:var(--success);color:#fff'}">${isAp ? 'AP' : 'WiFi'}</span>
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;padding:10px;background:var(--bg);border-radius:6px">
+                <span style="font-size:20px">${isAp ? '📡' : '🔗'}</span>
+                <div style="flex:1">
+                    <div style="font-size:15px;font-weight:600">${isAp ? 'Access Point' : 'Client'}: ${wifi.ssid || '-'}</div>
+                    <div style="font-size:12px;color:var(--text-dim)">${wifi.ip || 'No IP'}</div>
                 </div>
+                <span style="font-size:11px;padding:3px 8px;border-radius:4px;font-weight:600;${isAp
+                    ? 'background:var(--accent2);color:#fff'
+                    : 'background:var(--success);color:#fff'}">${isAp ? 'AP' : 'WiFi'}</span>
+            </div>
 
-                ${wantMode === null && html`
-                    <div class="btn-group">
-                        ${isClient && html`<button class="btn btn-secondary" onclick=${() => setWantMode('ap')}>Switch to AP</button>`}
-                        ${isAp && html`<button class="btn btn-secondary" onclick=${() => { setWantMode('client'); scanNetworks(); }}>Join WiFi</button>`}
-                        ${isAp && html`<button class="btn btn-secondary" onclick=${() => setWantMode('ap-settings')}>AP Settings</button>`}
-                    </div>
-                `}
+            <div data-testid="wifi-mode-pref" style="margin-bottom:14px">
+                <div style="font-size:13px;color:var(--text-dim);margin-bottom:4px">
+                    Network mode${dirty ? html` <span style="color:var(--warn)">unsaved ●</span>` : ''}
+                </div>
+                <${ModeRadio} value="ap_only" label="AP only"
+                    sub="Pi is its own WiFi network. Phones connect to it." />
+                <${ModeRadio} value="wifi_for_updates" label="WiFi for updates"
+                    sub=${hasCreds
+                        ? "Joins home WiFi briefly when fetching releases, then back to AP."
+                        : "(set home WiFi below to enable)"}
+                    requiresCreds=${true} />
+                <${ModeRadio} value="wifi_always" label="WiFi always"
+                    sub=${hasCreds
+                        ? "Pi joins home WiFi permanently. No AP."
+                        : "(set home WiFi below to enable)"}
+                    requiresCreds=${true} />
+            </div>
 
-                ${wantMode === 'ap-settings' && html`
-                    <div class="form-group">
-                        <label>AP Password (min 8 chars)</label>
-                        <input type="password" value=${apPassword} onInput=${e => setApPassword(e.target.value)} placeholder="Leave empty to keep current" />
-                    </div>
-                    <div class="btn-group">
-                        <button class="btn btn-secondary" onclick=${() => setWantMode(null)}>Cancel</button>
-                        <button class="btn btn-primary" onclick=${switchToAp} disabled=${switching}>${switching ? 'Applying...' : 'Apply'}</button>
-                    </div>
-                `}
-
-                ${wantMode === 'ap' && html`
-                    <p style="font-size:13px;color:var(--text-dim);margin-bottom:8px">Switch back to access point mode?</p>
-                    <div class="form-group">
-                        <label>AP Password (min 8 chars)</label>
-                        <input type="password" value=${apPassword} onInput=${e => setApPassword(e.target.value)} placeholder="Leave empty to keep current" />
-                    </div>
-                    <div class="btn-group">
-                        <button class="btn btn-secondary" onclick=${() => setWantMode(null)}>Cancel</button>
-                        <button class="btn btn-primary" onclick=${switchToAp} disabled=${switching}>${switching ? 'Switching...' : 'Switch to AP'}</button>
-                    </div>
-                `}
-
-                ${wantMode === 'client' && html`
-                    <div class="form-group">
-                        <label>WiFi Network</label>
-                        <div style="display:flex;gap:8px">
-                            <select style="flex:1" value=${clientSsid} onChange=${e => setClientSsid(e.target.value)}>
-                                <option value="">Select network...</option>
-                                ${networks.map(n => html`<option value=${n.ssid}>${n.ssid} (${n.signal}%${n.security ? ' ' + n.security : ''})</option>`)}
-                            </select>
-                            <button class="btn btn-secondary" style="min-width:48px;padding:8px" onclick=${scanNetworks}>
-                                ${scanning ? '...' : '\u21bb'}
-                            </button>
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label>Password</label>
-                        <input type="password" value=${clientPassword} onInput=${e => setClientPassword(e.target.value)} />
-                    </div>
-                    <div class="btn-group">
-                        <button class="btn btn-secondary" onclick=${() => setWantMode(null)}>Cancel</button>
-                        <button class="btn btn-primary" onclick=${switchToClient} disabled=${switching || !clientSsid}>${switching ? 'Connecting...' : 'Connect'}</button>
-                    </div>
-                    <p style="font-size:11px;color:var(--text-dim);margin-top:6px;text-align:center">After connecting, find this device at <b>http://raspimidihub.local</b></p>
-                `}
-
-                ${wantMode === null && html`
-                    <div style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.08)">
-                        <div style="font-size:13px;color:var(--text-dim);margin-bottom:6px"><b>For software updates</b></div>
-                        <div data-testid="wifi-mode-pref" style="display:flex;flex-direction:column;gap:6px;font-size:13px;margin-bottom:10px">
-                            <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-                                <input type="radio" name="wifi-mode-pref" value="ap_only"
-                                    checked=${wifi.wifi_mode_pref === 'ap_only'}
-                                    onChange=${() => setWifiPref('ap_only')} />
-                                <span>AP only (use ethernet for updates if available)</span>
-                            </label>
-                            <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-                                <input type="radio" name="wifi-mode-pref" value="wifi_for_updates"
-                                    checked=${wifi.wifi_mode_pref === 'wifi_for_updates'}
-                                    onChange=${() => setWifiPref('wifi_for_updates')} />
-                                <span>WiFi for updates (briefly join WiFi to fetch, then back to AP)</span>
-                            </label>
-                            <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-                                <input type="radio" name="wifi-mode-pref" value="wifi_always"
-                                    checked=${wifi.wifi_mode_pref === 'wifi_always'}
-                                    onChange=${() => setWifiPref('wifi_always')} />
-                                <span>WiFi always (stay in client mode)</span>
-                            </label>
-                        </div>
-                        <div style="font-size:13px;color:var(--text-dim);margin-bottom:6px">
-                            <b>Update WiFi</b> ${wifi.saved_client_ssid
-                                ? html`<span data-testid="update-wifi-saved-ssid">: ${wifi.saved_client_ssid}</span>`
-                                : html`<span style="color:var(--text-dim)" data-testid="update-wifi-not-configured"> (not configured)</span>`}
-                        </div>
-                        <p style="font-size:11px;color:var(--text-dim);margin-bottom:8px">
-                            SSID + password the Pi will briefly join to fetch a new release.
-                        </p>
-                        <button class="btn btn-secondary" data-testid="update-wifi-edit"
-                            onclick=${() => { setUpdSsid(wifi.saved_client_ssid || ''); setWantMode('update-creds'); }}>
-                            ${wifi.saved_client_ssid ? 'Change' : 'Set credentials'}
-                        </button>
-                    </div>
-                `}
-
-                ${wantMode === 'update-creds' && html`
-                    <div style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.08)">
-                        <div class="form-group">
-                            <label>WiFi SSID</label>
-                            <input type="text" data-testid="update-wifi-ssid"
-                                value=${updSsid}
-                                onInput=${e => setUpdSsid(e.target.value)}
-                                placeholder="Your home WiFi network name" />
-                        </div>
-                        <div class="form-group">
-                            <label>Password</label>
-                            <input type="password" data-testid="update-wifi-password"
-                                value=${updPassword}
-                                onInput=${e => setUpdPassword(e.target.value)}
-                                placeholder=${wifi.saved_client_ssid ? 'Leave empty to keep current password' : ''} />
-                        </div>
-                        <div class="btn-group">
-                            <button class="btn btn-secondary" onclick=${() => setWantMode(null)}>Cancel</button>
-                            <button class="btn btn-primary" data-testid="update-wifi-save"
-                                onclick=${saveUpdateCreds}
-                                disabled=${savingCreds || !updSsid}>
-                                ${savingCreds ? 'Saving...' : 'Save'}
-                            </button>
-                        </div>
-                        <p style="font-size:11px;color:var(--text-dim);margin-top:6px">
-                            Saved without switching modes — the Pi stays on AP.
-                        </p>
-                    </div>
-                `}
+            ${dirty && html`
+                <div class="btn-group" style="margin-bottom:12px">
+                    <button class="btn btn-secondary" onclick=${() => setPendingPref(null)} disabled=${applying}>
+                        Discard
+                    </button>
+                    <button class="btn btn-primary" data-testid="apply-mode"
+                        onclick=${apply} disabled=${applying}>
+                        ${applying ? 'Applying...' : applyLabel}
+                    </button>
+                </div>
             `}
+
+            <div style="border-top:1px solid var(--surface2);padding-top:10px">
+                <${ConfigRow} label="Home WiFi"
+                    value=${wifi.saved_client_ssid || html`<span style="color:var(--text-dim)">not configured</span>`}
+                    buttonLabel=${hasCreds ? 'Edit' : 'Set'}
+                    testId="edit-home-wifi"
+                    onClick=${() => setEditing('home-wifi')} />
+                <${ConfigRow} label="AP password" value=${'•'.repeat(8)}
+                    buttonLabel="Edit"
+                    testId="edit-ap-password"
+                    onClick=${() => setEditing('ap-password')} />
+            </div>
+
+            ${editing === 'home-wifi' && html`
+                <${HomeWiFiModal} wifi=${wifi} showToast=${showToast}
+                    onClose=${() => setEditing(null)}
+                    onSaved=${() => { setEditing(null); refresh(); }} />
+            `}
+            ${editing === 'ap-password' && html`
+                <${APPasswordModal} showToast=${showToast}
+                    onClose=${() => setEditing(null)}
+                    onSaved=${() => { setEditing(null); refresh(); }} />
+            `}
+        </div>
+    `;
+}
+
+function ConfigRow({ label, value, buttonLabel, testId, onClick }) {
+    return html`
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0">
+            <div style="font-size:13px">
+                <span style="color:var(--text-dim)">${label}:</span>
+                <span style="margin-left:8px">${value}</span>
+            </div>
+            <button class="btn btn-secondary" data-testid=${testId}
+                style="padding:4px 12px;font-size:12px"
+                onclick=${onClick}>${buttonLabel}</button>
+        </div>
+    `;
+}
+
+function HomeWiFiModal({ wifi, showToast, onClose, onSaved }) {
+    const [ssid, setSsid] = useState(wifi.saved_client_ssid || '');
+    const [password, setPassword] = useState('');
+    const [networks, setNetworks] = useState([]);
+    const [scanning, setScanning] = useState(false);
+    const [busy, setBusy] = useState(false);
+    // Two input modes: pick from the live scan (dropdown), or type the
+    // SSID manually (text input). Pick is the default; manual is the
+    // escape hatch for hidden / out-of-range networks. We open in
+    // manual mode if there's a saved SSID that the current scan doesn't
+    // see — so the user always sees their saved value, never a blank.
+    const [manualEntry, setManualEntry] = useState(false);
+
+    const scan = async () => {
+        setScanning(true);
+        const nets = await api('/wifi/scan');
+        setNetworks(nets || []);
+        setScanning(false);
+        // After scan finishes: if the saved SSID isn't visible, open in
+        // manual mode so the user sees the SSID they have rather than
+        // an empty dropdown.
+        if (wifi.saved_client_ssid &&
+            !nets.some(n => n.ssid === wifi.saved_client_ssid)) {
+            setManualEntry(true);
+        }
+    };
+    useEffect(() => { scan(); }, []);
+
+    const save = async () => {
+        if (!ssid) return;
+        setBusy(true);
+        const res = await api('/wifi/credentials', {
+            method: 'POST', body: JSON.stringify({ ssid, password }),
+        });
+        setBusy(false);
+        if (res.error) {
+            showToast('Save failed: ' + res.error);
+            return;
+        }
+        showToast('Home WiFi saved: ' + ssid);
+        onSaved();
+    };
+
+    const forget = async () => {
+        if (!confirm(`Forget home WiFi "${wifi.saved_client_ssid}"?`)) return;
+        setBusy(true);
+        const res = await api('/wifi/credentials', {
+            method: 'POST', body: JSON.stringify({ action: 'forget' }),
+        });
+        setBusy(false);
+        if (res.error) {
+            showToast('Forget failed: ' + res.error);
+            return;
+        }
+        showToast('Home WiFi forgotten');
+        onSaved();
+    };
+
+    // Handle dropdown selection: the magic value '__manual__' switches
+    // to manual entry; anything else is a scan result.
+    const onPick = (e) => {
+        const v = e.target.value;
+        if (v === '__manual__') {
+            setManualEntry(true);
+            // Don't clobber a typed SSID if the user already had one;
+            // they may have switched to manual specifically to keep it.
+        } else {
+            setSsid(v);
+        }
+    };
+
+    return html`
+        <div onclick=${onClose} style="position:fixed;inset:0;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;z-index:1000;padding:20px">
+            <div onclick=${e => e.stopPropagation()} style="background:var(--surface);border-radius:8px;padding:20px;max-width:400px;width:100%;max-height:90vh;overflow-y:auto">
+                <h3>Home WiFi</h3>
+                <div class="form-group">
+                    <label>Network</label>
+                    ${manualEntry ? html`
+                        <input type="text" data-testid="home-wifi-ssid"
+                            value=${ssid} autoFocus
+                            onInput=${e => setSsid(e.target.value)}
+                            placeholder="SSID" />
+                        <button data-testid="home-wifi-back-to-scan"
+                            style="background:none;border:none;color:var(--accent);font-size:12px;cursor:pointer;padding:4px 0;margin-top:4px"
+                            onclick=${() => setManualEntry(false)}>
+                            ← Pick from scan
+                        </button>
+                    ` : html`
+                        <div style="display:flex;gap:8px">
+                            <select style="flex:1" data-testid="home-wifi-pick"
+                                value=${ssid}
+                                onChange=${onPick}>
+                                <option value="">${scanning ? 'Scanning...' : 'Pick a network...'}</option>
+                                ${networks.map(n => html`<option value=${n.ssid}>${n.ssid} (${n.signal}%${n.security ? ' ' + n.security : ''})</option>`)}
+                                <option disabled>──────────</option>
+                                <option value="__manual__">Type SSID manually...</option>
+                            </select>
+                            <button class="btn btn-secondary" style="min-width:48px;padding:8px"
+                                onclick=${scan} disabled=${scanning}>${scanning ? '...' : '↻'}</button>
+                        </div>
+                    `}
+                </div>
+                <div class="form-group">
+                    <label>Password</label>
+                    <input type="password" data-testid="home-wifi-password"
+                        value=${password}
+                        onInput=${e => setPassword(e.target.value)}
+                        placeholder=${wifi.saved_client_ssid ? 'Leave empty to keep current password' : ''} />
+                </div>
+                <div style="display:flex;justify-content:space-between;gap:8px;margin-top:12px">
+                    ${wifi.saved_client_ssid && html`
+                        <button class="btn btn-danger" data-testid="home-wifi-forget"
+                            onclick=${forget} disabled=${busy}>Forget</button>
+                    `}
+                    <div style="flex:1"></div>
+                    <button class="btn btn-secondary" onclick=${onClose} disabled=${busy}>Cancel</button>
+                    <button class="btn btn-primary" data-testid="home-wifi-save"
+                        onclick=${save} disabled=${busy || !ssid}>
+                        ${busy ? 'Saving...' : 'Save'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function APPasswordModal({ showToast, onClose, onSaved }) {
+    const [password, setPassword] = useState('');
+    const [busy, setBusy] = useState(false);
+
+    const save = async () => {
+        if (password.length < 8) {
+            showToast('Password must be at least 8 characters');
+            return;
+        }
+        setBusy(true);
+        const res = await api('/wifi/ap-password', {
+            method: 'POST', body: JSON.stringify({ password }),
+        });
+        setBusy(false);
+        if (res.error) {
+            showToast('Save failed: ' + res.error);
+            return;
+        }
+        showToast('AP password saved');
+        onSaved();
+    };
+
+    return html`
+        <div onclick=${onClose} style="position:fixed;inset:0;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;z-index:1000;padding:20px">
+            <div onclick=${e => e.stopPropagation()} style="background:var(--surface);border-radius:8px;padding:20px;max-width:400px;width:100%;max-height:90vh;overflow-y:auto">
+                <h3>Change AP password</h3>
+                <div class="form-group">
+                    <label>New password (≥ 8 chars)</label>
+                    <input type="password" data-testid="ap-password-input"
+                        value=${password} autoFocus
+                        onInput=${e => setPassword(e.target.value)} />
+                </div>
+                <p style="font-size:11px;color:var(--text-dim);margin-bottom:12px">
+                    Phones already connected stay connected; new ones need the new password.
+                </p>
+                <div style="display:flex;justify-content:flex-end;gap:8px">
+                    <button class="btn btn-secondary" onclick=${onClose} disabled=${busy}>Cancel</button>
+                    <button class="btn btn-primary" data-testid="ap-password-save"
+                        onclick=${save} disabled=${busy || password.length < 8}>
+                        ${busy ? 'Saving...' : 'Save'}
+                    </button>
+                </div>
+            </div>
         </div>
     `;
 }

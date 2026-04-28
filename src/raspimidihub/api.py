@@ -1122,18 +1122,6 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         )
         return Response.json({"status": "started", "version": version})
 
-    @server.route("POST", "/api/system/wifi-mode-pref")
-    async def api_system_wifi_mode_pref(req: Request) -> Response:
-        """Save which network strategy to use for fetches. One of
-        ap_only / wifi_for_updates / wifi_always."""
-        data = req.json
-        pref = data.get("pref", "")
-        if pref not in ("ap_only", "wifi_for_updates", "wifi_always"):
-            return Response.error("invalid pref")
-        config.wifi["wifi_mode_pref"] = pref
-        await config.asave()
-        return Response.json({"status": "saved", "pref": pref})
-
     @server.route("GET", "/api/system/update-status")
     async def api_update_status(req: Request) -> Response:
         """Live state of the most recent update flow. UI polls this for
@@ -1303,76 +1291,102 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
             "wifi_mode_pref": config.wifi.get("wifi_mode_pref", "ap_only"),
         })
 
-    @server.route("POST", "/api/wifi/ap")
-    async def api_wifi_ap(req: Request) -> Response:
+    # ----- Home WiFi credentials --------------------------------------
+    #
+    # The Pi's "home WiFi" is the network it can briefly join (or stay on
+    # permanently) to reach the public internet. Saved as a pair of
+    # SSID + password in the persistent config; the actual mode flip is
+    # decided by `wifi_mode_pref` and the apply-mode endpoint, NOT by
+    # saving credentials. So this endpoint is data-only — no live
+    # network changes.
+    @server.route("POST", "/api/wifi/credentials")
+    async def api_wifi_credentials(req: Request) -> Response:
         data = req.json
-        ssid = data.get("ssid", "")
-        password = data.get("password", "midihub1")
-        if password and len(password) < 8:
-            return Response.error("Password must be at least 8 characters")
-
-        loop = asyncio.get_event_loop()
-        await loop.run_in_executor(None, wifi.start_ap, ssid, password)
-
-        # Update config
         cfg_wifi = config.wifi
-        if ssid:
-            cfg_wifi["ap_ssid"] = ssid
-        if password:
-            cfg_wifi["ap_password"] = password
-        cfg_wifi["mode"] = "ap"
-        await config.asave()
-        return Response.json({"status": "ap started", "ssid": wifi.ssid, "ip": wifi.ip})
 
-    @server.route("POST", "/api/wifi/client")
-    async def api_wifi_client(req: Request) -> Response:
-        data = req.json
-        ssid = data.get("ssid", "")
-        password = data.get("password", "")
-        if not ssid:
-            return Response.error("SSID required")
-
-        cfg_wifi = config.wifi
-        ap_ssid = cfg_wifi.get("ap_ssid", "")
-        ap_password = cfg_wifi.get("ap_password", "midihub1")
-
-        # Run in background with fallback
-        await wifi.start_client_with_fallback(ssid, password, ap_ssid, ap_password)
-
-        if wifi.mode == "client":
-            cfg_wifi["mode"] = "client"
-            cfg_wifi["client_ssid"] = ssid
-            cfg_wifi["client_password"] = password
-            await config.asave()
-            return Response.json({"status": "connected", "ssid": ssid, "ip": wifi.ip})
-        else:
-            return Response.error("Connection failed, fell back to AP mode", 502)
-
-    # POST /api/wifi/save-credentials — store SSID + password without
-    # switching modes. Used by the transient-update flow: the Pi stays
-    # in AP mode for normal use, then briefly joins this WiFi to fetch
-    # a new deb when the user clicks "Check for updates".
-    @server.route("POST", "/api/wifi/save-credentials")
-    async def api_wifi_save_credentials(req: Request) -> Response:
-        data = req.json
-        ssid = data.get("ssid", "").strip()
-        # Empty password = keep existing (so the user can change SSID
-        # without re-typing the password). If you really want to clear
-        # the password, send {"password": "", "force_clear_password": true}.
-        password_provided = "password" in data and data.get("password") != ""
-        if not ssid:
-            return Response.error("SSID required")
-        cfg_wifi = config.wifi
-        cfg_wifi["client_ssid"] = ssid
-        if password_provided:
-            cfg_wifi["client_password"] = data["password"]
-        elif data.get("force_clear_password"):
+        if data.get("action") == "forget":
+            cfg_wifi["client_ssid"] = ""
             cfg_wifi["client_password"] = ""
-        # NOT changing cfg_wifi["mode"] — leave whatever was there
-        # (typically "ap"). The transient-update flow flips mode
-        # temporarily on its own without touching this saved value.
+            # Two of the three modes need credentials. Without them only
+            # ap_only is meaningful, so demote silently.
+            if cfg_wifi.get("wifi_mode_pref") in ("wifi_for_updates", "wifi_always"):
+                cfg_wifi["wifi_mode_pref"] = "ap_only"
+            await config.asave()
+            return Response.json({"status": "forgotten"})
+
+        ssid = data.get("ssid", "").strip()
+        if not ssid:
+            return Response.error("SSID required")
+        cfg_wifi["client_ssid"] = ssid
+        # Empty password = keep existing (so the user can change SSID
+        # without re-typing the password).
+        if "password" in data and data["password"] != "":
+            cfg_wifi["client_password"] = data["password"]
         await config.asave()
         return Response.json({"status": "saved", "ssid": ssid})
+
+    @server.route("POST", "/api/wifi/ap-password")
+    async def api_wifi_ap_password(req: Request) -> Response:
+        """Change the AP password without flipping modes. Existing
+        connections survive (PSK is checked at association, not per
+        packet); new connections need the new password."""
+        password = req.json.get("password", "")
+        if len(password) < 8:
+            return Response.error("Password must be at least 8 characters")
+        try:
+            wifi.set_ap_password(password)
+        except ValueError as e:
+            return Response.error(str(e))
+        config.wifi["ap_password"] = password
+        await config.asave()
+        return Response.json({"status": "saved"})
+
+    # The mode-pref is the only thing that drives the live wlan0 state.
+    # Apply saves the pref and triggers the underlying mode flip (if
+    # any) as a backgrounded asyncio task — same reason as
+    # /api/system/check-update: switching to client mode tears down the
+    # AP and would kill any held-open HTTP request from a phone.
+    @server.route("POST", "/api/wifi/apply-mode")
+    async def api_wifi_apply_mode(req: Request) -> Response:
+        pref = req.json.get("pref", "")
+        if pref not in ("ap_only", "wifi_for_updates", "wifi_always"):
+            return Response.error("invalid pref")
+        cfg_wifi = config.wifi
+        saved_ssid = cfg_wifi.get("client_ssid", "")
+        if pref in ("wifi_for_updates", "wifi_always") and not saved_ssid:
+            return Response.error(
+                "Save home WiFi credentials before selecting this mode")
+
+        cfg_wifi["wifi_mode_pref"] = pref
+        await config.asave()
+
+        # Decide whether the live wlan0 mode needs to change. Only two
+        # of the four (current_mode, target_pref) combinations are
+        # disruptive: AP→client (going to wifi_always) and client→AP
+        # (leaving wifi_always).
+        target_live = "client" if pref == "wifi_always" else "ap"
+        if wifi.mode == target_live:
+            return Response.json({"status": "saved", "switched": False})
+
+        loop = asyncio.get_event_loop()
+        ap_ssid = cfg_wifi.get("ap_ssid", "")
+        ap_password = cfg_wifi.get("ap_password", "midihub1")
+        client_password = cfg_wifi.get("client_password", "")
+
+        async def switch():
+            try:
+                if target_live == "client":
+                    await wifi.start_client_with_fallback(
+                        saved_ssid, client_password, ap_ssid, ap_password)
+                else:
+                    await loop.run_in_executor(
+                        None, wifi.start_ap, ap_ssid, ap_password)
+            except Exception:
+                log.exception("apply-mode switch failed")
+
+        loop.create_task(switch())
+        return Response.json({"status": "saved", "switched": True,
+                              "target_mode": target_live})
 
     @server.route("GET", "/api/wifi/scan")
     async def api_wifi_scan(req: Request) -> Response:
