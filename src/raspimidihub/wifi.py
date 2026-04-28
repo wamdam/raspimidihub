@@ -378,6 +378,7 @@ no-hosts
 
         if hostapd_ok and dnsmasq_ok:
             self._mode = "ap"
+            self._disable_wlan_power_save()
             log.info("WiFi AP already up and matching: SSID=%s, channel=%d — skipping restart",
                      ssid, channel)
             return
@@ -438,10 +439,36 @@ no-hosts
                   "--pid-file=/run/raspimidihub/dnsmasq.pid"], check=False)
 
         self._mode = "ap"
+        self._disable_wlan_power_save()
+
         what = (["hostapd"] if not hostapd_ok else []) + \
                (["dnsmasq"] if not dnsmasq_ok else [])
         log.info("WiFi AP started: SSID=%s, IP=%s, channel=%d (restarted: %s)",
                  ssid, AP_IP, channel, ",".join(what) or "none")
+
+    @staticmethod
+    def _disable_wlan_power_save() -> None:
+        """Force wlan0 power save off via `iw`.
+
+        The Pi 3 brcmfmac driver re-enables WiFi power management on
+        every cfg80211 init — most visibly when wpa_supplicant connects
+        in client mode, which leaves the flag stuck on the next AP
+        bring-up. With power save on in AP mode the radio accepts
+        clients at first but starts dropping probe / auth frames after
+        a while, so the AP looks fine but new associations time out
+        (this exact symptom broke our user's phone connection).
+
+        Idempotent. Cheap. The check=False / timeout makes it
+        non-fatal if `iw` is missing — we still warn so it shows up
+        in journalctl when reproducing.
+        """
+        r = _run(["iw", "dev", WLAN_IFACE, "set", "power_save", "off"],
+                 check=False, timeout=3)
+        if r.returncode != 0:
+            log.warning("Failed to disable wlan0 power save (iw rc=%d): %s",
+                        r.returncode, (r.stderr or "").strip() or "(empty)")
+        else:
+            log.info("wlan0 power_save disabled via iw")
 
     def stop_ap(self):
         """Stop WiFi access point."""

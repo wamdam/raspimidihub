@@ -187,6 +187,7 @@ class _FakeWifi:
 
     def __init__(self, *, can_join: bool = True) -> None:
         self.mode = "ap"
+        self.ip = "192.168.4.1"
         self.can_join = can_join
         self.ap_calls: list[tuple[str, str]] = []
         self.client_calls: list[tuple[str, str]] = []

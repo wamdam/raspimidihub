@@ -38,6 +38,7 @@ import json
 import logging
 import re
 import subprocess
+import time
 import urllib.request
 from collections.abc import Awaitable, Callable
 from pathlib import Path
@@ -77,6 +78,7 @@ def read_status() -> dict[str, Any]:
 def probe_internet(timeout: float = INTERNET_PROBE_TIMEOUT_SEC) -> bool:
     """Sync probe of GitHub's `/zen` endpoint. Returns True if reachable
     (any 2xx/3xx). Called from an executor by async callers."""
+    t0 = time.monotonic()
     try:
         req = urllib.request.Request(
             INTERNET_PROBE_URL,
@@ -84,9 +86,15 @@ def probe_internet(timeout: float = INTERNET_PROBE_TIMEOUT_SEC) -> bool:
                      "User-Agent": "raspimidihub"},
         )
         with urllib.request.urlopen(req, timeout=timeout) as resp:
-            return 200 <= resp.status < 400
+            ok = 200 <= resp.status < 400
+        elapsed_ms = int((time.monotonic() - t0) * 1000)
+        log.info("Internet probe %s in %dms via %s",
+                 "ok" if ok else f"HTTP {resp.status}", elapsed_ms,
+                 INTERNET_PROBE_URL)
+        return ok
     except Exception as e:
-        log.info("Internet probe failed: %s", e)
+        elapsed_ms = int((time.monotonic() - t0) * 1000)
+        log.info("Internet probe failed in %dms: %s", elapsed_ms, e)
         return False
 
 
@@ -126,17 +134,22 @@ def fetch_github_releases() -> list[dict[str, Any]]:
     Returns one dict per release with: version, changelog, deb_url,
     prerelease. Releases without a `raspimidihub_*_all.deb` asset are
     skipped (drafts, accidentally-tagged commits)."""
+    t0 = time.monotonic()
     rq = urllib.request.Request(
         GITHUB_RELEASES_URL,
         headers={"Accept": "application/vnd.github+json",
                  "User-Agent": "raspimidihub"},
     )
+    log.info("Fetching GitHub releases: %s", GITHUB_RELEASES_URL)
     with urllib.request.urlopen(rq, timeout=GITHUB_RELEASES_TIMEOUT_SEC) as resp:
         releases = json.loads(resp.read())
 
     out: list[dict[str, Any]] = []
+    skipped_drafts = 0
+    skipped_no_asset = 0
     for rel in releases:
         if rel.get("draft"):
+            skipped_drafts += 1
             continue
         tag = rel.get("tag_name", "")
         ver_str = tag.lstrip("v")
@@ -147,6 +160,7 @@ def fetch_github_releases() -> list[dict[str, Any]]:
                 deb_url = asset.get("browser_download_url", "")
                 break
         if not deb_url:
+            skipped_no_asset += 1
             continue
         out.append({
             "version": ver_str,
@@ -155,6 +169,14 @@ def fetch_github_releases() -> list[dict[str, Any]]:
             "prerelease": rel.get("prerelease", False),
         })
     out.sort(key=lambda e: parse_version(e["version"]), reverse=True)
+
+    elapsed_ms = int((time.monotonic() - t0) * 1000)
+    log.info("GitHub returned %d release(s) in %dms (drafts skipped: %d, "
+             "no-deb-asset skipped: %d)",
+             len(out), elapsed_ms, skipped_drafts, skipped_no_asset)
+    for entry in out:
+        pre = " [pre-release]" if entry["prerelease"] else ""
+        log.info("  - v%s%s → %s", entry["version"], pre, entry["deb_url"])
     return out
 
 
@@ -232,6 +254,8 @@ def prune_stored(keep: int = KEEP_VERSIONS) -> list[str]:
                 except OSError:
                     pass
             removed.append(entry["deb_name"])
+    log.info("Pruned %d old deb(s) from %s (kept newest %d): %s",
+             len(removed), UPDATES_DIR, keep, removed)
     return removed
 
 
@@ -286,12 +310,16 @@ def download_release(deb_url: str, dest: Path,
     rootfs remount because UPDATES_DIR lives on the read-only root.
     Returns (ok, error_message)."""
     tmp = dest.with_suffix(".part")
+    log.info("Downloading %s → %s", deb_url, dest)
+    t0 = time.monotonic()
+    bytes_written = 0
     try:
         req = urllib.request.Request(
             deb_url, headers={"User-Agent": "raspimidihub"},
         )
         with urllib.request.urlopen(req, timeout=DOWNLOAD_TIMEOUT_SEC) as resp:
             if resp.status >= 400:
+                log.warning("Download HTTP %d for %s", resp.status, deb_url)
                 return False, f"HTTP {resp.status}"
             # Hold rw open only for the actual disk writes — the network
             # read happens regardless of fs mode.
@@ -303,6 +331,7 @@ def download_release(deb_url: str, dest: Path,
                         if not chunk:
                             break
                         f.write(chunk)
+                        bytes_written += len(chunk)
                 tmp.replace(dest)
                 if changelog_text:
                     try:
@@ -311,12 +340,18 @@ def download_release(deb_url: str, dest: Path,
                         log.warning("failed to write changelog alongside %s: %s",
                                     dest, e)
     except Exception as e:
+        elapsed_ms = int((time.monotonic() - t0) * 1000)
+        log.warning("Download failed after %dms (%d bytes): %s",
+                    elapsed_ms, bytes_written, e)
         try:
             with _rw_rootfs():
                 tmp.unlink()
         except OSError:
             pass
         return False, str(e)
+    elapsed_ms = int((time.monotonic() - t0) * 1000)
+    log.info("Download ok: %s (%d bytes in %dms)",
+             dest.name, bytes_written, elapsed_ms)
     return True, ""
 
 
@@ -352,9 +387,14 @@ class UpdateFetcher:
         """Execute `work` while ensuring internet access. Returns whatever
         `work` returns. Raises NoInternetError if no path to GitHub."""
         loop = asyncio.get_event_loop()
+        log.info("UpdateFetcher.run start (label=%s, current wifi mode=%s, "
+                 "wifi_mode_pref=%s)",
+                 version_label or "-", self.wifi.mode,
+                 self.config.wifi.get("wifi_mode_pref", "ap_only"))
         write_status({"step": "probing", "version": version_label})
 
         if await loop.run_in_executor(None, probe_internet):
+            log.info("Path: current network has internet — no WiFi switch")
             return await self._run_work(work, switched=False,
                                          version_label=version_label)
 
@@ -364,9 +404,13 @@ class UpdateFetcher:
 
         if wifi_pref != "wifi_for_updates" or not saved_ssid:
             msg = self._explain_no_internet(wifi_pref, saved_ssid)
+            log.warning("Path: aborting — no internet route available "
+                        "(wifi_mode_pref=%s, saved_ssid=%r)",
+                        wifi_pref, saved_ssid)
             self._abort("error-no-internet", msg)
             raise NoInternetError(msg)
 
+        log.info("Path: transient WiFi switch to '%s' for the fetch", saved_ssid)
         schedule_watchdog("transient-update")
         try:
             return await self._transient_wifi_path(
@@ -387,6 +431,7 @@ class UpdateFetcher:
             return result
         finally:
             if switched:
+                log.info("Switching back to AP after work")
                 write_status({"step": "switching-to-ap",
                               "version": version_label})
                 await self._switch_to_ap()
@@ -397,11 +442,13 @@ class UpdateFetcher:
             if isinstance(result, dict):
                 done.update({k: v for k, v in result.items()
                              if k in ("newly_downloaded", "pruned")})
+            log.info("UpdateFetcher.run done: %s", done)
             write_status(done)
 
     async def _transient_wifi_path(self, work, ssid: str, password: str,
                                     version_label: str):
         loop = asyncio.get_event_loop()
+        log.info("Switching to client mode (SSID=%s)", ssid)
         write_status({"step": "switching-to-client", "version": version_label,
                       "ssid": ssid})
         wifi_cfg = self.config.wifi
@@ -412,16 +459,21 @@ class UpdateFetcher:
             await self.wifi.start_client_with_fallback(
                 ssid, password, ap_ssid, ap_password)
         except Exception as e:
+            log.error("WiFi association raised: %s", e)
             self._abort("error-wifi-assoc",
                         f"Failed to switch to WiFi: {e}")
             raise NoInternetError(f"Failed to switch to WiFi: {e}") from e
 
         if self.wifi.mode != "client":
+            log.warning("Couldn't join '%s' — wifi_manager.mode is %s",
+                        ssid, self.wifi.mode)
             msg = (f"Couldn't join '{ssid}'. Check the saved password "
                    f"and that the network is in range.")
             self._abort("error-wifi-assoc", msg)
             raise NoInternetError(msg)
 
+        log.info("Joined '%s' (IP=%s) — verifying internet via WiFi",
+                 ssid, self.wifi.ip)
         write_status({"step": "verifying-internet", "version": version_label,
                       "ssid": ssid})
         # start_client_with_fallback already waits for an IP. Re-probe to
@@ -430,12 +482,15 @@ class UpdateFetcher:
         # silently dump us into a "downloading…" that just hangs).
         reachable = await loop.run_in_executor(None, probe_internet)
         if not reachable:
+            log.warning("'%s' joined but no internet — switching back to AP",
+                        ssid)
             await self._switch_to_ap()
             msg = (f"Joined '{ssid}' but no internet — check the "
                    "network's router has internet access.")
             self._abort("error-no-internet-on-wifi", msg)
             raise NoInternetError(msg)
 
+        log.info("Internet reachable via '%s' — running work callable", ssid)
         return await self._run_work(work, switched=True,
                                      version_label=version_label)
 
@@ -481,27 +536,42 @@ async def download_newer_releases(current_version: str) -> dict[str, Any]:
         await fetcher.run(lambda: download_newer_releases(__version__))
     """
     loop = asyncio.get_event_loop()
+    log.info("download_newer_releases: current=%s, fetching list...",
+             current_version)
     write_status({"step": "fetching-release-list"})
     releases = await loop.run_in_executor(None, fetch_github_releases)
     current = parse_version(current_version)
-    newly_downloaded: list[str] = []
     stored_versions = {v["version"] for v in list_stored_versions()}
+    log.info("download_newer_releases: %d already on disk: %s",
+             len(stored_versions), sorted(stored_versions))
+
+    newly_downloaded: list[str] = []
     for rel in releases:
-        if parse_version(rel["version"]) <= current:
+        ver = rel["version"]
+        if parse_version(ver) <= current:
+            log.info("  v%s: skipping (not newer than current v%s)",
+                     ver, current_version)
             continue
-        if rel["version"] in stored_versions:
+        if ver in stored_versions:
+            log.info("  v%s: skipping (already on disk)", ver)
             continue
-        dest = UPDATES_DIR / f"raspimidihub_{rel['version']}-1_all.deb"
-        write_status({"step": "downloading", "version": rel["version"]})
+        log.info("  v%s: downloading", ver)
+        dest = UPDATES_DIR / f"raspimidihub_{ver}-1_all.deb"
+        write_status({"step": "downloading", "version": ver})
         ok, err = await loop.run_in_executor(
             None, download_release, rel["deb_url"], dest, rel["changelog"])
         if not ok:
+            log.warning("  v%s: download failed: %s", ver, err)
             write_status({"step": "error-download",
-                          "version": rel["version"],
+                          "version": ver,
                           "message": f"Download failed: {err}"})
             continue
-        newly_downloaded.append(rel["version"])
+        newly_downloaded.append(ver)
+
+    pruned = prune_stored()
+    log.info("download_newer_releases: result newly_downloaded=%s pruned=%s",
+             newly_downloaded, pruned)
     return {
         "newly_downloaded": newly_downloaded,
-        "pruned": prune_stored(),
+        "pruned": pruned,
     }
