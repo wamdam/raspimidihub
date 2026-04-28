@@ -63,6 +63,13 @@ function NetworkCard({ iface, showToast }) {
 // red when they're failing (e.g. AP outage with the user's phone on
 // a different WiFi). When polling stops, the dot stops with it, so
 // the user can tell at a glance whether anything's happening.
+//
+// Implementation note: all five dots use the same background colour;
+// only opacity varies (active = 1, inactive = 0.2). Earlier we did
+// this by swapping background between the bright colour and a dim
+// surface colour, which mis-rendered on subsequent cycles — the
+// active dot looked half-faded after the first lap. Animating only
+// opacity sidesteps that whole class of background-transition glitch.
 const POLL_DOT_COUNT = 5;
 function PollIndicator({ tick, ok }) {
     const active = tick % POLL_DOT_COUNT;
@@ -74,7 +81,7 @@ function PollIndicator({ tick, ok }) {
             style="display:flex;justify-content:center;gap:6px;margin-top:6px;height:8px;align-items:center"
             data-poll-tick=${tick}>
             ${[...Array(POLL_DOT_COUNT)].map((_, i) => html`
-                <span style="width:6px;height:6px;border-radius:50%;background:${i === active ? colour : 'var(--surface2)'};transition:background 200ms"></span>
+                <span style="width:6px;height:6px;border-radius:50%;background:${colour};opacity:${i === active ? 1 : 0.2};transition:opacity 200ms ease-out"></span>
             `)}
         </div>
     `;
