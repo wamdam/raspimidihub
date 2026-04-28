@@ -85,20 +85,44 @@ function VersionsCard({ showToast, onUpdatingChange }) {
     // Watch the orchestrator's status file while a check or install
     // runs. The orchestrator runs as a backgrounded asyncio task on
     // the server; the AP may go down mid-flow when we switch to WiFi
-    // client mode. So poll fetches that fail (TypeError on phones
-    // when the AP drops) are silently absorbed — we just keep polling
-    // until the AP is back and a status read succeeds.
+    // client mode. Poll fetches that fail (TypeError on phones when
+    // the AP drops) are silently absorbed in the short term — but if
+    // they keep failing past STALL_TIMEOUT_MS, the user's phone has
+    // probably auto-reconnected to a different saved network and won't
+    // come back to the Pi's AP on its own. Surface a help message
+    // telling them to reconnect + reload.
     //
     // For an install we also detect the running-version flip, which
     // is the unambiguous "the new deb is live" signal.
+    const STALL_TIMEOUT_MS = 90_000;
     const pollStatus = (until, startVersion) => {
+        let lastSuccessAt = Date.now();  // kickoff just succeeded
+        let stalled = false;
         const id = setInterval(async () => {
             let s = null;
             try {
                 const resp = await fetch('/api/system/update-status');
                 s = await resp.json();
+                lastSuccessAt = Date.now();
+                if (stalled) {
+                    stalled = false;
+                    setStatusErr('');
+                }
             } catch (e) {
-                // AP outage — just keep polling.
+                // Silently keep polling — but if it's been long enough
+                // that the phone has clearly given up on the AP, swap
+                // to a help message. We don't clearInterval; once the
+                // user reconnects, polling resumes and the real status
+                // (most likely 'done') replaces this.
+                if (!stalled && Date.now() - lastSuccessAt > STALL_TIMEOUT_MS) {
+                    stalled = true;
+                    setStatusErr(
+                        "Can't reach the Pi. The update probably finished, " +
+                        "but your phone reconnected to a different WiFi " +
+                        "network. Reconnect to the Pi's AP " +
+                        "(RaspiMIDIHub-…) and reload this page.");
+                    setStatusMsg('');
+                }
                 return;
             }
             if (!s || !s.status) return;
