@@ -1033,14 +1033,18 @@ body {
  * starts over from frame 0 without needing JS-side trigger.
  */
 @keyframes dropbtn-ring-pulse {
+    /* Both keyframes preserve the centering translate(-50%,-50%) from
+     * .dropbtn-ring's static rule — overriding `transform` would clobber
+     * it and the SVG would drift bottom-right (its top-left anchored at
+     * the button's centre with no compensating shift back). */
     0% {
-        transform: scale(1.10);
+        transform: translate(-50%, -50%) scale(1.10);
         filter: drop-shadow(0 0 6px rgba(255,220,170,1.00))
                 drop-shadow(0 0 14px rgba(255,180,100,0.85))
                 drop-shadow(0 0 22px rgba(255,140,60,0.45));
     }
     100% {
-        transform: scale(1.00);
+        transform: translate(-50%, -50%) scale(1.00);
         filter: drop-shadow(0 0 3px rgba(255,200,140,0.55))
                 drop-shadow(0 0 6px rgba(255,160,80,0.25));
     }
