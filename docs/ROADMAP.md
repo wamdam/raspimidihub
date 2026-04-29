@@ -1742,21 +1742,34 @@ Open follow-ups (parked, not blocking):
   connections/` so ethernet-with-internet works reliably from cold
   boot.
 
-### Phase 6 — Workflow (≈ 1 sprint)
+### Phase 6 — Workflow (DONE 2026-04-28)
 
-Quality-of-life, not blocking anything live.
+Shared `<ContextMenu>` popover at App level, triggered via
+`useTapMenu` from any matrix cell, plugin/hardware header, or
+mapping row. Single-slot client clipboard (kind = connection /
+plugin / mapping).
 
-1. **Matrix context menu** (§3). Long-press / right-click popover
-   on cells, headers, **mapping rows** (with single-tap = Edit
-   shortcut). Removes the inline Edit/Delete buttons on mapping
-   rows; adds the `[ + Paste Mapping ]` button next to `[ + Add
-   Mapping ]`.
-2. **Connection clipboard**. Copy filter + mappings; paste onto
-   another connection.
-3. **Plugin clipboard**. Paste-as-new + paste-over-instance.
-4. **Mapping clipboard**. Append-as-is when free; bump-on-conflict
-   with a forward search through the destination field's range
-   (semantics from §3).
+Refinements over the original sketch:
+- The "single-tap = Edit shortcut, long-press opens menu" dual
+  mode that the spec called for turned out to feel sluggish on a
+  phone (500 ms long-press delay) and let stray taps toggle
+  connections by accident. Replaced with **single tap opens menu
+  everywhere** — every action lives in the menu, no more dual
+  mode. Cell menu just adds "Add connection" / "Remove" items at
+  the top to take over from the old tap-toggles.
+- Mapping paste with bump-on-conflict iterates the destination
+  field forward 0..127 (CC) or 0..15 (channel). Server's dup-
+  detection error (`...already exists`) marks the retry signal.
+  Other errors (pointless mapping, invalid shape) abort the loop
+  immediately since bumping wouldn't help.
+- Connection paste replaces, doesn't merge — wipes the target's
+  mappings before applying the source. Roadmap §3 open question
+  #1 resolved towards "what the user sees on the source".
+- Plugin paste-as-new doesn't copy the name (so two clones don't
+  collide). Cross-type paste isn't a thing because the menu only
+  enables Paste-as-new on plugin headers AND only when the
+  clipboard holds `kind: "plugin"` (any plugin type works as
+  source — you create a fresh instance of *that* type).
 
 ### Phase 7 — Modulator (≈ 0.5–1 sprint)
 
