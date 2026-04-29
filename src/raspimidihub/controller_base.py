@@ -106,9 +106,14 @@ class ControllerBase(PluginBase):
             for i in range(self.DROP_BUTTON_COUNT)
         }
         # Controller-wide schedule reference. None when nothing is
-        # pending; otherwise dict {button_id, set_at_tick, fire_at_tick,
-        # progress: 0..1}. Only one entry can exist at a time —
-        # scheduling on any button cancels the previous.
+        # pending; otherwise `{fade: <slot>|None, hard: <slot>|None}`
+        # where each slot is `{button_id, set_at_tick, fire_at_tick,
+        # cycle_start_tick, every_n_bars, progress, synced}`. Two slots
+        # so a fade-mode button can run alongside a hard-drop button —
+        # if the hard slot fires, any in-flight fade is cancelled
+        # (drop wins over a pending fade). Pressing the same button
+        # again cancels its slot. Pressing another button that maps to
+        # the same slot replaces the slot's contents.
         self._param_values["drop_schedule"] = None
         # Action signal sent FROM the UI to the server: {action, button_id}.
         # Reset to {"action": "idle"} after handling.
@@ -366,13 +371,32 @@ class ControllerBase(PluginBase):
             states[sid] = "captured"
             self.set_param("drop_states", states)
 
+    def _schedule_slots(self) -> dict:
+        """Read drop_schedule as a {fade, hard} dict, normalising the
+        None-when-empty wire form so callers can always do `slots[k]`."""
+        s = self._param_values.get("drop_schedule")
+        if not s:
+            return {"fade": None, "hard": None}
+        return {"fade": s.get("fade"), "hard": s.get("hard")}
+
+    def _write_schedule(self, slots: dict) -> None:
+        """Persist {fade, hard} slots, collapsing to None when both empty."""
+        if slots["fade"] is None and slots["hard"] is None:
+            self.set_param("drop_schedule", None)
+        else:
+            self.set_param("drop_schedule",
+                           {"fade": slots["fade"], "hard": slots["hard"]})
+
     def _fire_drop(self, sid: str) -> None:
         """Press semantics:
-        - if THIS button is currently scheduled, treat as cancel.
+        - if THIS button is currently scheduled (in either slot), cancel.
         - else, the button's mode decides:
           - immediately: fire now.
-          - bar / 4bar: cancel any other scheduled drop, schedule
-            this one at the next bar / 4-bar boundary.
+          - bar / 4bar: schedule into our slot. Slot is `fade` if the
+            button has fade=True, else `hard`. The OTHER slot keeps
+            running so a fade and a hard drop can be in flight at once.
+            If our slot is already occupied by a different button, that
+            other button is bumped back to captured.
         - empty (no snapshot): no-op.
         """
         states = dict(self._param_values.get("drop_states") or {})
@@ -411,6 +435,7 @@ class ControllerBase(PluginBase):
 
         sync = bool((self._param_values.get("drop_sync") or {}).get(sid, True))
         fade = bool((self._param_values.get("drop_fade") or {}).get(sid, False))
+        slot_key = "fade" if fade else "hard"
 
         if sync:
             # Quantize to the next bar boundary on the musical grid
@@ -433,10 +458,12 @@ class ControllerBase(PluginBase):
             fire_at_tick = now_tick + cycle_total
             cycle_start_tick = now_tick
 
-        # Cancel any other scheduled drop FIRST — only one schedule per controller.
-        sched = self._param_values.get("drop_schedule")
-        if sched and sched.get("button_id") != int(sid):
-            other_sid = str(sched["button_id"])
+        # Bump anything already in OUR slot. The other slot is left
+        # alone — fade and hard run side by side.
+        slots = self._schedule_slots()
+        bumped = slots[slot_key]
+        if bumped:
+            other_sid = str(bumped["button_id"])
             states[other_sid] = "captured" if (
                 self._param_values.get("drop_snapshots") or {}).get(other_sid) else "idle"
             self._drop_fade_start.pop(other_sid, None)
@@ -461,7 +488,7 @@ class ControllerBase(PluginBase):
             self._drop_fade_last_emit.pop(sid, None)
 
         progress = round((now_tick - cycle_start_tick) / max(1, cycle_total), 2)
-        self.set_param("drop_schedule", {
+        slots[slot_key] = {
             "button_id": int(sid),
             "set_at_tick": now_tick,
             "fire_at_tick": fire_at_tick,
@@ -469,14 +496,20 @@ class ControllerBase(PluginBase):
             "every_n_bars": every_n_bars,
             "progress": progress,
             "synced": sync,
-            "fade": fade,
-        })
+        }
+        self._write_schedule(slots)
 
     def _cancel_drop(self, sid: str) -> None:
-        sched = self._param_values.get("drop_schedule")
-        if not sched or sched.get("button_id") != int(sid):
+        slots = self._schedule_slots()
+        bid = int(sid)
+        touched = False
+        for k in ("fade", "hard"):
+            if slots[k] and slots[k].get("button_id") == bid:
+                slots[k] = None
+                touched = True
+        if not touched:
             return
-        self.set_param("drop_schedule", None)
+        self._write_schedule(slots)
         states = dict(self._param_values.get("drop_states") or {})
         snaps = self._param_values.get("drop_snapshots") or {}
         states[sid] = "captured" if snaps.get(sid) else "idle"
@@ -520,26 +553,54 @@ class ControllerBase(PluginBase):
     clock_divisions = ["1/16"]
 
     def on_tick(self, division: str) -> None:
-        """Drive the scheduled-drop countdown. Also lets subclasses
-        hook other divisions if they override."""
+        """Drive the scheduled-drop countdown for both slots. Also lets
+        subclasses hook other divisions if they override."""
         if division != "1/16":
             return
-        sched = self._param_values.get("drop_schedule")
-        if not sched:
+        slots = self._schedule_slots()
+        if slots["fade"] is None and slots["hard"] is None:
             return
         bus = self._plugin_clock_bus()
         if bus is None:
             return
         now_tick = bus._tick_count
-        set_at = sched.get("set_at_tick", now_tick)
-        fire_at = sched.get("fire_at_tick", now_tick)
-        sid = str(sched.get("button_id"))
+
+        # Step the hard slot first. If it fires this tick, any in-flight
+        # fade slot is cancelled — the hard drop wins over a pending
+        # fade (per design: pressing a hard drop after a fade should
+        # cut the fade short and snap to the hard target).
+        new_hard, hard_fired = self._tick_slot(slots["hard"], now_tick, fade=False)
+        new_fade = slots["fade"]
+        if hard_fired and new_fade is not None:
+            fade_sid = str(new_fade["button_id"])
+            self._drop_fade_start.pop(fade_sid, None)
+            self._drop_fade_last_emit.pop(fade_sid, None)
+            st = dict(self._param_values.get("drop_states") or {})
+            snaps = self._param_values.get("drop_snapshots") or {}
+            st[fade_sid] = "captured" if snaps.get(fade_sid) else "idle"
+            self.set_param("drop_states", st)
+            new_fade = None
+        else:
+            new_fade, _ = self._tick_slot(new_fade, now_tick, fade=True)
+
+        before = (slots["fade"], slots["hard"])
+        after = (new_fade, new_hard)
+        if before != after:
+            self._write_schedule({"fade": new_fade, "hard": new_hard})
+
+    def _tick_slot(self, slot: dict | None, now_tick: int, *, fade: bool):
+        """Advance one slot. Returns `(new_slot_or_None, fired_bool)`.
+        `fade=True` means run the fade lerp on each step."""
+        if slot is None:
+            return None, False
+        set_at = slot.get("set_at_tick", now_tick)
+        fire_at = slot.get("fire_at_tick", now_tick)
+        sid = str(slot.get("button_id"))
 
         if now_tick >= fire_at:
-            # Fire it. _apply_snapshot lands the exact target values
-            # (covers both hard-drop and the final landing of a fade).
+            # _apply_snapshot lands the exact target values (covers
+            # both hard-drop and the final landing of a fade).
             snap = (self._param_values.get("drop_snapshots") or {}).get(sid)
-            self.set_param("drop_schedule", None)
             self._drop_fade_start.pop(sid, None)
             self._drop_fade_last_emit.pop(sid, None)
             states = dict(self._param_values.get("drop_states") or {})
@@ -549,26 +610,25 @@ class ControllerBase(PluginBase):
             self.set_param("drop_states", states)
             states[sid] = "captured" if snap else "idle"
             self.set_param("drop_states", states)
-            return
+            return None, True
 
         total = max(1, fire_at - set_at)
         prog = max(0.0, min(1.0, (now_tick - set_at) / total))
 
-        # Fade interpolation runs every 1/16 boundary while a faded
-        # drop is scheduled. For each continuous cell we lerp current
+        # Fade interpolation runs every 1/16 boundary while the fade
+        # slot is active. For each continuous cell we lerp current
         # value from start → snapshot proportional to progress, and
         # emit a CC only when the integer value has crossed since last
         # emit — keeps fade traffic bounded (one CC per integer step
         # per cell, so a 0→127 fade is 127 emits regardless of fade
         # duration). Buttons (on/off) and XY pads stay discrete and
         # land at fire_at via _apply_snapshot.
-        if sched.get("fade"):
+        if fade:
             self._step_fade(sid, prog)
 
-        new_sched = dict(sched)
-        new_sched["progress"] = round(prog, 2)
-        if new_sched != sched:
-            self.set_param("drop_schedule", new_sched)
+        new_slot = dict(slot)
+        new_slot["progress"] = round(prog, 2)
+        return new_slot, False
 
     def _step_fade(self, sid: str, progress: float) -> None:
         """Interpolate continuous cells toward the snapshot. Called from

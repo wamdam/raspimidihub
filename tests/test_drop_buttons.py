@@ -82,24 +82,30 @@ def _new(bus=None):
 
 
 # --- Schedule shape ----------------------------------------------------------
+#
+# drop_schedule is `{fade: <slot>|None, hard: <slot>|None}` (or None when both
+# are empty). Each slot carries the {button_id, set_at_tick, fire_at_tick,
+# cycle_start_tick, every_n_bars, progress, synced} payload. A button's slot
+# identity is decided by its `drop_fade` flag at press time.
 
 class TestFireDropSyncMode:
     def test_synced_quantizes_to_next_4bar_grid(self):
         # Press at tick 281 (= bar 2 + 89 ticks, with tpb=96). Mode 4bar.
         # Next 4-bar grid line is bar 4 = tick 384. So fire_at=384,
-        # cycle_start=384-384=0, set_at=281.
+        # cycle_start=384-384=0, set_at=281. Hard slot (fade=False default).
         p = _new(_FakeBus(tick=281))
         p._param_values["drop_modes"]["1"] = "4bar"
         p._param_values["drop_snapshots"]["1"] = {"f1": 64}
         p._fire_drop("1")
         sched = p._param_values["drop_schedule"]
-        assert sched["button_id"] == 1
-        assert sched["set_at_tick"] == 281
-        assert sched["fire_at_tick"] == 384
-        assert sched["cycle_start_tick"] == 0
-        assert sched["every_n_bars"] == 4
-        assert sched["synced"] is True
-        assert sched["fade"] is False
+        assert sched["fade"] is None
+        slot = sched["hard"]
+        assert slot["button_id"] == 1
+        assert slot["set_at_tick"] == 281
+        assert slot["fire_at_tick"] == 384
+        assert slot["cycle_start_tick"] == 0
+        assert slot["every_n_bars"] == 4
+        assert slot["synced"] is True
 
     def test_synced_pressed_on_grid_fires_at_next_grid(self):
         # Press exactly on a 4-bar grid line — fire goes to the NEXT one,
@@ -108,9 +114,9 @@ class TestFireDropSyncMode:
         p._param_values["drop_modes"]["0"] = "4bar"
         p._param_values["drop_snapshots"]["0"] = {"f1": 100}
         p._fire_drop("0")
-        sched = p._param_values["drop_schedule"]
-        assert sched["fire_at_tick"] == 768   # bar 8
-        assert sched["cycle_start_tick"] == 384
+        slot = p._param_values["drop_schedule"]["hard"]
+        assert slot["fire_at_tick"] == 768   # bar 8
+        assert slot["cycle_start_tick"] == 384
 
 
 class TestFireDropFreeMode:
@@ -121,12 +127,12 @@ class TestFireDropFreeMode:
         p._param_values["drop_sync"]["2"] = False
         p._param_values["drop_snapshots"]["2"] = {"f1": 50}
         p._fire_drop("2")
-        sched = p._param_values["drop_schedule"]
-        assert sched["set_at_tick"] == 200
-        assert sched["fire_at_tick"] == 200 + 2 * 96  # = 392
-        assert sched["cycle_start_tick"] == 200       # fresh countdown
-        assert sched["every_n_bars"] == 2
-        assert sched["synced"] is False
+        slot = p._param_values["drop_schedule"]["hard"]
+        assert slot["set_at_tick"] == 200
+        assert slot["fire_at_tick"] == 200 + 2 * 96  # = 392
+        assert slot["cycle_start_tick"] == 200       # fresh countdown
+        assert slot["every_n_bars"] == 2
+        assert slot["synced"] is False
 
     def test_free_progress_starts_at_zero(self):
         p = _new(_FakeBus(tick=200))
@@ -136,7 +142,7 @@ class TestFireDropFreeMode:
         p._fire_drop("0")
         # Synced mode would jump in at the cycle's mid-point progress;
         # free mode always starts at 0.
-        assert p._param_values["drop_schedule"]["progress"] == 0.0
+        assert p._param_values["drop_schedule"]["hard"]["progress"] == 0.0
 
 
 # --- Fade interpolation ------------------------------------------------------
@@ -230,7 +236,7 @@ class TestNoteTrigger:
         p._param_values["drop_snapshots"]["1"] = {"f1": 99}
         p.on_note_on(5, 60, 80)
         assert p._param_values["drop_states"]["1"] == "scheduled"
-        assert p._param_values["drop_schedule"]["button_id"] == 1
+        assert p._param_values["drop_schedule"]["hard"]["button_id"] == 1
 
     def test_note_with_no_match_does_nothing(self):
         p = _new()
@@ -256,3 +262,121 @@ class TestNoteTrigger:
         p._param_values["drop_snapshots"]["0"] = {"f1": 50}
         p.on_note_on(0, 60, 0)
         assert p._param_values["drop_schedule"] is None
+
+
+# --- Dual-slot scheduling ---------------------------------------------------
+#
+# A fade-mode button schedules into the `fade` slot; a non-fade ("hard") button
+# schedules into the `hard` slot. Both slots can be active simultaneously.
+# Pressing the same button cancels its slot. Pressing another button targeting
+# the same slot replaces that slot's contents (other slot untouched). When the
+# hard slot fires, any in-flight fade slot is cancelled (drop wins over fade).
+
+class TestDualSlotScheduling:
+    def test_fade_and_hard_run_side_by_side(self):
+        # Press fade-button 0, then hard-button 1. Both are scheduled.
+        p = _new(_FakeBus(tick=0))
+        p._param_values["drop_modes"] = {"0": "bar", "1": "bar", "2": "bar", "3": "bar"}
+        p._param_values["drop_fade"] = {"0": True, "1": False, "2": False, "3": False}
+        p._param_values["drop_snapshots"]["0"] = {"f1": 80}
+        p._param_values["drop_snapshots"]["1"] = {"f2": 30}
+        p._fire_drop("0")
+        p._fire_drop("1")
+        sched = p._param_values["drop_schedule"]
+        assert sched["fade"]["button_id"] == 0
+        assert sched["hard"]["button_id"] == 1
+        assert p._param_values["drop_states"]["0"] == "scheduled"
+        assert p._param_values["drop_states"]["1"] == "scheduled"
+
+    def test_hard_press_replaces_hard_slot_keeps_fade(self):
+        # Two hard-mode buttons can't coexist; the second press evicts
+        # the first. The fade slot is untouched.
+        p = _new(_FakeBus(tick=0))
+        p._param_values["drop_modes"] = {"0": "bar", "1": "bar", "2": "bar", "3": "bar"}
+        p._param_values["drop_fade"] = {"0": True, "1": False, "2": False, "3": False}
+        p._param_values["drop_snapshots"]["0"] = {"f1": 80}
+        p._param_values["drop_snapshots"]["1"] = {"f1": 60}
+        p._param_values["drop_snapshots"]["2"] = {"f1": 40}
+        p._fire_drop("0")  # fade slot
+        p._fire_drop("1")  # hard slot
+        p._fire_drop("2")  # hard slot — evicts 1
+        sched = p._param_values["drop_schedule"]
+        assert sched["fade"]["button_id"] == 0
+        assert sched["hard"]["button_id"] == 2
+        assert p._param_values["drop_states"]["1"] == "captured"
+        assert p._param_values["drop_states"]["2"] == "scheduled"
+
+    def test_same_button_press_cancels_its_slot_only(self):
+        # Pressing the same fade button while it's scheduled cancels
+        # the fade slot, leaving the hard slot untouched.
+        p = _new(_FakeBus(tick=0))
+        p._param_values["drop_modes"] = {"0": "bar", "1": "bar", "2": "bar", "3": "bar"}
+        p._param_values["drop_fade"] = {"0": True, "1": False, "2": False, "3": False}
+        p._param_values["drop_snapshots"]["0"] = {"f1": 80}
+        p._param_values["drop_snapshots"]["1"] = {"f2": 30}
+        p._fire_drop("0")
+        p._fire_drop("1")
+        p._fire_drop("0")  # same button → cancel fade
+        sched = p._param_values["drop_schedule"]
+        assert sched["fade"] is None
+        assert sched["hard"]["button_id"] == 1
+        assert p._param_values["drop_states"]["0"] == "captured"
+        assert p._param_values["drop_states"]["1"] == "scheduled"
+
+    def test_cancelling_last_slot_collapses_schedule_to_none(self):
+        # Wire shape: when both slots empty, drop_schedule is None.
+        p = _new(_FakeBus(tick=0))
+        p._param_values["drop_modes"]["0"] = "bar"
+        p._param_values["drop_snapshots"]["0"] = {"f1": 50}
+        p._fire_drop("0")
+        p._cancel_drop("0")
+        assert p._param_values["drop_schedule"] is None
+
+
+class TestHardFireCancelsFade:
+    def test_hard_slot_fire_cancels_pending_fade(self):
+        # Fade slot scheduled at fire_at=192 (2 bars), hard slot at
+        # fire_at=96 (1 bar). At tick 96 the hard slot fires; the fade
+        # slot should be wiped, and its button bumped back to captured.
+        p = _new(_FakeBus(tick=0))
+        p._param_values["drop_modes"] = {"0": "2bar", "1": "bar", "2": "bar", "3": "bar"}
+        p._param_values["drop_fade"] = {"0": True, "1": False, "2": False, "3": False}
+        p._param_values["drop_sync"] = {"0": False, "1": False, "2": False, "3": False}
+        p._param_values["drop_snapshots"]["0"] = {"f1": 80}
+        p._param_values["drop_snapshots"]["1"] = {"f1": 30}
+        p._param_values["f1"] = 0
+        p._fire_drop("0")
+        p._fire_drop("1")
+        # Advance time to just past the hard fire boundary.
+        p._clock_bus._tick_count = 96
+        p.on_tick("1/16")
+        sched = p._param_values["drop_schedule"]
+        # Hard fired → its slot cleared; fade also cancelled → schedule None.
+        assert sched is None
+        assert p._param_values["drop_states"]["0"] == "captured"  # fade evicted
+        assert p._param_values["drop_states"]["1"] == "captured"  # hard fired
+        # Hard's snapshot landed on f1.
+        assert p._param_values["f1"] == 30
+        # Fade interpolation was torn down.
+        assert "0" not in p._drop_fade_start
+        assert "0" not in p._drop_fade_last_emit
+
+    def test_fade_slot_fire_does_not_touch_hard_slot(self):
+        # Inverse of the above: fade fires first, hard keeps running.
+        p = _new(_FakeBus(tick=0))
+        p._param_values["drop_modes"] = {"0": "bar", "1": "2bar", "2": "bar", "3": "bar"}
+        p._param_values["drop_fade"] = {"0": True, "1": False, "2": False, "3": False}
+        p._param_values["drop_sync"] = {"0": False, "1": False, "2": False, "3": False}
+        p._param_values["drop_snapshots"]["0"] = {"f1": 80}
+        p._param_values["drop_snapshots"]["1"] = {"f2": 30}
+        p._param_values["f1"] = 0
+        p._param_values["f2"] = 0
+        p._fire_drop("0")  # fade fires at tick 96
+        p._fire_drop("1")  # hard fires at tick 192
+        p._clock_bus._tick_count = 96
+        p.on_tick("1/16")
+        sched = p._param_values["drop_schedule"]
+        assert sched["fade"] is None
+        assert sched["hard"]["button_id"] == 1
+        assert p._param_values["f1"] == 80         # fade landed
+        assert p._param_values["f2"] == 0          # hard not yet fired

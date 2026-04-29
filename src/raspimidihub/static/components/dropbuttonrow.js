@@ -16,8 +16,15 @@
  *   • drop_states[id]    : 'idle'|'captured'|'scheduled'|'firing'
  *   • drop_labels[id]    : display name (default A/B/C/D)
  *   • drop_modes[id]     : 'immediately'|'bar'|'4bar'
- *   • drop_schedule      : {button_id, set_at_tick, fire_at_tick,
- *                           progress: 0..1} or null
+ *   • drop_schedule      : {fade, hard} where each slot is either null
+ *                           or {button_id, set_at_tick, fire_at_tick,
+ *                           cycle_start_tick, every_n_bars, progress,
+ *                           synced}. Wire form is `null` when both
+ *                           slots are empty. A button lives in the
+ *                           `fade` slot iff its drop_fade flag was true
+ *                           when it was scheduled, else `hard`. Both
+ *                           slots run independently; a hard fire also
+ *                           cancels any in-flight fade.
  *
  * The schema param exposes the names of those siblings so this
  * component can resolve them generically.
@@ -184,14 +191,24 @@ export function PluginDropButtonRow({ param, values, onChange, displayCtx }) {
         </div>`;
     }
 
-    // Play branch — the row of 4 quarter-width buttons.
+    // Play branch — the row of 4 quarter-width buttons. drop_schedule
+    // is either null or {fade, hard}. A button can live in at most one
+    // slot at a time (its slot is decided by its drop_fade flag at
+    // press time), so the lookup picks whichever slot, if any, has
+    // this button's id.
+    const fadeSlot = schedule && schedule.fade;
+    const hardSlot = schedule && schedule.hard;
     return html`<div class="droprow">
         ${Array.from({ length: count }, (_, i) => {
             const sid = String(i);
             const state = states[sid] || 'idle';
             const label = labels[sid] || String.fromCharCode(65 + i);
             const mode = modes[sid] || 'immediately';
-            const isScheduled = schedule && Number(schedule.button_id) === i;
+            const mySlot = (fadeSlot && Number(fadeSlot.button_id) === i)
+                ? fadeSlot
+                : (hardSlot && Number(hardSlot.button_id) === i)
+                    ? hardSlot
+                    : null;
             const syncOn = sync[sid] !== false;  // default true
             const fadeOn = !!fade[sid];
             return html`<${DropButton}
@@ -202,7 +219,7 @@ export function PluginDropButtonRow({ param, values, onChange, displayCtx }) {
                 mode=${mode}
                 synced=${syncOn}
                 fade=${fadeOn}
-                schedule=${isScheduled ? schedule : null}
+                schedule=${mySlot}
                 clockPosition=${clockPosition}
                 onChange=${onChange}
                 paramName=${param.name} />`;
