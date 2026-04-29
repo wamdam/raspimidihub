@@ -46,12 +46,23 @@ const clamp01 = (v) => v < 0 ? 0 : (v > 1 ? 1 : v);
 // computed from the last received interval, so the displayed tick
 // matches the audible beat wall-time. Returns null if no clock has
 // been seen yet.
+//
+// Cap the projection at one quarter beat (24 ticks). Real SSE
+// arrives every quarter; if the next event hasn't shown up within
+// that window, the connection is stalled — better to freeze the
+// ring than to extrapolate further and produce wrong-direction
+// jumps when the next event finally lands. Without this cap a
+// network stall + flush burst (or a tab that briefly backgrounded)
+// drove the drop-button rings into a "fills many times per second"
+// runaway visible to the user.
+const MAX_DEAD_RECKON_TICKS = 24;
 function liveTickEstimate(cp) {
     if (!cp || cp.tick == null) return null;
     if (!cp.running) return cp.tick;          // transport stopped — freeze
     if (!cp.ms_per_tick) return cp.tick;      // first event, no tempo yet
     const elapsed = Date.now() - cp.received_at;
-    return cp.tick + Math.floor(elapsed / cp.ms_per_tick);
+    const projected = Math.floor(elapsed / cp.ms_per_tick);
+    return cp.tick + Math.min(projected, MAX_DEAD_RECKON_TICKS);
 }
 
 export function PluginDropButtonRow({ param, values, onChange, displayCtx }) {

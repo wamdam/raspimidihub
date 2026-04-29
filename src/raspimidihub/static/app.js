@@ -207,7 +207,28 @@ function App() {
                         && data.tick > prev.tick && now > prev.received_at) {
                     const dt = now - prev.received_at;
                     const dticks = data.tick - prev.tick;
-                    ms_per_tick = dt / dticks;
+                    const measured = dt / dticks;
+                    // Skip implausibly small intervals — TCP delivering
+                    // buffered SSE events back-to-back (after a brief
+                    // network stall, or a tab resuming) clumps them at
+                    // < 1 ms apart, which collapses ms_per_tick toward
+                    // zero and makes the drop-button dead-reckoning
+                    // extrapolate liveTick wildly. 5 ms/tick is ~480
+                    // BPM at 24 PPQN — well past any real music.
+                    if (measured >= 5) {
+                        // EWMA: one jittery interval (e.g., one event
+                        // 200 ms late, next on time) only nudges
+                        // ms_per_tick partway toward the spurious
+                        // value, so the dead-reckoning stays stable.
+                        // Sustained tempo changes still propagate over
+                        // a handful of events. Without this, valid-
+                        // looking but jittery measurements made the
+                        // ring "tick 2-3 times fast" between freezes
+                        // when SSE delivery wasn't perfectly even.
+                        ms_per_tick = ms_per_tick != null
+                            ? 0.75 * ms_per_tick + 0.25 * measured
+                            : measured;
+                    }
                 }
                 return {
                     tick: data.tick,
