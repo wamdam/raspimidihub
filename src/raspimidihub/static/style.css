@@ -1096,10 +1096,6 @@ body {
     border: 1px solid rgba(255,170,90,0.18);
     border-radius: 6px;
 }
-.dropbtn-edit.loaded {
-    border-color: rgba(255,170,90,0.55);
-    background: rgba(255,170,90,0.10);
-}
 .dropbtn-edit-row {
     display: flex; flex-direction: row; align-items: center; gap: 8px;
 }
@@ -1127,74 +1123,33 @@ body {
     border-color: var(--accent);
     background: rgba(0,0,0,0.5);
 }
-.dropbtn-edit-state {
-    flex: 0 0 auto;
-    font-size: 11px;
-    color: var(--text-dim);
-}
-.dropbtn-edit-fieldlabel {
-    flex: 0 0 auto;
-    font-size: 11px;
-    color: var(--text-dim);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    min-width: 56px;
-}
-.dropbtn-edit-wheel {
-    flex: 1 1 auto;
-    /* Wheel needs explicit width to size; bound it so it shares
-     * the row with the Clear button cleanly. */
-    max-width: 180px;
-}
-.dropbtn-edit-clear {
-    flex: 0 0 auto;
-    margin-left: auto;
-    height: 30px;
-    padding: 0 12px;
-    background: rgba(0,0,0,0.3);
-    border: 1px solid rgba(255,170,90,0.30);
-    border-radius: 3px;
-    color: rgba(255,200,140,0.85);
-    font-size: 12px;
-    cursor: pointer;
-}
-.dropbtn-edit-clear:hover {
-    background: rgba(0,0,0,0.45);
-    border-color: rgba(255,170,90,0.55);
-}
-.dropbtn-edit-toggle {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 12px;
-    color: var(--text-dim);
-    cursor: pointer;
-    user-select: none;
-}
-.dropbtn-edit-toggle input[type="checkbox"] {
-    margin: 0;
-    cursor: pointer;
-}
-.dropbtn-edit-firerow {
-    /* Pack Fire wheel + Note wheel side-by-side. flex-start aligns
-     * both wheel-containers at the top of the row so the wheels
-     * themselves are at the same height; the Learn pill of the note
-     * wheel hangs below without pushing the wheel up. */
+.dropbtn-edit-controls {
+    /* All four configurables (Fire wheel, Trigger Note wheel, Sync
+     * rubber-toggle, Fade rubber-toggle) share one row. flex-start
+     * aligns the wheel-containers and rubber buttons at the top so
+     * the wheels themselves and the rubber buttons line up cleanly
+     * — the Note wheel's Learn pill hangs below without pushing
+     * anything up. flex-wrap keeps the layout tidy on narrow phones
+     * if the row can't fit. */
     align-items: flex-start;
-    gap: 16px;
+    flex-wrap: wrap;
+    gap: 12px;
     min-height: 56px;
 }
-.dropbtn-edit-firerow .wheel-group {
-    /* Constrain each wheel column to the wheel-container's width so
-     * the Learn pill (width:100% of its column) stays the same width
-     * as the wheel rather than stretching to the row's free space. */
+.dropbtn-edit-controls .wheel-group {
+    /* Each wheel column is exactly the wheel-container's width so the
+     * Learn pill (width:100% of its column) doesn't grow to fill the
+     * row's free space. */
     width: 80px;
     flex: 0 0 80px;
 }
-.dropbtn-edit-flagsrow {
-    /* Sync + Fade rubber buttons in a separate row below the wheels. */
-    gap: 16px;
-    align-items: flex-start;
+.dropbtn-edit-controls .btn-group-param {
+    /* Match the wheels' fixed-column treatment so the row reads as
+     * four equally-weighted controls. */
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
 }
 
 /* XYPad */

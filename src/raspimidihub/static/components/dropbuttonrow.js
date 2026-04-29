@@ -104,18 +104,19 @@ export function PluginDropButtonRow({ param, values, onChange, displayCtx }) {
         return () => cancelAnimationFrame(rafId);
     }, [playOnly, transportRunning]);
 
-    // Config branch — one card per button with a name input + mode
-    // wheel + capture / clear hint. Lives in the device-detail panel
-    // (Routing tab → tap the controller).
+    // Config branch — one card per button. Header row (tag + name)
+    // followed by a single row holding all four configurables: Fire
+    // wheel, Trigger Note wheel, Sync rubber-toggle, Fade rubber-toggle.
+    // Lives in the device-detail panel (Routing tab → tap the
+    // controller). Cards intentionally don't reflect runtime state
+    // (loaded / scheduled / firing) — config is about what the button
+    // does when pressed, not what it's currently doing.
     if (!playOnly) {
         return html`<div class="droprow-config">
             ${Array.from({ length: count }, (_, i) => {
                 const sid = String(i);
                 const label = labels[sid] || String.fromCharCode(65 + i);
                 const mode = modes[sid] || 'immediately';
-                const stateText = states[sid] === 'captured' ? 'Loaded' :
-                                  states[sid] === 'scheduled' ? 'Scheduled' :
-                                  states[sid] === 'firing' ? 'Firing' : 'Empty';
                 const setLabel = (v) => {
                     onChange(param.labels_param, { ...labels, [sid]: v });
                 };
@@ -142,37 +143,22 @@ export function PluginDropButtonRow({ param, values, onChange, displayCtx }) {
                 const setNote = (_paramName, v) => {
                     onChange(param.notes_param, { ...notes, [sid]: v });
                 };
-                return html`<div class="dropbtn-edit ${states[sid] === 'captured' ? 'loaded' : ''}" key=${i}>
+                return html`<div class="dropbtn-edit" key=${i}>
                     <div class="dropbtn-edit-row">
                         <span class="dropbtn-edit-tag">Drop ${i + 1}</span>
                         <input class="dropbtn-edit-name" type="text"
                             value=${label === String.fromCharCode(65 + i) ? '' : label}
                             placeholder=${String.fromCharCode(65 + i)}
                             onInput=${(e) => setLabel(e.target.value)} />
-                        <span class="dropbtn-edit-state">${stateText}</span>
                     </div>
-                    <div class="dropbtn-edit-row dropbtn-edit-firerow">
-                        <div class="dropbtn-edit-wheel">
-                            <${PluginWheel}
-                                name=${'mode_' + sid}
-                                label="Fire"
-                                min=${0} max=${MODE_ORDER.length - 1}
-                                value=${Math.max(0, MODE_ORDER.indexOf(mode))}
-                                tickLabel=${(i) => MODE_LABELS[i] || String(i)}
-                                onChange=${setMode} />
-                        </div>
-                        <div class="dropbtn-edit-notewheel">
-                            <${PluginNoteSelect}
-                                name=${'note_' + sid}
-                                label="Note"
-                                min=${-1}
-                                formatValue=${(i) => i === -1 ? 'Off' : noteName(i)}
-                                value=${noteValue}
-                                onChange=${setNote}
-                                learnable=${true} />
-                        </div>
-                    </div>
-                    <div class="dropbtn-edit-row dropbtn-edit-flagsrow">
+                    <div class="dropbtn-edit-row dropbtn-edit-controls">
+                        <${PluginWheel}
+                            name=${'mode_' + sid}
+                            label="Fire"
+                            min=${0} max=${MODE_ORDER.length - 1}
+                            value=${Math.max(0, MODE_ORDER.indexOf(mode))}
+                            tickLabel=${(i) => MODE_LABELS[i] || String(i)}
+                            onChange=${setMode} />
                         <${PluginButton}
                             name=${'sync_' + sid}
                             label="Sync to bars"
@@ -185,6 +171,14 @@ export function PluginDropButtonRow({ param, values, onChange, displayCtx }) {
                             value=${fadeOn}
                             color="green"
                             onChange=${(_n, v) => setFade(v)} />
+                        <${PluginNoteSelect}
+                            name=${'note_' + sid}
+                            label="Trigger Note"
+                            min=${-1}
+                            formatValue=${(i) => i === -1 ? 'Off' : noteName(i)}
+                            value=${noteValue}
+                            onChange=${setNote}
+                            learnable=${true} />
                     </div>
                 </div>`;
             })}
