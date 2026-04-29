@@ -28,18 +28,23 @@ class ControllerPerformance16(ControllerBase):
     AUTHOR = "RaspiMIDIHub"
     VERSION = "1.0"
     HELP = """\
-4-wide performance controller. Default bindings on channel 1:
-  - Rows 1-4: 16 macro knobs (M1..M16) -> CC 16..31
-  - Row 5:    4 scene buttons (A B C D) -> CC 32..35 (0 / 127)
+4-wide performance controller: 16 macro knobs (4×4) plus a row of
+4 colored scene buttons. Defaults on channel 1 — the per-cell
+bindings panel below shows every cell's CC and lets you change it.
 
-Tap "Edit names" to override the cell label, channel and CC of any
-cell, or arm "L" and twist a hardware knob to capture a binding.
+Tap "Edit names" to override a cell's label, channel and CC, or
+arm "L" and twist a hardware knob to capture a binding.
 
 Move any UI cell -> the OUT port emits the matching CC. Wire OUT
-to a synth or destination in the matrix.
+to a synth or destination in the matrix. External CC arriving on
+the IN port silently updates the matching on-screen cell.
 
-External CC arriving on the IN port silently updates the matching
-on-screen cell."""
+Drop buttons (A/B/C/D row at the top): each can be fired by a MIDI
+note via its Trigger Note setting in the drop config. When a note
+arrives on the IN port and matches a bound button's note, that
+button fires — same path as a UI tap. Tap Learn next to the note
+wheel to capture the next incoming note. Use it to drive drops
+from a foot pedal, external pad, or sequencer."""
 
     params = [
         DropButtonRow(

@@ -24,17 +24,20 @@ class ControllerFx6(ControllerBase):
     AUTHOR = "RaspiMIDIHub"
     VERSION = "1.1"
     HELP = """\
-6-wide FX controller. Five rows of 6 cells with default bindings on
-channel 1:
-  - Row 1: knobs row A (FX1..FX6)    -> CC 16..21
-  - Row 2: knobs row B (FX7..FX12)   -> CC 22..27
-  - Row 3: knobs row C (FX13..FX18)  -> CC 28..33
-  - Row 4: vertical faders (S1..S6)  -> CC 34..39
-  - Row 5: buttons (B1..B6)          -> CC 40..45 (0 / 127)
+6-wide FX controller: 18 knobs (3 rows of 6) / 6 vertical faders /
+6 buttons. Defaults on channel 1 — the per-cell bindings panel
+below shows every cell's CC and lets you change it.
 
-Tap the EDIT button below the grid to override the cell label,
+Tap the EDIT button below the grid to override a cell's label,
 channel, CC and (for buttons) the on / off CC values; or tap Learn
-on a row and twist a hardware knob to capture its binding."""
+on a row and twist a hardware knob to capture its binding.
+
+Drop buttons (A/B/C/D row at the top): each can be fired by a MIDI
+note via its Trigger Note setting in the drop config. When a note
+arrives on the IN port and matches a bound button's note, that
+button fires — same path as a UI tap. Tap Learn next to the note
+wheel to capture the next incoming note. Use it to drive drops
+from a foot pedal, external pad, or sequencer."""
 
     params = [
         DropButtonRow(

@@ -30,17 +30,20 @@ class ControllerXY4(ControllerBase):
     AUTHOR = "RaspiMIDIHub"
     VERSION = "1.0"
     HELP = """\
-Performance controller. Five rows of 4 cells with default bindings on
-channel 1:
-  - Rows 1-2: XY pads (2×2 each)
-       XY1.x -> CC 16, XY1.y -> CC 17
-       XY2.x -> CC 18, XY2.y -> CC 19
-  - Row 3:    knobs K1..K4 -> CC 20..23
-  - Row 4:    knobs K5..K8 -> CC 24..27
-  - Row 5:    buttons B1..B4 -> CC 28..31 (0 / 127)
+Performance controller: 2 large XY pads (2×2 each) on top, 8 knobs
+(2 rows of 4) in the middle, 4 buttons across the bottom. Defaults
+on channel 1 — the per-cell bindings panel below shows every cell's
+CC(s) and lets you change them.
 
 Each XY pad emits two CCs — one per axis — at the same channel by
-default. Edit any cell to override its label, channel and CC(s)."""
+default. Edit any cell to override its label, channel and CC(s).
+
+Drop buttons (A/B/C/D row at the top): each can be fired by a MIDI
+note via its Trigger Note setting in the drop config. When a note
+arrives on the IN port and matches a bound button's note, that
+button fires — same path as a UI tap. Tap Learn next to the note
+wheel to capture the next incoming note. Use it to drive drops
+from a foot pedal, external pad, or sequencer."""
 
     params = [
         DropButtonRow(

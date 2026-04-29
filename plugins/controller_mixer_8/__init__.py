@@ -28,17 +28,13 @@ class ControllerMixer8(ControllerBase):
     AUTHOR = "RaspiMIDIHub"
     VERSION = "1.2"
     HELP = """\
-8-wide mixer-strip controller. Five rows of 8 cells with default
-bindings on channel 1:
-  - Row 1: knobs row A (K1..K8)   -> CC 16..23
-  - Row 2: knobs row B (K9..K16)  -> CC 24..31
-  - Row 3: knobs row C (K17..K24) -> CC 32..39
-  - Row 4: vertical faders         -> CC 40..47
-  - Row 5: buttons (B1..B8)        -> CC 48..55 (0 / 127)
+8-wide mixer-strip controller: 24 knobs (3 rows of 8) / 8 vertical
+faders / 8 buttons. Defaults on channel 1 — the per-cell bindings
+panel below shows every cell's CC and lets you change it.
 
-Tap the small EDIT button below the grid to override the cell
-label, channel and CC of any cell, or arm "L" and twist a hardware
-knob to capture a binding.
+Tap the EDIT button below the grid to override a cell's label,
+channel and CC, or arm "L" and twist a hardware knob to capture a
+binding.
 
 Move any UI cell -> the OUT port emits the matching CC. Wire OUT
 to a synth or other destination in the matrix.
@@ -46,7 +42,14 @@ to a synth or other destination in the matrix.
 External CC arriving on the IN port silently updates the matching
 on-screen cell (so the UI mirrors what the synth currently has)
 without re-emitting on OUT — wire `Synth OUT -> Controller IN` to
-keep both sides in sync without feedback loops."""
+keep both sides in sync without feedback loops.
+
+Drop buttons (A/B/C/D row at the top): each can be fired by a MIDI
+note via its Trigger Note setting in the drop config. When a note
+arrives on the IN port and matches a bound button's note, that
+button fires — same path as a UI tap. Tap Learn next to the note
+wheel to capture the next incoming note. Use it to drive drops
+from a foot pedal, external pad, or sequencer."""
 
     params = [
         DropButtonRow(
