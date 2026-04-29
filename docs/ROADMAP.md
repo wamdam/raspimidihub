@@ -1581,34 +1581,10 @@ UX.
      on Stop and resumes on Start / Continue. New SSE event
      `clock-position` with `running` flag drives this.
 
-2. **Cell preview — only while a drop is `scheduled` (NOT while merely
-   `captured`).** The original Phase 5.2 sketch (always render the
-   captured snapshot value as a ghost mark on the cell once captured)
-   would clutter the surface when 4 different snapshots are loaded —
-   the user could not tell which one is about to fire. Reframed:
-
-   While ANY drop on the controller is `scheduled`, every cell shows
-   how it will change *for that specific drop*. While no drop is
-   scheduled, cells show only their live values — clean surface.
-
-   - **Knobs**: live value on the LED arc in the warm accent
-     colour; ghost arc segment from current to scheduled value in
-     turquoise. The arc reads as "we are HERE, going THERE".
-   - **Faders**: ghost thumb at the scheduled value, on the track
-     opposite the live thumb. Visually clear "from / to" without
-     overdrawing.
-   - **Buttons**: thin coloured border tint while a drop targeting
-     a different on/off state is scheduled. (No ghost dot — too
-     small to read at button size.)
-   - **XY pads**: a second faint dot at the scheduled (x, y), with
-     a fading line between live and ghost to suggest motion.
-   - **Cells unchanged by the drop**: no preview at all — they're
-     not part of the diff, no point drawing.
-
-   Net effect: a glance at the controller surface tells you exactly
-   what the next drop will do, and only then. Less constant clutter
-   than "always visible while captured" — and disambiguates which of
-   four loaded snapshots is on deck.
+2. ~~**Cell preview while scheduled.**~~ **Dropped (2026-04-29).** The
+   four-button row with per-button labels + per-button rings already
+   answers "what is on deck?" without having to draw ghost arcs on
+   every cell. See *Dropped* section for the full reasoning.
 
 3. **ClockBus bar counter (server prereq).** The current ClockBus
    tracks 24-PPQN ticks but doesn't expose a bar counter. Add a
@@ -2088,6 +2064,19 @@ before implementation.
   current target hardware. Pi 4 / 5 / Zero would support it, but
   not the deploy target. Spec preserved in git history if we ever
   switch hardware.
+
+- **Cell preview while a drop is scheduled** (formerly Phase 5.2).
+  The premise was that with a single drop pad the user couldn't tell
+  what was about to happen, so every cell needed a ghost arc / ghost
+  thumb / ghost dot showing its scheduled target. The four-button row
+  shipped in Phase 5.1 — with per-button names, per-button mode
+  badges, per-button rings, and now per-button fade indicators —
+  already answers that question at the *button* level: which of A/B/
+  C/D is firing, with what mode, and how long until it fires. The
+  cell-level preview would re-encode information the user can already
+  read off the buttons, while painting ghost marks across every knob/
+  fader/XY pad on the surface every time a drop is queued. Net: more
+  visual noise, no real win. Dropped 2026-04-29.
 
 ## Not planned right now (but noted for later)
 
