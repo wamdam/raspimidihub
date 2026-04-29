@@ -1,21 +1,27 @@
 /**
  * DropButtonRow plugin control — row of N quarter-width snapshot
- * buttons with per-button mode (immediately / bar / 4bar).
+ * buttons. Each button has its own snapshot, label, fire mode, plus
+ * polish flags (sync to bars, fade, MIDI note trigger).
  *
  * Each button:
  *   • short-press → fire (sends {action: 'fire', button_id})
- *       Server resolves: immediately mode = fire now; bar/4bar mode
- *       = schedule, fire on the next bar boundary.
+ *       Server resolves: immediately mode = fire now; bar / N-bar mode
+ *       = schedule onto the fade or hard slot (decided by the button's
+ *       drop_fade flag) and fire at the next musical grid line.
  *   • long-press (≥500 ms with progress ring) → capture
  *       (sends {action: 'capture', button_id})
  *   • short-press while THIS button is scheduled → cancel
  *       (server treats a fire on a scheduled button as a cancel)
- *   • only one button on the row can be `scheduled` at a time.
+ *   • a fade button and a hard button can be scheduled simultaneously;
+ *     a hard fire cancels any in-flight fade.
  *
  * Auxiliary state lives in sibling params on the plugin instance:
  *   • drop_states[id]    : 'idle'|'captured'|'scheduled'|'firing'
  *   • drop_labels[id]    : display name (default A/B/C/D)
- *   • drop_modes[id]     : 'immediately'|'bar'|'4bar'
+ *   • drop_modes[id]     : 'immediately'|'bar'|'2bar'|'4bar'|'8bar'|'16bar'
+ *   • drop_sync[id]      : bool — quantize fire to bar grid (default true)
+ *   • drop_fade[id]      : bool — interpolate cells press→fire (default false)
+ *   • drop_notes[id]     : int  — MIDI note that fires this button (-1 = Off)
  *   • drop_schedule      : {fade, hard} where each slot is either null
  *                           or {button_id, set_at_tick, fire_at_tick,
  *                           cycle_start_tick, every_n_bars, progress,

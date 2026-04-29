@@ -1609,7 +1609,7 @@ UX.
    maps them to the new shape: `pad_snapshot` → `drop1_snapshot`,
    `pad` → `drop1_state` ("captured" / "idle"). Buttons 2-4 start
    empty. Preserves muscle memory + saved configs.
-3. **Whatever the MVP usage in Phase 4 surfaced.** As of 2026-04-26
+5. **Whatever the MVP usage in Phase 4 surfaced.** As of 2026-04-26
    nothing user-facing is open — the day's session ran four
    simultaneous LC faders into Mixer 8 across multiple browsers and
    identified a stack of bottlenecks rather than UX issues. Open
