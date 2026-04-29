@@ -82,7 +82,13 @@ class ControllerBase(PluginBase):
         self._param_values.setdefault("drop_fade",
                                        {str(i): False
                                         for i in range(self.DROP_BUTTON_COUNT)})
-        self._param_values.setdefault("drop_notes", {})
+        # -1 = "Off" (the default). The server's on_note_on check
+        # `bound == int(note)` never matches for -1 since incoming
+        # MIDI notes are 0..127, so the wheel can sit on Off without
+        # any guard logic.
+        self._param_values.setdefault("drop_notes",
+                                       {str(i): -1
+                                        for i in range(self.DROP_BUTTON_COUNT)})
         # Fade animation runs from start_values → snapshot. start is
         # captured at press time (current cell readings), kept transient
         # in `_drop_fade_start` (instance attr — not persisted, gone on
