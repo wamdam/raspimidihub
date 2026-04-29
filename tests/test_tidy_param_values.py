@@ -44,6 +44,10 @@ class _MiniPlugin(PluginBase):
             modes_param="drop_modes",
             labels_param="drop_labels",
             schedule_param="drop_schedule",
+            sync_param="drop_sync",
+            fade_param="drop_fade",
+            notes_param="drop_notes",
+            note_learn_param="drop_note_learn",
         ),
     ]
 
@@ -76,6 +80,11 @@ class TestSchemaParamKeys:
         assert "drop_modes" in keys
         assert "drop_labels" in keys
         assert "drop_schedule" in keys
+        # Phase 5 polish: per-button sync / fade / note / learn refs
+        assert "drop_sync" in keys
+        assert "drop_fade" in keys
+        assert "drop_notes" in keys
+        assert "drop_note_learn" in keys
 
     def test_does_not_collect_dunder_or_private_attrs(self):
         """The auxiliary-pointer walk looks for attrs ending in `_param`

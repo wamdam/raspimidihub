@@ -71,6 +71,10 @@ export function PluginDropButtonRow({ param, values, onChange, displayCtx }) {
     const labels = values[param.labels_param] || {};
     const modes = values[param.modes_param] || {};
     const schedule = values[param.schedule_param] || null;
+    const sync = values[param.sync_param] || {};
+    const fade = values[param.fade_param] || {};
+    const notes = values[param.notes_param] || {};
+    const noteLearn = values[param.note_learn_param] || '';
     const playOnly = !!(displayCtx && displayCtx.playOnly);
     const clockPosition = displayCtx && displayCtx.clockPosition;
 
@@ -117,6 +121,31 @@ export function PluginDropButtonRow({ param, values, onChange, displayCtx }) {
                     delete next[sid];
                     onChange(param.snapshots_param, next);
                 };
+                // Per-button polish toggles. Sync defaults true (current
+                // behaviour: quantize to grid line). Fade defaults false.
+                // Note is null when no trigger note is bound.
+                const syncOn = sync[sid] !== false;  // default true
+                const fadeOn = !!fade[sid];
+                const note = notes[sid];
+                const learning = noteLearn === sid;
+                const setSync = (v) => {
+                    onChange(param.sync_param, { ...sync, [sid]: !!v });
+                };
+                const setFade = (v) => {
+                    onChange(param.fade_param, { ...fade, [sid]: !!v });
+                };
+                const setNote = (n) => {
+                    const next = { ...notes };
+                    if (n == null || n === '') {
+                        delete next[sid];
+                    } else {
+                        next[sid] = Math.max(0, Math.min(127, parseInt(n, 10)));
+                    }
+                    onChange(param.notes_param, next);
+                };
+                const armLearn = () => {
+                    onChange(param.note_learn_param, learning ? '' : sid);
+                };
                 return html`<div class="dropbtn-edit ${states[sid] === 'captured' ? 'loaded' : ''}" key=${i}>
                     <div class="dropbtn-edit-row">
                         <span class="dropbtn-edit-tag">Drop ${i + 1}</span>
@@ -142,6 +171,29 @@ export function PluginDropButtonRow({ param, values, onChange, displayCtx }) {
                                 title="Clear this button's snapshot"
                                 onclick=${clearSnapshot}>Clear</button>` : null}
                     </div>
+                    <div class="dropbtn-edit-row">
+                        <label class="dropbtn-edit-toggle" title="Quantize fire to the bar grid">
+                            <input type="checkbox" checked=${syncOn}
+                                onchange=${(e) => setSync(e.target.checked)} />
+                            <span>Sync to bars</span>
+                        </label>
+                        <label class="dropbtn-edit-toggle" title="Fade cell values from current → snapshot over the press-to-fire window">
+                            <input type="checkbox" checked=${fadeOn}
+                                onchange=${(e) => setFade(e.target.checked)} />
+                            <span>Fade</span>
+                        </label>
+                    </div>
+                    <div class="dropbtn-edit-row">
+                        <span class="dropbtn-edit-fieldlabel">Note trigger</span>
+                        <input class="dropbtn-edit-note" type="number" min="0" max="127"
+                            value=${note != null ? note : ''}
+                            placeholder="—"
+                            onInput=${(e) => setNote(e.target.value)} />
+                        <button type="button"
+                            class="dropbtn-edit-learn ${learning ? 'learning' : ''}"
+                            title="Listen for the next incoming note and bind it"
+                            onclick=${armLearn}>${learning ? 'Listening…' : 'Learn'}</button>
+                    </div>
                 </div>`;
             })}
         </div>`;
@@ -155,12 +207,14 @@ export function PluginDropButtonRow({ param, values, onChange, displayCtx }) {
             const label = labels[sid] || String.fromCharCode(65 + i);
             const mode = modes[sid] || 'immediately';
             const isScheduled = schedule && Number(schedule.button_id) === i;
+            const syncOn = sync[sid] !== false;  // default true
             return html`<${DropButton}
                 key=${i}
                 index=${i}
                 label=${label}
                 state=${state}
                 mode=${mode}
+                synced=${syncOn}
                 schedule=${isScheduled ? schedule : null}
                 clockPosition=${clockPosition}
                 onChange=${onChange}
@@ -171,7 +225,7 @@ export function PluginDropButtonRow({ param, values, onChange, displayCtx }) {
 
 // One quarter-width button in the row. Owns its own press / progress
 // gesture state; reads display state from props.
-function DropButton({ index, label, state, mode, schedule,
+function DropButton({ index, label, state, mode, synced, schedule,
                      clockPosition, onChange, paramName }) {
     const isScheduled = !!schedule;
     const elRef = useRef(null);
@@ -301,15 +355,24 @@ function DropButton({ index, label, state, mode, schedule,
     // Scheduled: cycle = [schedule.cycle_start_tick, schedule.fire_at_tick).
     // Both reduce to "(tick - cycle_start) / cycle_total" using the
     // dead-reckoned tick.
+    //
+    // Free-mode ring: the schedule itself carries `synced: false` and
+    // cycle_start_tick = press tick (NOT a pre-press cycle position),
+    // so the same formula works — it just produces a 0→1 sweep across
+    // the press-to-fire window. When idle in free mode, no ring is
+    // shown at all (the button waits silently until pressed).
     const liveTick = liveTickEstimate(clockPosition);
     const transportRunning = !!(clockPosition && clockPosition.running);
+    const schedSynced = isScheduled
+        ? (schedule.synced !== false)
+        : !!synced;
     let ringProgress = 0;
     if (transportRunning && liveTick != null) {
         const tpb = clockPosition.ticks_per_bar;
         if (isScheduled && schedule.cycle_start_tick != null) {
             const cycleTotal = (schedule.every_n_bars || 1) * tpb;
             ringProgress = clamp01((liveTick - schedule.cycle_start_tick) / cycleTotal);
-        } else if (MODE_SEGMENTS[mode]) {
+        } else if (schedSynced && MODE_SEGMENTS[mode]) {
             const cycleTotal = (MODE_SEGMENTS[mode] * tpb) / 4;
             if (cycleTotal > 0) {
                 ringProgress = (liveTick % cycleTotal) / cycleTotal;
@@ -325,17 +388,58 @@ function DropButton({ index, label, state, mode, schedule,
         ? Math.floor(liveTick / 24) : 0;
 
     return html`<div class=${cls} ref=${elRef}>
-        <${SegmentedRing} mode=${mode}
-            progress=${ringProgress}
-            isScheduled=${isScheduled}
-            beatNumber=${beatNumber}
-            buttonId=${index} />
+        ${schedSynced
+            ? html`<${SegmentedRing} mode=${mode}
+                progress=${ringProgress}
+                isScheduled=${isScheduled}
+                beatNumber=${beatNumber}
+                buttonId=${index} />`
+            : (isScheduled
+                ? html`<${SmoothRing} progress=${ringProgress}
+                    beatNumber=${beatNumber} buttonId=${index} />`
+                : null)}
         ${pressing ? html`
             <div class="dropbtn-pressfill"
                 style="height: ${pressProgress * 100}%"></div>` : null}
         <span class="dropbtn-label">${label}</span>
         ${modeBadge ? html`<span class="dropbtn-mode">${modeBadge}</span>` : null}
     </div>`;
+}
+
+// Free-mode (sync_to_bars=false) ring: a single arc with no segment
+// notches that fills clockwise from 0 to 1 over the configured time.
+// Only rendered while a free-mode drop is scheduled (idle = no ring,
+// since "where in the bar" doesn't apply when we're not synced).
+function SmoothRing({ progress, beatNumber, buttonId }) {
+    const cx = 20, cy = 20, r = 18;
+    const stroke = 2.5;
+    const sweep = 360 * clamp01(progress);
+    const dimColor = SEGMENT_COLOR_DIM_ACTIVE;
+    const litColor = SEGMENT_COLOR_LIT_ACTIVE;
+
+    function arcPath(startDeg, sweepDeg) {
+        const sa = (startDeg - 90) * Math.PI / 180;
+        const ea = (startDeg + sweepDeg - 90) * Math.PI / 180;
+        const sx = cx + r * Math.cos(sa);
+        const sy = cy + r * Math.sin(sa);
+        const ex = cx + r * Math.cos(ea);
+        const ey = cy + r * Math.sin(ea);
+        const largeArc = sweepDeg > 180 ? 1 : 0;
+        return `M ${sx} ${sy} A ${r} ${r} 0 ${largeArc} 1 ${ex} ${ey}`;
+    }
+
+    // The full track sits underneath at low alpha; the lit arc draws
+    // on top up to the current progress. sweep < 1° doesn't render a
+    // visible arc, so just skip it (the underlying full track is
+    // visible regardless).
+    return html`<svg class="dropbtn-ring active" viewBox="0 0 40 40"
+        key=${`${buttonId}-smooth-b${beatNumber}`}>
+        <circle cx=${cx} cy=${cy} r=${r}
+            fill="none" stroke=${dimColor} stroke-width=${stroke} />
+        ${sweep >= 1 ? html`<path d=${arcPath(0, sweep)}
+            fill="none" stroke=${litColor} stroke-width=${stroke}
+            stroke-linecap="round" />` : null}
+    </svg>`;
 }
 
 // Segments-per-mode: 4 quarter-notes per bar × bars in the cycle.

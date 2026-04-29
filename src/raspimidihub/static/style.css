@@ -1000,11 +1000,19 @@ body {
      *             and a beat-aligned pulse animation that re-triggers
      *             on every quarter (the React key on this element
      *             changes every beat → CSS animation restarts).
+     *
+     * Sized as a square based on button height (the smaller dim) and
+     * centered both axes — the previous `inset: 4px` made the SVG
+     * element rectangular on wide buttons, with the round content
+     * drawn centered inside, which optically read as "ring shifted
+     * right" against the button's bounds.
      */
     position: absolute;
-    inset: 4px;
-    width: calc(100% - 8px);
+    top: 50%;
+    left: 50%;
     height: calc(100% - 8px);
+    aspect-ratio: 1;
+    transform: translate(-50%, -50%);
     pointer-events: none;
     z-index: 0;
 }
@@ -1132,6 +1140,60 @@ body {
 .dropbtn-edit-clear:hover {
     background: rgba(0,0,0,0.45);
     border-color: rgba(255,170,90,0.55);
+}
+.dropbtn-edit-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--text-dim);
+    cursor: pointer;
+    user-select: none;
+}
+.dropbtn-edit-toggle input[type="checkbox"] {
+    margin: 0;
+    cursor: pointer;
+}
+.dropbtn-edit-note {
+    flex: 0 0 56px;
+    height: 28px;
+    padding: 0 6px;
+    background: rgba(0,0,0,0.4);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 3px;
+    color: var(--text);
+    font-size: 12px;
+    text-align: center;
+}
+.dropbtn-edit-note:focus {
+    border-color: rgba(255,170,90,0.55);
+    outline: none;
+}
+.dropbtn-edit-learn {
+    flex: 0 0 auto;
+    height: 28px;
+    padding: 0 10px;
+    background: rgba(0,0,0,0.3);
+    border: 1px solid rgba(255,170,90,0.30);
+    border-radius: 3px;
+    color: rgba(255,200,140,0.85);
+    font-size: 12px;
+    cursor: pointer;
+}
+.dropbtn-edit-learn:hover {
+    background: rgba(0,0,0,0.45);
+    border-color: rgba(255,170,90,0.55);
+}
+.dropbtn-edit-learn.learning {
+    background: rgba(255,170,90,0.18);
+    border-color: rgba(255,200,140,0.85);
+    color: rgba(255,220,180,1.0);
+    /* Pulse so the user knows it's listening for the next note. */
+    animation: dropbtn-edit-learn-pulse 800ms ease-in-out infinite alternate;
+}
+@keyframes dropbtn-edit-learn-pulse {
+    0%   { box-shadow: 0 0 0 rgba(255,200,140,0); }
+    100% { box-shadow: 0 0 8px rgba(255,200,140,0.6); }
 }
 
 /* XYPad */

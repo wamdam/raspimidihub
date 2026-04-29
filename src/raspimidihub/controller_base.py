@@ -68,6 +68,31 @@ class ControllerBase(PluginBase):
         self._param_values.setdefault("drop_labels",
                                        {str(i): chr(ord("A") + i)
                                         for i in range(self.DROP_BUTTON_COUNT)})
+        # Per-button polish flags. `sync` defaults to true (current
+        # behaviour: quantize to the next bar/4-bar/etc. grid line);
+        # `fade` defaults to false (current behaviour: hard snap on
+        # fire). `notes` is the optional MIDI note that fires this
+        # button when received on the controller's IN port. `note_learn`
+        # is a transient sid telling on_note_on "the next note is the
+        # trigger for THIS button" — UI sets it when the user taps the
+        # Learn pill, server clears it the moment a note arrives.
+        self._param_values.setdefault("drop_sync",
+                                       {str(i): True
+                                        for i in range(self.DROP_BUTTON_COUNT)})
+        self._param_values.setdefault("drop_fade",
+                                       {str(i): False
+                                        for i in range(self.DROP_BUTTON_COUNT)})
+        self._param_values.setdefault("drop_notes", {})
+        self._param_values.setdefault("drop_note_learn", "")
+        # Fade animation runs from start_values → snapshot. start is
+        # captured at press time (current cell readings), kept transient
+        # in `_drop_fade_start` (instance attr — not persisted, gone on
+        # service restart since a fade can't survive that anyway). Last
+        # emitted CC value per cell goes in `_drop_fade_last_emit` so
+        # we only push CCs when the integer value crosses, keeping the
+        # 1/16-cadence fade traffic bounded.
+        self._drop_fade_start: dict[str, dict] = {}
+        self._drop_fade_last_emit: dict[str, dict] = {}
         # Derived: button is 'captured' iff its snapshot is non-empty,
         # else 'idle'. Scheduled state is layered on by _handle_drop_action.
         snaps = self._param_values["drop_snapshots"]
@@ -274,7 +299,30 @@ class ControllerBase(PluginBase):
 
     # Pass-through silence for the other event types — the matrix routes
     # them however the user's wired the plugin's IN port.
-    def on_note_on(self, channel, note, velocity): pass
+    def on_note_on(self, channel, note, velocity):
+        """If a drop button is in note-Learn mode, capture this note as
+        its trigger. Otherwise look for a button bound to this note and
+        fire it (same code path as a UI tap). Note channel is ignored —
+        a drop trigger is a global "any incoming note=N fires button X"
+        binding, since the typical use case is a single foot pedal /
+        pad on whatever channel it happens to be on."""
+        if velocity <= 0:  # note-on with velocity 0 = note-off in MIDI
+            return
+        learn_target = self._param_values.get("drop_note_learn") or ""
+        if learn_target != "":
+            notes = dict(self._param_values.get("drop_notes") or {})
+            notes[learn_target] = int(note)
+            self.set_param("drop_notes", notes)
+            self.set_param("drop_note_learn", "")
+            return
+        notes = self._param_values.get("drop_notes") or {}
+        for sid, bound in notes.items():
+            if bound == int(note):
+                snaps = self._param_values.get("drop_snapshots") or {}
+                if snaps.get(sid):
+                    self._fire_drop(sid)
+                break
+
     def on_note_off(self, channel, note): pass
     def on_pitchbend(self, channel, value): pass
     def on_aftertouch(self, channel, value): pass
@@ -354,35 +402,66 @@ class ControllerBase(PluginBase):
             states[sid] = "captured"
             self.set_param("drop_states", states)
             return
-        # Quantize to the next bar boundary that lies on the
-        # configured musical grid (1 = every bar; 4/8/16 = every
-        # 4/8/16-bar downbeat). NOT "wait N bars" — pressing during
-        # bar 5 with mode='4bar' fires at bar 8, not bar 9.
         every_n_bars = self.DROP_MODE_GRID_BARS.get(mode, 1)
         try:
-            ticks_left = bus.ticks_until_next_grid(every_n_bars)
-            now_tick = bus._tick_count  # OK to read; lock-free is fine for arithmetic
+            now_tick = bus._tick_count  # lock-free read; arithmetic only
+            tpb = bus._ticks_per_bar
         except AttributeError:
             self._apply_snapshot(snap)
             return
+
+        sync = bool((self._param_values.get("drop_sync") or {}).get(sid, True))
+        fade = bool((self._param_values.get("drop_fade") or {}).get(sid, False))
+
+        if sync:
+            # Quantize to the next bar boundary on the musical grid
+            # (1 = every bar; 4/8/16 = every 4/8/16-bar downbeat).
+            # NOT "wait N bars" — pressing during bar 5 with mode='4bar'
+            # fires at bar 8, not bar 9.
+            ticks_left = bus.ticks_until_next_grid(every_n_bars)
+            fire_at_tick = now_tick + ticks_left
+            # Cycle-relative ring: idle ring runs in lockstep with the
+            # music; on press the scheduled ring picks up at the
+            # current cycle position so it doesn't visually restart.
+            cycle_total = every_n_bars * tpb
+            cycle_start_tick = fire_at_tick - cycle_total
+        else:
+            # Free mode: press starts a fresh N-bar countdown from now.
+            # No cycle synchronisation — every press takes the same time
+            # regardless of where the music is. Ring starts at 0 and
+            # fills over exactly the press-to-fire window.
+            cycle_total = every_n_bars * tpb
+            fire_at_tick = now_tick + cycle_total
+            cycle_start_tick = now_tick
+
         # Cancel any other scheduled drop FIRST — only one schedule per controller.
         sched = self._param_values.get("drop_schedule")
         if sched and sched.get("button_id") != int(sid):
             other_sid = str(sched["button_id"])
             states[other_sid] = "captured" if (
                 self._param_values.get("drop_snapshots") or {}).get(other_sid) else "idle"
+            self._drop_fade_start.pop(other_sid, None)
+            self._drop_fade_last_emit.pop(other_sid, None)
         states[sid] = "scheduled"
         self.set_param("drop_states", states)
-        # Cycle-relative progress: the ring starts at the position the
-        # bar is on within the upcoming cycle, not at 0%. So pressing
-        # halfway through bar 5 with mode='4bar' starts the ring at
-        # ~38 % (1.5 of 4 bars elapsed), filling smoothly to 100 %
-        # at bar 8. Without this, the ring would jump back to 0 every
-        # press and not match the live music position.
-        fire_at_tick = now_tick + ticks_left
-        cycle_total = every_n_bars * bus._ticks_per_bar
-        cycle_start_tick = fire_at_tick - cycle_total
-        progress = round((now_tick - cycle_start_tick) / cycle_total, 2)
+
+        # If fade is enabled, capture the CURRENT cell values so the
+        # fade interpolates from where we are now (not from where the
+        # cycle started or from the snapshot). On press near the end
+        # of a synced cycle there's only a small remaining window —
+        # the fade just runs faster, hitting the snapshot at fire.
+        if fade:
+            self._drop_fade_start[sid] = {
+                cell: self._param_values.get(cell)
+                for cell in snap
+                if self._param_values.get(cell) is not None
+            }
+            self._drop_fade_last_emit[sid] = {}
+        else:
+            self._drop_fade_start.pop(sid, None)
+            self._drop_fade_last_emit.pop(sid, None)
+
+        progress = round((now_tick - cycle_start_tick) / max(1, cycle_total), 2)
         self.set_param("drop_schedule", {
             "button_id": int(sid),
             "set_at_tick": now_tick,
@@ -390,6 +469,8 @@ class ControllerBase(PluginBase):
             "cycle_start_tick": cycle_start_tick,
             "every_n_bars": every_n_bars,
             "progress": progress,
+            "synced": sync,
+            "fade": fade,
         })
 
     def _cancel_drop(self, sid: str) -> None:
@@ -401,6 +482,8 @@ class ControllerBase(PluginBase):
         snaps = self._param_values.get("drop_snapshots") or {}
         states[sid] = "captured" if snaps.get(sid) else "idle"
         self.set_param("drop_states", states)
+        self._drop_fade_start.pop(sid, None)
+        self._drop_fade_last_emit.pop(sid, None)
 
     def _apply_snapshot(self, snap: dict) -> None:
         """Re-emit each captured CC + snap on-screen cells to the
@@ -451,11 +534,15 @@ class ControllerBase(PluginBase):
         now_tick = bus._tick_count
         set_at = sched.get("set_at_tick", now_tick)
         fire_at = sched.get("fire_at_tick", now_tick)
+        sid = str(sched.get("button_id"))
+
         if now_tick >= fire_at:
-            # Fire it.
-            sid = str(sched["button_id"])
+            # Fire it. _apply_snapshot lands the exact target values
+            # (covers both hard-drop and the final landing of a fade).
             snap = (self._param_values.get("drop_snapshots") or {}).get(sid)
             self.set_param("drop_schedule", None)
+            self._drop_fade_start.pop(sid, None)
+            self._drop_fade_last_emit.pop(sid, None)
             states = dict(self._param_values.get("drop_states") or {})
             if snap:
                 self._apply_snapshot(snap)
@@ -464,14 +551,64 @@ class ControllerBase(PluginBase):
             states[sid] = "captured" if snap else "idle"
             self.set_param("drop_states", states)
             return
-        # Update progress 0..1.
+
         total = max(1, fire_at - set_at)
         prog = max(0.0, min(1.0, (now_tick - set_at) / total))
-        # Round to 2 dp so identical values dedup in the coalescer.
+
+        # Fade interpolation runs every 1/16 boundary while a faded
+        # drop is scheduled. For each continuous cell we lerp current
+        # value from start → snapshot proportional to progress, and
+        # emit a CC only when the integer value has crossed since last
+        # emit — keeps fade traffic bounded (one CC per integer step
+        # per cell, so a 0→127 fade is 127 emits regardless of fade
+        # duration). Buttons (on/off) and XY pads stay discrete and
+        # land at fire_at via _apply_snapshot.
+        if sched.get("fade"):
+            self._step_fade(sid, prog)
+
         new_sched = dict(sched)
         new_sched["progress"] = round(prog, 2)
         if new_sched != sched:
             self.set_param("drop_schedule", new_sched)
+
+    def _step_fade(self, sid: str, progress: float) -> None:
+        """Interpolate continuous cells toward the snapshot. Called from
+        on_tick when sched.fade is set."""
+        snap = (self._param_values.get("drop_snapshots") or {}).get(sid)
+        if not snap:
+            return
+        starts = self._drop_fade_start.get(sid)
+        if starts is None:
+            return
+        last_emit = self._drop_fade_last_emit.setdefault(sid, {})
+        for cell, target in snap.items():
+            cell_type = self._cell_types.get(cell, "")
+            if cell_type in ("button", "xypad"):
+                # Discrete — snap at fire_at via _apply_snapshot, no fade.
+                continue
+            start = starts.get(cell)
+            if start is None or start == target:
+                continue
+            # Linear interpolation, clamped to int. The cell's stored
+            # value is an int for knobs/faders/wheels.
+            cur = int(round(start + (target - start) * progress))
+            # Skip if we'd be emitting either the start value (already
+            # the live state, redundant) or the same int we just sent.
+            if last_emit.get(cell, start) == cur:
+                continue
+            binding = self._effective_binding(cell)
+            if binding is None:
+                continue
+            cc_val = self._cell_value_to_cc(cell, cur, binding)
+            if cc_val is not None:
+                self.send_cc(binding["channel"], binding["cc"], cc_val)
+            last_emit[cell] = cur
+            self._param_values[cell] = cur
+            if self._notify_param_change:
+                try:
+                    self._notify_param_change(cell, cur)
+                except Exception:
+                    pass
 
     # --- Panic ---
 

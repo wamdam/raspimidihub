@@ -45,6 +45,10 @@ on a row and twist a hardware knob to capture its binding."""
             modes_param="drop_modes",
             labels_param="drop_labels",
             schedule_param="drop_schedule",
+            sync_param="drop_sync",
+            fade_param="drop_fade",
+            notes_param="drop_notes",
+            note_learn_param="drop_note_learn",
         ),
         Radio("bg", "Background", ControllerBase.BG_OPTIONS, default="Default", config_only=True),
         LayoutGrid(

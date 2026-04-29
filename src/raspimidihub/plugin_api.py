@@ -266,20 +266,21 @@ class DropButtonRow(Param):
     modes_param: str | None = None        # dict[str(id) -> 'immediately'|'bar'|'4bar']
     labels_param: str | None = None       # dict[str(id) -> str (display name)]
     schedule_param: str | None = None     # {button_id, set_at_tick, fire_at_tick, progress}|null
+    # New per-button toggles + note-trigger (Phase 5 polish).
+    sync_param: str | None = None         # dict[str(id) -> bool] — quantize to bar grid (default true)
+    fade_param: str | None = None         # dict[str(id) -> bool] — interpolate cells press→fire instead of hard-snap
+    notes_param: str | None = None        # dict[str(id) -> int|null] — incoming-note number that fires this button
+    note_learn_param: str | None = None   # str — sid of button currently arming "next incoming note becomes my trigger"
 
     def to_dict(self) -> dict:
         d = super().to_dict()
         d["count"] = self.count
-        if self.states_param:
-            d["states_param"] = self.states_param
-        if self.snapshots_param:
-            d["snapshots_param"] = self.snapshots_param
-        if self.modes_param:
-            d["modes_param"] = self.modes_param
-        if self.labels_param:
-            d["labels_param"] = self.labels_param
-        if self.schedule_param:
-            d["schedule_param"] = self.schedule_param
+        for attr in ("states_param", "snapshots_param", "modes_param",
+                     "labels_param", "schedule_param", "sync_param",
+                     "fade_param", "notes_param", "note_learn_param"):
+            v = getattr(self, attr)
+            if v:
+                d[attr] = v
         return d
 
 
