@@ -1580,6 +1580,32 @@ UX.
      "running" via the auto-start branch. Ring freezes promptly
      on Stop and resumes on Start / Continue. New SSE event
      `clock-position` with `running` flag drives this.
+   - Per-button **Sync to bars** toggle (default on). When off, fire
+     starts a fresh N-bar countdown from press time instead of
+     quantising to the next grid line — the segmented ring becomes a
+     single smooth arc that fills 0→1 over the press-to-fire window.
+   - Per-button **Fade** toggle (default off). When on, continuous
+     cells (knobs / faders) interpolate linearly from their value at
+     press time to the snapshot over the remaining press-to-fire
+     window. Buttons + XY pads stay discrete and snap at fire. CC
+     traffic is bounded — one emit per integer crossing per cell.
+   - **Dual-slot scheduling.** `drop_schedule` carries `{fade, hard}`
+     so a fade-mode button and a hard-drop-mode button can run side
+     by side. Pressing same-button cancels its slot; pressing a
+     different button targeting the same slot replaces it. When the
+     hard slot fires it cancels any in-flight fade — drop wins.
+   - Per-button **Trigger Note**. Each button has an optional MIDI
+     note (Off / 0..127 wheel + Learn pill that subscribes to
+     midi-activity SSE). Notes arriving on the controller's IN port
+     drive the same gesture as a touch press: tap-and-release fires,
+     hold ≥0.5 s captures. Server publishes `drop_note_pressing[sid]`
+     so the on-screen button runs the press-fill animation in lockstep
+     with an external held note (thud + flash at the capture mark).
+   - Drop button **config card** simplified late-cycle: all four
+     configurables (Fire / Sync to bars / Fade / Trigger Note) sit
+     on one row instead of three, and the card no longer reflects
+     runtime state — config is about what the button does on press,
+     the runtime story lives on the play surface.
 
 2. ~~**Cell preview while scheduled.**~~ **Dropped (2026-04-29).** The
    four-button row with per-button labels + per-button rings already
