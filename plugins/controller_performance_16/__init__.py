@@ -58,6 +58,7 @@ external pads, or sequencer-driven drops."""
             sync_param="drop_sync",
             fade_param="drop_fade",
             notes_param="drop_notes",
+            note_press_param="drop_note_pressing",
         ),
         Radio("bg", "Background", ControllerBase.BG_OPTIONS, default="Default", config_only=True),
         LayoutGrid(

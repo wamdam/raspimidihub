@@ -89,6 +89,7 @@ export function PluginDropButtonRow({ param, values, onChange, displayCtx }) {
     const sync = values[param.sync_param] || {};
     const fade = values[param.fade_param] || {};
     const notes = values[param.notes_param] || {};
+    const notePress = values[param.note_press_param] || {};
     const playOnly = !!(displayCtx && displayCtx.playOnly);
     const clockPosition = displayCtx && displayCtx.clockPosition;
 
@@ -211,6 +212,7 @@ export function PluginDropButtonRow({ param, values, onChange, displayCtx }) {
                     : null;
             const syncOn = sync[sid] !== false;  // default true
             const fadeOn = !!fade[sid];
+            const notePressing = !!notePress[sid];
             return html`<${DropButton}
                 key=${i}
                 index=${i}
@@ -220,6 +222,7 @@ export function PluginDropButtonRow({ param, values, onChange, displayCtx }) {
                 synced=${syncOn}
                 fade=${fadeOn}
                 schedule=${mySlot}
+                notePressing=${notePressing}
                 clockPosition=${clockPosition}
                 onChange=${onChange}
                 paramName=${param.name} />`;
@@ -230,6 +233,7 @@ export function PluginDropButtonRow({ param, values, onChange, displayCtx }) {
 // One quarter-width button in the row. Owns its own press / progress
 // gesture state; reads display state from props.
 function DropButton({ index, label, state, mode, synced, fade, schedule,
+                     notePressing,
                      clockPosition, onChange, paramName }) {
     const isScheduled = !!schedule;
     const elRef = useRef(null);
@@ -329,6 +333,51 @@ function DropButton({ index, label, state, mode, synced, fade, schedule,
             if (s.rafId) cancelAnimationFrame(s.rafId);
         };
     }, [index, paramName]);
+
+    // External-press-fill: when an incoming trigger note is held on a
+    // device wired to the controller's IN port, the server flips
+    // notePressing[sid] = true and we mirror the long-press animation
+    // here so the on-screen button visually tracks the held note. The
+    // server runs the fire-vs-capture decision on note-off; we only
+    // own the visual. A separate rAF id from the touch path so the two
+    // can't collide if (somehow) both fire at once.
+    const notePressRaf = useRef(null);
+    useEffect(() => {
+        if (!notePressing) {
+            if (notePressRaf.current) {
+                cancelAnimationFrame(notePressRaf.current);
+                notePressRaf.current = null;
+            }
+            setPressing(false);
+            setPressProgress(0);
+            return;
+        }
+        const startTs = Date.now();
+        let thudded = false;
+        setPressing(true);
+        setPressProgress(0);
+        tickFeedback();
+        const loop = () => {
+            const elapsed = Date.now() - startTs;
+            const p = Math.min(1, elapsed / LONG_PRESS_MS);
+            setPressProgress(p);
+            if (p >= 1 && !thudded) {
+                thudded = true;
+                thudFeedback();
+                triggerFlash();
+            }
+            if (elapsed < LONG_PRESS_MS * 1.2) {
+                notePressRaf.current = requestAnimationFrame(loop);
+            }
+        };
+        notePressRaf.current = requestAnimationFrame(loop);
+        return () => {
+            if (notePressRaf.current) {
+                cancelAnimationFrame(notePressRaf.current);
+                notePressRaf.current = null;
+            }
+        };
+    }, [notePressing]);
 
     // Visual classes:
     //   armed     — snapshot loaded (state in 'captured'|'scheduled'|'firing')

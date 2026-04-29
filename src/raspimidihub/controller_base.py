@@ -96,6 +96,14 @@ class ControllerBase(PluginBase):
         self._param_values.setdefault("drop_notes",
                                        {str(i): -1
                                         for i in range(self.DROP_BUTTON_COUNT)})
+        # Per-button "trigger note currently held" flag, broadcast
+        # over SSE so the on-screen drop button can run the same
+        # press-fill animation that a touch long-press shows. Reset
+        # to all-False on every restart — a held note across a
+        # service restart can't survive anyway.
+        self._param_values["drop_note_pressing"] = {
+            str(i): False for i in range(self.DROP_BUTTON_COUNT)
+        }
         # Fade animation runs from start_values → snapshot. start is
         # captured at press time (current cell readings), kept transient
         # in `_drop_fade_start` (instance attr — not persisted, gone on
@@ -340,6 +348,11 @@ class ControllerBase(PluginBase):
             if bound == int(note):
                 if sid not in self._drop_note_press:
                     self._drop_note_press[sid] = time.monotonic()
+                    # Broadcast "this button is now held" so the UI
+                    # can run the press-fill animation.
+                    pressing = dict(self._param_values.get("drop_note_pressing") or {})
+                    pressing[sid] = True
+                    self.set_param("drop_note_pressing", pressing)
                 break
 
     def on_note_off(self, channel, note):
@@ -353,6 +366,12 @@ class ControllerBase(PluginBase):
             press_time = self._drop_note_press.pop(sid, None)
             if press_time is None:
                 return
+            # Clear the pressing flag so the UI's press-fill animation
+            # ends — regardless of whether we're about to fire or capture.
+            pressing = dict(self._param_values.get("drop_note_pressing") or {})
+            if pressing.get(sid):
+                pressing[sid] = False
+                self.set_param("drop_note_pressing", pressing)
             held = time.monotonic() - press_time
             if held >= _NOTE_LONG_PRESS_S:
                 self._capture_drop(sid)

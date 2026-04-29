@@ -270,13 +270,14 @@ class DropButtonRow(Param):
     sync_param: str | None = None         # dict[str(id) -> bool] — quantize to bar grid (default true)
     fade_param: str | None = None         # dict[str(id) -> bool] — interpolate cells press→fire instead of hard-snap
     notes_param: str | None = None        # dict[str(id) -> int|null] — incoming-note number that fires this button
+    note_press_param: str | None = None   # dict[str(id) -> bool] — trigger-note currently held (drives press-fill animation)
 
     def to_dict(self) -> dict:
         d = super().to_dict()
         d["count"] = self.count
         for attr in ("states_param", "snapshots_param", "modes_param",
                      "labels_param", "schedule_param", "sync_param",
-                     "fade_param", "notes_param"):
+                     "fade_param", "notes_param", "note_press_param"):
             v = getattr(self, attr)
             if v:
                 d[attr] = v
