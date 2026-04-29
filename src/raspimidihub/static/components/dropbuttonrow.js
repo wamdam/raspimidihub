@@ -208,6 +208,7 @@ export function PluginDropButtonRow({ param, values, onChange, displayCtx }) {
             const mode = modes[sid] || 'immediately';
             const isScheduled = schedule && Number(schedule.button_id) === i;
             const syncOn = sync[sid] !== false;  // default true
+            const fadeOn = !!fade[sid];
             return html`<${DropButton}
                 key=${i}
                 index=${i}
@@ -215,6 +216,7 @@ export function PluginDropButtonRow({ param, values, onChange, displayCtx }) {
                 state=${state}
                 mode=${mode}
                 synced=${syncOn}
+                fade=${fadeOn}
                 schedule=${isScheduled ? schedule : null}
                 clockPosition=${clockPosition}
                 onChange=${onChange}
@@ -225,7 +227,7 @@ export function PluginDropButtonRow({ param, values, onChange, displayCtx }) {
 
 // One quarter-width button in the row. Owns its own press / progress
 // gesture state; reads display state from props.
-function DropButton({ index, label, state, mode, synced, schedule,
+function DropButton({ index, label, state, mode, synced, fade, schedule,
                      clockPosition, onChange, paramName }) {
     const isScheduled = !!schedule;
     const elRef = useRef(null);
@@ -403,7 +405,29 @@ function DropButton({ index, label, state, mode, synced, schedule,
                 style="height: ${pressProgress * 100}%"></div>` : null}
         <span class="dropbtn-label">${label}</span>
         ${modeBadge ? html`<span class="dropbtn-mode">${modeBadge}</span>` : null}
+        ${MODE_SEGMENTS[mode] ? html`<${FadeIcon} fade=${fade} />` : null}
     </div>`;
+}
+
+// Mirrors the mode badge on the opposite corner. Diagonal up-right
+// line when fade is on (cells ramp toward snapshot), a small step
+// when fade is off (cells snap at fire). Hidden on `immediately`
+// mode where there's no countdown to fade across.
+function FadeIcon({ fade }) {
+    if (fade) {
+        // Diagonal ramp from bottom-left to top-right.
+        return html`<svg class="dropbtn-fadeicon" viewBox="0 0 12 12">
+            <path d="M 1 11 L 11 1" stroke="currentColor" stroke-width="1.6"
+                stroke-linecap="round" fill="none" />
+        </svg>`;
+    }
+    // Step: flat low, then a vertical jump, then flat high — the
+    // "cells stay where they are, then snap at fire" shape.
+    return html`<svg class="dropbtn-fadeicon" viewBox="0 0 12 12">
+        <path d="M 1 9 L 6 9 L 6 3 L 11 3" stroke="currentColor"
+            stroke-width="1.6" stroke-linecap="round"
+            stroke-linejoin="round" fill="none" />
+    </svg>`;
 }
 
 // Free-mode (sync_to_bars=false) ring: a single arc with no segment

@@ -963,6 +963,23 @@ body {
     pointer-events: none;
     z-index: 2;
 }
+.dropbtn-fadeicon {
+    /* Mirrors .dropbtn-mode but on the left edge: a tiny SVG that
+     * shows the cell-landing shape — diagonal "ramp" when Fade is
+     * on (cells lerp from current to snapshot over the countdown),
+     * a single step when Fade is off (cells snap at fire). */
+    position: absolute;
+    top: 4px; left: 6px;
+    width: 12px;
+    height: 12px;
+    color: rgba(255,170,90,0.55);
+    pointer-events: none;
+    z-index: 2;
+}
+.dropbtn.scheduled .dropbtn-fadeicon,
+.dropbtn.scheduled .dropbtn-mode {
+    color: rgba(255,200,140,0.9);
+}
 .dropbtn.armed {
     border-color: rgba(255,170,90,0.55);
     background: linear-gradient(180deg, #3a2330 0%, #1f1018 100%);
