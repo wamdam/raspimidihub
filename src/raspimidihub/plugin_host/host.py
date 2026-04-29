@@ -99,30 +99,18 @@ class PluginHost:
 
         return self.list_types()
 
-    # Imports allowed for plugins (sandbox)
-    _ALLOWED_IMPORTS = frozenset({
-        "math", "random", "collections", "dataclasses", "enum",
-        "threading", "time", "queue", "typing",
-        "raspimidihub.plugin_api",
-        "raspimidihub.controller_base",
-    })
-
     def _load_plugin_class(self, type_name: str, init_file: Path) -> type[PluginBase] | None:
-        """Import a plugin module and find the PluginBase subclass."""
-        # Validate imports before loading
-        source = init_file.read_text()
-        for line in source.splitlines():
-            stripped = line.strip()
-            if stripped.startswith("import ") or stripped.startswith("from "):
-                # Extract module name
-                if stripped.startswith("from "):
-                    mod = stripped.split()[1].split(".")[0]
-                else:
-                    mod = stripped.split()[1].split(".")[0].split(",")[0]
-                if mod not in self._ALLOWED_IMPORTS and not mod.startswith("raspimidihub"):
-                    log.warning("Plugin %s uses disallowed import: %s", type_name, mod)
-                    return None
+        """Import a plugin module and find the PluginBase subclass.
 
+        Plugins are first-party code shipped in our deb — no import
+        allowlist or other "sandbox" check, since real Python sandboxing
+        isn't possible from within Python and this is a single-user
+        trusted-environment appliance. Anything stronger (process
+        isolation, RestrictedPython) would be a much bigger architectural
+        change and isn't justified by the threat model. SyntaxError /
+        ImportError raised below propagate to discover_plugins which
+        catches them and logs "Failed to load plugin X".
+        """
         module_name = f"raspimidihub_plugin_{type_name}"
         spec = importlib.util.spec_from_file_location(module_name, init_file)
         if spec is None or spec.loader is None:

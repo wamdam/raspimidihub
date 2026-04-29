@@ -48,8 +48,8 @@ Drop buttons (A/B/C/D row at the top): each can be fired by a MIDI
 note via its Trigger Note setting in the drop config. When a note
 arrives on the IN port and matches a bound button's note, that
 button fires — same path as a UI tap. Tap Learn next to the note
-wheel to capture the next incoming note. Use it to drive drops
-from a foot pedal, external pad, or sequencer."""
+wheel to capture the next incoming note. Useful for foot pedals,
+external pads, or sequencer-driven drops."""
 
     params = [
         DropButtonRow(
