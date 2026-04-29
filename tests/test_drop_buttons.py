@@ -223,44 +223,118 @@ class TestFadeInterpolation:
 
 
 # --- Note trigger ------------------------------------------------------------
+#
+# Trigger-note semantics mirror the on-screen drop button: a quick press +
+# release fires, a hold past 0.5s captures. The fire/capture decision
+# happens at note-off (or velocity-0 note-on which the engine routes to
+# on_note_off). To test the timing branch deterministically these tests
+# patch the `_drop_note_press` press_time directly instead of sleeping.
 
 class TestNoteTrigger:
-    def test_note_fires_matching_button(self):
-        # Server's job: lookup drop_notes for an exact match and fire.
-        # Learn (capturing the note) lives in the frontend now —
-        # PluginNoteSelect listens to midi-activity SSE and writes the
-        # note back via the normal param-change flow.
+    def test_short_press_fires_on_note_off(self):
         p = _new(_FakeBus(tick=200))
         p._param_values["drop_notes"] = {"1": 60}
         p._param_values["drop_modes"]["1"] = "bar"
         p._param_values["drop_snapshots"]["1"] = {"f1": 99}
         p.on_note_on(5, 60, 80)
+        # Still pending — fire/capture decision is deferred to note-off.
+        assert p._param_values["drop_schedule"] is None
+        assert "1" in p._drop_note_press
+        # Quick release -> fire.
+        p.on_note_off(5, 60)
         assert p._param_values["drop_states"]["1"] == "scheduled"
         assert p._param_values["drop_schedule"]["hard"]["button_id"] == 1
+        assert "1" not in p._drop_note_press
 
-    def test_note_with_no_match_does_nothing(self):
-        p = _new()
-        p._param_values["drop_notes"] = {"0": 36}
-        p.on_note_on(0, 60, 80)
-        assert p._param_values["drop_schedule"] is None
-
-    def test_unbound_button_is_not_fired_by_a_random_match(self):
-        # Even if the note matches, an empty snapshot means there's
-        # nothing to fire — silently ignored.
+    def test_long_hold_captures_on_note_off(self):
+        # Hold past 0.5s -> capture (no fire). Cell values become the
+        # snapshot for that button, exactly like a long-press on the
+        # on-screen drop button.
+        import time as _t
         p = _new(_FakeBus(tick=0))
-        p._param_values["drop_notes"] = {"0": 60}
-        p._param_values["drop_snapshots"] = {}
-        p.on_note_on(0, 60, 80)
+        p._param_values["drop_notes"] = {"2": 60}
+        p._param_values["f1"] = 42
+        p._param_values["b1"] = True
+        p.on_note_on(0, 60, 100)
+        # Backdate the pending press so the duration check trips capture.
+        p._drop_note_press["2"] = _t.monotonic() - 0.6
+        p.on_note_off(0, 60)
+        # Fire path was NOT taken (no schedule, no fire flash).
         assert p._param_values["drop_schedule"] is None
+        # Capture path WAS taken — snapshot holds every bound cell with
+        # a current value. Cells the test never poked stay absent
+        # (_capture_drop skips None values, see controller_base).
+        snap = p._param_values["drop_snapshots"]["2"]
+        assert snap == {"f1": 42, "b1": True}
+        assert p._param_values["drop_states"]["2"] == "captured"
+        assert "2" not in p._drop_note_press
 
-    def test_velocity_zero_is_ignored(self):
-        # MIDI convention: note-on with velocity 0 = note-off — must
-        # not fire any matching button.
+    def test_velocity_zero_routes_to_release_path(self):
+        # Velocity-0 note-on is a note-off in MIDI. The engine converts
+        # it to on_note_off; on_note_on must NOT add a press for it.
         p = _new(_FakeBus(tick=0))
         p._param_values["drop_notes"] = {"0": 60}
         p._param_values["drop_modes"]["0"] = "bar"
         p._param_values["drop_snapshots"]["0"] = {"f1": 50}
         p.on_note_on(0, 60, 0)
+        assert "0" not in p._drop_note_press
+        assert p._param_values["drop_schedule"] is None
+
+    def test_note_with_no_match_does_nothing(self):
+        # Note 60 with no matching binding leaves nothing pending and
+        # nothing scheduled.
+        p = _new()
+        p._param_values["drop_notes"] = {"0": 36}
+        p.on_note_on(0, 60, 80)
+        p.on_note_off(0, 60)
+        assert p._drop_note_press == {}
+        assert p._param_values["drop_schedule"] is None
+
+    def test_unbound_button_short_press_is_silent(self):
+        # Snapshot empty -> short press fires _fire_drop which no-ops
+        # (no snapshot to fire). State stays idle, no schedule armed.
+        p = _new(_FakeBus(tick=0))
+        p._param_values["drop_notes"] = {"0": 60}
+        p._param_values["drop_snapshots"] = {}
+        p.on_note_on(0, 60, 80)
+        p.on_note_off(0, 60)
+        assert p._param_values["drop_schedule"] is None
+
+    def test_unbound_button_long_hold_captures_first_time(self):
+        # Empty snapshot + long hold -> capture populates it, just like
+        # the very first long-press on a fresh on-screen button.
+        import time as _t
+        p = _new(_FakeBus(tick=0))
+        p._param_values["drop_notes"] = {"3": 60}
+        p._param_values["f1"] = 11
+        p.on_note_on(0, 60, 80)
+        p._drop_note_press["3"] = _t.monotonic() - 0.6
+        p.on_note_off(0, 60)
+        assert p._param_values["drop_states"]["3"] == "captured"
+        assert p._param_values["drop_snapshots"]["3"]["f1"] == 11
+
+    def test_repeated_note_on_keeps_original_press_time(self):
+        # If a noisy MIDI source double-fires note-on without a note-off
+        # in between, the second arrival must NOT reset the press timer
+        # (which would let an actually-long hold be misread as short).
+        import time as _t
+        p = _new(_FakeBus(tick=0))
+        p._param_values["drop_notes"] = {"0": 60}
+        p.on_note_on(0, 60, 80)
+        first = p._drop_note_press["0"]
+        # Backdate so we'd capture if this arrival is honoured.
+        p._drop_note_press["0"] = _t.monotonic() - 0.6
+        p.on_note_on(0, 60, 80)  # duplicate
+        # Press time still the backdated one (not refreshed by the dup).
+        assert p._drop_note_press["0"] != first  # backdated, not refreshed
+        assert p._drop_note_press["0"] < _t.monotonic() - 0.55
+
+    def test_note_off_without_press_is_noop(self):
+        # Stray note-off (e.g. plugin restarted mid-hold) is ignored.
+        p = _new(_FakeBus(tick=0))
+        p._param_values["drop_notes"] = {"0": 60}
+        p._param_values["drop_snapshots"]["0"] = {"f1": 50}
+        p.on_note_off(0, 60)
         assert p._param_values["drop_schedule"] is None
 
 

@@ -15,9 +15,16 @@ base — even though it's a `PluginBase` subclass — is *not* picked up
 as a plugin in its own right.
 """
 
+import time
 from typing import Any
 
 from raspimidihub.plugin_api import LayoutGrid, PluginBase
+
+# Hold duration past which a trigger-note press becomes a capture
+# instead of a fire. Mirrors LONG_PRESS_MS = 500 in dropbuttonrow.js
+# so the on-screen button and an external keyboard / pedal binding
+# behave identically.
+_NOTE_LONG_PRESS_S = 0.5
 
 
 class ControllerBase(PluginBase):
@@ -98,6 +105,11 @@ class ControllerBase(PluginBase):
         # 1/16-cadence fade traffic bounded.
         self._drop_fade_start: dict[str, dict] = {}
         self._drop_fade_last_emit: dict[str, dict] = {}
+        # Pending trigger-note presses: sid -> press time (monotonic).
+        # Populated on note-on, drained on note-off. The held duration
+        # decides fire (short) vs capture (long), same as the on-screen
+        # drop button. Transient — service restart drops in-flight holds.
+        self._drop_note_press: dict[str, float] = {}
         # Derived: button is 'captured' iff its snapshot is non-empty,
         # else 'idle'. Scheduled state is layered on by _handle_drop_action.
         snaps = self._param_values["drop_snapshots"]
@@ -310,24 +322,43 @@ class ControllerBase(PluginBase):
     # Pass-through silence for the other event types — the matrix routes
     # them however the user's wired the plugin's IN port.
     def on_note_on(self, channel, note, velocity):
-        """Look for a drop button bound to this note and fire it (same
-        path as a UI tap). Note channel is ignored — a drop trigger is
-        a global "any incoming note=N fires button X" binding, since
-        the typical use case is a single foot pedal or pad on whatever
-        channel it happens to be on. The Learn flow lives in the
-        frontend (PluginNoteSelect listens to midi-activity SSE and
-        captures), same pattern as Hold Arp's release_note."""
+        """Match an incoming note against the drop_notes bindings and
+        record the press time. The actual fire-vs-capture decision waits
+        for note-off so a held note can capture (≥0.5s) the same way a
+        long-press on the on-screen button does, while a quick tap fires
+        (<0.5s). Note channel is ignored — a drop trigger is a global
+        "any incoming note=N talks to button X" binding, since the
+        typical use case is a single foot pedal or pad on whatever
+        channel it happens to be on. Re-arrival while already pressed is
+        ignored so the original press_time wins. The Learn flow lives in
+        the frontend (PluginNoteSelect listens to midi-activity SSE),
+        same pattern as Hold Arp's release_note."""
         if velocity <= 0:  # note-on with velocity 0 = note-off in MIDI
             return
         notes = self._param_values.get("drop_notes") or {}
         for sid, bound in notes.items():
             if bound == int(note):
-                snaps = self._param_values.get("drop_snapshots") or {}
-                if snaps.get(sid):
-                    self._fire_drop(sid)
+                if sid not in self._drop_note_press:
+                    self._drop_note_press[sid] = time.monotonic()
                 break
 
-    def on_note_off(self, channel, note): pass
+    def on_note_off(self, channel, note):
+        """Resolve a pending trigger-note press: <0.5s -> fire, >=0.5s
+        -> capture. Mirrors the on-screen button's tap-vs-long-press
+        gesture. Note-off without a matching pending press is ignored."""
+        notes = self._param_values.get("drop_notes") or {}
+        for sid, bound in notes.items():
+            if bound != int(note):
+                continue
+            press_time = self._drop_note_press.pop(sid, None)
+            if press_time is None:
+                return
+            held = time.monotonic() - press_time
+            if held >= _NOTE_LONG_PRESS_S:
+                self._capture_drop(sid)
+            else:
+                self._fire_drop(sid)
+            return
     def on_pitchbend(self, channel, value): pass
     def on_aftertouch(self, channel, value): pass
     def on_program_change(self, channel, program): pass
