@@ -60,7 +60,6 @@ keep both sides in sync without feedback loops."""
             sync_param="drop_sync",
             fade_param="drop_fade",
             notes_param="drop_notes",
-            note_learn_param="drop_note_learn",
         ),
         Radio("bg", "Background", ControllerBase.BG_OPTIONS, default="Default", config_only=True),
         LayoutGrid(

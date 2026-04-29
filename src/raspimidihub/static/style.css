@@ -1175,46 +1175,13 @@ body {
     margin: 0;
     cursor: pointer;
 }
-.dropbtn-edit-note {
-    flex: 0 0 56px;
-    height: 28px;
-    padding: 0 6px;
-    background: rgba(0,0,0,0.4);
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 3px;
-    color: var(--text);
-    font-size: 12px;
-    text-align: center;
-}
-.dropbtn-edit-note:focus {
-    border-color: rgba(255,170,90,0.55);
-    outline: none;
-}
-.dropbtn-edit-learn {
-    flex: 0 0 auto;
-    height: 28px;
-    padding: 0 10px;
-    background: rgba(0,0,0,0.3);
-    border: 1px solid rgba(255,170,90,0.30);
-    border-radius: 3px;
-    color: rgba(255,200,140,0.85);
-    font-size: 12px;
-    cursor: pointer;
-}
-.dropbtn-edit-learn:hover {
-    background: rgba(0,0,0,0.45);
-    border-color: rgba(255,170,90,0.55);
-}
-.dropbtn-edit-learn.learning {
-    background: rgba(255,170,90,0.18);
-    border-color: rgba(255,200,140,0.85);
-    color: rgba(255,220,180,1.0);
-    /* Pulse so the user knows it's listening for the next note. */
-    animation: dropbtn-edit-learn-pulse 800ms ease-in-out infinite alternate;
-}
-@keyframes dropbtn-edit-learn-pulse {
-    0%   { box-shadow: 0 0 0 rgba(255,200,140,0); }
-    100% { box-shadow: 0 0 8px rgba(255,200,140,0.6); }
+.dropbtn-edit-noterow {
+    /* Hosts a PluginNoteSelect (wheel + Learn pill). PluginNoteSelect
+     * already styles its own internals; we just give the row enough
+     * vertical breathing room and align it to the start so the wheel
+     * doesn't get squashed by the parent flex. */
+    align-items: center;
+    min-height: 56px;
 }
 
 /* XYPad */

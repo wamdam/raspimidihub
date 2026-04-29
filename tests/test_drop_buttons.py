@@ -47,7 +47,6 @@ class _C(ControllerBase):
             sync_param="drop_sync",
             fade_param="drop_fade",
             notes_param="drop_notes",
-            note_learn_param="drop_note_learn",
         ),
         LayoutGrid(
             "g", "",
@@ -220,20 +219,15 @@ class TestFadeInterpolation:
 # --- Note trigger ------------------------------------------------------------
 
 class TestNoteTrigger:
-    def test_learn_captures_next_note(self):
-        p = _new()
-        p._param_values["drop_note_learn"] = "2"
-        p.on_note_on(0, 64, 100)
-        # Learn target cleared, note 64 bound to button 2.
-        assert p._param_values["drop_note_learn"] == ""
-        assert p._param_values["drop_notes"]["2"] == 64
-
-    def test_note_with_no_learn_fires_matching_button(self):
+    def test_note_fires_matching_button(self):
+        # Server's job: lookup drop_notes for an exact match and fire.
+        # Learn (capturing the note) lives in the frontend now —
+        # PluginNoteSelect listens to midi-activity SSE and writes the
+        # note back via the normal param-change flow.
         p = _new(_FakeBus(tick=200))
         p._param_values["drop_notes"] = {"1": 60}
         p._param_values["drop_modes"]["1"] = "bar"
         p._param_values["drop_snapshots"]["1"] = {"f1": 99}
-        # Note 60 fires button 1.
         p.on_note_on(5, 60, 80)
         assert p._param_values["drop_states"]["1"] == "scheduled"
         assert p._param_values["drop_schedule"]["button_id"] == 1
@@ -241,14 +235,24 @@ class TestNoteTrigger:
     def test_note_with_no_match_does_nothing(self):
         p = _new()
         p._param_values["drop_notes"] = {"0": 36}
-        # No learn, no matching binding: silently ignored.
+        p.on_note_on(0, 60, 80)
+        assert p._param_values["drop_schedule"] is None
+
+    def test_unbound_button_is_not_fired_by_a_random_match(self):
+        # Even if the note matches, an empty snapshot means there's
+        # nothing to fire — silently ignored.
+        p = _new(_FakeBus(tick=0))
+        p._param_values["drop_notes"] = {"0": 60}
+        p._param_values["drop_snapshots"] = {}
         p.on_note_on(0, 60, 80)
         assert p._param_values["drop_schedule"] is None
 
     def test_velocity_zero_is_ignored(self):
-        # MIDI convention: note-on with velocity 0 = note-off; should
-        # not trigger.
-        p = _new()
-        p._param_values["drop_note_learn"] = "0"
+        # MIDI convention: note-on with velocity 0 = note-off — must
+        # not fire any matching button.
+        p = _new(_FakeBus(tick=0))
+        p._param_values["drop_notes"] = {"0": 60}
+        p._param_values["drop_modes"]["0"] = "bar"
+        p._param_values["drop_snapshots"]["0"] = {"f1": 50}
         p.on_note_on(0, 60, 0)
-        assert p._param_values["drop_note_learn"] == "0"  # still armed
+        assert p._param_values["drop_schedule"] is None

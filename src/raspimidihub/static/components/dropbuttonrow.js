@@ -26,6 +26,7 @@
 import { useEffect, useRef, useState } from '../lib/hooks.module.js';
 import { html, tickFeedback, thudFeedback } from './common.js';
 import { PluginWheel } from './wheel.js';
+import { PluginNoteSelect } from './noteselect.js';
 
 // Visual tick rate while a clock is running. requestAnimationFrame
 // (~16 ms / 60 Hz on most browsers) keeps the dead-reckoned tick
@@ -74,7 +75,6 @@ export function PluginDropButtonRow({ param, values, onChange, displayCtx }) {
     const sync = values[param.sync_param] || {};
     const fade = values[param.fade_param] || {};
     const notes = values[param.notes_param] || {};
-    const noteLearn = values[param.note_learn_param] || '';
     const playOnly = !!(displayCtx && displayCtx.playOnly);
     const clockPosition = displayCtx && displayCtx.clockPosition;
 
@@ -123,28 +123,30 @@ export function PluginDropButtonRow({ param, values, onChange, displayCtx }) {
                 };
                 // Per-button polish toggles. Sync defaults true (current
                 // behaviour: quantize to grid line). Fade defaults false.
-                // Note is null when no trigger note is bound.
+                // Note trigger: drop_notes[sid] is the bound MIDI note
+                // (0-127); absence = no trigger. Toggling enabled adds
+                // a default-60 entry; toggling off removes it.
                 const syncOn = sync[sid] !== false;  // default true
                 const fadeOn = !!fade[sid];
                 const note = notes[sid];
-                const learning = noteLearn === sid;
+                const noteEnabled = note != null;
                 const setSync = (v) => {
                     onChange(param.sync_param, { ...sync, [sid]: !!v });
                 };
                 const setFade = (v) => {
                     onChange(param.fade_param, { ...fade, [sid]: !!v });
                 };
-                const setNote = (n) => {
+                const setNoteEnabled = (on) => {
                     const next = { ...notes };
-                    if (n == null || n === '') {
-                        delete next[sid];
+                    if (on) {
+                        if (next[sid] == null) next[sid] = 60;  // default C4
                     } else {
-                        next[sid] = Math.max(0, Math.min(127, parseInt(n, 10)));
+                        delete next[sid];
                     }
                     onChange(param.notes_param, next);
                 };
-                const armLearn = () => {
-                    onChange(param.note_learn_param, learning ? '' : sid);
+                const setNote = (_paramName, v) => {
+                    onChange(param.notes_param, { ...notes, [sid]: v });
                 };
                 return html`<div class="dropbtn-edit ${states[sid] === 'captured' ? 'loaded' : ''}" key=${i}>
                     <div class="dropbtn-edit-row">
@@ -184,16 +186,22 @@ export function PluginDropButtonRow({ param, values, onChange, displayCtx }) {
                         </label>
                     </div>
                     <div class="dropbtn-edit-row">
-                        <span class="dropbtn-edit-fieldlabel">Note trigger</span>
-                        <input class="dropbtn-edit-note" type="number" min="0" max="127"
-                            value=${note != null ? note : ''}
-                            placeholder="—"
-                            onInput=${(e) => setNote(e.target.value)} />
-                        <button type="button"
-                            class="dropbtn-edit-learn ${learning ? 'learning' : ''}"
-                            title="Listen for the next incoming note and bind it"
-                            onclick=${armLearn}>${learning ? 'Listening…' : 'Learn'}</button>
+                        <label class="dropbtn-edit-toggle" title="Trigger this button when an incoming note matches">
+                            <input type="checkbox" checked=${noteEnabled}
+                                onchange=${(e) => setNoteEnabled(e.target.checked)} />
+                            <span>Note trigger</span>
+                        </label>
                     </div>
+                    ${noteEnabled && html`
+                        <div class="dropbtn-edit-row dropbtn-edit-noterow">
+                            <${PluginNoteSelect}
+                                name=${'note_' + sid}
+                                label=""
+                                value=${note}
+                                onChange=${setNote}
+                                learnable=${true} />
+                        </div>
+                    `}
                 </div>`;
             })}
         </div>`;

@@ -83,7 +83,6 @@ class ControllerBase(PluginBase):
                                        {str(i): False
                                         for i in range(self.DROP_BUTTON_COUNT)})
         self._param_values.setdefault("drop_notes", {})
-        self._param_values.setdefault("drop_note_learn", "")
         # Fade animation runs from start_values → snapshot. start is
         # captured at press time (current cell readings), kept transient
         # in `_drop_fade_start` (instance attr — not persisted, gone on
@@ -300,20 +299,14 @@ class ControllerBase(PluginBase):
     # Pass-through silence for the other event types — the matrix routes
     # them however the user's wired the plugin's IN port.
     def on_note_on(self, channel, note, velocity):
-        """If a drop button is in note-Learn mode, capture this note as
-        its trigger. Otherwise look for a button bound to this note and
-        fire it (same code path as a UI tap). Note channel is ignored —
-        a drop trigger is a global "any incoming note=N fires button X"
-        binding, since the typical use case is a single foot pedal /
-        pad on whatever channel it happens to be on."""
+        """Look for a drop button bound to this note and fire it (same
+        path as a UI tap). Note channel is ignored — a drop trigger is
+        a global "any incoming note=N fires button X" binding, since
+        the typical use case is a single foot pedal or pad on whatever
+        channel it happens to be on. The Learn flow lives in the
+        frontend (PluginNoteSelect listens to midi-activity SSE and
+        captures), same pattern as Hold Arp's release_note."""
         if velocity <= 0:  # note-on with velocity 0 = note-off in MIDI
-            return
-        learn_target = self._param_values.get("drop_note_learn") or ""
-        if learn_target != "":
-            notes = dict(self._param_values.get("drop_notes") or {})
-            notes[learn_target] = int(note)
-            self.set_param("drop_notes", notes)
-            self.set_param("drop_note_learn", "")
             return
         notes = self._param_values.get("drop_notes") or {}
         for sid, bound in notes.items():
