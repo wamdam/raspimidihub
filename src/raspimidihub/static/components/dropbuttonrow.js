@@ -27,6 +27,7 @@ import { useEffect, useRef, useState } from '../lib/hooks.module.js';
 import { html, tickFeedback, thudFeedback, noteName } from './common.js';
 import { PluginWheel } from './wheel.js';
 import { PluginNoteSelect } from './noteselect.js';
+import { PluginButton } from './button.js';
 
 // Visual tick rate while a clock is running. requestAnimationFrame
 // (~16 ms / 60 Hz on most browsers) keeps the dead-reckoned tick
@@ -115,12 +116,6 @@ export function PluginDropButtonRow({ param, values, onChange, displayCtx }) {
                     onChange(param.modes_param,
                         { ...modes, [sid]: MODE_ORDER[idx] || 'immediately' });
                 };
-                const clearSnapshot = () => {
-                    const snaps = values[param.snapshots_param] || {};
-                    const next = { ...snaps };
-                    delete next[sid];
-                    onChange(param.snapshots_param, next);
-                };
                 // Per-button polish toggles. Sync defaults true (current
                 // behaviour: quantize to grid line). Fade defaults false.
                 // Note trigger lives on the same wheel as the rest, with
@@ -150,11 +145,10 @@ export function PluginDropButtonRow({ param, values, onChange, displayCtx }) {
                         <span class="dropbtn-edit-state">${stateText}</span>
                     </div>
                     <div class="dropbtn-edit-row dropbtn-edit-firerow">
-                        <span class="dropbtn-edit-fieldlabel">Fire</span>
                         <div class="dropbtn-edit-wheel">
                             <${PluginWheel}
                                 name=${'mode_' + sid}
-                                label=""
+                                label="Fire"
                                 min=${0} max=${MODE_ORDER.length - 1}
                                 value=${Math.max(0, MODE_ORDER.indexOf(mode))}
                                 tickLabel=${(i) => MODE_LABELS[i] || String(i)}
@@ -163,29 +157,27 @@ export function PluginDropButtonRow({ param, values, onChange, displayCtx }) {
                         <div class="dropbtn-edit-notewheel">
                             <${PluginNoteSelect}
                                 name=${'note_' + sid}
-                                label=""
+                                label="Note"
                                 min=${-1}
                                 formatValue=${(i) => i === -1 ? 'Off' : noteName(i)}
                                 value=${noteValue}
                                 onChange=${setNote}
                                 learnable=${true} />
                         </div>
-                        ${states[sid] === 'captured' ? html`
-                            <button type="button" class="dropbtn-edit-clear"
-                                title="Clear this button's snapshot"
-                                onclick=${clearSnapshot}>Clear</button>` : null}
                     </div>
-                    <div class="dropbtn-edit-row">
-                        <label class="dropbtn-edit-toggle" title="Quantize fire to the bar grid">
-                            <input type="checkbox" checked=${syncOn}
-                                onchange=${(e) => setSync(e.target.checked)} />
-                            <span>Sync to bars</span>
-                        </label>
-                        <label class="dropbtn-edit-toggle" title="Fade cell values from current → snapshot over the press-to-fire window">
-                            <input type="checkbox" checked=${fadeOn}
-                                onchange=${(e) => setFade(e.target.checked)} />
-                            <span>Fade</span>
-                        </label>
+                    <div class="dropbtn-edit-row dropbtn-edit-flagsrow">
+                        <${PluginButton}
+                            name=${'sync_' + sid}
+                            label="Sync to bars"
+                            value=${syncOn}
+                            color="green"
+                            onChange=${(_n, v) => setSync(v)} />
+                        <${PluginButton}
+                            name=${'fade_' + sid}
+                            label="Fade"
+                            value=${fadeOn}
+                            color="green"
+                            onChange=${(_n, v) => setFade(v)} />
                     </div>
                 </div>`;
             })}

@@ -1176,20 +1176,25 @@ body {
     cursor: pointer;
 }
 .dropbtn-edit-firerow {
-    /* Pack the Fire mode wheel + Note trigger wheel + Clear pill into
-     * one row to save vertical space. Both wheels keep their default
-     * size; the row stretches to host the bottom of the wheel ticks. */
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 8px;
+    /* Pack Fire wheel + Note wheel side-by-side. flex-start aligns
+     * both wheel-containers at the top of the row so the wheels
+     * themselves are at the same height; the Learn pill of the note
+     * wheel hangs below without pushing the wheel up. */
+    align-items: flex-start;
+    gap: 16px;
     min-height: 56px;
 }
-.dropbtn-edit-notewheel {
-    /* Right-side note wheel (sibling of the Fire wheel). Same vertical
-     * footprint as the Fire wheel — PluginNoteSelect handles its own
-     * tick styling. */
-    flex: 1 1 auto;
-    min-width: 100px;
+.dropbtn-edit-firerow .wheel-group {
+    /* Constrain each wheel column to the wheel-container's width so
+     * the Learn pill (width:100% of its column) stays the same width
+     * as the wheel rather than stretching to the row's free space. */
+    width: 80px;
+    flex: 0 0 80px;
+}
+.dropbtn-edit-flagsrow {
+    /* Sync + Fade rubber buttons in a separate row below the wheels. */
+    gap: 16px;
+    align-items: flex-start;
 }
 
 /* XYPad */
