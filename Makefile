@@ -12,7 +12,7 @@ ROSETUP_DEB_FILE = dist/$(ROSETUP_DEB_NAME).deb
 
 PI_HOST = user@10.1.1.2
 
-.PHONY: all clean deb deb-rosetup deploy deploy-rosetup install uninstall test test-pi run lint fmt fmt-check
+.PHONY: all clean deb deb-rosetup deploy deploy-rosetup install uninstall test test-pi run lint fmt fmt-check screenshots
 
 all: deb deb-rosetup
 
@@ -194,3 +194,21 @@ status:
 
 restart:
 	ssh $(PI_HOST) 'sudo systemctl restart raspimidihub'
+
+# --- Documentation screenshots (Playwright + headless Chromium).
+# Strips the live plugin set, recreates a curated demo set, walks
+# every documented scene, writes PNGs into docs/screenshots/. Does
+# NOT save — the Pi's bottom-nav Routing icon ends up dirty; click
+# Load Config in Settings to restore your real state.
+#
+# Override the target Pi with TARGET=http://<host>; default is
+# http://10.1.1.2 (matches the rest of the Makefile's PI_HOST).
+TARGET ?= http://10.1.1.2
+
+screenshots:
+	@if [ ! -x .venv/bin/playwright ]; then \
+		python3 -m venv .venv && \
+		.venv/bin/pip install -e ".[screenshots]" && \
+		.venv/bin/playwright install chromium; \
+	fi
+	.venv/bin/python scripts/screenshots/run.py --target=$(TARGET)
