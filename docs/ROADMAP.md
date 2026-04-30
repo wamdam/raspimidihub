@@ -1497,11 +1497,12 @@ Biggest user-visible win for performance.
      single-digit-ms loop lag, ~95 SSE/s (down from 1478),
      zero backlog, even with 7 connected browsers.
 
-### Phase 5 — Controller polish (≈ 1 sprint)
+### Phase 5 — Controller polish (≈ 1 sprint) ✓ Done (2026-04-30)
 
 Reshaped 2026-04-27 around a 4-button drop row that absorbs the
 original "Autodrop" + "Preview indicator" items into one coherent
-UX.
+UX. Bar counter + data-model migration shipped alongside; lookahead
+fire timing landed in Phase 6.5 below.
 
 1. ✓ **Done (2026-04-27): 4 drop buttons per controller, replacing the single drop pad.**
    The pad row at the top of every controller becomes a row of FOUR
@@ -1612,30 +1613,18 @@ UX.
    answers "what is on deck?" without having to draw ghost arcs on
    every cell. See *Dropped* section for the full reasoning.
 
-3. **ClockBus bar counter (server prereq).** The current ClockBus
-   tracks 24-PPQN ticks but doesn't expose a bar counter. Add a
-   `bar`/`tick_in_bar` pair that:
-   - Increments on every 96th tick (4/4 at 24 PPQN).
-   - Resets on `on_start()`.
-   - Is queryable as `clock_bus.bar_position() → (bar, tick_in_bar,
-     ticks_per_bar)` so the controller plugin can compute "ticks
-     until next bar boundary" + the drop fire moment.
+3. ✓ **Done (2026-04-27): ClockBus bar counter.** `bar_position()` +
+   `ticks_until_next_grid(every_n_bars)` shipped on the existing
+   ClockBus singleton. No new wire format; internal state. Time-
+   signature override on the Master Clock is still parked open —
+   bus stays at 4/4 (96 ticks/bar) until a user asks for odd-time.
 
-   No new wire format; this is internal state on the existing
-   ClockBus singleton. Plugins that subscribe to clock ticks now
-   also see bar transitions if they want them.
+4. ✓ **Done (2026-04-27): Migration from the old single-drop-pad data
+   model.** Loader maps `pad_snapshot` → `drop1_snapshot`, `pad` →
+   `drop1_state`; buttons 2-4 start empty. Saved configs from the
+   single-pad era load cleanly.
 
-   **Open question — time signature.** Default 4/4 fits the
-   electronic-music targets. A future `time_signature` plugin param
-   on the Master Clock could feed the bus's `ticks_per_bar`. Out of
-   scope for v1 of drop-buttons; revisit when needed.
-
-4. **Migration from the old single-drop-pad data model.** Existing
-   instances persist `pad`, `pad_snapshot` in their params. Loader
-   maps them to the new shape: `pad_snapshot` → `drop1_snapshot`,
-   `pad` → `drop1_state` ("captured" / "idle"). Buttons 2-4 start
-   empty. Preserves muscle memory + saved configs.
-5. **Whatever the MVP usage in Phase 4 surfaced.** As of 2026-04-26
+5. ✓ **Phase 4 follow-ups parked.** As of 2026-04-26
    nothing user-facing is open — the day's session ran four
    simultaneous LC faders into Mixer 8 across multiple browsers and
    identified a stack of bottlenecks rather than UX issues. Open
@@ -1772,6 +1761,91 @@ Refinements over the original sketch:
   enables Paste-as-new on plugin headers AND only when the
   clipboard holds `kind: "plugin"` (any plugin type works as
   source — you create a fresh instance of *that* type).
+
+### Phase 6.5 — ALSA queue scheduling + 2.1 polish (DONE 2026-04-30)
+
+Foundational timing fix. Server-driven, time-sensitive plugin events
+now go through a per-instance ALSA queue with absolute real-time
+stamps. The kernel-side scheduler dispatches each event at its
+target moment with sub-ms jitter regardless of Python latency or
+load. Drove the work after a Mixer 8 drop on bar 1 was missing the
+audible kick — the snapshot CCs were arriving right ON the bar
+instead of comfortably ahead of it.
+
+What landed:
+- `alsa_seq.py` gains the queue lifecycle bindings
+  (alloc_named_queue / free_queue / control_queue), the real-time
+  event-stamp helper, and the remove-events family for cancel-by-tag.
+- `PluginAlsaClient` allocates + starts a queue at instance create,
+  frees it at close. `send_event_at(when_monotonic, ...)` posts a
+  queued event with absolute real-time; `cancel_tag(tag)` clears
+  pending events. Falls back to immediate send if the queue couldn't
+  be allocated.
+- `PluginBase` exposes `send_cc_at` / `send_note_on_at` /
+  `send_note_off_at` / `send_clock_at` / `send_start_at` /
+  `send_stop_at` / `send_continue_at` + `cancel_scheduled(tag)`.
+- ClockBus tracks tick → monotonic-time mapping (EMA over recent
+  inter-tick intervals) so plugins can compute "what monotonic
+  moment will tick N fire at?" via `tick_to_monotonic(tick)`.
+- **Drop button hard-fire** pre-schedules each snapshot CC
+  `DROP_FIRE_LEAD_S` (8 ms) before the bar moment. State flip happens
+  at fire_at_tick; CCs themselves arrive at the synth ahead of any
+  beat-1 event. Cancel + bumped-by-other-button paths invoke
+  `cancel_scheduled`.
+- **Master Clock** pre-schedules a 0.5 s lookahead burst of clock
+  ticks; refill loop tops up before the queue runs dry. BPM changes
+  drop the rest of the burst and re-anchor at "now" with the new
+  period.
+- **MIDI Delay** pre-schedules each echo's note_on + note_off via the
+  queue at note-on time. Both sync (clock-bus tick → monotonic) and
+  free (time.monotonic + delay_ms × i) modes go through the queue.
+  Trade-off: sync mode no longer dedups overlapping echoes that fall
+  in the same circular-buffer slot — rare in practice.
+- **Arpeggiator** schedules each step's note-off at note_on_time +
+  gate × rate_period. Side-effect: the gate parameter is honoured
+  for the first time — the previous code computed gate but never
+  used the result, leaving every note effectively at 100 % gate.
+
+Not migrated this round (would lose existing behaviour for marginal
+benefit):
+- **CC LFO**: at-now scheduling ≈ direct send, and pre-scheduling
+  future samples would lose the value-change dedup the existing
+  code does carefully. Revisit if a slow LFO shows zipper under load.
+- **Drop fade**: still steps per-tick. The user's reported lag-stack
+  was hard drop only; per-cell interpolation already runs through a
+  controlled lerp. Revisit if fade timing becomes audibly off.
+
+Other 2.1 polish that landed in the same session:
+- USB tethering: phone plugged into a USB-A port + tether on phone
+  → Settings shows the tethered URL as a clickable link. Web server
+  binds 0.0.0.0 already, so the link works for free; the phone also
+  becomes the Pi's default route, so the existing update flow can
+  reach GitHub without touching wlan0.
+- XY pad spring: per-cell `spring_force` + `spring_home` (Bottom-left
+  / Center). Client-side exponential-decay animation on touch
+  release; tracks float position to avoid integer-rounding stalls
+  at slow forces.
+- Per-axis MIDI Learn for XY pads (X and Y captured independently).
+- Mixer 8 second button row (B9-B16, CC 56-63 ch 1).
+- Bottom-nav Routing icon shows a dark-red asterisk when in-memory
+  state diverges from the saved config; cleared by Save / Load /
+  Import.
+- "Reload App" + "stale, reload" link unregister the service worker,
+  clear caches, and reload via a fresh `?_r=<timestamp>` query —
+  reliably bypasses mobile Safari's bf-cache. `index.html` now goes
+  out with `no-store`.
+- MIDI monitor shows destination-routed events (engine augments
+  `midi-activity` with `dst_clients`, monitor matches src OR dst).
+  Render is rAF-coalesced.
+- SSE: peer-EOF watcher cleans up SSE connections immediately on
+  tab close instead of waiting up to 30 s for the next heartbeat.
+- Mini variant for Wheel + Button (half-height) — used in dense
+  edit panels.
+- Pencil icon on the Controller bar opens the corresponding
+  device-detail panel directly.
+- Edit menu item on hardware row headers — opens device-detail panel
+  for MIDI monitor + test sender (the matrix context menu only had
+  Rename before).
 
 ### Phase 7 — Modulator (≈ 0.5–1 sprint)
 

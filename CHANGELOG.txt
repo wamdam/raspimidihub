@@ -4,86 +4,89 @@ User-visible changes. Short tagged one-liners, no code or commit
 hashes. Tags: Added, Improved, Fix, Changed, Removed.
 
 
-Unreleased
+2.1 — Unreleased
 
-- Added: USB tethering - plug a phone into a USB-A port and enable USB tethering / Personal Hotspot, the Pi gets an IP from the phone over usb0 / enxXX and Settings surfaces it as a clickable link ("Phone connected. Open http://x.y.z.w/ on your phone for a faster connection."). Web server already binds 0.0.0.0 so the link works for free; the phone also becomes the Pi's default route, so the existing update flow can reach GitHub without touching the wlan0 mode flip. No toggle - plugging in is consent
-- Added: Software updates - Settings shows a Software Versions card listing every locally-stored deb (newest first) with its changelog and an Install button; "Check GitHub for newer versions" auto-downloads anything newer than the running build into /var/lib/raspimidihub/updates/, keeps the 3 most recent. Install is offline-only (no network at install time): it just dpkg's a stored deb under an rw remount and back to ro
-- Improved: Update kickoff is non-blocking - POST /api/system/check-update spawns the orchestrator as a backgrounded asyncio task and returns immediately. The phone-via-AP case (where switching to WiFi tears down the AP and would kill any held-open HTTP request) now just polls /api/system/update-status across the AP outage and surfaces "done" once the AP is back. Replaces an earlier design where the request blocked through the whole flow and produced "Failed to fetch" on the phone
-- Added: WiFi mode preference (Settings) - radio between "AP only", "WiFi for updates" and "WiFi always". When set to "WiFi for updates", clicking Check briefly joins the saved WiFi to fetch + download, then switches back to AP. Probes the current network first - if ethernet has internet the orchestrator just downloads through it, no WiFi switch
-- Added: Update watchdog - any time the orchestrator switches to WiFi client mode it schedules a transient systemd-run unit that forces the Pi back to AP mode after 180 s if the orchestrator hangs. Survives a service crash mid-flow, so a buggy update step can never leave the Pi unreachable from your phone
-- Fix: Pi 3 brcmfmac re-enables WiFi power save on every cfg80211 init (most visibly when wpa_supplicant connects in client mode, leaving the flag stuck on the next AP bring-up). With power save on in AP mode the radio accepts clients at first but starts dropping probe / auth frames after a while, so the AP looks fine but new associations time out. Now `iw dev wlan0 set power_save off` runs after every start_ap (idempotency fast path included). iw is added to the deb's Depends. Verified: AP→client→AP transitions no longer break the phone's reconnect
-- Improved: Update flow log output - every step is now in journalctl. Probe outcome with duration + URL hit, full GitHub release list with each deb URL, per-version skip reason ("not newer than current", "already on disk"), download bytes + duration, prune list, transient WiFi state transitions. `journalctl -u raspimidihub -f` while clicking Check shows the entire flow without needing to dig
-- Added: Drop button - Sync to bars toggle. Default on (current behaviour: quantize fire to the bar / 4-bar / etc grid line). When off, pressing the button starts a fresh N-bar countdown from the press tick — every press takes the same time regardless of where the music is. The ring becomes a single segmentless arc filling 0-1 over the press-to-fire window
-- Added: Drop button - Fade toggle. Default off (current behaviour: hard-snap cell values at fire). When on, the controller's continuous cells (knobs / faders) interpolate linearly from their current value at press time to the snapshot over the remaining press-to-fire window — so pressing a 4-bar drop near the start of the cycle fades slowly, near the end fades fast, and the cells always land exactly on the snapshot at the fire moment. Cell-buttons (on/off) and XY pads stay discrete and snap at fire as before
-- Added: Drop button - per-button MIDI note trigger. Each button has a note number (0-127) and a Learn pill in its config card. When a note arrives on the controller's IN port and matches a bound button, that button fires (same path as a UI tap). Learn captures the next incoming note. Useful for foot pedals or external pads driving drops
-- Improved: Trigger note now mirrors the on-screen button's gesture - a quick press + release fires the drop, holding the note past 0.5 s captures the snapshot instead. Previously the trigger note could only fire; now an external keyboard or pad can also re-arm a button without diving into the UI
-- Improved: Trigger-note press now drives the on-screen drop button's press-fill animation — hold a bound note and the matching button fills its progress ring in real time, thuds + flashes at the 0.5 s capture mark, exactly like a touch long-press. The fire/capture decision is still server-side; the client only owns the visual
-- Added: Drop button - dual-slot scheduling. A fade button and a hard-drop button can run side by side now: cells fade slowly toward target A while a separate drop B is queued for a closer beat. When the hard slot fires it cancels any in-flight fade — drop wins, the fade just stops where it was. Pressing the same button still cancels its own schedule; pressing another button that targets the same slot replaces that slot's contents only
-- Changed: Drop button config card slimmed down. All four configurables (Fire / Sync to bars / Fade / Trigger Note) now share one row instead of stacking across three. The card no longer reflects runtime state — no Loaded/Scheduled badge, no orange highlight on capture; config is about what the button does, not what it's currently doing. Note column relabelled "Trigger Note" so its purpose reads at a glance
-- Changed: Roadmap drops the planned cell-level preview-while-scheduled (Phase 5.2). The four-button row with per-button names, mode badges, rings and fade indicators already tells you what's on deck — ghost arcs across every knob and fader would just paint over the surface every time a drop was queued, without telling you anything the buttons don't already say
-- Added: Matrix context menu (Phase 6). Single tap or right-click any matrix cell, plugin row/column header, or mapping row to open a popover menu. Cell menu: Edit / Copy / Paste / Remove on active connections, Add connection / Paste on empty cells. Plugin headers: Edit / Copy / Paste as new / Delete. Hardware headers: Rename. Mapping rows: Edit / Copy / Remove. The popover is large enough to be a comfortable touch target on phones and dismisses on outside-tap or Esc
-- Changed: All matrix interactions now go through the menu — single tap opens it, every action lives there. The old "tap toggles connection / opens detail / confirms remove, long-press opens menu" dual mode is gone. One way to do anything, no 500 ms delay, no accidental toggles from a stray tap. Menu items label what'll happen ("Add connection" / "Remove") so you can read before you commit
-- Added: Connection clipboard. Copy a connection's filter + mappings, paste onto another cell — empty cell creates the connection first, active cell replaces. Replaces the old long-press-to-jump-to-filter shortcut (Edit menu item does the same job, with Copy / Paste / Remove right next to it)
-- Added: Plugin clipboard. Copy a plugin instance, Paste-as-new creates a clone with the same params (no name copied so two clones don't collide). Plus a Delete shortcut that goes through the menu instead of having to dig into the device-detail panel
-- Added: Mapping clipboard with bump-on-conflict. Copy a mapping row, paste it onto the same connection or any other connection's mapping list. Pastes as-is when the destination CC / channel is free; on duplicate conflict, scans the destination field forward until a free slot is found and pastes there with a "(bumped to free slot)" toast. Mapping rows lost their inline Edit / Del buttons — single-tap is Edit, long-press is the menu
-- Added: Tiny "we're alive" dot indicator under the update status. A single dot hops along five positions, advancing on every poll. Green when polls are getting through, red when they're failing (AP outage). Stops moving when polling stops, so the user can tell at a glance whether anything's happening
-- Improved: Update poll surfaces a "reconnect to AP" help message after 90 s of failed polls. When the user's phone auto-reconnects to a different saved WiFi during the orchestrator's AP outage, polls fail forever and the UI used to sit on "Starting…" indefinitely. Now after 90 s without a successful status read, it swaps to a help message naming the AP and asking the user to reconnect + reload. Auto-clears once the poll succeeds again
-- Changed: Settings WiFi card consolidated into one panel - status badge, mode-pref radio (AP only / WiFi for updates / WiFi always) with the inapplicable options greyed out when no home WiFi is saved, plus rows for Home WiFi and AP password each opening their own modal. The mode radio is the only thing that flips live network state, and only via an explicit Apply button with a label that tells you what's about to happen ("Save mode" / "Switch to home WiFi now" / "Stop WiFi client, start AP"). Home WiFi modal scans by default with a "Type SSID manually..." escape hatch for hidden / out-of-range networks. AP password modal updates hostapd in place (existing connections survive). Replaces the older mix of "Join WiFi", "Switch to AP", "AP Settings", "Update WiFi" buttons that did overlapping things in different places
-- Added: Controller tab in the top nav - opens the last-viewed Controller plugin in a fullscreen, non-scrolling play surface; switch between instances via arrow buttons, dropdown, or a horizontal swipe across empty grid space (touches that start on a control are reserved for the control); per-device last-viewed remembered via localStorage
-- Added: Controller - Mixer 8 plugin: 24 knobs (3 rows of 8) + 8 vertical faders + 8 buttons, OUT port emits sequential CC 16-55 ch 1, IN port silently mirrors external CCs back into the on-screen cells (no feedback loops)
-- Added: Controller - FX 6 plugin: 18 knobs (3 rows of 6) + 6 faders + 6 buttons; OUT port emits sequential CC 16-45 ch 1
-- Added: Controller - Performance 16 plugin: 4-wide layout with 16 macro knobs + 4 colored scene buttons; defaults CC 16-35 ch 1
-- Added: Controller - XY 4 plugin: 2 large XY pads on top + 8 knobs + 4 buttons; defaults CC 16-31 ch 1 (XY1 x/y = 16/17, XY2 x/y = 18/19, K1-K8 = 20-27, B1-B4 = 28-31)
-- Added: Controller - drop button row of 4 quarter-width buttons replacing the single drop pad; each button has its own snapshot, name and fire mode (Now / Bar / 2-Bar / 4-Bar / 8-Bar / 16-Bar). Long-press (500 ms with full-button-height fill) captures the current state into THIS button's snapshot; short-press fires (or schedules at the next musical bar / 2-bar / 4-bar / 8-bar / 16-bar downbeat). Bar-modes quantise to the musical grid - pressing during bar 5 with 4-Bar fires at bar 8, not bar 9. Only one button on a controller can be scheduled at a time; tapping any other cancels the prior schedule. A second tap on the scheduled button cancels it. Fire timing is server-side and clock-accurate; client lag affects only the moment the press lands at the server, not the actual fire
-- Added: Controller - drop button progress ring around each button. N discrete arc segments (4 / 8 / 16 / 32 / 64 for the bar / 2-bar / 4-bar / 8-bar / 16-bar mode) with small quarter-gap notches; always running while transport is playing so the button reads as "we are HERE in the cycle" even when no schedule is active. While scheduled the ring switches to a neon-bright peach with drop-shadow glow and pulses on every beat (exponential decay). Pressing to schedule keeps the ring's current position - no visual restart. Ring freezes the moment a MIDI Stop arrives at the master clock
-- Added: Controller - per-cell rename: tap "Edit" to flip into a per-cell card list with a name input (default "K1", "F3" etc. shown as placeholder); names persist per-instance
-- Added: Controller - per-cell channel + CC rebind: each cell card has Ch + CC inputs that override the schema defaults, so different cells can route to different synths on different channels
-- Added: Controller - per-cell MIDI Learn: each cell card has a "Learn" button (orange-pulsing "Listening…" while armed); twist a knob on any device wired to the Controller's IN port and the next CC becomes that cell's binding (channel + CC captured automatically)
-- Added: Controller - per-cell on / off CC values for button cells (defaults 127 / 0); pair can be inverted (0 / 127) or set to any half-value pair like 64 / 0 for half-volume mute. ↔ swap button next to the values flips them in one tap. Bidirectional sync uses "closer to on or off?" so any pair works
-- Added: Controller - per-controller background colour with 8 dark themes (Default, Navy, Forest, Wine, Plum, Teal, Sienna, Slate); the picker shows in the device-detail Plugin Config and previews live as you choose, the Controller page itself stays uncluttered
-- Added: XY Pad control - square touch surface with a draggable dot; emits two values (x, y) for use as a dual-CC source. Cell config exposes separate Ch + CC inputs for X and Y axes (Y channel defaults to X) so the two axes can drive different synths or different channels on the same synth; Learn captures the X axis only, type Y manually
-- Added: LayoutGrid - fixed-position param container that lets a plugin declare cells in explicit (col, row) slots with multi-cell spans; ground floor for the Controller plugins
-- Added: Knob control - round body with rotating indicator, LED arc that lights up to the current value, value text in the centre; drag sensitivity scales with the value range so labelled / few-step knobs aren't twitchy
-- Added: Param span - any wheel / knob / fader / toggle / button can declare it occupies 1, 2, 3 or 4 cells of the row (e.g. a fat "Master" fader spanning the row)
-- Added: Plugin panel - section titles can be hidden for tighter dense layouts
-- Added: Plugin device panel reorder - Plugin Config moved to the top, ports below it, MIDI Test Sender + MIDI Monitor collapsed by default with a ▶ / ▼ toggle. Inputs descriptor list moved into the help (?) dropdown
-- Added: Plugin Config in the device-detail panel renders a flat config list (rename / channel / cc / on / off / Learn) for any plugin that exposes cell bindings, auto-saving on every input change; a maximize button in the top-right jumps straight to the full-size Controller page
-- Added: Matrix clock indicator - pulses in time with the source's quarter notes instead of running a generic loop
-- Added: Clock Divider plugin - emits one MIDI Clock for every N received (2..32); passes notes / CC / etc. through unchanged
-- Added: UI Demo plugin - drop-in showcase of every UI control type, makes no MIDI
-- Added: Panic - second tap upgrades to "All Sound Off" (Elektron-style); first tap leaves delay / reverb tails ringing
-- Added: URL routing - /routing, /routing/d/<device_id>, /controller, /controller/<instance_id>, /presets, /settings; browser back / forward + bookmarks now do the obvious thing across tabs, the open device panel and the selected Controller instance
-- Added: Top-bar version badge "v2.0.9.<build-token>" with an orange "stale, reload" link when the server has been redeployed since this tab loaded - kills "is my browser running stale code?" guesswork
-- Added: Settings - Loop lag, MIDI in -> SSE out, MIDI in -> MIDI out and Control in -> MIDI out latency probes (windowed-max ms over the last second), plus process CPU% as percent-of-one-core. Loop lag is the single best signal that the server is keeping up with itself
-- Added: Settings - SSE backlog stat shows per-client outbox queue depth so a stuck phone is immediately visible
-- Added: Settings - SSE / sec stat alongside Load + CPU temp; ticks live every 2 s and shows current connected client count
-- Added: Settings - Knob / wheel tick sounds toggle (Display section); off silences the WebAudio tick / thud feedback while leaving haptic vibration alone
-- Improved: System prepare on install - the deb's postinst now disables services that contribute nothing to a single-purpose MIDI appliance (Bluetooth audio + stack, ModemManager, cloud-init, udisks2, cron, sshswitch, e2scrub_reap and the e2scrub_all / fstrim / dpkg-db-backup / logrotate / rpi-zram-writeback timers). Frees memory and removes periodic wake-ups that briefly competed with the asyncio loop. Idempotent; reverse with `raspimidihub-system-revert`
-- Improved: CPU 3 reserved for the asyncio loop. Kernel cmdline gets `isolcpus=3` so the scheduler can't place anything else there; the Python process explicitly pins itself to CPU 3 via os.sched_setaffinity at startup; hostapd / dnsmasq are spawned through `taskset -c 0-2` so they keep running on cores with normal timer ticks (unbroken WiFi beaconing). Latency spikes from "external influences" become impossible by construction — the loop owns its core; nothing the rest of the system does can preempt it. Idle CPU dropped from ~14 % to 7 %, loop lag in the low single-digit ms even idle. Activated automatically on install, takes effect on next reboot
-- Improved: SSE per-view subscription model - clients now receive only the events their current view needs (Routing gets midi-activity / clock / cc-changes; Controller gets plugin-param / plugin-display for the selected instance only; Settings + Presets subscribe to nothing dynamic). Idle browsers no longer eat the active controller's flood, and the per-client traffic scales with what you're looking at instead of with what every other client is doing
-- Improved: Server stays responsive under heavy hardware-controller load - 4 simultaneous LaunchControl faders mirroring into Mixer 8 used to pin the asyncio loop at 100+% CPU with 50-75 ms loop lag and laggy playback; the same load now sits at ~80% CPU with single-digit-ms loop lag and zero SSE backlog. Wins came from: trailing-edge coalescer on plugin-param + plugin-display SSE (1478 ev/s -> ~115), persistent ALSA fd reader (was add/remove per iteration), LED sysfs writes off the asyncio loop, midi-blink rate cap from 20 Hz to 1 Hz, cached plugin-client-id set, batched SSE writes per drain, removal of per-CC INFO log, light /plugins/instances list shape with cache + invalidation, stable Controller onSelect callback identity (no more list-fetch on every SSE event), plugin schema cached per class so PATCH responses don't re-serialise, ETag + 304 on static assets and version-stamped index.html so a fresh deploy busts the per-module cache without re-downloading unchanged bodies
-- Improved: SSE traffic cut roughly in half - Clock events stop double-emitting through midi-activity, plugin display callbacks throttled to 10 Hz with same-value dedup, ui_demo scope/meter halved to 10 / 5 Hz
-- Improved: Plugin controls - multi-touch fixed; two fingers on different knobs or wheels now track independently instead of both following the first finger
-- Improved: Plugin controls - drag and scroll feel smoother; the wheel / fader / knob thumb no longer jitters back to a stale value mid-move
-- Improved: Plugin controls - param values now stay in sync across all open browsers / phones via a self-healing watchdog (handles fast drags, rate limits, and dropped events)
-- Improved: Plugin panel - 4-column responsive grid that fits even on a 360 px phone; controls share a uniform 1u footprint so a row of mixed wheels, faders, knobs, toggles, buttons all line up
-- Improved: Plugin panel - cards have a brushed-metal gradient that reads as raised housings against the matrix-coloured panel background
-- Improved: Meter display - now a read-only green-LED knob instead of a flat bar
-- Improved: Switch-style toggles unified into LED buttons - same behaviour, color-coded (green = on, red = destructive), more compact in dense grids
-- Improved: Toggles + buttons - slimmer 44 px height to match the wheel / fader visual weight
-- Improved: Panic - momentary trigger button that flashes red when fired and clears itself when the all-notes-off completes (replaces the latching toggle)
-- Improved: Cell config (Controller edit mode) - replaced the dense single-row table with one card per cell: type word + name input on top, Ch + CC + Learn on the next row, On / Off on a third row for buttons. Default values pre-fill instead of placeholder hints so what you see is what's saved
-- Improved: MIDI Delay - Delay (ms) is now a Fader; sync rate covers 4 bars down to 1/16 with triplets
-- Improved: CC LFO - slow clock-sync rates added (up to 8 bars)
-- Improved: Disconnect - destinations get a clean Note Off when a connection is removed mid-note, so notes don't stick
-- Improved: Load Config - reapplies only the connections that actually changed; unrelated routing keeps flowing without interruption
-- Improved: Multi-tab support - several phones / browsers can be open at once without the SSE connection cap pushing one of them out
-- Fix: Vertical fader fill no longer overshoots the rounded top of the track at value = max
-- Fix: Plugin panel - turning a wheel / knob no longer slides the panel away
-- Fix: Radio buttons - the active pill no longer shifts its neighbours by 1 px when toggled
-- Fix: Note wheel - active value now centred on the indicator
-- Fix: WiFi AP - service restart now heals "no AP" / "two hostapds racing" states (was sometimes leaving the SSID dead or letting clients connect-then-immediately-disconnect)
-- Fix: WiFi AP - first hostapd spawn that loses the race against NetworkManager releasing wlan0 (boot, or switching client → AP) now retries automatically; hostapd's stderr is logged on failure instead of dying silently
+Controllers
+- Added: Controller tab in the top nav — fullscreen play surface, swipe / arrow / dropdown to switch between instances, last-viewed remembered
+- Added: Mixer 8 — 24 knobs / 8 faders / 16 buttons (CC 16-63 ch 1)
+- Added: FX 6 — 18 knobs / 6 faders / 6 buttons (CC 16-45 ch 1)
+- Added: Performance 16 — 16 macro knobs + 4 scene buttons (CC 16-35 ch 1)
+- Added: XY 4 — 2 XY pads + 8 knobs + 4 buttons (CC 16-31 ch 1)
+- Added: 4 drop buttons per controller — long-press to capture, tap to fire. Modes: Now / Bar / 2-Bar / 4-Bar / 8-Bar / 16-Bar, musical-grid quantised
+- Added: Drop button — Sync-to-bars toggle, Fade-on-fire toggle, MIDI-note trigger with Learn, dual-slot scheduling (one fade + one hard drop side by side)
+- Added: Drop button progress ring — segmented arc shows position in the cycle, peach pulse while scheduled, freezes on MIDI Stop
+- Added: Per-cell rename, Ch + CC rebind, MIDI Learn (per axis on XY pads), and on/off CC values for buttons
+- Added: 8 dark themes per controller (Default / Navy / Forest / Wine / Plum / Teal / Sienna / Slate)
+- Added: XY pad spring — per-cell force + home (Bottom-left / Center); the dot returns to home after release at the chosen speed
+- Added: Plugin Config in the device-detail panel renders a flat per-cell list with mini wheels for Ch / CC / On / Off. Maximize button jumps to the full Controller page
+- Added: Pencil icon on the Controller bar opens the controller's plugin config directly
+- Improved: Drop fire is sample-accurate — snapshot CCs land just ahead of the bar boundary, before any beat-1 event at the destination synth
+- Changed: Drop button labels shortened: "Sync to bars" → "Sync", "Trigger Note" → "Trg. Note"
+
+Routing & workflow
+- Added: Single-tap context menu on every matrix cell, plugin / hardware header and mapping row
+- Added: Connection clipboard — copy filter + mappings, paste into another cell
+- Added: Plugin clipboard — copy a plugin instance, Paste-as-new clones it
+- Added: Mapping clipboard — pastes as-is, or auto-bumps to a free slot on duplicate-conflict
+- Added: URL routing — back / forward and bookmarks now work for /routing, /controller, /presets, /settings, and the open device panel
+- Added: Edit menu item on hardware headers — opens the device-detail panel for MIDI monitor + test sender
+- Added: Bottom-nav Routing icon shows a dark-red asterisk when in-memory state diverges from the saved config
+- Improved: Disconnect sends a clean Note Off so notes don't stick
+- Improved: Load Config only reapplies what changed; unrelated routing keeps flowing
+- Improved: Multi-tab — several phones / browsers can be open at once without one being pushed out
+- Improved: MIDI monitor on a destination device (e.g. Mixer 8) shows incoming events from upstream devices
+- Changed: All matrix interactions go through the menu (no more dual tap-or-long-press)
+
+Plugins
+- Added: Clock Divider — emit one MIDI Clock for every N received (2..32)
+- Added: UI Demo — showcase of every UI control type, makes no MIDI
+- Improved: Master Clock — clock ticks pre-scheduled through the kernel queue, rock-solid 24-PPQN under load
+- Improved: MIDI Delay — every echo pre-scheduled at note-on time. Delay (ms) is now a Fader; sync rate covers 4 bars down to 1/16 with triplets
+- Improved: Arpeggiator — gate parameter actually controls staccato/legato now (was effectively 100 % before)
+- Improved: CC LFO — slow clock-sync rates added (up to 8 bars)
+- Improved: Panic — momentary trigger button; second tap upgrades to "All Sound Off"
+
+WiFi, updates & networking
+- Added: USB tethering — plug a phone into a USB-A port, Settings shows the tethered URL as a clickable link
+- Added: WiFi mode preference — radio between AP only / WiFi for updates / WiFi always
+- Added: Software Updates card — auto-downloads newer GitHub releases, keeps the latest 3, installs offline with one tap
+- Added: Update watchdog — forces the Pi back to AP mode if the orchestrator hangs in client mode
+- Added: Update progress UI — live status, "we're alive" hopping dot, "reconnect to AP" help after 90 s of failed polls
+- Improved: "Reload App" + "stale, reload" reliably picks up the new build on phones (was getting stuck on Safari bf-cache)
+- Changed: Settings WiFi card consolidated — one panel with status badge, mode-pref radio, Home WiFi and AP password rows
+- Fix: AP service restart heals "no AP" / "two hostapds racing" states
+- Fix: First hostapd spawn that loses the race against NetworkManager retries automatically
+- Fix: Pi 3 WiFi power-save quirk — phones can re-associate cleanly after a client→AP cycle
+
+System & performance
+- Improved: CPU 3 reserved for the asyncio loop — idle CPU dropped from ~14 % to ~7 %, single-digit-ms loop lag
+- Improved: SSE per-view subscription — each client only receives events its current view needs
+- Improved: Heavy-controller load — 4 LaunchControl faders into Mixer 8 used to pin CPU at 100+ %; now ~80 % with single-digit-ms lag and zero SSE backlog
+- Improved: SSE traffic cut roughly in half (clock dedup, plugin display throttle, ui_demo scope/meter halved)
+- Improved: SSE connections clean up immediately when a tab closes (was waiting up to 30 s for the next heartbeat)
+- Improved: System prepare on install disables services that contribute nothing to a single-purpose MIDI appliance (Bluetooth, ModemManager, cloud-init, cron, …)
+- Added: Settings stats — Loop lag, MIDI in→out and Control in→MIDI out latency probes, process CPU %, SSE / sec, SSE backlog
+- Added: Top-bar version badge with a "stale, reload" link when the server has been redeployed
+- Added: Knob / wheel tick sounds toggle (Display section)
+
+UI building blocks
+- Added: Knob — round body with rotating indicator, LED arc, centre value text; adaptive drag sensitivity
+- Added: XY Pad — square touch surface with separate Ch + CC for X and Y axes, per-axis MIDI Learn
+- Added: LayoutGrid — fixed-position param container with multi-cell spans
+- Added: Param span — any control can occupy 1, 2, 3 or 4 cells of the row
+- Added: Mini variant for Wheel + Button (half-height) — used in dense edit panels
+- Improved: Plugin panel — 4-column responsive grid that fits a 360 px phone; brushed-metal cards
+- Improved: Plugin controls — multi-touch fixed, smoother drag, cross-browser sync via watchdog
+- Improved: Buttons — same height as wheels (52 px) so mixed rows align
+- Improved: Meter — read-only green-LED knob instead of a flat bar
+- Improved: Cell config (Controller edit mode) — one card per cell with type / name / Ch / CC / Learn / On / Off
+- Improved: Matrix clock indicator — pulses with the source's quarter notes
+- Changed: Switch toggles unified into LED buttons (green = on, red = destructive)
+- Fix: Vertical fader fill no longer overshoots the rounded top at max
+- Fix: Plugin panel — turning a wheel / knob no longer slides the panel away
+- Fix: Radio buttons — active pill no longer shifts neighbours by 1 px
+- Fix: Note wheel — active value now centred on the indicator
+- Fix: Wheel ticks no longer paint over a sticky panel header during scroll
 
 
 2026-04-25 - Version 2.0.9
