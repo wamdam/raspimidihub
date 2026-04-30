@@ -49,8 +49,8 @@ vibrato to a synth pad without touching a physical controller."""
                   visible_when=("sync", False), span=3),
         ]),
         Group("Output", [
-            Wheel("cc_num", "CC #", min=0, max=127, default=1),
             ChannelSelect("out_ch", "Channel", default=1),
+            Wheel("cc_num", "CC #", min=0, max=127, default=1),
             Display("_scope", "Scope", display_name="level", span=2),
             Fader("depth", "Depth", min=0, max=127, default=127, span=4),
             Fader("center", "Center", min=0, max=127, default=64, span=4),
