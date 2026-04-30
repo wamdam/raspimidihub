@@ -671,6 +671,40 @@ function APPasswordModal({ showToast, onClose, onSaved }) {
     `;
 }
 
+// USB tethering: when the user plugs their phone into a USB-A port and
+// enables USB tethering / Personal Hotspot via USB, the kernel exposes
+// a usb0 / enxXX interface and the phone's DHCP gives the Pi an IP.
+// The Pi's web server already binds 0.0.0.0 so the phone's browser can
+// reach the UI at that IP — but only if the user knows the IP. This
+// card surfaces it as a clickable link, polled at the same cadence as
+// the rest of the Settings page.
+function UsbTetherCard() {
+    const [state, setState] = useState({ active: false, interface: null, ip: null });
+    useEffect(() => {
+        let cancelled = false;
+        const tick = () => {
+            api('/network/usb-tether').then(s => {
+                if (!cancelled) setState(s);
+            }).catch(() => {});
+        };
+        tick();
+        const id = setInterval(tick, 2000);
+        return () => { cancelled = true; clearInterval(id); };
+    }, []);
+
+    return html`
+        <div class="card">
+            <h3>USB Tethering</h3>
+            ${state.active ? html`
+                <p>Phone connected. Open <a href="http://${state.ip}/" style="color:var(--accent);text-decoration:underline">http://${state.ip}/</a> on your phone for a faster connection.</p>
+                <p style="font-size:11px;color:var(--text-dim);margin-top:4px">Interface: ${state.interface}</p>
+            ` : html`
+                <p style="color:var(--text-dim)">Connect your phone via USB and enable USB tethering / Personal Hotspot for a faster connection. The Pi will appear at the address your phone assigns it.</p>
+            `}
+        </div>
+    `;
+}
+
 export function SettingsPage({ showToast, showMidiBar, toggleMidiBar }) {
     const [ifaces, setIfaces] = useState([]);
     const [sys, setSys] = useState(null);
@@ -760,7 +794,8 @@ export function SettingsPage({ showToast, showMidiBar, toggleMidiBar }) {
             </div>
         `}
         <${WiFiCard} showToast=${showToast} />
-        ${ifaces.filter(i => i.interface !== 'wlan0').map(i => html`
+        <${UsbTetherCard} />
+        ${ifaces.filter(i => i.interface !== 'wlan0' && !/^(usb\d+|enx[0-9a-f]{12})$/.test(i.interface)).map(i => html`
             <${NetworkCard} iface=${i} showToast=${showToast} />
         `)}
         <div class="card">

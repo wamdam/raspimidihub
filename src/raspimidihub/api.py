@@ -1245,6 +1245,13 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         interfaces = await loop.run_in_executor(None, get_all_interfaces)
         return Response.json(interfaces)
 
+    @server.route("GET", "/api/network/usb-tether")
+    async def api_usb_tether(req: Request) -> Response:
+        from .usb_tether import detect_tether
+        loop = asyncio.get_event_loop()
+        state = await loop.run_in_executor(None, detect_tether)
+        return Response.json(state)
+
     @server.route("POST", "/api/network/", exact=False)
     async def api_configure_network(req: Request) -> Response:
         iface = req.path_param("/api/network/")
