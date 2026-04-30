@@ -98,6 +98,7 @@ export function renderParam(param, values, onChange, allValues, displayCtx) {
             const xy = val != null ? val : { x: param.default_x, y: param.default_y };
             return html`<${PluginXYPad} name=${param.name} label=${param.label}
                 min=${param.min} max=${param.max} value=${xy}
+                springForce=${param.spring_force} springHome=${param.spring_home}
                 onChange=${onChange} />`;
         }
         case 'layoutgrid':

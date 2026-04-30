@@ -6,6 +6,7 @@ import time
 
 from raspimidihub.plugin_api import (
     Group,
+    Knob,
     PluginBase,
     Radio,
     StepEditor,
@@ -45,9 +46,9 @@ Gate % = note length (100=legato, 10=staccato)."""
         ]),
         Group("Steps", [
             Wheel("step_count", "Steps", min=1, max=32, default=8),
-            Wheel("accent_vel", "Accent Vel.", min=0, max=127, default=30),
+            Knob("accent_vel", "Accent Vel.", min=0, max=127, default=30),
             StepEditor("steps", "Pattern", length_param="step_count",
-                       default_length=8, default_on=True),
+                       default_length=8, default_on=True, span=4),
         ]),
         Group("Controls", [
             Wheel("gate", "Gate %", min=10, max=100, default=80),

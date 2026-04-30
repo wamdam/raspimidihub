@@ -197,6 +197,10 @@ async def async_main() -> None:
 
         # Wire plugin host to engine
         engine._plugin_host = plugin_host
+        # Plug the dirty-tracker into the plugin host's central param-change
+        # signal. Has to happen AFTER engine._plugin_host is set; register_api
+        # already configured engine._dirty_sse_cb earlier.
+        plugin_host._on_dirty_cb = engine.mark_dirty
 
         # Latency probe: lets the engine record userspace-routed
         # midi-in→midi-out into the same window as loop_lag and

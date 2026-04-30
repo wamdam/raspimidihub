@@ -54,7 +54,8 @@ node_modules/
 # Playwright MCP
 .playwright-mcp/
 
-# Screenshots (allow docs/screenshots/)
+# Screenshots (allow docs/screenshots/ and website/screenshots/)
 *.png
 !docs/screenshots/*.png
+!website/screenshots/*.png
 masquerade.sh

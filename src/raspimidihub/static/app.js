@@ -35,7 +35,7 @@ function VersionBadge({ version, loadedBuild, serverBuild }) {
     const loadedToken = loadedBuild ? loadedBuild.split('-').pop() : '';
     const stale = serverBuild && loadedToken && serverBuild !== loadedToken;
     return html`<h1>RaspiMIDIHub
-        <span style="font-size:11px;font-weight:400;color:var(--text-dim)">
+        <span style="font-size:11px;font-weight:400;color:var(--text-dim);margin-left:10px">
             v${version}${loadedToken ? '·' + loadedToken : ''}
             ${stale ? html`<span style="color:#f80;cursor:pointer;margin-left:6px"
                 title="Server has been redeployed since this tab loaded — click to reload"
@@ -87,6 +87,16 @@ function App() {
     const setControllerId = useCallback((id, opts) => {
         navigate({ tab: 'controller', controllerId: id }, opts);
     }, [navigate]);
+    // Pencil icon on the Controller bar opens the device-detail panel
+    // for the current instance (where Plugin Config / per-cell rebind /
+    // Spring config live). Plugin instances appear in the device list
+    // with stable_id `plugin-<instance_id>`; we look up the matching
+    // ALSA client_id and route to /routing/d/<client_id>.
+    const openControllerConfig = useCallback((instanceId) => {
+        const dev = devicesRef.current.find(
+            (d) => d.stable_id === 'plugin-' + instanceId);
+        if (dev) navigate({ tab: 'routing', deviceId: dev.client_id });
+    }, [navigate]);
     const selectedDevice = selectedDeviceId != null ? devices.find(d => d.client_id === selectedDeviceId) || null : null;
     const [showMidiBar, setShowMidiBar] = useState(() => localStorage.getItem('midiBar') !== 'off');
     const [midiEvents, setMidiEvents] = useState({});  // src_client -> {name, text}
@@ -100,6 +110,12 @@ function App() {
     const [midiRates, setMidiRates] = useState({});  // "client:port" -> msgs/sec
     const [pluginDisplays, setPluginDisplays] = useState({});  // instance_id -> {name: value}
     const [sseConnected, setSseConnected] = useState(true);
+    // True when in-memory routing/plugin state has diverged from
+    // /boot/firmware/raspimidihub/config.json — drives the small dark-red
+    // asterisk on the bottom-nav Routing icon. Server pushes transitions
+    // via the `config-dirty` SSE event; initial value comes from the
+    // /api/system fetch on mount.
+    const [configDirty, setConfigDirty] = useState(false);
 
     const refresh = useCallback(async () => {
         const [devs, conns] = await Promise.all([api('/devices'), api('/connections')]);
@@ -117,6 +133,7 @@ function App() {
             setConfigFallback(s.config_fallback);
             setVersion(s.version || '');
             setServerBuild(s.build_token || '');
+            setConfigDirty(!!s.config_dirty);
         });
         // Expire stale clock sources and midi events
         const expireTimer = setInterval(() => {
@@ -146,6 +163,9 @@ function App() {
     useSSE((type, data) => {
         if (type === 'device-connected' || type === 'device-disconnected' || type === 'connection-changed') {
             refresh();
+        }
+        if (type === 'config-dirty') {
+            setConfigDirty(!!data.dirty);
         }
         if (type === 'midi-activity') {
             // Track clock sources regardless of connections
@@ -254,7 +274,7 @@ function App() {
     // and connection lifecycle events. Pages add their own on top.
     useSSESubscription(
         ['device-connected', 'device-disconnected', 'connection-changed',
-         'panic', 'plugin-changed'],
+         'panic', 'plugin-changed', 'config-dirty'],
         [],
     );
 
@@ -299,6 +319,7 @@ function App() {
             page = html`<${ControllerPage} pluginDisplays=${pluginDisplays} showToast=${showToast}
                 selectedId=${route.controllerId}
                 onSelect=${setControllerId}
+                onEditConfig=${openControllerConfig}
                 clockPosition=${clockPosition} />`;
             break;
         case 'presets':
@@ -318,7 +339,13 @@ function App() {
         <div class="main ${showMidiBar ? 'with-midi-bar' : ''}">${page}</div>
         ${showMidiBar && html`<${MidiBar} events=${midiEvents} />`}
         <nav class="bottom-nav">
-            <button class=${tab === 'routing' ? 'active' : ''} onclick=${() => setTab('routing')}>${IconRouting}<span>Routing</span></button>
+            <button class=${tab === 'routing' ? 'active' : ''} onclick=${() => setTab('routing')}>
+                <span class="nav-icon-wrap">
+                    ${IconRouting}
+                    ${configDirty ? html`<span class="dirty-asterisk" title="Unsaved changes">*</span>` : ''}
+                </span>
+                <span>Routing</span>
+            </button>
             <button class=${tab === 'controller' ? 'active' : ''} onclick=${() => setTab('controller')}>${IconController}<span>Controller</span></button>
             <button class=${tab === 'presets' ? 'active' : ''} onclick=${() => setTab('presets')}>${IconPreset}<span>Presets</span></button>
             <button class=${tab === 'settings' ? 'active' : ''} onclick=${() => setTab('settings')}>${IconSettings}<span>Settings</span></button>

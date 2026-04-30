@@ -41,7 +41,7 @@ body {
 /* --- Header --- */
 .header {
     background: var(--surface);
-    padding: 12px 16px;
+    padding: 6px 16px;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -50,7 +50,7 @@ body {
     top: 0;
     z-index: 10;
 }
-.header h1 { font-size: 18px; font-weight: 600; }
+.header h1 { font-size: 16px; font-weight: 600; }
 .header .status {
     font-size: 12px;
     color: var(--text-dim);
@@ -104,6 +104,21 @@ body {
 .bottom-nav button svg {
     width: 22px;
     height: 22px;
+}
+/* Asterisk badge on the Routing nav icon when in-memory config has
+ * diverged from disk. Positioned absolute on the icon's top-right
+ * corner; same accent red as the active-nav colour, sized to read
+ * at a glance from across the room. */
+.nav-icon-wrap { position: relative; display: inline-flex; line-height: 0; }
+.dirty-asterisk {
+    position: absolute;
+    top: -8px;
+    right: -10px;
+    color: var(--accent);
+    font-size: 22px;
+    font-weight: 700;
+    line-height: 1;
+    pointer-events: none;
 }
 
 /* --- Warning banner --- */
@@ -419,7 +434,7 @@ body {
     top: 0;
     background: var(--bg);
     padding: 8px 0 12px;
-    z-index: 1;
+    z-index: 10;
     display: flex;
     align-items: center;
 }
@@ -731,6 +746,12 @@ body {
 .wheel-container {
     width: 80px; height: 52px; overflow: hidden; border-radius: 10px;
     position: relative; touch-action: none; cursor: grab;
+    /* isolation: isolate creates a stacking context so the inner
+     * ::before / ::after (z-index 1 / 2) and the will-change: transform
+     * .wheel-inner stay contained — without this they escape to the
+     * panel's stacking context and paint over a sticky panel-header
+     * during scroll. */
+    isolation: isolate;
     background: linear-gradient(180deg, #080810 0%, #141420 8%, #1c1c30 20%, #222238 50%, #1c1c30 80%, #141420 92%, #080810 100%);
     border: 1px solid rgba(255,255,255,0.04);
     box-shadow: inset 0 3px 10px rgba(0,0,0,0.8), inset 0 -3px 10px rgba(0,0,0,0.8), 0 1px 2px rgba(255,255,255,0.03);
@@ -1130,26 +1151,37 @@ body {
      * the wheels themselves and the rubber buttons line up cleanly
      * — the Note wheel's Learn pill hangs below without pushing
      * anything up. flex-wrap keeps the layout tidy on narrow phones
-     * if the row can't fit. */
+     * if the row can't fit. Tight gap so 4 cells fit on a 360 px
+     * phone without wrapping Trigger Note to its own row. */
     align-items: flex-start;
     flex-wrap: wrap;
-    gap: 12px;
+    gap: 8px;
     min-height: 56px;
 }
 .dropbtn-edit-controls .wheel-group {
-    /* Each wheel column is exactly the wheel-container's width so the
-     * Learn pill (width:100% of its column) doesn't grow to fill the
-     * row's free space. */
-    width: 80px;
-    flex: 0 0 80px;
+    /* Each wheel column is sized to the narrowed wheel-container so
+     * the Learn pill (width:100%) doesn't grow into the row's free
+     * space. Width chosen so 4 × col + 3 × gap = 280 px fits inside
+     * the dropbtn-edit card on a 360 px phone (panel pad + card pad
+     * leave ~308 px content width). */
+    width: 64px;
+    flex: 0 0 64px;
+}
+.dropbtn-edit-controls .wheel-container {
+    /* Match the column. */
+    width: 64px;
 }
 .dropbtn-edit-controls .btn-group-param {
     /* Match the wheels' fixed-column treatment so the row reads as
      * four equally-weighted controls. */
-    flex: 0 0 auto;
+    flex: 0 0 64px;
+    width: 64px;
     display: flex;
     flex-direction: column;
     gap: 4px;
+}
+.dropbtn-edit-controls .rubber-btn {
+    width: 64px;
 }
 
 /* XYPad */
@@ -1252,6 +1284,17 @@ body {
 .cell-edit-row {
     display: flex; flex-direction: row; align-items: center; gap: 8px;
 }
+/* Spring row hosts two PluginWheels side by side: "Spring Force" and
+ * "Home". Each wheel-group keeps its default column flow (label on top,
+ * wheel below); the row container distributes them horizontally. */
+.spring-row {
+    align-items: flex-start;
+    gap: 16px;
+}
+.spring-row > .wheel-group {
+    flex: 0 0 auto;
+    margin-bottom: 0;
+}
 .cell-edit-type {
     flex: 0 0 auto;
     font-size: 12px;
@@ -1287,6 +1330,21 @@ body {
 .cell-edit-num::-webkit-outer-spin-button,
 .cell-edit-num::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .cell-edit-name:focus, .cell-edit-num:focus {
+    outline: none;
+    border-color: var(--accent);
+    background: rgba(0,0,0,0.5);
+}
+.cell-edit-select {
+    flex: 0 0 auto;
+    background: rgba(0,0,0,0.3);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 3px;
+    color: var(--text);
+    font-size: 13px;
+    padding: 6px 8px;
+    box-sizing: border-box;
+}
+.cell-edit-select:focus {
     outline: none;
     border-color: var(--accent);
     background: rgba(0,0,0,0.5);
@@ -1348,7 +1406,9 @@ body {
 /* Rubber push button */
 .btn-group-param { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; margin-bottom: 12px; }
 .rubber-btn {
-    width: 80px; height: 44px; border-radius: 4px; border: none; cursor: pointer;
+    /* Height matches .wheel-container (52px) so a row of mixed
+     * buttons + wheels in a plugin config aligns visually. */
+    width: 80px; height: 52px; border-radius: 4px; border: none; cursor: pointer;
     background: linear-gradient(180deg, #2a2a2a 0%, #222 30%, #1a1a1a 60%, #151515 100%);
     box-shadow: 0 3px 6px rgba(0,0,0,0.5), inset 0 1px 1px rgba(255,255,255,0.06);
     position: relative; display: flex; flex-direction: column; align-items: center;

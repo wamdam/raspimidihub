@@ -32,9 +32,9 @@ of audible zipper noise."""
         Group("Settings", [
             Wheel("cc_in", "Input CC #", min=0, max=127, default=1),
             Wheel("cc_out", "Output CC #", min=0, max=127, default=1),
-            Fader("smoothing", "Smoothing", min=1, max=50, default=10),
-            Display("_in_scope", "Input", display_name="input"),
-            Display("_out_scope", "Output", display_name="output"),
+            Fader("smoothing", "Smoothing", min=1, max=50, default=10, span=4),
+            Display("_in_scope", "Input", display_name="input", span=2),
+            Display("_out_scope", "Output", display_name="output", span=2),
         ]),
     ]
 

@@ -132,6 +132,14 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
                   wifi: WifiManager | None = None):
     """Register all API routes on the web server."""
 
+    # Wire the dirty-tracker SSE side so mark_dirty / clear_dirty can fan
+    # out a config-dirty event from any thread (CC-driven param mutations
+    # come from worker threads). The plugin_host._on_dirty_cb hook is
+    # wired in __main__ AFTER engine._plugin_host is attached — register_api
+    # runs before that, so doing it here would no-op.
+    engine._dirty_loop = asyncio.get_event_loop()
+    engine._dirty_sse_cb = server.send_sse
+
     for path, (body, status, fmt) in _CAPTIVE_ROUTES.items():
         def _make_handler(b, s, f):
             async def handler(req: Request) -> Response:
@@ -216,6 +224,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
             "latency_max": latency_max,
             "config_fallback": config.fallback_active,
             "default_routing": config.default_routing,
+            "config_dirty": engine.config_dirty,
         })
 
     # ================================================================
@@ -601,6 +610,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         })
 
         config.set_mode("custom")
+        engine.mark_dirty()
         return Response.json({"status": "created"}, 201)
 
     # ================================================================
@@ -614,6 +624,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
             # DELETE /api/connections — disconnect all
             engine.disconnect_all()
             config.set_mode("custom")
+            engine.mark_dirty()
             await server.send_sse("connection-changed", {"action": "disconnected-all"})
             return Response.json({"status": "disconnected all"})
 
@@ -678,6 +689,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         engine._disconnected[conn_id] = saved_data
 
         config.set_mode("custom")
+        engine.mark_dirty()
         await server.send_sse("connection-changed", {
             "action": "deleted",
             "id": conn_id,
@@ -742,6 +754,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
             "id": conn_id,
             "filter": midi_filter.to_dict(),
         })
+        engine.mark_dirty()
         return Response.json({"status": "updated", "filter": midi_filter.to_dict()})
 
     # ================================================================
@@ -801,6 +814,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
 
         idx = fe.add_mapping(conn_id, mapping)
         config.set_mode("custom")
+        engine.mark_dirty()
         await server.send_sse("connection-changed", {
             "action": "mapping-added", "id": conn_id,
         })
@@ -841,6 +855,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
                 pass
 
         config.set_mode("custom")
+        engine.mark_dirty()
         await server.send_sse("connection-changed", {
             "action": "mapping-removed", "id": conn_id,
         })
@@ -857,6 +872,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         engine.scan_devices()
         conns = engine.connect_all()
         config.set_mode("all-to-all")
+        engine.mark_dirty()
         await server.send_sse("connection-changed", {"action": "connected-all"})
         return Response.json({"status": "connected", "count": len(conns)})
 
@@ -945,6 +961,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
                     pass
 
             config.set_mode("custom")
+            engine.mark_dirty()
             await server.send_sse("connection-changed", {
                 "action": "preset-activated",
                 "name": name,
@@ -1019,6 +1036,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
             config.data["plugins"] = engine._plugin_host.serialize_instances()
 
         if await config.asave():
+            engine.clear_dirty()
             return Response.json({"status": "saved"})
         return Response.error("Failed to save config", 500)
 
@@ -1175,6 +1193,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
                 engine._disconnected[conn_id] = saved_data
             engine._update_monitor_subscriptions()
 
+        engine.clear_dirty()
         await server.send_sse("connection-changed", {"action": "config-loaded"})
         return Response.json({"status": "loaded"})
 
@@ -1230,6 +1249,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
                 engine._plugin_host.restore_instances(saved_plugins)
                 engine._schedule_rescan()
 
+        engine.clear_dirty()
         await server.send_sse("connection-changed", {"action": "config-loaded"})
         return Response.json({"status": "imported"})
 
@@ -1509,6 +1529,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         engine.handle_plugin_added()
 
         _invalidate_instances_cache()
+        engine.mark_dirty()
         data = engine._plugin_host.get_instance_data(instance.id)
         return Response.json(data, status=201)
 
@@ -1537,8 +1558,11 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         if "name" in body:
             engine._plugin_host.rename_instance(instance_id, body["name"])
             _invalidate_instances_cache()
+            engine.mark_dirty()
         if "params" in body:
             engine._plugin_host.set_params(instance_id, body["params"])
+            # set_params -> per-param notify -> _on_param_change closure
+            # already calls mark_dirty via _on_dirty_cb. No second call here.
 
         # Don't return get_instance_data here — frontend doesn't read the
         # body on a successful PATCH, but the schema serialization is
@@ -1571,4 +1595,5 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
             engine.handle_plugin_added()  # fall back to a plain refresh
 
         _invalidate_instances_cache()
+        engine.mark_dirty()
         return Response.json({"status": "deleted"})

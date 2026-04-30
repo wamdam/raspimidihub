@@ -318,15 +318,15 @@ export function DeviceDetailPanel({ device, onClose, showToast, refresh, pluginD
                 ${/* Plugin Config — first for plugins. Help button reveals plugin
                     description AND the Inputs descriptor list at the bottom. */ ''}
                 ${isPlugin && pluginData && html`
-                    <div class="card">
-                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-                            <h3 style="margin:0;line-height:24px">Plugin Config</h3>
+                    <div class="card" style="padding-top:8px">
+                        <div style="display:flex;align-items:center;justify-content:space-between;padding-bottom:5px;margin-bottom:8px">
+                            <h3 style="margin:0;line-height:1">Plugin Config</h3>
                             <div style="display:flex;align-items:center;gap:6px">
                                 ${pluginData.type && pluginData.type.startsWith('controller_') && onJumpToController && html`<button
-                                    style="width:24px;height:24px;border-radius:50%;border:1px solid var(--text-dim);background:none;color:var(--text-dim);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;flex:0 0 auto"
+                                    style="width:20px;height:20px;border-radius:50%;border:1px solid var(--text-dim);background:none;color:var(--text-dim);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;flex:0 0 auto"
                                     title="Open in fullscreen Controller view"
                                     onclick=${() => onJumpToController(device.plugin_instance_id)}>${IconMaximize}</button>`}
-                                ${(pluginData.help || (pluginData.inputs && pluginData.inputs.length)) && html`<button style="width:24px;height:24px;border-radius:50%;border:1px solid var(--text-dim);background:none;color:var(--text-dim);font-size:13px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;flex:0 0 auto"
+                                ${(pluginData.help || (pluginData.inputs && pluginData.inputs.length)) && html`<button style="width:20px;height:20px;border-radius:50%;border:1px solid var(--text-dim);background:none;color:var(--text-dim);font-size:12px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;flex:0 0 auto"
                                     onclick=${() => setShowHelp(h => !h)}>?</button>`}
                             </div>
                         </div>

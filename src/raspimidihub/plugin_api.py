@@ -312,6 +312,12 @@ class LayoutCell:
     channel_y is None the Y axis falls back to the X channel. The user
     can override any of the four via the LayoutGrid's `bindings_param`
     dict at runtime.
+
+    XY-pad-only spring fields: `spring_force` (0..127, 0 = no spring,
+    127 = very fast snap-back) and `spring_home` ("bottom_left" or
+    "center") drive a client-side animation that returns the dot to
+    home on touch release. Purely a UI behaviour — the value updates
+    flow through the same onChange → PATCH path as a manual drag.
     """
     param: Param
     col: int  # 1-based column
@@ -322,6 +328,8 @@ class LayoutCell:
     cc: int | None = None         # default CC number (0-127); X axis on XY pads
     channel_y: int | None = None  # XY-pad-only: default Y-axis channel (None = same as X)
     cc_y: int | None = None       # XY-pad-only: default Y-axis CC (0-127)
+    spring_force: int = 0         # XY-pad-only: 0 = off, 1..127 = spring strength
+    spring_home: str = "bottom_left"  # XY-pad-only: "bottom_left" or "center"
 
 
 @dataclass
@@ -365,6 +373,8 @@ class LayoutGrid:
                     **({"cc": c.cc} if c.cc is not None else {}),
                     **({"channel_y": c.channel_y} if c.channel_y is not None else {}),
                     **({"cc_y": c.cc_y} if c.cc_y is not None else {}),
+                    **({"spring_force": c.spring_force} if c.spring_force else {}),
+                    **({"spring_home": c.spring_home} if c.spring_home != "bottom_left" else {}),
                 }
                 for c in self.cells
             ],

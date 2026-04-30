@@ -88,6 +88,17 @@ class MidiEngine:
         # Optional latency reporter — set by __main__ to server.record_latency.
         # Used by run_event_loop to measure userspace-routed midi-in→midi-out.
         self._latency_cb = None
+        # Config-dirty tracker: True iff the in-memory routing/plugin/filter
+        # state diverges from /boot/firmware/raspimidihub/config.json.
+        # Mutations call mark_dirty(); save_config / load_config clear it.
+        # Drives the small dark-red asterisk on the bottom-nav Routing icon.
+        # _dirty_loop + _dirty_sse_cb together let mark/clear (which are
+        # often called from sync code paths and worker threads) schedule
+        # an SSE broadcast on the asyncio loop without crossing thread
+        # boundaries unsafely.
+        self.config_dirty = False
+        self._dirty_loop = None
+        self._dirty_sse_cb = None
         # Per-port message counters for rate metering
         self._port_msg_counts: dict[str, int] = {}  # "client:port" -> count
         self._port_rates: dict[str, int] = {}  # "client:port" -> msgs/sec (last snapshot)
@@ -111,6 +122,41 @@ class MidiEngine:
     @property
     def connections(self) -> set[Connection]:
         return self._connections
+
+    def mark_dirty(self) -> None:
+        """Mark the in-memory config as diverged from disk.
+
+        Idempotent — only the False→True transition broadcasts SSE; further
+        calls are cheap. Safe to call from any thread (the SSE schedule
+        crosses to the asyncio loop via run_coroutine_threadsafe)."""
+        if self.config_dirty:
+            return
+        self.config_dirty = True
+        self._notify_dirty_change(True)
+
+    def clear_dirty(self) -> None:
+        """In-memory state now matches disk. Called by save_config /
+        load_config / config_import paths."""
+        if not self.config_dirty:
+            return
+        self.config_dirty = False
+        self._notify_dirty_change(False)
+
+    def _notify_dirty_change(self, dirty: bool) -> None:
+        if not (self._dirty_loop and self._dirty_sse_cb):
+            return
+        cb = self._dirty_sse_cb
+
+        async def _fire():
+            try:
+                await cb("config-dirty", {"dirty": dirty})
+            except Exception:
+                pass
+        try:
+            asyncio.run_coroutine_threadsafe(_fire(), self._dirty_loop)
+        except RuntimeError:
+            # Loop closed during shutdown.
+            pass
 
     def on_change(self, callback):
         """Register a callback for device/connection changes."""

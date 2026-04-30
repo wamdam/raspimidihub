@@ -35,24 +35,25 @@ vibrato to a synth pad without touching a physical controller."""
 
     params = [
         Group("Waveform", [
-            Radio("wave", "Wave", ["sine", "triangle", "square", "saw", "s&h"], default="sine"),
+            Radio("wave", "Wave", ["sine", "triangle", "square", "saw", "s&h"],
+                  default="sine", span=4),
         ]),
         Group("Timing", [
             Button("sync", "Sync to Clock", color="green"),
             Radio("rate", "Rate",
                   ["8/1", "4/1", "2/1", "1/1", "1/2", "1/4", "1/8", "1/16"],
                   default="1/4",
-                  visible_when=("sync", True)),
+                  visible_when=("sync", True), span=3),
             Fader("freq", "Frequency", min=1, max=200, default=5,
                   display_factor=0.1, display_format=" Hz",
-                  visible_when=("sync", False)),
+                  visible_when=("sync", False), span=3),
         ]),
         Group("Output", [
             Wheel("cc_num", "CC #", min=0, max=127, default=1),
             ChannelSelect("out_ch", "Channel", default=1),
-            Display("_scope", "Scope", display_name="level"),
-            Fader("depth", "Depth", min=0, max=127, default=127),
-            Fader("center", "Center", min=0, max=127, default=64),
+            Display("_scope", "Scope", display_name="level", span=2),
+            Fader("depth", "Depth", min=0, max=127, default=127, span=4),
+            Fader("center", "Center", min=0, max=127, default=64, span=4),
         ]),
     ]
 

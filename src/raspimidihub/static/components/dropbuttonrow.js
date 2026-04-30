@@ -168,7 +168,7 @@ export function PluginDropButtonRow({ param, values, onChange, displayCtx }) {
                             onChange=${setMode} />
                         <${PluginButton}
                             name=${'sync_' + sid}
-                            label="Sync to bars"
+                            label="Sync"
                             value=${syncOn}
                             color="green"
                             onChange=${(_n, v) => setSync(v)} />
@@ -180,7 +180,7 @@ export function PluginDropButtonRow({ param, values, onChange, displayCtx }) {
                             onChange=${(_n, v) => setFade(v)} />
                         <${PluginNoteSelect}
                             name=${'note_' + sid}
-                            label="Trigger Note"
+                            label="Trg. Note"
                             min=${-1}
                             formatValue=${(i) => i === -1 ? 'Off' : noteName(i)}
                             value=${noteValue}

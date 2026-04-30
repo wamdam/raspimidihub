@@ -19,6 +19,19 @@
  */
 
 import { html } from './common.js';
+import { PluginWheel } from './wheel.js';
+
+const SPRING_HOME_OPTIONS = ["Bottom-left", "Center"];
+
+// Storage normalisation: legacy values "bottom_left" / "center" still
+// load correctly into the new display-string options. Returns the
+// display string the Radio expects.
+function normaliseSpringHome(v) {
+    if (v == null || v === "") return "Bottom-left";
+    const s = String(v).toLowerCase();
+    if (s === "center") return "Center";
+    return "Bottom-left";
+}
 
 export function PluginLayoutGrid({ param, values, onChange, displayCtx, renderParam }) {
     const playOnly = !!(displayCtx && displayCtx.playOnly);
@@ -39,9 +52,21 @@ export function PluginLayoutGrid({ param, values, onChange, displayCtx, renderPa
         const next = { ...cur, [key]: Number.isFinite(parsed) ? parsed : null };
         onChange(param.bindings_param, { ...bindings, [cellName]: next });
     };
+    const setBindingStr = (cellName, key, value) => {
+        if (!param.bindings_param) return;
+        const cur = bindings[cellName] || {};
+        const next = { ...cur, [key]: value };
+        onChange(param.bindings_param, { ...bindings, [cellName]: next });
+    };
     const toggleLearn = (cellName) => {
         if (!param.learn_param) return;
         onChange(param.learn_param, learnTarget === cellName ? '' : cellName);
+    };
+    const toggleLearnTarget = (target) => {
+        // XY pads pass "<cell>:y" to learn the Y axis; bare "<cell>" or
+        // "<cell>:x" lands on the X axis (server defaults to X).
+        if (!param.learn_param) return;
+        onChange(param.learn_param, learnTarget === target ? '' : target);
     };
 
     // Config view — shown in the device-detail panel for any LayoutGrid
@@ -70,6 +95,14 @@ export function PluginLayoutGrid({ param, values, onChange, displayCtx, renderPa
                 const isLearning = learnTarget === c.param.name;
                 const isButton = c.param.type === 'button';
                 const isXYPad = c.param.type === 'xypad';
+                // Per-axis learn for XY pads: ':x' suffix → X, ':y' → Y,
+                // bare name → X (legacy). Highlights only the axis the
+                // user armed.
+                const isLearningX = isXYPad &&
+                    (learnTarget === c.param.name ||
+                     learnTarget === c.param.name + ':x');
+                const isLearningY = isXYPad &&
+                    learnTarget === c.param.name + ':y';
                 const typeLabel = TYPE_LABEL[c.param.type] || c.param.type;
                 const ovOn  = (bindOv.on  != null && bindOv.on  !== '') ? bindOv.on  : null;
                 const ovOff = (bindOv.off != null && bindOv.off !== '') ? bindOv.off : null;
@@ -80,7 +113,7 @@ export function PluginLayoutGrid({ param, values, onChange, displayCtx, renderPa
                 const defChY = c.channel_y != null ? c.channel_y + 1 : null;
                 const ovChY = (bindOv.channel_y != null && bindOv.channel_y !== '') ? bindOv.channel_y + 1 : null;
                 const hasBindings = param.bindings_param && (defCh != null || defCc != null);
-                return html`<div class="cell-edit ${isLearning ? 'learning' : ''}">
+                return html`<div class="cell-edit ${(isLearning || isLearningX || isLearningY) ? 'learning' : ''}">
                     <div class="cell-edit-row">
                         <span class="cell-edit-type">${typeLabel}</span>
                         <input class="cell-edit-name" type="text"
@@ -104,10 +137,10 @@ export function PluginLayoutGrid({ param, values, onChange, displayCtx, renderPa
                                 onInput=${(e) => setBinding(c.param.name, 'cc',
                                     e.target.value === '' ? null : parseInt(e.target.value, 10))} />
                             ${param.learn_param ? html`
-                                <button type="button" class="cell-edit-learn ${isLearning ? 'on' : ''}"
-                                    title=${isLearning ? 'Listening for incoming CC — tap to cancel'
-                                        : 'Tap, then twist a hardware knob to capture the X-axis (channel, cc). Type Y axis manually.'}
-                                    onclick=${() => toggleLearn(c.param.name)}>${isLearning ? 'Listening…' : 'Learn'}</button>` : null}
+                                <button type="button" class="cell-edit-learn ${isLearningX ? 'on' : ''}"
+                                    title=${isLearningX ? 'Listening for X-axis CC — tap to cancel'
+                                        : 'Tap, then twist a hardware knob to capture the X-axis (channel, cc).'}
+                                    onclick=${() => toggleLearnTarget(c.param.name + ':x')}>${isLearningX ? 'Listening…' : 'Learn'}</button>` : null}
                         </div>
                         <div class="cell-edit-row">
                             <span class="cell-edit-fieldlabel">Y:</span>
@@ -123,7 +156,45 @@ export function PluginLayoutGrid({ param, values, onChange, displayCtx, renderPa
                                 title="Y-axis CC (0-127)"
                                 onInput=${(e) => setBinding(c.param.name, 'cc_y',
                                     e.target.value === '' ? null : parseInt(e.target.value, 10))} />
+                            ${param.learn_param ? html`
+                                <button type="button" class="cell-edit-learn ${isLearningY ? 'on' : ''}"
+                                    title=${isLearningY ? 'Listening for Y-axis CC — tap to cancel'
+                                        : 'Tap, then twist a hardware knob to capture the Y-axis (channel, cc).'}
+                                    onclick=${() => toggleLearnTarget(c.param.name + ':y')}>${isLearningY ? 'Listening…' : 'Learn'}</button>` : null}
                         </div>
+                        ${(() => {
+                            const defForce = c.spring_force != null ? c.spring_force : 0;
+                            const defHome = c.spring_home != null ? c.spring_home : 'Bottom-left';
+                            const ovForce = (bindOv.spring_force != null && bindOv.spring_force !== '')
+                                ? bindOv.spring_force : null;
+                            const ovHome = (typeof bindOv.spring_home === 'string' && bindOv.spring_home !== '')
+                                ? bindOv.spring_home : null;
+                            const effForce = ovForce != null ? ovForce : defForce;
+                            const effHome = normaliseSpringHome(ovHome != null ? ovHome : defHome);
+                            // Home wheel: 2 ticks, each labelled. Storage stays
+                            // as the string "Bottom-left" / "Center" so old
+                            // saves still load; only the wheel↔string adapter
+                            // here knows the index mapping.
+                            const homeIdx = effHome === "Center" ? 1 : 0;
+                            return html`<div class="cell-edit-row spring-row">
+                                <${PluginWheel}
+                                    name=${`${c.param.name}_spring_force`}
+                                    label="Spring Force"
+                                    min=${0}
+                                    max=${127}
+                                    value=${effForce}
+                                    onChange=${(_, v) => setBinding(c.param.name, 'spring_force', v)} />
+                                <${PluginWheel}
+                                    name=${`${c.param.name}_spring_home`}
+                                    label="Home"
+                                    min=${0}
+                                    max=${1}
+                                    value=${homeIdx}
+                                    tickLabel=${(v) => SPRING_HOME_OPTIONS[v] || ''}
+                                    onChange=${(_, v) => setBindingStr(c.param.name, 'spring_home',
+                                        SPRING_HOME_OPTIONS[v] || 'Bottom-left')} />
+                            </div>`;
+                        })()}
                     ` : null}
                     ${hasBindings && !isXYPad ? html`<div class="cell-edit-row">
                         <span class="cell-edit-fieldlabel">Ch</span>
@@ -182,11 +253,22 @@ export function PluginLayoutGrid({ param, values, onChange, displayCtx, renderPa
         ${param.cells.map((c) => {
             const cellStyle = `grid-column: ${c.col} / span ${c.span_cols}; grid-row: ${c.row} / span ${c.span_rows}; min-width: 0`;
             const labelOv = labels[c.param.name];
-            const patchedParam = labelOv != null && labelOv !== ''
-                ? { ...c.param, label: labelOv }
-                : c.param;
+            const patched = { ...c.param };
+            if (labelOv != null && labelOv !== '') patched.label = labelOv;
+            // XY pads: layer cell defaults + per-cell binding overrides
+            // for the spring config so the rendered <PluginXYPad> picks
+            // up the effective values without a separate plumbing path.
+            if (c.param.type === 'xypad') {
+                const bindOv = bindings[c.param.name] || {};
+                const cellSpringForce = c.spring_force != null ? c.spring_force : 0;
+                const cellSpringHome = c.spring_home != null ? c.spring_home : 'bottom_left';
+                patched.spring_force = (typeof bindOv.spring_force === 'number')
+                    ? bindOv.spring_force : cellSpringForce;
+                patched.spring_home = (typeof bindOv.spring_home === 'string')
+                    ? bindOv.spring_home : cellSpringHome;
+            }
             return html`<div class="layout-cell" style=${cellStyle}>
-                ${renderParam(patchedParam, values, onChange, values, displayCtx)}
+                ${renderParam(patched, values, onChange, values, displayCtx)}
             </div>`;
         })}
     </div>`;

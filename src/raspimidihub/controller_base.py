@@ -268,17 +268,29 @@ class ControllerBase(PluginBase):
         """MIDI Learn capture (if armed for a cell), else bidirectional
         sync — silently update the matching cell, no OUT re-emit."""
         learn_target = self._param_values.get("cell_learn") or ""
-        if learn_target and learn_target in self._defaults:
+        # XY pads have two independent axes — the learn target encodes
+        # which one with a ":x" / ":y" suffix; bare cell name = X axis
+        # (the legacy single-axis pads pick this branch unchanged).
+        learn_cell = learn_target
+        learn_axis = "x"
+        if ":" in learn_target:
+            learn_cell, _, suffix = learn_target.partition(":")
+            if suffix in ("x", "y"):
+                learn_axis = suffix
+        if learn_cell and learn_cell in self._defaults:
             bindings = dict(self._param_values.get("cell_bindings") or {})
-            # Learn captures the X axis (channel, cc); preserve any
-            # existing Y-axis fields so toggling Learn on an XY pad
-            # doesn't blow away the user's Y configuration.
-            prev = bindings.get(learn_target) or {}
-            new = {"channel": channel, "cc": cc}
-            for k in ("cc_y", "channel_y", "on", "off"):
-                if k in prev:
-                    new[k] = prev[k]
-            bindings[learn_target] = new
+            # Layer the captured axis on top of whatever was there;
+            # preserve every other field (the OTHER axis, on/off pair,
+            # spring config, ...) so toggling Learn doesn't blow away
+            # unrelated config.
+            prev = dict(bindings.get(learn_cell) or {})
+            if learn_axis == "y":
+                prev["channel_y"] = channel
+                prev["cc_y"] = cc
+            else:
+                prev["channel"] = channel
+                prev["cc"] = cc
+            bindings[learn_cell] = prev
             self.set_param("cell_bindings", bindings)
             self.set_param("cell_learn", "")
             return

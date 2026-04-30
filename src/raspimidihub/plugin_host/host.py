@@ -55,6 +55,14 @@ class PluginHost:
         self._on_display_callback = None  # (instance_id, name, value) -> None
         self._on_param_change_callback = None  # (instance_id, name, value) -> None
         self._latency_cb = None  # set by __main__ to server.record_latency
+        # Set by __main__ to engine.mark_dirty. Called on plugin instance
+        # add/remove/rename and on every param change so the bottom-nav
+        # asterisk lights up when in-memory state diverges from disk.
+        self._on_dirty_cb = None
+        # True while restore_instances() is replaying the saved config —
+        # the param-change notifications it triggers are loading state
+        # FROM disk, so they shouldn't dirty the flag.
+        self._loading = False
         # Cached plugin-client-id set; rebuilt lazily by
         # get_plugin_client_ids() and invalidated on any add/remove.
         self._plugin_client_ids_cache: frozenset[int] | None = None
@@ -288,6 +296,11 @@ class PluginHost:
         host_self_p = self
         instance_p = instance
         def _on_param_change(name, value):
+            if host_self_p._on_dirty_cb and not host_self_p._loading:
+                try:
+                    host_self_p._on_dirty_cb()
+                except Exception:
+                    pass
             key = (instance_p.id, name)
             if isinstance(value, str):
                 host_self_p._param_coalescer.emit_now(
@@ -693,6 +706,13 @@ class PluginHost:
 
     def restore_instances(self, saved: list[dict]) -> None:
         """Recreate instances from saved config data, preserving original IDs."""
+        self._loading = True
+        try:
+            self._restore_instances(saved)
+        finally:
+            self._loading = False
+
+    def _restore_instances(self, saved: list[dict]) -> None:
         for item in saved:
             plugin_type = item.get("type", "")
             name = item.get("name", "")

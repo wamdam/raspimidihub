@@ -62,7 +62,7 @@ function ControllerSurface({ instance, pluginData, pluginDisplays, clockPosition
     </div>`;
 }
 
-export function ControllerPage({ pluginDisplays, showToast, selectedId, onSelect, clockPosition }) {
+export function ControllerPage({ pluginDisplays, showToast, selectedId, onSelect, onEditConfig, clockPosition }) {
     // Subscribe only to plugin events for the currently-selected
     // instance — that's the only plugin whose cells are visible. Also
     // grab transport-start so the surface can react to global play /
@@ -193,6 +193,9 @@ export function ControllerPage({ pluginDisplays, showToast, selectedId, onSelect
                     <option value=${i.id}>${i.name}</option>
                 `)}
             </select>
+            ${onEditConfig ? html`<button class="controller-arrow"
+                title="Edit plugin config"
+                onclick=${() => onEditConfig(selected.id)}>✎</button>` : null}
             <button class="controller-arrow" disabled=${!next}
                 onclick=${() => next && setSelectedId(next.id)}>›</button>
         </div>

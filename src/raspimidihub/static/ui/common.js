@@ -55,7 +55,7 @@ export function useSSE(onEvent, onConnChange, onConnectionId) {
             'midi-activity', 'midi-rates', 'plugin-display', 'plugin-param',
             'clock-quarter', 'clock-position',
             'transport-start', 'cc-changes', 'panic',
-            'plugin-changed',
+            'plugin-changed', 'config-dirty',
         ]) {
             es.addEventListener(ev, handler(ev));
         }

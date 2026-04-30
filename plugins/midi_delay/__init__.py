@@ -39,13 +39,13 @@ echoes that fade out on a lead synth line."""
         Group("Timing", [
             Button("sync", "Sync to Clock", color="green"),
             Fader("delay_ms", "Delay (ms)", min=10, max=2000, default=250,
-                  visible_when=("sync", False)),
+                  visible_when=("sync", False), span=3),
             Radio("rate", "Rate", _DELAY_RATES, default="1/8",
-                  visible_when=("sync", True)),
+                  visible_when=("sync", True), span=3),
         ]),
         Group("Controls", [
             Wheel("repeats", "Repeats", min=0, max=10, default=3),
-            Fader("vel_decay", "Vel Decay %", min=0, max=100, default=20),
+            Fader("vel_decay", "Vel Decay %", min=0, max=100, default=20, span=3),
         ]),
     ]
 
