@@ -122,13 +122,13 @@
 
     <div class="feature-row">
       <div class="feature-text">
-        <h3>12 Built-in Plugins</h3>
+        <h3>14 Built-in Plugins</h3>
         <p>Virtual instruments and effects that appear as real MIDI devices in the routing matrix. Each plugin has its own custom interface with wheels, faders, toggles, step sequencers, and live scopes.</p>
         <ul class="feature-list">
           <li>Arpeggiator with step sequencer and accents</li>
           <li>CC LFO, Smoother, Chord Generator</li>
           <li>Master Clock with transport controls</li>
-          <li>Scale Remapper, Velocity Curve, and more</li>
+          <li>Scale Remapper, Velocity Curve, Hold, and more</li>
         </ul>
       </div>
       <div class="feature-phone">
@@ -140,6 +140,25 @@
     </div>
 
     <div class="feature-row reverse">
+      <div class="feature-text">
+        <h3>Controllers — Tap-to-Play Surfaces</h3>
+        <p>Fullscreen play surfaces (Mixer 8, FX 6, Performance 16, XY 4) that send CCs over MIDI in real time. Each cell is renameable, MIDI-Learnable, and themable. Four drop buttons per controller capture and replay snapshots, quantised to bar boundaries.</p>
+        <ul class="feature-list">
+          <li>4 controller templates with knobs, faders, buttons, XY pads</li>
+          <li>Drop buttons — tap to fire, long-press to capture, sync to bars</li>
+          <li>Per-axis MIDI Learn on XY pads, optional spring-back</li>
+          <li>8 dark themes per controller; swipe / arrow / dropdown to switch</li>
+        </ul>
+      </div>
+      <div class="feature-phone">
+        <div class="phone">
+          <div class="phone-notch"></div>
+          <img src="screenshots/controller-mixer-8.png" alt="Mixer 8 Controller" loading="lazy">
+        </div>
+      </div>
+    </div>
+
+    <div class="feature-row">
       <div class="feature-text">
         <h3>Test & Monitor</h3>
         <p>Every device gets a detail panel with a scrollable piano keyboard, CC slider, and live MIDI monitor. Test your setup without touching your gear.</p>
@@ -154,6 +173,44 @@
         <div class="phone">
           <div class="phone-notch"></div>
           <img src="screenshots/06-device-detail.png" alt="Device Detail Panel" loading="lazy">
+        </div>
+      </div>
+    </div>
+
+    <div class="feature-row reverse">
+      <div class="feature-text">
+        <h3>Master Clock & Tight Timing</h3>
+        <p>Internal BPM clock with start/stop transport drives every synced plugin and external synth from one place. Clock ticks are pre-scheduled through the kernel-side ALSA queue for sub-millisecond jitter even under heavy CPU load.</p>
+        <ul class="feature-list">
+          <li>24 PPQ clock with start/stop/continue</li>
+          <li>Drop buttons fire CC snapshots sample-accurately ahead of beat 1</li>
+          <li>MIDI Delay echoes pre-scheduled at note-on time</li>
+          <li>Live beat meter and bar counter</li>
+        </ul>
+      </div>
+      <div class="feature-phone">
+        <div class="phone">
+          <div class="phone-notch"></div>
+          <img src="screenshots/13-plugin-master-clock.png" alt="Master Clock Plugin" loading="lazy">
+        </div>
+      </div>
+    </div>
+
+    <div class="feature-row">
+      <div class="feature-text">
+        <h3>Velocity Curve Editor</h3>
+        <p>Draw a custom 128-point velocity response curve to match your playing style or your hardware's quirks. Pick from preset shapes or freehand-draw your own — soft pads, hard drums, S-curves, anything in between.</p>
+        <ul class="feature-list">
+          <li>Drawable curve canvas with smoothing</li>
+          <li>Built-in shape presets (linear, exponential, S-curve, step)</li>
+          <li>Per-channel filtering</li>
+          <li>Same editor reused across plugins where curves matter</li>
+        </ul>
+      </div>
+      <div class="feature-phone">
+        <div class="phone">
+          <div class="phone-notch"></div>
+          <img src="screenshots/19-plugin-velocity-curve.png" alt="Velocity Curve Plugin" loading="lazy">
         </div>
       </div>
     </div>
@@ -209,6 +266,14 @@
       <div class="plugin-card">
         <h4>Velocity Equalizer</h4>
         <p>Normalize velocity to a fixed value or compress the range. Tame those dynamics.</p>
+      </div>
+      <div class="plugin-card">
+        <h4>Hold</h4>
+        <p>Latch notes without a sustain pedal. MIDI-Learn the release note for hands-free toggling on stage.</p>
+      </div>
+      <div class="plugin-card">
+        <h4>Clock Divider</h4>
+        <p>Divide an incoming clock by 2..32. Drive a slow LFO from a fast master, or feed half-tempo to one synth.</p>
       </div>
       <div class="plugin-card">
         <h4>Panic Button</h4>
