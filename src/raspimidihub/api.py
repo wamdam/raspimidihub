@@ -1155,6 +1155,23 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
     @server.route("POST", "/api/config/load")
     async def api_load_config(req: Request) -> Response:
         await config.aload()
+        # Plugin instances are part of the saved config (just like
+        # connections / device names / disconnected entries). Reload
+        # them from disk before touching connections so any saved
+        # routing that references plugin stable IDs can resolve. This
+        # also drops any unsaved instances the user added since the
+        # last save — which is the whole point of "Load Config".
+        if engine._plugin_host:
+            engine._plugin_host.stop_all()
+            saved_plugins = config.data.get("plugins", [])
+            if saved_plugins:
+                loop = asyncio.get_event_loop()
+                await loop.run_in_executor(
+                    None, engine._plugin_host.restore_instances, saved_plugins)
+            _invalidate_instances_cache()
+            # Pick up the restored plugins' new ALSA client IDs so
+            # apply_edge_diff below can resolve their stable IDs.
+            engine.scan_devices()
         if config.mode != "custom" or not config.connections:
             # No custom config — fall back to all-to-all
             engine.disconnect_all()
