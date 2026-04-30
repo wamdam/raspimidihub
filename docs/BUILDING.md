@@ -23,8 +23,8 @@ cd raspimidihub
 make all
 
 # Or build individually:
-make deb           # builds dist/raspimidihub_1.3.0-1_all.deb
-make deb-rosetup   # builds dist/raspimidihub-rosetup_1.0.0-1_all.deb
+make deb           # builds dist/raspimidihub_<VERSION>-1_all.deb
+make deb-rosetup   # builds dist/raspimidihub-rosetup_<ROSETUP_VERSION>-1_all.deb
 ```
 
 Output files land in `dist/`.

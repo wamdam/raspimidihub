@@ -36,41 +36,64 @@ See all screenshots in [docs/screenshots/](docs/screenshots/) and the full [UI G
 ### MIDI Routing Matrix
 - **Automatic all-to-all routing** between USB MIDI devices out of the box
 - **Tap-to-connect matrix** with device icons and live rate meters
-- **Hot-plug support** -- add or remove devices at any time, live state preserved
-- **Offline connections** -- configure routing for unplugged devices
-- **Loop prevention** -- self-connections excluded automatically
-- **Multi-port devices** fully supported
+- **Single-tap context menu** on every cell, header, and mapping row -- Edit, Copy, Paste, Remove
+- **Connection / plugin / mapping clipboard** -- copy filter+mappings (or a whole plugin instance) and paste anywhere
+- **URL routing** -- back/forward and bookmarks work for /routing, /controller, /presets, /settings, and the open device panel
+- **Dirty-state asterisk** on the bottom-nav Routing icon when in-memory state diverges from the saved config
+- **Hot-plug support** -- add or remove devices at any time, saved connections re-apply automatically
+- **Offline connections** -- saved routing for unplugged devices stays visible and toggleable
+- **Loop prevention** and **multi-port devices** fully supported
 
 ### Virtual Instruments and Plugins
-- **12 built-in plugins** that appear as routable MIDI devices
+- **14 built-in plugins** that appear as routable MIDI devices
 - **Plugins start unconnected** -- route them manually for precise control
-- **Custom UI controls** -- wheels, faders, toggles, step editors, curve editors, scopes
+- **Custom UI controls** -- wheels, faders, knobs, XY pads, toggles, step editors, curve editors, scopes, meters
 - **MIDI clock sync** -- plugins can sync to external clock or generate their own
-- **CC automation** -- map hardware knobs to plugin parameters
+- **Sample-accurate scheduling** -- Master Clock, MIDI Delay, Arpeggiator and drop-button fires use ALSA kernel-side queue scheduling for sub-millisecond jitter under load
+- **CC automation** -- map hardware knobs to plugin parameters; the on-screen control animates in real time
 - **Live display outputs** -- scopes and meters show plugin state in real time
-- **Plugin sandbox** -- plugins run in restricted threads, no filesystem or network access
+- **Plugin help** -- "?" button reveals a per-plugin extended HELP text
 
 ### Built-in Plugins
 
 | Plugin | Description |
 |--------|-------------|
-| Arpeggiator | Plays held notes as a pattern (up, down, up-down, random) with clock sync |
-| CC LFO | Generates CC waveforms (sine, triangle, square, saw, sample-and-hold) |
-| CC Smoother | Smooths incoming CC values to remove jitter from noisy knobs |
-| Chord Generator | Input note triggers a full chord (major, minor, 7th, custom intervals) |
-| Master Clock | Generates MIDI clock (24 PPQ) with transport controls (start/stop/pause) |
-| MIDI Delay | Delays notes with feedback repeats and velocity decay |
-| Note Splitter | Splits keyboard at a configurable note into two MIDI channels |
+| Arpeggiator | Pattern player with step sequencer, accents, gate, clock sync; rates from 4 bars down to 1/16 with triplets |
+| CC LFO | CC waveforms (sine, triangle, square, saw, sample-and-hold); free or clock-sync up to 8 bars; live scope |
+| CC Smoother | Removes jitter from noisy knobs with configurable smoothing; dual scopes (in / out) |
+| Chord Generator | Input note triggers a chord (major, minor, 7th, custom intervals) with inversions |
+| Clock Divider | Emit one MIDI Clock for every N received (2..32) |
+| Hold | Latch notes without a sustain pedal; MIDI-Learn the release note |
+| Master Clock | Internal BPM clock with start/stop/continue, beat meter, bar counter |
+| MIDI Delay | Pre-scheduled echoes with feedback repeats and velocity decay; sync rate or free ms |
+| Note Splitter | Splits keyboard at a configurable note into two channels with per-zone transpose |
 | Note Transpose | Shifts all notes up or down by semitones |
-| Panic Button | Sends All Notes Off and All Sound Off on all 16 channels |
-| Scale Remapper | Quantizes notes to a musical scale (major, minor, pentatonic, blues, etc.) |
-| Velocity Curve | Remaps velocity response with a drawable 128-point curve |
-| Velocity Equalizer | Normalizes velocities to a fixed value or compressed range |
+| Panic Button | Momentary trigger -- All Notes Off; second tap upgrades to All Sound Off |
+| Scale Remapper | Quantizes notes to a scale (major, minor, pentatonic, blues, ...) with labeled root selector |
+| Velocity Curve | Drawable 128-point velocity response curve with shape presets |
+| Velocity Equalizer | Normalize velocity to a fixed value or compress the range |
+
+### Controllers (tap-to-play surfaces)
+
+Fullscreen play surfaces that send CCs over MIDI. Each cell is renameable, MIDI-Learnable, and themable. Four controller templates ship out of the box:
+
+| Controller | Layout | Default CC range |
+|------------|--------|------------------|
+| Mixer 8 | 24 knobs / 8 faders / 16 buttons | CC 16-63 ch 1 |
+| FX 6 | 18 knobs / 6 faders / 6 buttons | CC 16-45 ch 1 |
+| Performance 16 | 16 macro knobs + 4 scene buttons | CC 16-35 ch 1 |
+| XY 4 | 2 XY pads + 8 knobs + 4 buttons | CC 16-31 ch 1 |
+
+- **Drop buttons** -- 4 per controller. Long-press to capture, tap to fire. Modes: Now / Bar / 2-Bar / 4-Bar / 8-Bar / 16-Bar. Quantised to musical-grid boundaries; fade-on-fire and MIDI-note trigger optional; dual-slot (one fade + one hard drop side by side)
+- **XY pad spring** -- per-cell force + home (Bottom-left / Center); dot returns to home after release
+- **Per-axis MIDI Learn** on XY pads
+- **8 dark themes** per controller (Default / Navy / Forest / Wine / Plum / Teal / Sienna / Slate)
+- **Top nav** -- swipe / arrow / dropdown to switch between instances; last-viewed remembered
 
 ### MIDI Filtering and Mapping
 - **Per-connection channel filtering** -- enable/disable any of 16 MIDI channels
 - **Message type filtering** -- block notes, CCs, program changes, pitch bend, aftertouch, SysEx, or clock
-- **Note to CC / Note to CC toggle / CC to CC / Channel remap** mappings
+- **Note to CC / Note to CC toggle / CC to CC / Channel remap** mappings (CC-to-CC supports range scaling and inversion; Channel remap supports fan-out)
 - **MIDI Learn** -- press a key or move a knob to auto-fill the mapping source
 - **Wheels, faders, radio buttons, and toggles** replace dropdowns for fast editing on stage
 
@@ -79,20 +102,25 @@ See all screenshots in [docs/screenshots/](docs/screenshots/) and the full [UI G
 - **Export/import** as JSON files for backup or sharing between devices
 - **Overwrite confirmation** prevents accidental preset loss
 
-### WiFi and Web Interface
+### Connectivity
 - **Built-in WiFi access point** -- connect from your phone, captive portal opens automatically
+- **WiFi mode preference** -- AP only / WiFi for updates / WiFi always (Settings)
+- **USB tethering** -- plug a phone into a USB-A port, Settings shows the tethered URL as a clickable link (Pi gets internet for updates without flipping wlan0)
+- **Software Updates** -- Settings card auto-downloads newer GitHub releases, keeps the latest 3, installs offline with one tap
+- **Auto-fallback** -- if WiFi client mode is lost, reverts to AP mode within ~90 seconds
 - **Progressive Web App (PWA)** -- install to home screen for app-like experience
 - **Mobile-first touch UI** designed for live performance
-- **Real-time sync** across multiple browsers via SSE
-- **Client mode** -- join an existing WiFi network, reachable at `http://raspimidihub.local`
-- **Auto-fallback** -- if WiFi connection is lost, reverts to AP mode within ~90 seconds
+- **Real-time sync** across multiple browsers via SSE; per-view subscriptions keep traffic minimal
+- **mDNS** -- reachable at `http://raspimidihub.local`
 
 ### Appliance Reliability
 - **Read-only filesystem** -- SD card never written during normal operation
 - **Power-safe** -- pull the power at any time, boots back to last saved config
+- **CPU 3 reserved** -- the asyncio main loop runs on an isolated core (no kernel timer, no other userland) for tight sub-ms loop lag
 - **Auto-start** -- MIDI routing active within 30 seconds of power-on
 - **Watchdog** -- service automatically restarts on failure
 - **LED status** -- green ACT LED steady = running, blinks on MIDI activity
+- **Settings stats** -- live loop lag, MIDI in→out and Control in→MIDI out latency probes, CPU %, SSE rate / backlog
 
 ---
 
@@ -119,9 +147,10 @@ sudo reboot
 <summary>Manual installation</summary>
 
 ```bash
-wget https://github.com/wamdam/raspimidihub/releases/latest/download/raspimidihub_2.0.0-1_all.deb
-wget https://github.com/wamdam/raspimidihub/releases/latest/download/raspimidihub-rosetup_1.0.0-1_all.deb
-sudo apt install ./raspimidihub_2.0.0-1_all.deb ./raspimidihub-rosetup_1.0.0-1_all.deb
+TAG=$(curl -sL -o /dev/null -w '%{url_effective}' https://github.com/wamdam/raspimidihub/releases/latest | grep -oP 'v[\d.]+$')
+wget https://github.com/wamdam/raspimidihub/releases/download/$TAG/raspimidihub_${TAG#v}-1_all.deb
+wget https://github.com/wamdam/raspimidihub/releases/download/$TAG/raspimidihub-rosetup_1.0.1-1_all.deb
+sudo apt install ./raspimidihub_${TAG#v}-1_all.deb ./raspimidihub-rosetup_1.0.1-1_all.deb
 sudo reboot
 ```
 </details>
@@ -133,8 +162,8 @@ After reboot, the Pi runs with a read-only filesystem and all connected MIDI dev
 1. On your phone, go to WiFi settings
 2. Connect to `RaspiMIDIHub-XXXX` (default password: `midihub1`)
 3. The configuration page opens automatically (captive portal)
-4. Tap the matrix to route devices, long-press for filters and mappings
-5. Tap the "+" button in the matrix to add plugins
+4. Tap a matrix cell to open its menu (Edit, Copy, Paste, Remove); pick **Edit** to set filters and mappings
+5. Tap **Add** at the bottom of the matrix to add plugins or controllers
 6. Hit **Save Config** to persist across reboots
 
 ---
@@ -226,12 +255,13 @@ sudo reboot
 make test
 ```
 
-This creates a Python venv, installs test dependencies, and runs 77+ unit and integration tests covering:
+This creates a Python venv, installs test dependencies, and runs ~290 unit and integration tests covering:
 
 - **MIDI filter logic** -- channel masks, message type filtering, serialization
-- **Mapping pipeline** -- CC-to-CC scaling, Note-to-CC, toggle, channel remap, pass-through
-- **All 12 plugins** -- note transpose, chord generator, scale remapper, velocity curve, arpeggiator, and more
+- **Mapping pipeline** -- CC-to-CC scaling, Note-to-CC, toggle, channel remap (incl. fan-out), pass-through
+- **All 14 plugins + 4 controllers** -- end-to-end behaviour, parameter wiring, clock sync, drop-button scheduling
 - **Filter engine** -- end-to-end mapping with captured output verification
+- **Plugin host** -- hotplug restore, instance lifecycle, ALSA queue scheduling
 
 Tests run without ALSA hardware (`RASPIMIDIHUB_TEST_MODE=1`). No Raspberry Pi required.
 
@@ -254,7 +284,7 @@ Tests run without ALSA hardware (`RASPIMIDIHUB_TEST_MODE=1`). No Raspberry Pi re
 - [Plugin Developer Guide](plugins/README.md) -- Creating custom plugins
 - [Building from Source](docs/BUILDING.md) -- How to build the .deb packages
 - [Changelog](CHANGELOG.txt) -- Release history
-- [Functional Specification](docs/FSD.md)
+- [Roadmap](docs/ROADMAP.md) -- Living design doc for upcoming work
 
 ---
 
