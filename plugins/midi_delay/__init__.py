@@ -1,6 +1,10 @@
-"""MIDI Delay — delays notes using a clock-synced circular buffer."""
+"""MIDI Delay — delays notes via ALSA-queue scheduling.
 
-import threading
+Each incoming note pre-schedules its echoes (note_on + note_off pairs)
+at the right monotonic moments. The ALSA kernel queue dispatches them
+with sub-ms jitter regardless of Python latency or load.
+"""
+
 import time
 
 from raspimidihub.plugin_api import (
@@ -17,6 +21,26 @@ _DELAY_RATES = [
     "1/2", "1/2T", "1/4", "1/4T", "1/8", "1/8T",
     "1/16", "1/16T",
 ]
+
+# Raw ticks at 24 PPQN per delay rate. Used in sync mode to compute the
+# monotonic moment of each echo via ClockBus.tick_to_monotonic.
+_RATE_RAW_TICKS = {
+    "4/1": 96 * 4, "4/1T": 64 * 4,
+    "2/1": 96 * 2, "2/1T": 64 * 2,
+    "1/1": 96, "1/1T": 64,
+    "1/2": 48, "1/2T": 32,
+    "1/4": 24, "1/4T": 16,
+    "1/8": 12, "1/8T": 8,
+    "1/16": 6, "1/16T": 4,
+}
+
+# Echo note duration. Long enough for the destination synth to register
+# the note, short enough that adjacent echoes don't bleed.
+_ECHO_NOTE_DURATION_S = 0.05
+
+# All scheduled echoes share this tag so panic / transport-stop can
+# clear the entire pending burst with one cancel call.
+_DELAY_TAG = 1
 
 
 class MidiDelay(PluginBase):
@@ -57,50 +81,25 @@ echoes that fade out on a lead synth line."""
     clock_divisions = _DELAY_RATES
 
     def on_start(self):
-        # Sync mode: circular buffer of 32 tick slots
-        # Each slot: dict of (channel, note) -> velocity
-        self._buf_size = 32
-        self._buffer = [dict() for _ in range(self._buf_size)]
-        self._buf_pos = 0  # current write position (advances on each tick)
-
-        # Free mode: timed pending list
-        self._pending = []  # [(fire_time, channel, note, velocity)]
-        self._note_offs = []  # [(fire_time, channel, note)]
-        self._lock = threading.Lock()
-        self._running = True
-        self._timer = threading.Thread(target=self._timer_loop, daemon=True)
-        self._timer.start()
+        # All scheduled echoes are tagged with _DELAY_TAG, so panic /
+        # transport-stop clears the in-flight burst by cancelling that
+        # tag instead of tracking individual events.
+        pass
 
     def on_stop(self):
-        self._running = False
+        self.cancel_scheduled(_DELAY_TAG)
 
     def on_transport_start(self):
-        """Clear delay buffers on MIDI Start."""
-        with self._lock:
-            self._buffer = [dict() for _ in range(self._buf_size)]
-            self._buf_pos = 0
-            self._pending.clear()
-            self._note_offs.clear()
+        self.cancel_scheduled(_DELAY_TAG)
 
     def on_transport_stop(self):
-        """Clear pending echoes on MIDI Stop."""
-        with self._lock:
-            self._pending.clear()
-            self._note_offs.clear()
+        self.cancel_scheduled(_DELAY_TAG)
 
     def panic(self):
-        with self._lock:
-            for slot in self._buffer:
-                slot.clear()
-            self._pending.clear()
-            for _t, ch, note in list(self._note_offs):
-                self.send_note_off(ch, note)
-            self._note_offs.clear()
+        self.cancel_scheduled(_DELAY_TAG)
 
     def on_note_on(self, channel, note, velocity):
-        # Pass through immediately
         self.send_note_on(channel, note, velocity)
-        # Place echoes into future
         self._place_echoes(channel, note, velocity)
 
     def on_note_off(self, channel, note):
@@ -112,25 +111,10 @@ echoes that fade out on a lead synth line."""
     def on_pitchbend(self, channel, value):
         self.send_pitchbend(channel, value)
 
-    def on_tick(self, division):
-        if not self.get_param("sync"):
-            return
-        rate = self.get_param("rate") or "1/8"
-        if division != rate:
-            return
-        # Advance buffer position and play notes in current slot
-        self._buf_pos = (self._buf_pos + 1) % self._buf_size
-        slot = self._buffer[self._buf_pos]
-        if slot:
-            for (ch, note), vel in slot.items():
-                self.send_note_on(ch, note, vel)
-                # Schedule note-off
-                with self._lock:
-                    self._note_offs.append((time.monotonic() + 0.05, ch, note))
-            slot.clear()
-
     def _place_echoes(self, channel, note, velocity):
-        """Place echo notes into future buffer slots or pending list."""
+        """Pre-schedule each echo's note_on + note_off via the ALSA
+        queue. ALSA dispatches at the exact target moment with sub-ms
+        jitter; no Python timer involved."""
         max_repeats = self.get_param("repeats")
         if max_repeats is None:
             max_repeats = 3
@@ -138,63 +122,40 @@ echoes that fade out on a lead synth line."""
         vel_decay = (self.get_param("vel_decay") or 20) / 100.0
 
         if self.get_param("sync"):
-            # Place into circular buffer at future tick positions
+            # Sync mode: each echo lands on the next musical-rate tick
+            # boundary. tick_to_monotonic maps a future raw tick to its
+            # wall-clock moment via the ClockBus's running EMA estimate.
+            bus = getattr(self, "_clock_bus", None)
+            if bus is None:
+                return
+            tick_to_monotonic = getattr(bus, "tick_to_monotonic", None)
+            if not callable(tick_to_monotonic):
+                return
+            rate = self.get_param("rate") or "1/8"
+            rate_ticks = _RATE_RAW_TICKS.get(rate, 12)
+            now_tick = bus._tick_count
             vel = velocity
             for i in range(1, max_repeats + 1):
                 vel = int(vel * (1 - vel_decay))
                 if vel < 1:
                     break
-                slot_idx = (self._buf_pos + i) % self._buf_size
-                key = (channel, note)
-                slot = self._buffer[slot_idx]
-                if key in slot:
-                    # Note already in this slot — add velocities (cap at 127)
-                    slot[key] = min(127, slot[key] + vel)
-                else:
-                    slot[key] = vel
+                target_tick = now_tick + i * rate_ticks
+                t_on = tick_to_monotonic(target_tick)
+                if t_on is None:
+                    return
+                self.send_note_on_at(t_on, channel, note, vel, tag=_DELAY_TAG)
+                self.send_note_off_at(
+                    t_on + _ECHO_NOTE_DURATION_S, channel, note, tag=_DELAY_TAG)
         else:
-            # Free mode: place into timed pending list
+            # Free mode: time-based, doesn't need clock-bus.
             delay_sec = (self.get_param("delay_ms") or 250) / 1000.0
+            now = time.monotonic()
             vel = velocity
             for i in range(1, max_repeats + 1):
                 vel = int(vel * (1 - vel_decay))
                 if vel < 1:
                     break
-                fire_time = time.monotonic() + delay_sec * i
-                with self._lock:
-                    self._pending.append((fire_time, channel, note, vel))
-
-    def _timer_loop(self):
-        while self._running:
-            now = time.monotonic()
-            to_fire = []
-            offs = []
-
-            with self._lock:
-                # Free mode echoes
-                remaining = []
-                for item in self._pending:
-                    if item[0] <= now:
-                        to_fire.append(item)
-                    else:
-                        remaining.append(item)
-                self._pending = remaining
-
-                # Note-offs (both modes)
-                off_remaining = []
-                for item in self._note_offs:
-                    if item[0] <= now:
-                        offs.append(item)
-                    else:
-                        off_remaining.append(item)
-                self._note_offs = off_remaining
-
-            for _, channel, note, velocity in to_fire:
-                self.send_note_on(channel, note, velocity)
-                with self._lock:
-                    self._note_offs.append((now + 0.05, channel, note))
-
-            for _, channel, note in offs:
-                self.send_note_off(channel, note)
-
-            time.sleep(0.005)
+                t_on = now + delay_sec * i
+                self.send_note_on_at(t_on, channel, note, vel, tag=_DELAY_TAG)
+                self.send_note_off_at(
+                    t_on + _ECHO_NOTE_DURATION_S, channel, note, tag=_DELAY_TAG)
