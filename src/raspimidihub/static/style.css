@@ -775,6 +775,13 @@ body {
     background: radial-gradient(ellipse 160% 50% at 50% 50%, transparent 30%, rgba(0,0,0,0.85) 100%);
     pointer-events: none; z-index: 1;
 }
+/* Mini wheel: half-height variant for dense edit panels.
+ * The component's TICK_H switches to 12 px to match. */
+.wheel-container.mini { height: 32px; border-radius: 6px; }
+.wheel-container.mini .wheel-tick { height: 12px; font-size: 9px; }
+.wheel-container.mini .wheel-tick.active { font-size: 10px; }
+.wheel-container.mini .wheel-tick.near { font-size: 9px; }
+.wheel-group.mini { margin-bottom: 4px; }
 
 /* Knob — round body, indicator mark, LED arc */
 .knob-group { display: flex; flex-direction: column; align-items: center; gap: 2px; margin-bottom: 12px; min-width: 0; }
@@ -1284,15 +1291,26 @@ body {
 .cell-edit-row {
     display: flex; flex-direction: row; align-items: center; gap: 8px;
 }
-/* Spring row hosts two PluginWheels side by side: "Spring Force" and
- * "Home". Each wheel-group keeps its default column flow (label on top,
- * wheel below); the row container distributes them horizontally. */
-.spring-row {
-    align-items: flex-start;
-    gap: 16px;
+/* Mini-controls row: hosts mini PluginWheels side by side. Each
+ * wheel-group keeps its column flow (label-on-top, wheel-below); the
+ * row aligns wheels at the bottom so prefix text labels (X: / Y: /
+ * Spring) line up with the wheel itself rather than the wheel's
+ * caption. Used in the cell-edit panel for Ch / CC, On / Off, and
+ * the XY-pad spring config. */
+.cell-edit-row.mini-controls {
+    align-items: flex-end;
+    gap: 10px;
 }
-.spring-row > .wheel-group {
+.cell-edit-row.mini-controls > .wheel-group {
     flex: 0 0 auto;
+    margin-bottom: 0;
+}
+.cell-edit-row.mini-controls > .cell-edit-fieldlabel {
+    /* Keep the X: / Y: / Spring prefix nudged off the wheel's bottom
+     * edge so it visually centers on the wheel circle. */
+    margin-bottom: 8px;
+}
+.cell-edit-row.mini-controls > .cell-edit-learn {
     margin-bottom: 0;
 }
 .cell-edit-type {
@@ -1428,6 +1446,12 @@ body {
 .rubber-btn.active .btn-led.red { background: #f44336; box-shadow: 0 0 8px #f44336; }
 .rubber-btn.active .btn-led.blue { background: #2196f3; box-shadow: 0 0 8px #2196f3; }
 .rubber-btn .btn-text { font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; }
+/* Mini rubber-btn: half-height to pair with mini wheels in dense
+ * edit panels. */
+.rubber-btn.mini { height: 32px; gap: 3px; }
+.rubber-btn.mini .btn-led { width: 6px; height: 6px; }
+.rubber-btn.mini .btn-text { font-size: 9px; }
+.btn-group-param.mini { margin-bottom: 4px; }
 
 /* Step editor */
 .step-editor { padding-bottom: 4px; }

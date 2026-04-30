@@ -69,6 +69,7 @@ class Wheel(Param):
     display_factor: float = 0  # if >0, display value*factor (e.g. 0.1 for Hz tenths)
     unit: str = ""  # suffix shown after value (e.g. "Hz", "%")
     labels: list[str] = field(default_factory=list)  # if set, show labels[value-min] instead of number
+    mini: bool = False  # half-height variant for dense edit panels
 
     def to_dict(self) -> dict:
         d = super().to_dict()
@@ -79,6 +80,8 @@ class Wheel(Param):
             d["display_factor"] = self.display_factor
         if self.unit:
             d["unit"] = self.unit
+        if self.mini:
+            d["mini"] = True
         return d
 
 
@@ -199,11 +202,14 @@ class Button(Param):
     default: bool = False
     color: str = "green"  # LED color: green, yellow, red, blue
     trigger: bool = False  # momentary fire-mode if True
+    mini: bool = False  # half-height variant for dense edit panels
 
     def to_dict(self) -> dict:
         d = super().to_dict()
         d.update({"default": self.default, "color": self.color,
                   "trigger": self.trigger})
+        if self.mini:
+            d["mini"] = True
         return d
 
 
@@ -532,6 +538,21 @@ class PluginBase:
         self._send_start = None
         self._send_stop = None
         self._send_continue = None
+        # Scheduled-event hooks. Set by the host alongside the immediate
+        # send_* counterparts. Plugins use these to land MIDI at exact
+        # future moments (drop snapshots ahead of the bar boundary,
+        # arpeggiator notes pre-scheduled, MIDI Delay echoes, etc.) —
+        # ALSA's queue dispatches at the right tick regardless of
+        # Python latency. None means the host couldn't allocate a queue
+        # for this instance; plugins should fall back to immediate sends.
+        self._send_cc_at = None
+        self._send_note_on_at = None
+        self._send_note_off_at = None
+        self._send_clock_at = None
+        self._send_start_at = None
+        self._send_stop_at = None
+        self._send_continue_at = None
+        self._cancel_scheduled = None
         self._notify_param_change = None  # callback to notify UI of param update
         self._notify_display = None  # callback to push display updates to UI
 
@@ -703,3 +724,60 @@ class PluginBase:
         """Send MIDI Continue (transport)."""
         if self._send_continue:
             self._send_continue()
+
+    # --- Scheduled-event API (ALSA queue) ---
+    # Call these to land an event at an exact monotonic-time moment in
+    # the future. `tag` is 1..255 (0 = no tag); pass the same tag value
+    # to cancel_scheduled() to remove all pending events with that tag.
+    # Falls back to immediate sends if the host couldn't allocate a queue.
+
+    def send_cc_at(self, when_monotonic: float, channel: int, cc: int,
+                   value: int, tag: int = 0) -> None:
+        if self._send_cc_at:
+            self._send_cc_at(when_monotonic, channel, cc, value, tag)
+        elif self._send_cc:
+            self._send_cc(channel, cc, value)
+
+    def send_note_on_at(self, when_monotonic: float, channel: int, note: int,
+                        velocity: int, tag: int = 0) -> None:
+        if self._send_note_on_at:
+            self._send_note_on_at(when_monotonic, channel, note, velocity, tag)
+        elif self._send_note_on:
+            self._send_note_on(channel, note, velocity)
+
+    def send_note_off_at(self, when_monotonic: float, channel: int, note: int,
+                         tag: int = 0) -> None:
+        if self._send_note_off_at:
+            self._send_note_off_at(when_monotonic, channel, note, tag)
+        elif self._send_note_off:
+            self._send_note_off(channel, note)
+
+    def send_clock_at(self, when_monotonic: float, tag: int = 0) -> None:
+        if self._send_clock_at:
+            self._send_clock_at(when_monotonic, tag)
+        elif self._send_clock:
+            self._send_clock()
+
+    def send_start_at(self, when_monotonic: float, tag: int = 0) -> None:
+        if self._send_start_at:
+            self._send_start_at(when_monotonic, tag)
+        elif self._send_start:
+            self._send_start()
+
+    def send_stop_at(self, when_monotonic: float, tag: int = 0) -> None:
+        if self._send_stop_at:
+            self._send_stop_at(when_monotonic, tag)
+        elif self._send_stop:
+            self._send_stop()
+
+    def send_continue_at(self, when_monotonic: float, tag: int = 0) -> None:
+        if self._send_continue_at:
+            self._send_continue_at(when_monotonic, tag)
+        elif self._send_continue:
+            self._send_continue()
+
+    def cancel_scheduled(self, tag: int) -> None:
+        """Remove all pending queued events tagged `tag` from this plugin's
+        ALSA output queue."""
+        if self._cancel_scheduled:
+            self._cancel_scheduled(tag)

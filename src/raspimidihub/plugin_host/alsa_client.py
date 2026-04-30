@@ -69,6 +69,26 @@ class PluginAlsaClient:
         # Rate limiter
         self._rate_window = []
 
+        # Per-client ALSA queue for scheduled-event delivery. The queue
+        # runs in real-time (CLOCK_MONOTONIC under the hood) and lets
+        # plugins emit events at exact future moments — used by the
+        # drop-button fire path to land snapshot CCs ahead of the bar
+        # boundary, ahead of the audible kick. _queue_start_monotonic
+        # is captured right after start so we can convert
+        # `target_monotonic` → `queue_real_time = target - start`.
+        self._queue_id = self._alsa.snd_seq_alloc_named_queue(
+            self._handle, f"plugin-{client_name}".encode())
+        if self._queue_id < 0:
+            log.warning("plugin %s: alloc_named_queue failed (%d) — "
+                        "scheduled events disabled", client_name, self._queue_id)
+            self._queue_id = -1
+            self._queue_start_monotonic = None
+        else:
+            self._alsa.snd_seq_start_queue(
+                self._handle, self._queue_id, None)
+            self._alsa.snd_seq_drain_output(self._handle)
+            self._queue_start_monotonic = time.monotonic()
+
     @property
     def client_id(self) -> int:
         return self._client_id
@@ -129,7 +149,96 @@ class PluginAlsaClient:
 
         self._alsa.snd_seq_event_output_direct(self._handle, ctypes.pointer(ev))
 
+    def send_event_at(self, when_monotonic: float, ev_type: int,
+                      tag: int = 0, **kwargs) -> None:
+        """Schedule a MIDI event for ALSA-queue delivery at the given
+        monotonic time. Drop-in replacement for send_event() except
+        the event lands in the future; the kernel-side queue dispatches
+        it at the requested moment regardless of Python latency.
+
+        `tag` (1..255; 0 = no tag) lets the caller cancel pending events
+        en masse via cancel_tag() — drop-button cancel uses this.
+
+        Falls back to immediate send_event() if the queue couldn't be
+        allocated at startup."""
+        if self._queue_id < 0 or self._queue_start_monotonic is None:
+            return self.send_event(ev_type, **kwargs)
+
+        # Drop into the past = fire immediately. Avoid the kernel
+        # silently discarding it.
+        delta = when_monotonic - self._queue_start_monotonic
+        if delta <= 0:
+            return self.send_event(ev_type, **kwargs)
+
+        # Rate limiter still applies — scheduled events count too.
+        now = time.monotonic()
+        self._rate_window = [t for t in self._rate_window if now - t < 1.0]
+        if len(self._rate_window) >= 1000:
+            return
+        self._rate_window.append(now)
+
+        ev = self._alsa.SndSeqEvent()
+        ev.type = ev_type
+        ev.source.client = self._client_id
+        ev.source.port = self._out_port
+        ev.dest.client = SND_SEQ_ADDRESS_SUBSCRIBERS
+        ev.dest.port = 0
+        ev.queue = self._queue_id
+        ev.tag = tag & 0xFF
+        # set_event_time_real handles flags + the time-stamp union slot.
+        sec = int(delta)
+        nsec = int((delta - sec) * 1_000_000_000)
+        self._alsa.set_event_time_real(ev, sec, nsec)
+
+        MidiEventType = self._alsa.MidiEventType
+        if ev_type in (MidiEventType.NOTEON, MidiEventType.NOTEOFF, MidiEventType.KEYPRESS):
+            ev.data.note.channel = kwargs.get("channel", 0)
+            ev.data.note.note = kwargs.get("note", 0)
+            ev.data.note.velocity = kwargs.get("velocity", 0)
+        elif ev_type == MidiEventType.CONTROLLER:
+            ev.data.control.channel = kwargs.get("channel", 0)
+            ev.data.control.param = kwargs.get("cc", 0)
+            ev.data.control.value = kwargs.get("value", 0)
+        elif ev_type in (MidiEventType.PITCHBEND, MidiEventType.CHANPRESS, MidiEventType.PGMCHANGE):
+            ev.data.control.channel = kwargs.get("channel", 0)
+            ev.data.control.value = kwargs.get("value", 0)
+
+        # output (queued) + drain to flush to kernel.
+        self._alsa.snd_seq_event_output(self._handle, ctypes.pointer(ev))
+        self._alsa.snd_seq_drain_output(self._handle)
+
+    def cancel_tag(self, tag: int) -> None:
+        """Remove all pending queued events from this client tagged `tag`.
+        Used to undo a scheduled drop fire when the user cancels before
+        the bar boundary."""
+        if self._queue_id < 0 or tag <= 0:
+            return
+        from ..alsa_seq import (
+            SND_SEQ_REMOVE_OUTPUT,
+            SND_SEQ_REMOVE_TAG_MATCH,
+        )
+        rm = self._alsa.SndSeqRemoveEventsPtr()
+        if self._alsa.snd_seq_remove_events_malloc(ctypes.byref(rm)) < 0:
+            return
+        try:
+            self._alsa.snd_seq_remove_events_set_condition(
+                rm, SND_SEQ_REMOVE_OUTPUT | SND_SEQ_REMOVE_TAG_MATCH)
+            self._alsa.snd_seq_remove_events_set_tag(rm, tag & 0xFF)
+            self._alsa.snd_seq_remove_events_set_queue(rm, self._queue_id)
+            self._alsa.snd_seq_remove_events(self._handle, rm)
+        finally:
+            self._alsa.snd_seq_remove_events_free(rm)
+
     def close(self) -> None:
         if self._handle:
+            if self._queue_id >= 0:
+                try:
+                    self._alsa.snd_seq_stop_queue(
+                        self._handle, self._queue_id, None)
+                    self._alsa.snd_seq_free_queue(
+                        self._handle, self._queue_id)
+                except Exception:
+                    pass
+                self._queue_id = -1
             self._alsa.snd_seq_close(self._handle)
             self._handle = self._alsa.SndSeqPtr()

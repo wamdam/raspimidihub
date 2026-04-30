@@ -530,8 +530,26 @@ class ControllerBase(PluginBase):
                 self._param_values.get("drop_snapshots") or {}).get(other_sid) else "idle"
             self._drop_fade_start.pop(other_sid, None)
             self._drop_fade_last_emit.pop(other_sid, None)
+            # The bumped button's pre-scheduled CCs (if any) must be
+            # cancelled so they don't fire alongside the new schedule.
+            self.cancel_scheduled(self._drop_tag_for(other_sid))
         states[sid] = "scheduled"
         self.set_param("drop_states", states)
+
+        # Pre-schedule the snapshot CCs via the ALSA queue ahead of the
+        # bar boundary, so the new state is in effect before any
+        # downbeat event lands at the destination synth. Hard slot only
+        # — fade still steps per-tick (Phase 2/3 migration). Skip if
+        # the clock-bus mapping isn't ready yet (no ticks observed) —
+        # _tick_slot will still _apply_snapshot at fire moment as a
+        # safety net.
+        if not fade:
+            tick_to_monotonic = getattr(bus, "tick_to_monotonic", None)
+            if callable(tick_to_monotonic):
+                fire_at_monotonic = tick_to_monotonic(fire_at_tick)
+                if fire_at_monotonic is not None:
+                    self._schedule_snapshot(
+                        snap, fire_at_monotonic, self._drop_tag_for(sid))
 
         # If fade is enabled, capture the CURRENT cell values so the
         # fade interpolates from where we are now (not from where the
@@ -572,6 +590,9 @@ class ControllerBase(PluginBase):
         if not touched:
             return
         self._write_schedule(slots)
+        # Pull any pre-scheduled CCs for this button out of the ALSA queue
+        # so they don't fire after the user cancelled.
+        self.cancel_scheduled(self._drop_tag_for(sid))
         states = dict(self._param_values.get("drop_states") or {})
         snaps = self._param_values.get("drop_snapshots") or {}
         states[sid] = "captured" if snaps.get(sid) else "idle"
@@ -581,7 +602,10 @@ class ControllerBase(PluginBase):
 
     def _apply_snapshot(self, snap: dict) -> None:
         """Re-emit each captured CC + snap on-screen cells to the
-        captured value. Used by both immediate-fire and scheduled-fire."""
+        captured value. Used for immediate-fire ("Now" mode) and the
+        no-clock fallback. Bar-quantised fires schedule the CCs ahead
+        of time via _schedule_snapshot and only run the state side at
+        fire moment via _apply_snapshot_state_only."""
         for cell_name, v in snap.items():
             binding = self._effective_binding(cell_name)
             if binding is None:
@@ -593,13 +617,72 @@ class ControllerBase(PluginBase):
                 if cc_val is None:
                     continue
                 self.send_cc(binding["channel"], binding["cc"], cc_val)
-            if self._param_values.get(cell_name) != v:
-                self._param_values[cell_name] = v
-                if self._notify_param_change:
-                    try:
-                        self._notify_param_change(cell_name, v)
-                    except Exception:
-                        pass
+            self._apply_snapshot_cell_state(cell_name, v)
+
+    def _apply_snapshot_cell_state(self, cell_name: str, v) -> None:
+        """Update the on-screen cell value for a single snapshot entry
+        without re-emitting MIDI. Called at fire moment when the CCs
+        have already been delivered via the ALSA queue."""
+        if self._param_values.get(cell_name) != v:
+            self._param_values[cell_name] = v
+            if self._notify_param_change:
+                try:
+                    self._notify_param_change(cell_name, v)
+                except Exception:
+                    pass
+
+    def _apply_snapshot_state_only(self, snap: dict) -> None:
+        """Mirror the on-screen cells to the snapshot without sending CCs.
+        Used after a scheduled-fire, when the CCs already went out via
+        the ALSA queue ahead of the bar boundary."""
+        for cell_name, v in snap.items():
+            self._apply_snapshot_cell_state(cell_name, v)
+
+    # Lead time (seconds) we schedule snapshot CCs ahead of the bar
+    # boundary so the new state is in effect before the first audible
+    # event of the next bar (e.g. a kick on beat 1). 8 ms covers the
+    # typical Pi → ALSA → USB-MIDI → synth path with comfortable
+    # headroom; small enough that we never flip into the previous bar.
+    DROP_FIRE_LEAD_S = 0.008
+
+    def _drop_tag_for(self, sid: str) -> int:
+        """Per-button ALSA-queue event tag (1..127). 0 = no tag.
+        Stable across reboots and re-schedules so cancel finds them."""
+        try:
+            return (int(sid) % 127) + 1
+        except (ValueError, TypeError):
+            return 0
+
+    def _schedule_snapshot(self, snap: dict, fire_at_monotonic: float,
+                           tag: int) -> None:
+        """Pre-schedule each snapshot CC for ALSA-queue delivery a few
+        ms before the bar boundary. State update happens at fire_at_tick
+        in _tick_slot; the CCs themselves arrive at the synth ahead of
+        any beat-1 event."""
+        when = fire_at_monotonic - self.DROP_FIRE_LEAD_S
+        for cell_name, v in snap.items():
+            binding = self._effective_binding(cell_name)
+            if binding is None:
+                continue
+            ctype = self._cell_types.get(cell_name)
+            if ctype == "xypad":
+                if not isinstance(v, dict):
+                    continue
+                ch = binding["channel"]
+                if isinstance(v.get("x"), int):
+                    self.send_cc_at(when, ch, binding["cc"],
+                                    max(0, min(127, v["x"])), tag)
+                cc_y = binding.get("cc_y")
+                if cc_y is not None and isinstance(v.get("y"), int):
+                    ch_y = binding.get("channel_y", ch)
+                    self.send_cc_at(when, ch_y, cc_y,
+                                    max(0, min(127, v["y"])), tag)
+            else:
+                cc_val = self._cell_value_to_cc(cell_name, v, binding)
+                if cc_val is None:
+                    continue
+                self.send_cc_at(when, binding["channel"],
+                                binding["cc"], cc_val, tag)
 
     def _plugin_clock_bus(self):
         """Return the host's ClockBus or None if not yet wired. Set by
@@ -660,14 +743,21 @@ class ControllerBase(PluginBase):
         sid = str(slot.get("button_id"))
 
         if now_tick >= fire_at:
-            # _apply_snapshot lands the exact target values (covers
-            # both hard-drop and the final landing of a fade).
+            # Land the snapshot. For hard slots the CCs were pre-scheduled
+            # via the ALSA queue (delivered ahead of the bar by
+            # DROP_FIRE_LEAD_S so the new state is in effect before any
+            # downbeat); only the on-screen state needs to flip here.
+            # Fade slots still emit per-tick, so the final landing here
+            # IS the only place the exact target value is sent.
             snap = (self._param_values.get("drop_snapshots") or {}).get(sid)
             self._drop_fade_start.pop(sid, None)
             self._drop_fade_last_emit.pop(sid, None)
             states = dict(self._param_values.get("drop_states") or {})
             if snap:
-                self._apply_snapshot(snap)
+                if fade:
+                    self._apply_snapshot(snap)
+                else:
+                    self._apply_snapshot_state_only(snap)
             states[sid] = "firing"
             self.set_param("drop_states", states)
             states[sid] = "captured" if snap else "idle"

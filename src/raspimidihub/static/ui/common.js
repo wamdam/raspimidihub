@@ -18,6 +18,38 @@ export async function api(path, opts = {}) {
     return res.json();
 }
 
+// --- Aggressive reload that survives mobile Safari's bf-cache and any
+// service-worker fetch handler. Plain location.reload() can leave a
+// phone showing the old page after a deploy because the browser
+// restores from memory. We:
+//   1. unregister the service worker so it can't intercept the next
+//      load with a stale fetch handler;
+//   2. clear any caches storage (sw.js doesn't currently use one, but
+//      cheap insurance);
+//   3. navigate to the same URL with a fresh `_r=<timestamp>` query
+//      param via location.replace — a never-before-seen URL bypasses
+//      every level of the HTTP cache and (because we replace, not
+//      assign) doesn't add a history entry.
+// Triggered by the "stale, reload" header link and the Settings →
+// "Reload App" button.
+export async function hardReload() {
+    try {
+        if ('serviceWorker' in navigator) {
+            const regs = await navigator.serviceWorker.getRegistrations();
+            await Promise.all(regs.map(r => r.unregister()));
+        }
+    } catch {}
+    try {
+        if ('caches' in window) {
+            const keys = await caches.keys();
+            await Promise.all(keys.map(k => caches.delete(k)));
+        }
+    } catch {}
+    const url = new URL(window.location.href);
+    url.searchParams.set('_r', Date.now().toString());
+    window.location.replace(url.toString());
+}
+
 // --- ESC closes panel ---
 export function useEscapeClose(close) {
     useEffect(() => {

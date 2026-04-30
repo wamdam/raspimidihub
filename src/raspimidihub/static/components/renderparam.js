@@ -45,7 +45,7 @@ export function renderParam(param, values, onChange, allValues, displayCtx) {
                 : param.unit ? (v) => `${v}${param.unit}` : null;
             return html`<${PluginWheel} name=${param.name} label=${param.label}
                 min=${param.min} max=${param.max} value=${val != null ? val : param.default}
-                onChange=${onChange} tickLabel=${tl} />`;
+                onChange=${onChange} tickLabel=${tl} mini=${param.mini} />`;
         }
         case 'knob':
             return html`<${PluginKnob} name=${param.name} label=${param.label}
@@ -64,7 +64,7 @@ export function renderParam(param, values, onChange, allValues, displayCtx) {
         case 'button':
             return html`<${PluginButton} name=${param.name} label=${param.label}
                 value=${val != null ? val : param.default} color=${param.color}
-                trigger=${param.trigger} onChange=${onChange} />`;
+                trigger=${param.trigger} mini=${param.mini} onChange=${onChange} />`;
         case 'stepeditor':
             return html`<${PluginStepEditor} name=${param.name} label=${param.label}
                 value=${val || []} onChange=${onChange}

@@ -11,7 +11,7 @@
 
 import { render } from './lib/preact.module.js';
 import { useState, useEffect, useRef, useCallback } from './lib/hooks.module.js';
-import { html, api, useSSE, Toast, MidiBar } from './ui/common.js';
+import { html, api, useSSE, Toast, MidiBar, hardReload } from './ui/common.js';
 import { ContextMenu } from './ui/contextmenu.js';
 import { setSSEConnectionId, useSSESubscription } from './ui/sse-subscriptions.js';
 import { IconRouting, IconController, IconPreset, IconSettings } from './ui/icons.js';
@@ -39,7 +39,7 @@ function VersionBadge({ version, loadedBuild, serverBuild }) {
             v${version}${loadedToken ? '·' + loadedToken : ''}
             ${stale ? html`<span style="color:#f80;cursor:pointer;margin-left:6px"
                 title="Server has been redeployed since this tab loaded — click to reload"
-                onclick=${() => location.reload()}>· stale, reload</span>` : ''}
+                onclick=${hardReload}>· stale, reload</span>` : ''}
         </span>
     </h1>`;
 }

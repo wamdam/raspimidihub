@@ -9,6 +9,7 @@ fanned out via the same per-instance tick queue.
 import logging
 import os
 import threading
+import time
 
 from .instance import PluginInstance
 
@@ -73,6 +74,14 @@ class ClockBus:
         # the live tick count and freeze them when the transport stops.
         # Signature: callback(tick_count: int, ticks_per_bar: int, running: bool).
         self._on_quarter_callback = None
+        # Tick → monotonic-time mapping. Recorded on each clock tick; used
+        # by tick_to_monotonic() so plugins can compute "what wall-clock
+        # moment will tick N fire at?" (e.g. drop-button fire ahead of
+        # the bar boundary). EMA over recent inter-tick intervals
+        # smooths over jitter without being slow to react to tempo
+        # changes.
+        self._last_tick_monotonic: float | None = None
+        self._tick_period_ema: float | None = None  # seconds per raw tick
 
     def subscribe(self, instance: PluginInstance, divisions: list[str]) -> None:
         with self._lock:
@@ -118,6 +127,17 @@ class ClockBus:
         next_grid_bar = ((current_bar // n) + 1) * n
         return next_grid_bar * tpb - tc
 
+    def tick_to_monotonic(self, tick: int) -> float | None:
+        """Predict the monotonic-time moment when raw tick `tick` will
+        fire. Returns None until enough ticks have arrived to estimate
+        the period. Used by drop-button fire to schedule snapshot CCs
+        a few ms ahead of the bar boundary."""
+        last_t = self._last_tick_monotonic
+        period = self._tick_period_ema
+        if last_t is None or period is None:
+            return None
+        return last_t + (tick - self._tick_count) * period
+
     def on_clock_tick(self) -> None:
         """Called by the engine for each MIDI Clock message (24 PPQ).
 
@@ -129,6 +149,20 @@ class ClockBus:
             self._tick_count = 0
             log.info("Clock bus: auto-started on first clock tick")
         self._tick_count += 1
+        # Record this tick's wall-clock moment + update the rolling
+        # period estimate (EMA, alpha=0.2). Used by tick_to_monotonic
+        # for forward prediction. Skip the very first tick — no period
+        # to compute — and clamp absurd outliers (master with hiccupping
+        # clock should not yank the estimate).
+        now = time.monotonic()
+        if self._last_tick_monotonic is not None:
+            dt = now - self._last_tick_monotonic
+            if 0.0005 < dt < 1.0:  # 1000 BPM down to 2.5 BPM bounds
+                if self._tick_period_ema is None:
+                    self._tick_period_ema = dt
+                else:
+                    self._tick_period_ema = 0.2 * dt + 0.8 * self._tick_period_ema
+        self._last_tick_monotonic = now
         # Fire the quarter listener (broadcasts clock-position SSE) so
         # the frontend's drop-button rings can advance even when no
         # schedule is active. Cheap — one int compare + at most one

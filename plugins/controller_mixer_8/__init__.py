@@ -1,7 +1,7 @@
 """Controller — Mixer 8.
 
-Fixed 8-wide layout: 3 rows of knobs / 8 vertical faders / 8
-buttons (5 rows total). Defaults on ch 1; user can override per cell
+Fixed 8-wide layout: 3 rows of knobs / 8 vertical faders / 2 rows of
+buttons (6 rows total). Defaults on ch 1; user can override per cell
 via the UI's edit mode (rename, channel, CC, MIDI Learn).
 
 All the cell ↔ CC plumbing lives in ControllerBase; this file just
@@ -24,13 +24,14 @@ class ControllerMixer8(ControllerBase):
     """8-wide mixer-strip controller: 8 knobs / 8 faders / 8 mutes."""
 
     NAME = "Controller — Mixer 8"
-    DESCRIPTION = "8-wide mixer: 24 knobs / 8 faders / 8 buttons (defaults CC 16-55 ch 1)"
+    DESCRIPTION = "8-wide mixer: 24 knobs / 8 faders / 16 buttons (defaults CC 16-63 ch 1)"
     AUTHOR = "RaspiMIDIHub"
-    VERSION = "1.2"
+    VERSION = "1.3"
     HELP = """\
 8-wide mixer-strip controller: 24 knobs (3 rows of 8) / 8 vertical
-faders / 8 buttons. Defaults on channel 1 — the per-cell bindings
-panel below shows every cell's CC and lets you change it.
+faders / 16 buttons (2 rows of 8). Defaults on channel 1 — the
+per-cell bindings panel below shows every cell's CC and lets you
+change it.
 
 Tap the EDIT button below the grid to override a cell's label,
 channel and CC, or arm "L" and twist a hardware knob to capture a
@@ -68,7 +69,7 @@ external pads, or sequencer-driven drops."""
         Radio("bg", "Background", ControllerBase.BG_OPTIONS, default="Default", config_only=True),
         LayoutGrid(
             "controller", "",
-            cols=8, rows=5,
+            cols=8, rows=6,
             labels_param="cell_labels",
             bindings_param="cell_bindings",
             learn_param="cell_learn",
@@ -86,12 +87,15 @@ external pads, or sequencer-driven drops."""
                 *[LayoutCell(Fader(f"f{i}", f"F{i+1}", min=0, max=127,
                                    default=80, vertical=True),
                              col=i+1, row=4, channel=0, cc=40+i) for i in range(8)],
-                # Row 5: buttons — ch 1, CC 48..55.
+                # Row 5: buttons A — ch 1, CC 48..55.
                 *[LayoutCell(Button(f"m{i}", f"B{i+1}", color="green"),
                              col=i+1, row=5, channel=0, cc=48+i) for i in range(8)],
+                # Row 6: buttons B — ch 1, CC 56..63.
+                *[LayoutCell(Button(f"m{i+8}", f"B{i+9}", color="green"),
+                             col=i+1, row=6, channel=0, cc=56+i) for i in range(8)],
             ],
         ),
     ]
 
-    cc_outputs = list(range(16, 56))  # CC 16..55 ch 1
-    outputs = ["CC 16..55 on ch 1 — 24 knobs, 8 faders, 8 buttons"]
+    cc_outputs = list(range(16, 64))  # CC 16..63 ch 1
+    outputs = ["CC 16..63 on ch 1 — 24 knobs, 8 faders, 16 buttons"]

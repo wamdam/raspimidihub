@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect } from '../lib/hooks.module.js';
-import { html, api } from '../ui/common.js';
+import { html, api, hardReload } from '../ui/common.js';
 import { UPDATE_LABELS } from '../state/constants.js';
 import { getSoundsEnabled, setSoundsEnabled } from '../components/common.js';
 
@@ -184,7 +184,7 @@ function VersionsCard({ showToast, onUpdatingChange }) {
             setStatusMsg(UPDATE_LABELS[step] || step);
             if (s.version && startVersion && s.version !== startVersion) {
                 clearInterval(id);
-                location.reload();
+                hardReload();
                 return;
             }
             if (step === 'done' && until === 'check') {
@@ -823,7 +823,7 @@ export function SettingsPage({ showToast, showMidiBar, toggleMidiBar }) {
         </div>
         <${VersionsCard} showToast=${showToast} onUpdatingChange=${setIsUpgrading} />
         <div class="card">
-            <button class="btn btn-secondary btn-block" style="margin-bottom:8px" onclick=${() => location.reload()} disabled=${isUpgrading}>Reload App</button>
+            <button class="btn btn-secondary btn-block" style="margin-bottom:8px" onclick=${hardReload} disabled=${isUpgrading}>Reload App</button>
             <button class="btn btn-danger btn-block" onclick=${rebootPi} disabled=${isUpgrading}>${isUpgrading ? 'Upgrade in progress...' : 'Reboot Pi'}</button>
         </div>
     `;

@@ -96,6 +96,31 @@ class SndSeqPortSubscribe(Structure):
 SndSeqPortSubscribePtr = POINTER(SndSeqPortSubscribe)
 
 
+# --- snd_seq_real_time_t (used for queue-scheduled events) ---
+
+class SndSeqRealTime(Structure):
+    _fields_ = [
+        ("tv_sec", c_uint),
+        ("tv_nsec", c_uint),
+    ]
+
+
+# --- snd_seq_remove_events_t (opaque, used for cancelling queued events) ---
+
+class SndSeqRemoveEvents(Structure):
+    pass
+
+SndSeqRemoveEventsPtr = POINTER(SndSeqRemoveEvents)
+
+
+# --- Event time-stamp / mode flags + remove-events condition flags ---
+
+SND_SEQ_TIME_STAMP_REAL = 0x01      # bit 0 = real-time (vs tick)
+SND_SEQ_TIME_MODE_ABS = 0x00        # bit 1 cleared = absolute (vs relative)
+SND_SEQ_REMOVE_OUTPUT = 0x02
+SND_SEQ_REMOVE_TAG_MATCH = 0x200
+
+
 # --- snd_seq_client_info_t / snd_seq_port_info_t (opaque) ---
 
 class SndSeqClientInfo(Structure):
@@ -269,8 +294,53 @@ snd_seq_query_port_subscribers = _func("snd_seq_query_port_subscribers", c_int, 
 # Connect/disconnect to system announce port
 snd_seq_connect_from = _func("snd_seq_connect_from", c_int, SndSeqPtr, c_int, c_int, c_int)
 
+# Queue lifecycle (used by PluginAlsaClient for scheduled-event delivery).
+# Note: snd_seq_start_queue / _stop_queue are static-inline wrappers in
+# the ALSA headers and aren't exported as symbols; we call the underlying
+# snd_seq_control_queue with the right event-type code instead.
+snd_seq_alloc_named_queue = _func("snd_seq_alloc_named_queue", c_int, SndSeqPtr, c_char_p)
+snd_seq_free_queue = _func("snd_seq_free_queue", c_int, SndSeqPtr, c_int)
+snd_seq_control_queue = _func(
+    "snd_seq_control_queue", c_int, SndSeqPtr, c_int, c_int, c_int, SndSeqEventPtr)
+
+
+def snd_seq_start_queue(handle, queue_id, ev=None) -> int:
+    # SND_SEQ_EVENT_START = 30, value=0 (unused for queue control)
+    return snd_seq_control_queue(handle, queue_id, 30, 0, ev)
+
+
+def snd_seq_stop_queue(handle, queue_id, ev=None) -> int:
+    # SND_SEQ_EVENT_STOP = 32
+    return snd_seq_control_queue(handle, queue_id, 32, 0, ev)
+
+# Remove-events: lets a client cancel its own pending queued events
+# (e.g. drop-button cancel removes the snapshot CCs scheduled for the
+# upcoming bar boundary).
+snd_seq_remove_events_malloc = _func(
+    "snd_seq_remove_events_malloc", c_int, POINTER(SndSeqRemoveEventsPtr))
+snd_seq_remove_events_free = _func(
+    "snd_seq_remove_events_free", None, SndSeqRemoveEventsPtr)
+snd_seq_remove_events_set_condition = _func(
+    "snd_seq_remove_events_set_condition", None, SndSeqRemoveEventsPtr, c_uint)
+snd_seq_remove_events_set_tag = _func(
+    "snd_seq_remove_events_set_tag", None, SndSeqRemoveEventsPtr, c_int)
+snd_seq_remove_events_set_queue = _func(
+    "snd_seq_remove_events_set_queue", None, SndSeqRemoveEventsPtr, c_int)
+snd_seq_remove_events = _func(
+    "snd_seq_remove_events", c_int, SndSeqPtr, SndSeqRemoveEventsPtr)
+
 # Error string
 snd_strerror = _func("snd_strerror", c_char_p, c_int)
+
+
+def set_event_time_real(ev: SndSeqEvent, sec: int, nsec: int) -> None:
+    """Stamp an event for absolute real-time queue delivery at (sec, nsec)
+    on the queue's own clock. Caller is responsible for setting ev.queue
+    to a running queue's id and calling snd_seq_event_output (NOT _direct)."""
+    ev.flags = SND_SEQ_TIME_STAMP_REAL  # ABS=0, real-time=1
+    rt = SndSeqRealTime.from_address(ctypes.addressof(ev) + SndSeqEvent.time.offset)
+    rt.tv_sec = sec
+    rt.tv_nsec = nsec
 
 
 # --- High-level helpers ---

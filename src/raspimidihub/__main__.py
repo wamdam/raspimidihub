@@ -172,6 +172,19 @@ async def async_main() -> None:
         elif ev.type == 10:  # CC
             data["cc"] = ev.data.control.param
             data["value"] = ev.data.control.value
+        # Carry the routing destinations of this (src_client, src_port)
+        # so the device-detail MIDI monitor on a downstream device
+        # (e.g. Mixer 8 receiving from LCXL3) can match incoming events
+        # by destination, not just by source. Only the live engine
+        # connections — offline / disconnected entries don't deliver
+        # MIDI so they shouldn't pollute the receiver's monitor.
+        dsts = set()
+        for conn in engine.connections:
+            if (conn.src_client == ev.source.client
+                    and conn.src_port == ev.source.port):
+                dsts.add(conn.dst_client)
+        if dsts:
+            data["dst_clients"] = sorted(dsts)
 
         # Latency probe: from "engine handed us this event" to "SSE
         # message put on every client queue". Captures asyncio

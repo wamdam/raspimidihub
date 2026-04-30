@@ -267,6 +267,29 @@ class PluginHost:
         instance.plugin._send_stop = lambda: _send_transport(MidiEventType.STOP, MIDI_STOP)
         instance.plugin._send_continue = lambda: _send_transport(MidiEventType.CONTINUE, MIDI_CONTINUE)
 
+        # Scheduled-event variants: lands the event at an exact monotonic
+        # moment via the per-client ALSA queue. Drop-button fire uses
+        # this to put the snapshot CCs ahead of the bar-boundary kick;
+        # other plugins migrate to it for jitter-free timing.
+        instance.plugin._send_cc_at = lambda when, ch, cc, val, tag=0: \
+            alsa_client.send_event_at(when, MidiEventType.CONTROLLER,
+                                       tag=tag, channel=ch, cc=cc, value=val)
+        instance.plugin._send_note_on_at = lambda when, ch, note, vel, tag=0: \
+            alsa_client.send_event_at(when, MidiEventType.NOTEON,
+                                       tag=tag, channel=ch, note=note, velocity=vel)
+        instance.plugin._send_note_off_at = lambda when, ch, note, tag=0: \
+            alsa_client.send_event_at(when, MidiEventType.NOTEOFF,
+                                       tag=tag, channel=ch, note=note, velocity=0)
+        instance.plugin._send_clock_at = lambda when, tag=0: \
+            alsa_client.send_event_at(when, MidiEventType.CLOCK, tag=tag)
+        instance.plugin._send_start_at = lambda when, tag=0: \
+            alsa_client.send_event_at(when, MidiEventType.START, tag=tag)
+        instance.plugin._send_stop_at = lambda when, tag=0: \
+            alsa_client.send_event_at(when, MidiEventType.STOP, tag=tag)
+        instance.plugin._send_continue_at = lambda when, tag=0: \
+            alsa_client.send_event_at(when, MidiEventType.CONTINUE, tag=tag)
+        instance.plugin._cancel_scheduled = lambda tag: alsa_client.cancel_tag(tag)
+
         # Wire display output through the trailing-edge coalescer.
         # Plugins may call _notify_display rapidly (a sine-wave scope
         # sampling at any rate) — coalesced to 10 Hz per (instance,

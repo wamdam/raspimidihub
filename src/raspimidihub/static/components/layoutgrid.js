@@ -122,40 +122,32 @@ export function PluginLayoutGrid({ param, values, onChange, displayCtx, renderPa
                             onInput=${(e) => setLabel(c.param.name, e.target.value)} />
                     </div>
                     ${hasBindings && isXYPad ? html`
-                        <div class="cell-edit-row">
+                        <div class="cell-edit-row mini-controls">
                             <span class="cell-edit-fieldlabel">X:</span>
-                            <span class="cell-edit-fieldlabel">Ch</span>
-                            <input class="cell-edit-num" type="number" min="1" max="16"
-                                value=${ovCh != null ? ovCh : (defCh != null ? defCh : '')}
-                                title="X-axis channel (1-16)"
-                                onInput=${(e) => setBinding(c.param.name, 'channel',
-                                    e.target.value === '' ? null : (parseInt(e.target.value, 10) - 1))} />
-                            <span class="cell-edit-fieldlabel">CC</span>
-                            <input class="cell-edit-num" type="number" min="0" max="127"
-                                value=${ovCc != null ? ovCc : (defCc != null ? defCc : '')}
-                                title="X-axis CC (0-127)"
-                                onInput=${(e) => setBinding(c.param.name, 'cc',
-                                    e.target.value === '' ? null : parseInt(e.target.value, 10))} />
+                            <${PluginWheel} mini name=${c.param.name + '_x_ch'} label="Ch"
+                                min=${1} max=${16}
+                                value=${ovCh != null ? ovCh : (defCh != null ? defCh : 1)}
+                                onChange=${(_, v) => setBinding(c.param.name, 'channel', v - 1)} />
+                            <${PluginWheel} mini name=${c.param.name + '_x_cc'} label="CC"
+                                min=${0} max=${127}
+                                value=${ovCc != null ? ovCc : (defCc != null ? defCc : 0)}
+                                onChange=${(_, v) => setBinding(c.param.name, 'cc', v)} />
                             ${param.learn_param ? html`
                                 <button type="button" class="cell-edit-learn ${isLearningX ? 'on' : ''}"
                                     title=${isLearningX ? 'Listening for X-axis CC — tap to cancel'
                                         : 'Tap, then twist a hardware knob to capture the X-axis (channel, cc).'}
                                     onclick=${() => toggleLearnTarget(c.param.name + ':x')}>${isLearningX ? 'Listening…' : 'Learn'}</button>` : null}
                         </div>
-                        <div class="cell-edit-row">
+                        <div class="cell-edit-row mini-controls">
                             <span class="cell-edit-fieldlabel">Y:</span>
-                            <span class="cell-edit-fieldlabel">Ch</span>
-                            <input class="cell-edit-num" type="number" min="1" max="16"
-                                value=${ovChY != null ? ovChY : (defChY != null ? defChY : (ovCh != null ? ovCh : (defCh != null ? defCh : '')))}
-                                title="Y-axis channel (1-16). Defaults to the X channel."
-                                onInput=${(e) => setBinding(c.param.name, 'channel_y',
-                                    e.target.value === '' ? null : (parseInt(e.target.value, 10) - 1))} />
-                            <span class="cell-edit-fieldlabel">CC</span>
-                            <input class="cell-edit-num" type="number" min="0" max="127"
-                                value=${ovCcY != null ? ovCcY : (defCcY != null ? defCcY : '')}
-                                title="Y-axis CC (0-127)"
-                                onInput=${(e) => setBinding(c.param.name, 'cc_y',
-                                    e.target.value === '' ? null : parseInt(e.target.value, 10))} />
+                            <${PluginWheel} mini name=${c.param.name + '_y_ch'} label="Ch"
+                                min=${1} max=${16}
+                                value=${ovChY != null ? ovChY : (defChY != null ? defChY : (ovCh != null ? ovCh : (defCh != null ? defCh : 1)))}
+                                onChange=${(_, v) => setBinding(c.param.name, 'channel_y', v - 1)} />
+                            <${PluginWheel} mini name=${c.param.name + '_y_cc'} label="CC"
+                                min=${0} max=${127}
+                                value=${ovCcY != null ? ovCcY : (defCcY != null ? defCcY : 0)}
+                                onChange=${(_, v) => setBinding(c.param.name, 'cc_y', v)} />
                             ${param.learn_param ? html`
                                 <button type="button" class="cell-edit-learn ${isLearningY ? 'on' : ''}"
                                     title=${isLearningY ? 'Listening for Y-axis CC — tap to cancel'
@@ -176,15 +168,15 @@ export function PluginLayoutGrid({ param, values, onChange, displayCtx, renderPa
                             // saves still load; only the wheel↔string adapter
                             // here knows the index mapping.
                             const homeIdx = effHome === "Center" ? 1 : 0;
-                            return html`<div class="cell-edit-row spring-row">
-                                <${PluginWheel}
+                            return html`<div class="cell-edit-row spring-row mini-controls">
+                                <${PluginWheel} mini
                                     name=${`${c.param.name}_spring_force`}
                                     label="Spring Force"
                                     min=${0}
                                     max=${127}
                                     value=${effForce}
                                     onChange=${(_, v) => setBinding(c.param.name, 'spring_force', v)} />
-                                <${PluginWheel}
+                                <${PluginWheel} mini
                                     name=${`${c.param.name}_spring_home`}
                                     label="Home"
                                     min=${0}
@@ -196,38 +188,30 @@ export function PluginLayoutGrid({ param, values, onChange, displayCtx, renderPa
                             </div>`;
                         })()}
                     ` : null}
-                    ${hasBindings && !isXYPad ? html`<div class="cell-edit-row">
-                        <span class="cell-edit-fieldlabel">Ch</span>
-                        <input class="cell-edit-num" type="number" min="1" max="16"
-                            value=${ovCh != null ? ovCh : (defCh != null ? defCh : '')}
-                            title="Channel (1-16)"
-                            onInput=${(e) => setBinding(c.param.name, 'channel',
-                                e.target.value === '' ? null : (parseInt(e.target.value, 10) - 1))} />
-                        <span class="cell-edit-fieldlabel">CC</span>
-                        <input class="cell-edit-num" type="number" min="0" max="127"
-                            value=${ovCc != null ? ovCc : (defCc != null ? defCc : '')}
-                            title="CC (0-127)"
-                            onInput=${(e) => setBinding(c.param.name, 'cc',
-                                e.target.value === '' ? null : parseInt(e.target.value, 10))} />
+                    ${hasBindings && !isXYPad ? html`<div class="cell-edit-row mini-controls">
+                        <${PluginWheel} mini name=${c.param.name + '_ch'} label="Ch"
+                            min=${1} max=${16}
+                            value=${ovCh != null ? ovCh : (defCh != null ? defCh : 1)}
+                            onChange=${(_, v) => setBinding(c.param.name, 'channel', v - 1)} />
+                        <${PluginWheel} mini name=${c.param.name + '_cc'} label="CC"
+                            min=${0} max=${127}
+                            value=${ovCc != null ? ovCc : (defCc != null ? defCc : 0)}
+                            onChange=${(_, v) => setBinding(c.param.name, 'cc', v)} />
                         ${param.learn_param ? html`
                             <button type="button" class="cell-edit-learn ${isLearning ? 'on' : ''}"
                                 title=${isLearning ? 'Listening for incoming CC — tap to cancel'
                                     : 'Tap, then twist a hardware knob to capture its (channel, cc)'}
                                 onclick=${() => toggleLearn(c.param.name)}>${isLearning ? 'Listening…' : 'Learn'}</button>` : null}
                     </div>` : null}
-                    ${isButton && hasBindings ? html`<div class="cell-edit-row">
-                        <span class="cell-edit-fieldlabel">On</span>
-                        <input class="cell-edit-num" type="number" min="0" max="127"
+                    ${isButton && hasBindings ? html`<div class="cell-edit-row mini-controls">
+                        <${PluginWheel} mini name=${c.param.name + '_on'} label="On"
+                            min=${0} max=${127}
                             value=${ovOn != null ? ovOn : 127}
-                            title="CC value when the button is ON (0-127)"
-                            onInput=${(e) => setBinding(c.param.name, 'on',
-                                e.target.value === '' ? null : parseInt(e.target.value, 10))} />
-                        <span class="cell-edit-fieldlabel">Off</span>
-                        <input class="cell-edit-num" type="number" min="0" max="127"
+                            onChange=${(_, v) => setBinding(c.param.name, 'on', v)} />
+                        <${PluginWheel} mini name=${c.param.name + '_off'} label="Off"
+                            min=${0} max=${127}
                             value=${ovOff != null ? ovOff : 0}
-                            title="CC value when the button is OFF (0-127)"
-                            onInput=${(e) => setBinding(c.param.name, 'off',
-                                e.target.value === '' ? null : parseInt(e.target.value, 10))} />
+                            onChange=${(_, v) => setBinding(c.param.name, 'off', v)} />
                         <button type="button" class="cell-edit-swap"
                             title="Swap On / Off values"
                             onclick=${() => {

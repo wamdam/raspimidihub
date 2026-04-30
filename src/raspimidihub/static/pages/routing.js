@@ -365,8 +365,11 @@ export function RoutingPage({ devices, connections, refresh, showToast, clockSou
                 { label: 'Delete', danger: true, action: () => deletePlugin(item) },
             ];
         }
-        // Online hardware: just rename (per spec — "hardware is physical").
+        // Online hardware: Edit (opens device-detail panel for MIDI
+        // monitor + test sender) and Rename. Hardware can't be deleted
+        // here — unplug to remove.
         return [
+            { label: 'Edit', action: () => onDeviceOpenForMenu(item.client_id) },
             { label: 'Rename', action: () => renameHardware(item) },
         ];
     };

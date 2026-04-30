@@ -8,15 +8,19 @@ import { useEffect, useRef } from '../lib/hooks.module.js';
 // =======================================================================
 // WHEEL — scrollable drum wheel (pixel-offset based, matching controls-demo.html)
 // =======================================================================
-export function PluginWheel({ name, label, min, max, value, onChange, suffix, tickLabel }) {
+export function PluginWheel({ name, label, min, max, value, onChange, suffix, tickLabel, mini }) {
     const containerRef = useRef(null);
     const innerRef = useRef(null);
     const onChangeRef = useRef(onChange);
     onChangeRef.current = onChange;
-    const TICK_H = 20;
-    // Wheel container is 52px tall (see .wheel-container). Center
-    // offset so the active tick lines up with the indicator at 50%.
-    const CENTER = 26 - TICK_H / 2;
+    // Mini variant: half-height container (32px instead of 52px) with
+    // a proportionally-shorter tick row. Same scroll/drag math, just
+    // smaller. Used in dense edit panels (per-cell Ch / CC / On / Off,
+    // XY pad spring config) where the full-size wheel would crowd
+    // the row.
+    const TICK_H = mini ? 12 : 20;
+    const CONTAINER_H = mini ? 32 : 52;
+    const CENTER = CONTAINER_H / 2 - TICK_H / 2;
     // Persistent state across renders (not React state — direct DOM manipulation)
     const s = useRef({
         value, offset: 0, startY: 0, startOffset: 0, lastY: 0, lastT: 0,
@@ -194,9 +198,9 @@ export function PluginWheel({ name, label, min, max, value, onChange, suffix, ti
         ticks.push(html`<div class="wheel-tick" key=${i}>${tickLabel ? tickLabel(i) : suffix ? i + suffix : i}</div>`);
     }
 
-    return html`<div class="wheel-group">
-        <span class="wheel-label">${label}</span>
-        <div class="wheel-container" ref=${containerRef}>
+    return html`<div class=${mini ? 'wheel-group mini' : 'wheel-group'}>
+        ${label ? html`<span class="wheel-label">${label}</span>` : null}
+        <div class=${mini ? 'wheel-container mini' : 'wheel-container'} ref=${containerRef}>
             <div class="wheel-inner" ref=${innerRef}>${ticks}</div>
         </div>
     </div>`;

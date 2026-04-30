@@ -18,7 +18,7 @@ const TRIGGER_MIN_FLASH_MS = 100;
 // =======================================================================
 // BUTTON — rubber push button with LED
 // =======================================================================
-export function PluginButton({ name, label, value, color, onChange, trigger }) {
+export function PluginButton({ name, label, value, color, onChange, trigger, mini }) {
     const [flashing, setFlashing] = useState(false);
     const flashTimer = useRef(null);
 
@@ -40,9 +40,9 @@ export function PluginButton({ name, label, value, color, onChange, trigger }) {
 
     const lit = trigger ? (flashing || value) : value;
 
-    return html`<div class="btn-group-param">
-        <span style="font-size:12px;color:var(--text-dim)">${label}</span>
-        <button class="rubber-btn ${lit ? 'active' : ''}" onclick=${press}>
+    return html`<div class=${mini ? 'btn-group-param mini' : 'btn-group-param'}>
+        ${label ? html`<span style="font-size:12px;color:var(--text-dim)">${label}</span>` : null}
+        <button class="rubber-btn ${mini ? 'mini' : ''} ${lit ? 'active' : ''}" onclick=${press}>
             <div class="btn-led ${color || 'green'}"></div>
             ${trigger ? null : html`<span class="btn-text">${value ? 'On' : 'Off'}</span>`}
         </button>

@@ -262,10 +262,19 @@ class WebServer:
         self._rate_counts[client].append(now)
         return False
 
-    async def _handle_sse(self, request: Request, writer: asyncio.StreamWriter):
+    async def _handle_sse(self, request: Request, reader: asyncio.StreamReader,
+                          writer: asyncio.StreamWriter):
         """Handle SSE connection with direct writer access. The first
         message sent is `event: connection` carrying a UUID; the
-        client uses it as conn_id when calling /api/sse/subscribe."""
+        client uses it as conn_id when calling /api/sse/subscribe.
+
+        We also park a reader task that watches for peer-EOF and pushes
+        the shutdown sentinel into the queue when it fires. Without this,
+        a browser tab close (which sends TCP FIN) sits in CLOSE_WAIT
+        until the next heartbeat write tries to drain a half-closed
+        socket — up to 30 s of zombie connection per tab close. SSE is
+        one-way (server→client), so any inbound bytes signal the peer
+        is gone."""
         if len(self._sse_connections) >= MAX_SSE_CONNECTIONS:
             resp = Response.error("Too many SSE connections", 429)
             await self._write_response(writer, resp)
@@ -295,6 +304,25 @@ class WebServer:
         intro = f"event: connection\ndata: {json.dumps({'conn_id': conn_id})}\n\n"
         writer.write(intro.encode())
         await writer.drain()
+
+        # Peer-EOF watcher: any inbound byte (or EOF) on an SSE socket
+        # means the browser closed the tab / refreshed / lost the page.
+        # Push the shutdown sentinel so the writer loop unblocks and
+        # the finally clause cleans up the connection.
+        async def _watch_peer():
+            try:
+                while True:
+                    chunk = await reader.read(4096)
+                    if not chunk:
+                        break  # EOF — peer closed
+            except (ConnectionResetError, BrokenPipeError, OSError,
+                    asyncio.CancelledError):
+                pass
+            try:
+                queue.put_nowait(None)
+            except asyncio.QueueFull:
+                pass
+        watcher = asyncio.create_task(_watch_peer())
 
         try:
             while True:
@@ -326,6 +354,7 @@ class WebServer:
                 OSError, asyncio.TimeoutError):
             pass
         finally:
+            watcher.cancel()
             self._sse_connections.pop(conn_id, None)
             if queue in self._sse_queues:
                 self._sse_queues.remove(queue)
@@ -402,6 +431,14 @@ class WebServer:
             from . import __version__
             stamp = f"{__version__}-{self._build_token}"
             body = body.replace(b"__VERSION__", stamp.encode())
+            # index.html: no-store so browsers (mobile Safari especially,
+            # which restores from bf-cache aggressively) always refetch
+            # on reload. Other assets stay on no-cache+revalidate so
+            # ETag 304s remain cheap. Without this, "Reload App" on a
+            # phone can restore the old page from memory and the
+            # version-stamped JS URLs in it never refresh.
+            return Response(body=body, content_type=content_type,
+                            headers={"Cache-Control": "no-store"})
         return Response(body=body, content_type=content_type,
                         headers={"ETag": etag,
                                  "Cache-Control": "no-cache, must-revalidate"})
@@ -467,7 +504,7 @@ class WebServer:
 
             # SSE endpoint (special handling — keeps connection open)
             if path == "/api/events" and method == "GET":
-                await self._handle_sse(request, writer)
+                await self._handle_sse(request, reader, writer)
                 return
 
             # Rate limiting for mutating requests

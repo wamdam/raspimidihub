@@ -228,25 +228,72 @@ export function DeviceDetailPanel({ device, onClose, showToast, refresh, pluginD
     const lastEventRef = useRef(null);
     const eventsRef = useRef([]);
 
+    // The monitor opens its own EventSource so live midi-activity
+    // events drop into THIS panel's monitor list without going through
+    // the App's debounced midi-bar pipeline. Two things matter:
+    //   1) only run while the user has the monitor open — every
+    //      EventSource is a separate SSE connection, costs a queue and
+    //      a heartbeat slot on the server;
+    //   2) the per-view subscription model means a fresh connection
+    //      filters everything out by default, so we POST a
+    //      midi-activity subscription as soon as we get our conn_id.
     useEffect(() => {
+        if (!showMonitor) return;
         const es = new EventSource('/api/events');
+        // rAF-coalesce DOM writes: many events can arrive in one frame
+        // (e.g. 4 LCXL3 faders fanning into Mixer 8). Updating the
+        // <div> innerHTML on every event was the bottleneck — now we
+        // mutate eventsRef cheaply on each event and only render once
+        // per animation frame.
+        let pendingRender = false;
+        const scheduleRender = () => {
+            if (pendingRender) return;
+            pendingRender = true;
+            requestAnimationFrame(() => {
+                pendingRender = false;
+                const evs = eventsRef.current;
+                if (lastEventRef.current && evs.length) {
+                    lastEventRef.current.textContent = evs[0].line;
+                }
+                if (monitorRef.current) {
+                    monitorRef.current.innerHTML = evs.map(ev =>
+                        `<div class="midi-event">${ev.line}</div>`).join('');
+                }
+            });
+        };
         const handler = (e) => {
             try {
                 const data = JSON.parse(e.data);
-                if (data.src_client === device.client_id && data.event !== 'Clock') {
+                // Match either as event source (e.g. moving a fader on
+                // a hardware controller) or as routing destination
+                // (e.g. Mixer 8 receiving CCs from LCXL3 via the matrix).
+                const isSrc = data.src_client === device.client_id;
+                const isDst = Array.isArray(data.dst_clients)
+                    && data.dst_clients.includes(device.client_id);
+                if ((isSrc || isDst) && data.event !== 'Clock') {
                     const line = formatEvent(data);
                     eventsRef.current = [{ line, ts: Date.now() }, ...eventsRef.current].slice(0, maxEvents);
-                    if (lastEventRef.current) lastEventRef.current.textContent = line;
-                    if (monitorRef.current) {
-                        monitorRef.current.innerHTML = eventsRef.current.map(ev =>
-                            `<div class="midi-event">${ev.line}</div>`).join('');
-                    }
+                    scheduleRender();
                 }
             } catch {}
         };
+        const onConnection = (e) => {
+            try {
+                const { conn_id } = JSON.parse(e.data);
+                if (!conn_id) return;
+                fetch('/api/sse/subscribe', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        conn_id, events: ['midi-activity'], instances: [],
+                    }),
+                }).catch(() => {});
+            } catch {}
+        };
+        es.addEventListener('connection', onConnection);
         es.addEventListener('midi-activity', handler);
         return () => es.close();
-    }, [device.client_id]);
+    }, [device.client_id, showMonitor]);
 
     useEscapeClose(close);
 
@@ -401,11 +448,13 @@ export function DeviceDetailPanel({ device, onClose, showToast, refresh, pluginD
                                 <${ScrollablePiano} heldNotes=${heldNotes}
                                     onNoteDown=${pianoNoteDown} onNoteUp=${pianoNoteUp}
                                     pianoKeys=${pianoKeys} />
-                                <div style="display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap">
+                                <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;align-items:flex-start">
                                     <${PluginWheel} name="cc" label="CC #" min=${0} max=${127}
                                         value=${ccNum} onChange=${(_, v) => setCcNum(v)} />
-                                    <${PluginFader} name="ccval" label="Value" min=${0} max=${127}
-                                        value=${ccVal} onChange=${(_, v) => sendCC(v)} />
+                                    <div style="grid-column:span 3;min-width:0">
+                                        <${PluginFader} name="ccval" label="Value" min=${0} max=${127}
+                                            value=${ccVal} onChange=${(_, v) => sendCC(v)} />
+                                    </div>
                                 </div>
                             </div>
                         `}
