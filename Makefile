@@ -48,12 +48,13 @@ $(DEB_FILE): src/raspimidihub/*.py src/raspimidihub/plugin_host/*.py src/raspimi
 	done
 	cp systemd/raspimidihub.service $(BUILD_DIR)/lib/systemd/system/
 	cp systemd/raspimidihub-hostapd.service $(BUILD_DIR)/lib/systemd/system/
-	# CHANGELOG.txt — full per-version delta. Lands at
-	# /usr/share/doc/raspimidihub/CHANGELOG.txt so an offline / SSH-
-	# only operator can `cat` everything that's changed since the
-	# last stable they had installed (the in-app UI reads the GitHub
-	# release body for the same content).
-	cp CHANGELOG.txt $(BUILD_DIR)/usr/share/doc/$(PACKAGE)/CHANGELOG.txt
+	# CHANGELOG.txt — ship only the current major-version section
+	# (here: everything up to but not including "Version 2.x"), so a
+	# 2.0.9 → 3.x upgrader sees the full 3.x delta without the older
+	# release-history clutter. The repo's CHANGELOG keeps the entire
+	# history; the deb is the user-facing slice.
+	sed '/Version 2\./Q' CHANGELOG.txt \
+	    > $(BUILD_DIR)/usr/share/doc/$(PACKAGE)/CHANGELOG.txt
 	cp udev/90-raspimidihub.rules $(BUILD_DIR)/lib/udev/rules.d/
 	cp scripts/reset-wifi.sh $(BUILD_DIR)/usr/local/bin/reset-wifi
 	chmod 755 $(BUILD_DIR)/usr/local/bin/reset-wifi
