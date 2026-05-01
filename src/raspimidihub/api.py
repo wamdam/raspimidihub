@@ -114,17 +114,61 @@ def _matches_saved(c: dict, src_sid: str, dst_sid: str, src_port: int, dst_port:
             and c.get("src_port") == src_port and c.get("dst_port") == dst_port)
 
 
-# --- Captive portal probe responses ---
-# OS-specific endpoints that return "success" so the device stays connected.
+# --- Captive portal landing -----------------------------------------------
+# OS captive-portal probes (Android / iOS / Firefox) all hit known
+# endpoints. We serve the same tiny landing for every one — pure HTML,
+# no JS, no SSE. A captive webview that fetches this stays inert; the
+# user taps the link to open the SPA in their normal browser, where
+# SSE legitimately belongs.
+#
+# Microsoft endpoints (connecttest.txt / ncsi.txt) keep their original
+# success responses because Windows' NCSI uses them for "do I have
+# internet" without ever showing a captive browser — there's nothing
+# to land on, so changing them just risks breaking Windows.
 
-_CAPTIVE_ROUTES = {
-    "/generate_204": ("", 204, None),
-    "/hotspot-detect.html": ("<HTML><HEAD><TITLE>Success</TITLE></HEAD><BODY>Success</BODY></HTML>", 200, "html"),
-    "/library/test/success.html": ("<HTML><HEAD><TITLE>Success</TITLE></HEAD><BODY>Success</BODY></HTML>", 200, "html"),
-    "/connecttest.txt": ("Microsoft Connect Test", 200, "text"),
-    "/ncsi.txt": ("Microsoft NCSI", 200, "text"),
-    "/redirect": ("success\n", 200, "text"),
-    "/canonical.html": ("success\n", 200, "text"),
+_CAPTIVE_LANDING_HTML = """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RaspiMIDIHub</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;padding:24px;min-height:100vh;
+     font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+     background:#1a1a2e;color:#eaeaea;
+     display:flex;flex-direction:column;align-items:center;justify-content:center;
+     text-align:center}
+h1{font-size:1.6rem;font-weight:600;margin:0 0 8px}
+.tag{color:#9aa0aa;font-size:0.9rem;margin:0 0 28px}
+a.btn{display:inline-block;padding:14px 28px;border-radius:10px;
+      background:#e94560;color:#fff;text-decoration:none;font-weight:600;
+      font-size:1.05rem;box-shadow:0 6px 18px rgba(233,69,96,.35)}
+a.btn:active{transform:scale(0.97)}
+.foot{color:#6a6f78;font-size:0.78rem;margin-top:32px;line-height:1.4}
+</style>
+</head>
+<body>
+<h1>RaspiMIDIHub</h1>
+<p class="tag">Connected to the access point.</p>
+<a class="btn" href="http://192.168.4.1/">Open routing matrix</a>
+<p class="foot">If this opens inside a sign-in window,<br>
+copy <code>http://192.168.4.1/</code> into your browser.</p>
+</body>
+</html>
+"""
+
+_CAPTIVE_LANDING_PATHS = (
+    "/generate_204",                   # Android
+    "/hotspot-detect.html",            # iOS / macOS
+    "/library/test/success.html",      # iOS variant
+    "/redirect",                        # Firefox
+    "/canonical.html",                  # Firefox
+)
+# Microsoft NCSI: keep the original success body, no captive needed.
+_CAPTIVE_PASSTHROUGH = {
+    "/connecttest.txt": "Microsoft Connect Test",
+    "/ncsi.txt": "Microsoft NCSI",
 }
 
 
@@ -147,20 +191,31 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
     # phone-disconnect post-mortem possible: grep for "captive:" and
     # the time delta + client IP correlate against hostapd's own log.
     import time as _t_cap
-    for path, (body, status, fmt) in _CAPTIVE_ROUTES.items():
-        def _make_handler(b, s, f, p):
-            async def handler(req: Request) -> Response:
-                t0 = _t_cap.monotonic()
-                if s == 204:
-                    resp = Response(status=204)
-                else:
-                    resp = Response.html(b) if f == "html" else Response.text(b)
-                log.info("captive: %s %s %d %.1fms",
-                         req.client_addr or "?", p, s,
-                         (_t_cap.monotonic() - t0) * 1000.0)
-                return resp
-            return handler
-        server.route("GET", path)(_make_handler(body, status, fmt, path))
+
+    def _captive_handler(path: str, body: str, status: int, content_type: str):
+        async def handler(req: Request) -> Response:
+            t0 = _t_cap.monotonic()
+            if status == 204:
+                resp = Response(status=204)
+            elif content_type == "html":
+                resp = Response.html(body)
+            else:
+                resp = Response.text(body)
+            log.info("captive: %s %s %d %.1fms",
+                     req.client_addr or "?", path, status,
+                     (_t_cap.monotonic() - t0) * 1000.0)
+            return resp
+        return handler
+
+    # OS probes that should trigger the captive flow → serve the tiny
+    # landing with a link to the SPA. No JS/SSE here.
+    for p in _CAPTIVE_LANDING_PATHS:
+        server.route("GET", p)(_captive_handler(
+            p, _CAPTIVE_LANDING_HTML, 200, "html"))
+    # Windows NCSI: keep the legacy success bodies so it stays out of
+    # the captive flow entirely (it has no captive UI to land on).
+    for p, body in _CAPTIVE_PASSTHROUGH.items():
+        server.route("GET", p)(_captive_handler(p, body, 200, "text"))
 
     # ================================================================
     # GET /api/system — system info
