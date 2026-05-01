@@ -90,6 +90,15 @@ SERVICES_TO_DISABLE=(
     logrotate.timer
     # zram swap writeback — small Pi, swap rarely meaningful
     rpi-zram-writeback.timer
+    # NTP — the Pi is offline by default (AP mode, no upstream DNS) so
+    # ntpsec spins on dns_probe → "Temporary failure in name resolution"
+    # every few seconds, polluting the journal. Time-of-day accuracy is
+    # not relevant for MIDI routing; if the user really needs wall clock
+    # alignment they can re-enable ntpsec / systemd-timesyncd manually.
+    ntpsec.service
+    ntpsec-rotate-stats.timer
+    ntpsec-systemd-netif.path
+    systemd-timesyncd.service
 )
 
 disable_services() {
@@ -200,9 +209,29 @@ EOF
     log "wrote $DROPIN_FILE; raspimidihub.service will pick up on next start"
 }
 
+# disable_services and ensure_dropin both write under /etc — once
+# rosetup has marked / read-only, those writes fail silently (the
+# `|| true` swallows EROFS). Remount rw for the duration of those
+# two passes, then restore ro. ensure_cmdline handles its own
+# /boot/firmware remount, no wrap needed.
+ROOT_WAS_RO=false
+if findmnt -n -o OPTIONS / 2>/dev/null | grep -qw ro; then
+    ROOT_WAS_RO=true
+    log "remounting / rw for service-disable + drop-in writes"
+    if ! mount -o remount,rw /; then
+        warn "failed to remount / rw — service disables and drop-in may not stick"
+        ROOT_WAS_RO=false
+    fi
+fi
+
 disable_services
 ensure_cmdline
 ensure_dropin
+
+if $ROOT_WAS_RO; then
+    sync
+    mount -o remount,ro / || warn "could not restore / to ro"
+fi
 
 log ""
 log "Done."

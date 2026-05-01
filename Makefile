@@ -89,7 +89,6 @@ $(ROSETUP_DEB_FILE): rosetup/setup.sh rosetup/undo.sh rosetup/debian/postinst ro
 	@echo "Architecture: all" >> $(ROSETUP_BUILD_DIR)/DEBIAN/control
 	@echo "Maintainer: Daniel Kraft <wam@poplr.de>" >> $(ROSETUP_BUILD_DIR)/DEBIAN/control
 	@echo "Depends: bash" >> $(ROSETUP_BUILD_DIR)/DEBIAN/control
-	@echo "Recommends: ntpsec" >> $(ROSETUP_BUILD_DIR)/DEBIAN/control
 	@echo "Section: admin" >> $(ROSETUP_BUILD_DIR)/DEBIAN/control
 	@echo "Priority: optional" >> $(ROSETUP_BUILD_DIR)/DEBIAN/control
 	@echo "Description: Read-only filesystem hardening for Raspberry Pi" >> $(ROSETUP_BUILD_DIR)/DEBIAN/control
