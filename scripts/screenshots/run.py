@@ -54,6 +54,8 @@ DEMO_PLUGINS = [
     ("velocity_curve", "Velocity Curve"),
     ("velocity_equalizer", "Velocity Equalizer"),
     ("controller_mixer_8", "Mixer 8"),
+    ("controller_fx_6", "FX 6"),
+    ("controller_performance_16", "Performance 16"),
     ("controller_xy_4", "XY 4"),
 ]
 
@@ -164,13 +166,22 @@ def build_scenes(target: str, instances: dict[str, dict]) -> list[dict]:
         {"name": "01-routing", "path": "/routing"},
         {"name": "02-presets", "path": "/presets"},
         {"name": "04-settings", "path": "/settings"},
-        {"name": "controller-mixer-8",
-         "path": f"/controller/{instances['controller_mixer_8']['id']}"
-         if "controller_mixer_8" in instances else "/controller"},
-        {"name": "controller-xy-4",
-         "path": f"/controller/{instances['controller_xy_4']['id']}"
-         if "controller_xy_4" in instances else "/controller"},
     ]
+    # Controller play-surface scenes. One per controller template,
+    # path resolves to the instance's id; the file name is the
+    # historical short form so README / website refs still work.
+    controller_play_scenes = {
+        "controller_mixer_8": "controller-mixer-8",
+        "controller_fx_6": "controller-fx-6",
+        "controller_performance_16": "controller-performance-16",
+        "controller_xy_4": "controller-xy-4",
+    }
+    for plugin_type, scene_name in controller_play_scenes.items():
+        inst = instances.get(plugin_type)
+        if inst is None:
+            continue
+        scenes.append({"name": scene_name,
+                       "path": f"/controller/{inst['id']}"})
     # 05/07/08 need a real connection in the matrix so there is an
     # 'on' cell to click. We wire a transient one between two demo
     # plugins; setup_demo_plugins already wiped the live state and
@@ -212,6 +223,8 @@ def build_scenes(target: str, instances: dict[str, dict]) -> list[dict]:
         "hold": "22-plugin-hold",
         "controller_mixer_8": "23-controller-mixer-8-config",
         "controller_xy_4": "24-controller-xy-4-config",
+        "controller_fx_6": "25-controller-fx-6-config",
+        "controller_performance_16": "26-controller-performance-16-config",
     }
     for plugin_type, scene_name in plugin_scene_names.items():
         inst = instances.get(plugin_type)

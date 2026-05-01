@@ -101,9 +101,14 @@ Each controller has a **row of 4 drop buttons** that capture and replay snapshot
 
 8 dark themes per controller: Default / Navy / Forest / Wine / Plum / Teal / Sienna / Slate. Theme is per controller, not global.
 
-![Controller (Mixer 8)](screenshots/controller-mixer-8.png)
+| | |
+|---|---|
+| ![Controller (Mixer 8)](screenshots/controller-mixer-8.png) | ![Controller (XY 4)](screenshots/controller-xy-4.png) |
+| Mixer 8 -- 24 knobs / 8 faders / 16 buttons | XY 4 -- 2 XY pads + 8 knobs + 4 buttons |
+| ![Controller (FX 6)](screenshots/controller-fx-6.png) | ![Controller (Performance 16)](screenshots/controller-performance-16.png) |
+| FX 6 -- 18 knobs / 6 faders / 6 buttons | Performance 16 -- 16 macro knobs + 4 scene buttons |
 
-The same controller's **Plugin Config** in the device-detail panel renders a flat per-cell list with mini wheels for Ch / CC / On / Off; the **Maximize** button jumps to the full Controller page.
+The same controller's **Plugin Config** in the device-detail panel renders a flat per-cell list with mini wheels for Ch / CC / On / Off; the **Maximize** button jumps to the full Controller page. Drop buttons get their own card per slot with Sync / Fade / Trg. Note + Learn.
 
 ![Controller config (Mixer 8)](screenshots/23-controller-mixer-8-config.png)
 
