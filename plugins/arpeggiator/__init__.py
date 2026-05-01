@@ -13,6 +13,7 @@ import time
 
 from raspimidihub.plugin_api import (
     Button,
+    ChannelSelect,
     Group,
     Knob,
     NoteSelect,
@@ -68,7 +69,12 @@ Trigger Note: when on, MIDI notes from `Base` upward set the rate
 live. Base = first rate (4/1), Base+1 semitone = 4/1T, +2 = 2/1, …
 covering all 15 rates. Trigger notes are consumed — they don't get
 arpeggiated. Pick a Base outside your playing range (default C1).
-Use MIDI Learn on the Base wheel to capture from a controller."""
+Use MIDI Learn on the Base wheel to capture from a controller.
+
+Arp Ch / Ctrl Ch: channel filters on the input. Default Any =
+accept any channel (current behaviour). Set Arp Ch = 1 + Ctrl Ch
+= 16 to wire a separate keyboard / footswitch on ch16 that only
+flips Rate, never plays."""
 
     # Single source of truth for the rate Radio's options AND the
     # rate-trigger note→rate mapping. Index N in this list is the rate
@@ -83,6 +89,15 @@ Use MIDI Learn on the Base wheel to capture from a controller."""
         Group("Pattern", [
             Radio("pattern", "Pattern", ["up", "down", "up-down", "random", "as-played"],
                   default="up"),
+            # Channel filters. 0 = Any (default, current behaviour);
+            # 1-16 restricts which incoming notes count as arpeggiate
+            # input vs rate-trigger input. Useful when one keyboard
+            # plays melodies on ch1 and a footswitch / aux key sends
+            # rate-trigger notes on ch16 — set arp_channel=1,
+            # control_channel=16 and the same note range no longer
+            # has to be split between the two functions.
+            ChannelSelect("arp_channel", "Arp Ch", default=0, allow_any=True),
+            ChannelSelect("control_channel", "Ctrl Ch", default=0, allow_any=True),
             # Live-rate trigger: when enabled, a MIDI note in the
             # [rate_base, rate_base + len(_RATE_OPTIONS)) range sets
             # the Rate radio without being arpeggiated. Hit MIDI Learn
@@ -160,13 +175,23 @@ Use MIDI Learn on the Base wheel to capture from a controller."""
             self._transport_playing = False
             self._silence_all()
 
-    def _rate_trigger_index(self, note: int) -> int | None:
-        """Return rate-table index N if `note` is the Nth semitone of
-        the rate-trigger range, else None. The trigger feature is
-        opt-in via the Pattern group's "Trigger Note" toggle; when
-        off, this always returns None and notes flow into the arp
-        normally."""
+    def _channel_match(self, channel: int, param_name: str) -> bool:
+        """True if `channel` (0-based) passes the named filter param.
+        Filter value 0 = Any (no filter); 1-16 = filter to that
+        user-channel which is `value - 1` internally. Missing param
+        or None defaults to Any."""
+        v = self.get_param(param_name)
+        return v is None or v == 0 or int(v) - 1 == channel
+
+    def _rate_trigger_index(self, channel: int, note: int) -> int | None:
+        """Return rate-table index N if `note` on `channel` is the Nth
+        semitone of the rate-trigger range AND control_channel allows
+        the source channel, else None. The trigger feature is opt-in
+        via the Pattern group's "Trigger Note" toggle; when off, this
+        always returns None and notes flow through to the arp filter."""
         if not self.get_param("rate_trigger"):
+            return None
+        if not self._channel_match(channel, "control_channel"):
             return None
         base = self.get_param("rate_base")
         if base is None:
@@ -181,9 +206,15 @@ Use MIDI Learn on the Base wheel to capture from a controller."""
         # do NOT join the held-notes set, so the trigger range can't
         # be accidentally arpeggiated. set_param broadcasts the change
         # to the UI via SSE so the user sees the radio flip live.
-        idx = self._rate_trigger_index(note)
+        idx = self._rate_trigger_index(channel, note)
         if idx is not None:
             self.set_param("rate", self._RATE_OPTIONS[idx])
+            return
+        # Arp channel filter: notes on a non-matching channel pass
+        # through without joining the held-notes set, so they don't
+        # arpeggiate. The output is unchanged — this only governs
+        # what counts as "input that should be arped".
+        if not self._channel_match(channel, "arp_channel"):
             return
         with self._lock:
             self._held_notes.append((note, velocity, channel))
@@ -197,9 +228,12 @@ Use MIDI Learn on the Base wheel to capture from a controller."""
                     self._start_free_runner()
 
     def on_note_off(self, channel, note):
-        # Symmetric: trigger-range note-offs are also consumed, so the
-        # held-notes list never sees them at all.
-        if self._rate_trigger_index(note) is not None:
+        # Symmetric to on_note_on: trigger-range and non-matching-arp-
+        # channel note-offs are also consumed, so the held-notes list
+        # never sees them at all.
+        if self._rate_trigger_index(channel, note) is not None:
+            return
+        if not self._channel_match(channel, "arp_channel"):
             return
         with self._lock:
             self._held_notes = [(n, v, c) for n, v, c in self._held_notes if n != note]

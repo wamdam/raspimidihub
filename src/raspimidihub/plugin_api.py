@@ -178,12 +178,19 @@ class NoteSelect(Param):
 
 @dataclass
 class ChannelSelect(Param):
-    """Wheel for MIDI channel 1-16."""
+    """Wheel for MIDI channel 1-16. Set `allow_any=True` to add a
+    leading "Any" tick at value 0 — used by channel filters where 0
+    means "accept all channels". Plugins reading the value should
+    treat 0 as "no filter" and otherwise subtract 1 for the ALSA
+    0-based channel index."""
     default: int = 1
+    allow_any: bool = False
 
     def to_dict(self) -> dict:
         d = super().to_dict()
         d["default"] = self.default
+        if self.allow_any:
+            d["allow_any"] = True
         return d
 
 

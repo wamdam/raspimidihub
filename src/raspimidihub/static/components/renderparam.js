@@ -79,7 +79,8 @@ export function renderParam(param, values, onChange, allValues, displayCtx) {
                 learnable=${param.learnable !== false} />`;
         case 'channelselect':
             return html`<${PluginChannelSelect} name=${param.name} label=${param.label}
-                value=${val != null ? val : param.default || 1} onChange=${onChange} />`;
+                value=${val != null ? val : (param.default != null ? param.default : 1)}
+                allowAny=${!!param.allow_any} onChange=${onChange} />`;
         case 'display': {
             if (!displayCtx) return null;
             const dout = (displayCtx.outputs || []).find(d => d.name === param.display_name);
