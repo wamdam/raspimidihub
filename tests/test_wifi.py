@@ -328,19 +328,30 @@ def fake_fs(tmp_path, monkeypatch):
     return SimpleNamespace(hostapd=h, dnsmasq=d)
 
 
-def _stub_helpers(monkeypatch, hostapd_pids: list[int],
+def _stub_helpers(monkeypatch, hostapd_active: bool,
                   dnsmasq_pids: list[int], wlan_mode: str,
-                  spawn_ok: bool = True):
-    """Pin _find_pids / _wlan_mode / _spawn_hostapd return values for
-    start_ap tests."""
+                  spawn_ok: bool = True,
+                  stray_hostapd_pids: list[int] | None = None):
+    """Pin _hostapd_active / _find_pids / _wlan_mode / _spawn_hostapd
+    return values for start_ap tests.
+
+    `hostapd_active` is the systemd-side state. `stray_hostapd_pids`
+    simulates an old subprocess-managed hostapd lingering through a
+    package upgrade — start_ap kills it before delegating to systemd.
+    `dnsmasq_pids` is still per-pid because dnsmasq stays subprocess-
+    managed for now."""
+    stray = list(stray_hostapd_pids or [])
+
     def find(executable, required_arg, **kw):
         if executable == "hostapd":
-            return list(hostapd_pids)
+            return list(stray)
         if executable == "dnsmasq":
             return list(dnsmasq_pids)
         return []
 
     monkeypatch.setattr(WifiManager, "_find_pids", staticmethod(find))
+    monkeypatch.setattr(WifiManager, "_hostapd_active",
+                        classmethod(lambda cls: hostapd_active))
     monkeypatch.setattr(WifiManager, "_wlan_mode",
                         staticmethod(lambda: wlan_mode))
     monkeypatch.setattr(WifiManager, "_spawn_hostapd",
@@ -368,7 +379,7 @@ class TestStartApSkipPath:
             m._render_hostapd_conf("MyAP", "midihub1", 11))
         fake_fs.dnsmasq.write_text(m._render_dnsmasq_conf())
 
-        _stub_helpers(monkeypatch, hostapd_pids=[100],
+        _stub_helpers(monkeypatch, hostapd_active=True,
                       dnsmasq_pids=[101], wlan_mode="AP")
 
         m.start_ap(ssid="MyAP", password="midihub1")
@@ -383,62 +394,68 @@ class TestStartApSkipPath:
 class TestStartApRestartPath:
     """When something is wrong, restart only what's actually wrong."""
 
-    def test_restarts_when_hostapd_dead_even_if_config_matches(
+    def test_restarts_when_hostapd_inactive_even_if_config_matches(
             self, monkeypatch, fake_fs, stub_run, stub_kill):
         m = WifiManager()
         fake_fs.hostapd.write_text(
             m._render_hostapd_conf("MyAP", "midihub1", 11))
         fake_fs.dnsmasq.write_text(m._render_dnsmasq_conf())
 
-        # Reproduces "no hostapd / wlan0=managed" — the user's exact failure
+        # Reproduces "systemctl says inactive / wlan0=managed" — the
+        # user's exact failure mode after an external `pkill hostapd`.
         spawned = {"n": 0}
-        _stub_helpers(monkeypatch, hostapd_pids=[],
+        _stub_helpers(monkeypatch, hostapd_active=False,
                       dnsmasq_pids=[101], wlan_mode="managed")
         monkeypatch.setattr(WifiManager, "_spawn_hostapd",
                             classmethod(lambda cls: spawned.update(n=spawned["n"] + 1) or True))
 
         m.start_ap(ssid="MyAP", password="midihub1")
 
-        assert ("hostapd", str(fake_fs.hostapd)) in stub_kill
-        assert spawned["n"] == 1, "expected fresh hostapd spawn via _spawn_hostapd"
+        assert spawned["n"] == 1, "expected systemctl restart via _spawn_hostapd"
 
-    def test_restarts_when_wlan_in_managed_even_if_pid_present(
+    def test_restarts_when_wlan_in_managed_even_if_unit_active(
             self, monkeypatch, fake_fs, stub_run, stub_kill):
-        # Defends against: stale hostapd PID still alive but interface
+        # Defends against: systemd unit reports active but wlan0 has
         # somehow reverted to managed (driver glitch, external nmcli, …).
         m = WifiManager()
         fake_fs.hostapd.write_text(
             m._render_hostapd_conf("MyAP", "midihub1", 11))
         fake_fs.dnsmasq.write_text(m._render_dnsmasq_conf())
 
-        _stub_helpers(monkeypatch, hostapd_pids=[100],
+        spawned = {"n": 0}
+        _stub_helpers(monkeypatch, hostapd_active=True,
                       dnsmasq_pids=[101], wlan_mode="managed")
+        monkeypatch.setattr(WifiManager, "_spawn_hostapd",
+                            classmethod(lambda cls: spawned.update(n=spawned["n"] + 1) or True))
 
         m.start_ap(ssid="MyAP", password="midihub1")
 
-        assert ("hostapd", str(fake_fs.hostapd)) in stub_kill, \
+        assert spawned["n"] == 1, \
             "wlan_mode != AP must trigger hostapd restart"
 
-    def test_restarts_when_two_hostapd_pids(
+    def test_kills_stray_subprocess_hostapd_during_migration(
             self, monkeypatch, fake_fs, stub_run, stub_kill):
-        # The "two hostapds racing" failure mode: any pid count != 1 must
-        # not be considered healthy.
+        # Upgrade-day scenario: the OLD raspimidihub package spawned
+        # hostapd via subprocess.Popen. After `apt install` the new
+        # raspimidihub starts up, sees the unit isn't active yet, and
+        # finds the leftover hostapd PID — it must be killed before
+        # systemctl spawns a fresh one, otherwise two would race.
         m = WifiManager()
         fake_fs.hostapd.write_text(
             m._render_hostapd_conf("MyAP", "midihub1", 11))
         fake_fs.dnsmasq.write_text(m._render_dnsmasq_conf())
 
         spawned = {"n": 0}
-        _stub_helpers(monkeypatch, hostapd_pids=[100, 101],
-                      dnsmasq_pids=[200], wlan_mode="AP")
+        _stub_helpers(monkeypatch, hostapd_active=False,
+                      dnsmasq_pids=[200], wlan_mode="managed",
+                      stray_hostapd_pids=[12345])
         monkeypatch.setattr(WifiManager, "_spawn_hostapd",
                             classmethod(lambda cls: spawned.update(n=spawned["n"] + 1) or True))
 
         m.start_ap(ssid="MyAP", password="midihub1")
 
-        assert ("hostapd", str(fake_fs.hostapd)) in stub_kill
-        # Both old pids must be killed before respawn — _kill_and_wait
-        # iterates over _find_pids which we stubbed to return both.
+        assert ("hostapd", str(fake_fs.hostapd)) in stub_kill, \
+            "stray subprocess hostapd must be killed before systemctl restart"
         assert spawned["n"] == 1
 
     def test_restarts_when_config_changed(
@@ -449,13 +466,16 @@ class TestStartApRestartPath:
             m._render_hostapd_conf("OldAP", "midihub1", 11))
         fake_fs.dnsmasq.write_text(m._render_dnsmasq_conf())
 
-        _stub_helpers(monkeypatch, hostapd_pids=[100],
+        spawned = {"n": 0}
+        _stub_helpers(monkeypatch, hostapd_active=True,
                       dnsmasq_pids=[101], wlan_mode="AP")
+        monkeypatch.setattr(WifiManager, "_spawn_hostapd",
+                            classmethod(lambda cls: spawned.update(n=spawned["n"] + 1) or True))
 
         m.start_ap(ssid="NewAP", password="midihub1")
 
-        # Hostapd must restart, dnsmasq must NOT (config didn't change there)
-        assert ("hostapd", str(fake_fs.hostapd)) in stub_kill
+        # Hostapd must restart (via systemctl), dnsmasq must NOT.
+        assert spawned["n"] == 1
         assert ("dnsmasq", str(fake_fs.dnsmasq)) not in stub_kill
         # New config written
         assert "ssid=NewAP" in fake_fs.hostapd.read_text()
@@ -469,13 +489,16 @@ class TestStartApRestartPath:
             m._render_hostapd_conf("MyAP", "midihub1", 11))
         fake_fs.dnsmasq.write_text("# stale dnsmasq conf\n")
 
-        _stub_helpers(monkeypatch, hostapd_pids=[100],
+        spawned = {"n": 0}
+        _stub_helpers(monkeypatch, hostapd_active=True,
                       dnsmasq_pids=[101], wlan_mode="AP")
+        monkeypatch.setattr(WifiManager, "_spawn_hostapd",
+                            classmethod(lambda cls: spawned.update(n=spawned["n"] + 1) or True))
 
         m.start_ap(ssid="MyAP", password="midihub1")
 
         assert ("dnsmasq", str(fake_fs.dnsmasq)) in stub_kill
-        assert ("hostapd", str(fake_fs.hostapd)) not in stub_kill, \
+        assert spawned["n"] == 0, \
             "hostapd must stay untouched when only dnsmasq changed — " \
             "preserves the SSID and avoids blinking wlan0"
 
@@ -485,19 +508,25 @@ class TestStartApRestartPath:
         m = WifiManager()
         monkeypatch.setattr(m, "survey_ap_channel", lambda: 6)
 
-        _stub_helpers(monkeypatch, hostapd_pids=[],
+        spawned = {"n": 0}
+        _stub_helpers(monkeypatch, hostapd_active=False,
                       dnsmasq_pids=[], wlan_mode="managed")
+        monkeypatch.setattr(WifiManager, "_spawn_hostapd",
+                            classmethod(lambda cls: spawned.update(n=spawned["n"] + 1) or True))
 
         m.start_ap(ssid="MyAP", password="midihub1")
 
         assert "channel=6" in fake_fs.hostapd.read_text()
-        assert ("hostapd", str(fake_fs.hostapd)) in stub_kill
+        assert spawned["n"] == 1
         assert ("dnsmasq", str(fake_fs.dnsmasq)) in stub_kill
 
 
 class TestSpawnHostapd:
-    """The fresh-boot fix: hostapd may silently fail to take wlan0 if NM
-    is still releasing it. We need stderr surfaced and a wlan-mode check."""
+    """_spawn_hostapd now delegates to `systemctl restart
+    raspimidihub-hostapd.service`. The wlan-mode poll is unchanged
+    (and slightly wider to give systemd's Restart=on-failure cycle
+    a chance), and we still have to surface systemctl errors so a
+    stuck unit isn't a mystery."""
 
     def _stub_run(self, monkeypatch, returncode=0, stderr=""):
         seen: list[list[str]] = []
@@ -510,21 +539,23 @@ class TestSpawnHostapd:
         return seen
 
     def test_returns_true_when_wlan_enters_ap_mode(self, monkeypatch):
-        self._stub_run(monkeypatch)
+        seen = self._stub_run(monkeypatch)
         monkeypatch.setattr(WifiManager, "_wlan_mode",
                             staticmethod(lambda: "AP"))
         monkeypatch.setattr(wifi.time, "sleep", lambda s: None)
         monkeypatch.setattr(wifi.time, "monotonic", lambda: 0.0)
         assert WifiManager._spawn_hostapd() is True
+        # Sanity: we delegated to systemctl, not subprocess.Popen of hostapd.
+        assert seen and seen[0][:2] == ["systemctl", "restart"]
+        assert "raspimidihub-hostapd.service" in seen[0]
 
-    def test_returns_false_when_hostapd_exits_nonzero(self, monkeypatch, caplog):
+    def test_returns_false_when_systemctl_fails(self, monkeypatch, caplog):
         self._stub_run(monkeypatch, returncode=1,
-                       stderr="Could not set interface to AP mode")
+                       stderr="Failed to start raspimidihub-hostapd.service: Unit not found")
         with caplog.at_level("ERROR", logger="raspimidihub.wifi"):
             assert WifiManager._spawn_hostapd() is False
-        # The stderr must surface in the log — that's the whole point
-        assert any("Could not set interface to AP mode" in r.message
-                   for r in caplog.records)
+        # Stderr must surface so a missing unit isn't a silent dead AP.
+        assert any("Unit not found" in r.message for r in caplog.records)
 
     def test_returns_false_when_wlan_never_enters_ap(self, monkeypatch, caplog):
         self._stub_run(monkeypatch)
@@ -539,12 +570,47 @@ class TestSpawnHostapd:
             assert WifiManager._spawn_hostapd() is False
         assert any("stayed in mode" in r.message for r in caplog.records)
 
-    def test_returns_false_on_spawn_timeout(self, monkeypatch, caplog):
+    def test_returns_false_on_systemctl_timeout(self, monkeypatch, caplog):
         def boom(*a, **kw):
-            raise subprocess.TimeoutExpired(cmd="hostapd", timeout=10)
+            raise subprocess.TimeoutExpired(cmd="systemctl", timeout=10)
         monkeypatch.setattr(subprocess, "run", boom)
         with caplog.at_level("ERROR", logger="raspimidihub.wifi"):
             assert WifiManager._spawn_hostapd() is False
+
+
+class TestHostapdActive:
+    """`_hostapd_active` reads `systemctl is-active raspimidihub-hostapd`."""
+
+    def test_active_returns_true(self, monkeypatch):
+        monkeypatch.setattr(subprocess, "run",
+                            lambda *a, **kw: SimpleNamespace(
+                                returncode=0, stdout="active\n", stderr=""))
+        assert WifiManager._hostapd_active() is True
+
+    def test_inactive_returns_false(self, monkeypatch):
+        # is-active returns rc=3 + "inactive" stdout for a stopped unit
+        monkeypatch.setattr(subprocess, "run",
+                            lambda *a, **kw: SimpleNamespace(
+                                returncode=3, stdout="inactive\n", stderr=""))
+        assert WifiManager._hostapd_active() is False
+
+    def test_failed_returns_false(self, monkeypatch):
+        monkeypatch.setattr(subprocess, "run",
+                            lambda *a, **kw: SimpleNamespace(
+                                returncode=3, stdout="failed\n", stderr=""))
+        assert WifiManager._hostapd_active() is False
+
+    def test_systemctl_missing_returns_false(self, monkeypatch):
+        def boom(*a, **kw):
+            raise FileNotFoundError("systemctl")
+        monkeypatch.setattr(subprocess, "run", boom)
+        assert WifiManager._hostapd_active() is False
+
+    def test_systemctl_timeout_returns_false(self, monkeypatch):
+        def boom(*a, **kw):
+            raise subprocess.TimeoutExpired(cmd="systemctl", timeout=3)
+        monkeypatch.setattr(subprocess, "run", boom)
+        assert WifiManager._hostapd_active() is False
 
 
 class TestStartApRetryPath:
@@ -557,7 +623,7 @@ class TestStartApRetryPath:
         m = WifiManager()
         # No existing config — fresh boot path
         monkeypatch.setattr(m, "survey_ap_channel", lambda: 11)
-        _stub_helpers(monkeypatch, hostapd_pids=[],
+        _stub_helpers(monkeypatch, hostapd_active=False,
                       dnsmasq_pids=[], wlan_mode="managed")
 
         # First _spawn_hostapd → False, second → True
@@ -581,7 +647,7 @@ class TestStartApRetryPath:
             self, monkeypatch, fake_fs, stub_run, stub_kill, caplog):
         m = WifiManager()
         monkeypatch.setattr(m, "survey_ap_channel", lambda: 11)
-        _stub_helpers(monkeypatch, hostapd_pids=[],
+        _stub_helpers(monkeypatch, hostapd_active=False,
                       dnsmasq_pids=[], wlan_mode="managed")
 
         monkeypatch.setattr(WifiManager, "_spawn_hostapd",
@@ -595,7 +661,7 @@ class TestStartApRetryPath:
             self, monkeypatch, fake_fs, stub_run, stub_kill):
         m = WifiManager()
         monkeypatch.setattr(m, "survey_ap_channel", lambda: 11)
-        _stub_helpers(monkeypatch, hostapd_pids=[],
+        _stub_helpers(monkeypatch, hostapd_active=False,
                       dnsmasq_pids=[], wlan_mode="managed")
 
         attempts = {"n": 0}
@@ -612,10 +678,17 @@ class TestStartApRetryPath:
 
 
 class TestStopAp:
-    def test_calls_kill_and_wait_for_both_daemons(
+    def test_stops_systemd_unit_and_kills_strays(
             self, monkeypatch, fake_fs, stub_run, stub_kill):
         m = WifiManager()
         m.stop_ap()
+        # Systemd-managed hostapd: stop the unit.
+        assert any(c[:2] == ["systemctl", "stop"]
+                   and "raspimidihub-hostapd.service" in c
+                   for c in stub_run), \
+            "stop_ap must systemctl stop the hostapd unit"
+        # Belt-and-braces: still kill subprocess strays from a
+        # pre-systemd-migration install.
         assert ("hostapd", str(fake_fs.hostapd)) in stub_kill
         assert ("dnsmasq", str(fake_fs.dnsmasq)) in stub_kill
         # And it flushed the IP

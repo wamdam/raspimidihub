@@ -133,12 +133,11 @@ class WifiManager:
     def _render_hostapd_conf(self, ssid: str, password: str, channel: int) -> str:
         """Build the hostapd config text without writing it.
 
-        logger_syslog routes hostapd's own messages (associations,
-        deauth reasons, beacon failures) to systemd-journald so we
-        can correlate phone disconnects against the AP side. Without
-        this, hostapd -B daemonises and the events vanish — the only
-        symptom upstream is "the phone dropped" with no ground truth.
-        Module mask -1 = all subsystems; level 2 = info.
+        hostapd runs as raspimidihub-hostapd.service (Type=simple, no
+        -B), so its stderr lands in journald automatically — no need
+        for `logger_syslog`. Association / deauth events show up under
+        the `raspimidihub-hostapd` unit, not interleaved with the main
+        service log.
         """
         return f"""interface={WLAN_IFACE}
 driver=nl80211
@@ -153,8 +152,6 @@ wpa=2
 wpa_passphrase={password}
 wpa_key_mgmt=WPA-PSK
 rsn_pairwise=CCMP
-logger_syslog=-1
-logger_syslog_level=2
 """
 
     def _render_dnsmasq_conf(self) -> str:
@@ -303,46 +300,60 @@ no-hosts
 
     @classmethod
     def _spawn_hostapd(cls) -> bool:
-        """Start hostapd in background mode. Returns True iff wlan0 enters
-        type=AP within 3 s of the spawn returning.
+        """Start (or restart) hostapd via raspimidihub-hostapd.service.
 
-        On any failure (non-zero exit, silent death, wlan0 stuck in
-        managed) the captured stderr is logged — without this the parent
-        process sees a clean return and we get a mystery dead AP.
+        Replaces the old subprocess.Popen + taskset + -B daemonise flow.
+        systemd handles lifecycle (Restart=on-failure), CPU pin (CPUAffinity
+        drop-in pins to 0–2 so the asyncio loop's CPU 3 stays clean), and
+        stderr → journald capture. Method name kept so the existing
+        retry-on-fresh-boot path in start_ap doesn't change.
+
+        Returns True iff wlan0 reaches AP mode within 5 s of systemctl
+        returning. The window is wider than the old 3 s because systemd
+        may restart hostapd once if it lost a race with NetworkManager
+        releasing wlan0.
         """
         try:
-            # Spawn under taskset -c 0-2 so hostapd lands on a non-
-            # isolated core — the asyncio loop is on CPU 3 and that
-            # core has nohz_full set, which would starve hostapd's
-            # 100 ms beacon timer. Children inherit the parent's
-            # affinity {3} otherwise (raspimidihub.__main__ pins
-            # itself), and we can't share CPU 3 with hostapd anyway.
             r = subprocess.run(
-                ["taskset", "-c", "0-2", "hostapd", "-B", str(HOSTAPD_CONF)],
+                ["systemctl", "restart", "raspimidihub-hostapd.service"],
                 capture_output=True, text=True, timeout=10,
             )
         except subprocess.TimeoutExpired:
-            log.error("hostapd -B timed out — interface likely stuck")
+            log.error("systemctl restart raspimidihub-hostapd timed out")
             return False
 
         if r.returncode != 0:
-            log.error("hostapd exited %d during spawn — stderr: %s",
+            log.error("systemctl restart raspimidihub-hostapd exited %d: %s",
                       r.returncode,
                       (r.stderr or "").strip() or "(empty)")
             return False
 
-        # `hostapd -B` daemonizes only after init succeeds; even so, the
-        # kernel mode flip happens asynchronously. Poll until wlan0
-        # reports type=AP, or give up after 3 s.
-        deadline = time.monotonic() + 3.0
+        deadline = time.monotonic() + 5.0
         while time.monotonic() < deadline:
             if cls._wlan_mode() == "AP":
                 return True
             time.sleep(0.1)
 
-        log.error("hostapd reported success but wlan0 stayed in mode=%r",
+        log.error("systemctl reported success but wlan0 stayed in mode=%r",
                   cls._wlan_mode())
         return False
+
+    @classmethod
+    def _hostapd_active(cls) -> bool:
+        """Is raspimidihub-hostapd.service currently active? Used by the
+        idempotency check in start_ap — combined with config-text match,
+        it decides whether to leave the existing AP alone or kick a
+        restart. Returns False on any error so we err on the side of
+        restarting (the recovery path), not silently skipping (the
+        false-positive that bit us before)."""
+        try:
+            r = subprocess.run(
+                ["systemctl", "is-active", "raspimidihub-hostapd.service"],
+                capture_output=True, text=True, timeout=3,
+            )
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            return False
+        return (r.stdout or "").strip() == "active"
 
     def start_ap(self, ssid: str = "", password: str = "midihub1"):
         """Bring up WiFi AP mode. Idempotent.
@@ -372,16 +383,16 @@ no-hosts
         candidate_dnsmasq = self._render_dnsmasq_conf()
 
         # Idempotency guard: only skip restart when ALL three hold —
-        # config matches, daemon is actually running with our config path,
-        # AND the kernel reports wlan0 as type AP. Without the wlan_mode
-        # check, a previous external `pkill hostapd` leaves wlan0 in
-        # type=managed and we'd silently keep "skipping restart" forever.
-        hostapd_pids = self._find_pids("hostapd", str(HOSTAPD_CONF))
+        # config matches, the systemd unit is actually active, AND the
+        # kernel reports wlan0 as type AP. Without the wlan_mode check,
+        # an external `pkill hostapd` leaves wlan0 in type=managed and
+        # we'd silently keep "skipping restart" forever.
+        hostapd_active = self._hostapd_active()
         dnsmasq_pids = self._find_pids("dnsmasq", str(DNSMASQ_AP_CONF))
         wlan_mode = self._wlan_mode()
 
         hostapd_ok = (existing_hostapd == candidate_hostapd
-                      and len(hostapd_pids) == 1
+                      and hostapd_active
                       and wlan_mode == "AP")
         dnsmasq_ok = (existing_dnsmasq == candidate_dnsmasq
                       and len(dnsmasq_pids) == 1)
@@ -397,9 +408,9 @@ no-hosts
         # the exact reproduction the patch above guards against.
         if not hostapd_ok:
             log.info("WiFi AP: hostapd needs (re)start "
-                     "(config_match=%s pids=%s wlan_mode=%s)",
+                     "(config_match=%s active=%s wlan_mode=%s)",
                      existing_hostapd == candidate_hostapd,
-                     hostapd_pids, wlan_mode or "?")
+                     hostapd_active, wlan_mode or "?")
         if not dnsmasq_ok:
             log.info("WiFi AP: dnsmasq needs (re)start "
                      "(config_match=%s pids=%s)",
@@ -415,19 +426,30 @@ no-hosts
             HOSTAPD_CONF.write_text(candidate_hostapd)
             log.info("Wrote hostapd config: SSID=%s, channel=%d", ssid, channel)
 
+            # Migration cleanup: an older raspimidihub package spawned
+            # hostapd directly via subprocess.Popen. If a process is
+            # still alive from that path during the upgrade, kill it
+            # before letting systemd start a fresh one — otherwise two
+            # hostapds would race on wlan0. No-op on clean installs.
+            old_pids = self._find_pids("hostapd", str(HOSTAPD_CONF))
+            if old_pids:
+                log.info("Cleaning up subprocess-managed hostapd PIDs: %s", old_pids)
+                self._kill_and_wait("hostapd", str(HOSTAPD_CONF))
             # systemctl stop covers the distro hostapd.service if it ever
-            # got enabled; the precise kill-and-wait handles our own
-            # daemonized hostapd (and any extra strays).
+            # got enabled — keeps it from racing with our unit on wlan0.
             _run(["systemctl", "stop", "hostapd"], check=False)
-            self._kill_and_wait("hostapd", str(HOSTAPD_CONF))
 
             if not self._spawn_hostapd():
                 # First attempt failed — most likely because NM /
                 # wpa_supplicant hadn't finished releasing wlan0 yet
                 # (visible at fresh boot only). Bounce the interface,
-                # let NM settle, and try once more.
+                # let NM settle, and try once more. Stop the service
+                # cleanly so systemd doesn't keep its own
+                # Restart=on-failure cycle running in parallel with
+                # our retry.
                 log.warning("hostapd first spawn failed; bouncing wlan0 and retrying")
-                self._kill_and_wait("hostapd", str(HOSTAPD_CONF))
+                _run(["systemctl", "stop", "raspimidihub-hostapd.service"],
+                     check=False)
                 _run(["ip", "link", "set", WLAN_IFACE, "down"], check=False)
                 time.sleep(1.5)
                 self._claim_wlan0_for_ap()
@@ -482,6 +504,10 @@ no-hosts
 
     def stop_ap(self):
         """Stop WiFi access point."""
+        _run(["systemctl", "stop", "raspimidihub-hostapd.service"], check=False)
+        # Belt-and-braces: kill any leftover subprocess-spawned hostapd
+        # from a pre-systemd-migration install. No-op once the upgrade
+        # has gone through one start_ap cycle.
         self._kill_and_wait("hostapd", str(HOSTAPD_CONF))
         self._kill_and_wait("dnsmasq", str(DNSMASQ_AP_CONF))
         _run(["ip", "addr", "flush", "dev", WLAN_IFACE], check=False)

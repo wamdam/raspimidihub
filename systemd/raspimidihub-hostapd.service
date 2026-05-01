@@ -1,0 +1,25 @@
+[Unit]
+Description=hostapd for RaspiMIDIHub access point
+Documentation=man:hostapd(8)
+After=network.target
+# Don't try to start without our generated config in place. raspimidihub
+# writes /run/raspimidihub/hostapd.conf before invoking systemctl start;
+# this guards against an empty config blocking the AP at first boot.
+ConditionPathExists=/run/raspimidihub/hostapd.conf
+
+[Service]
+# Type=simple keeps hostapd in foreground so its stderr lands in
+# journald automatically — no logger_syslog workaround needed.
+Type=simple
+ExecStart=/usr/sbin/hostapd /run/raspimidihub/hostapd.conf
+Restart=on-failure
+RestartSec=2
+# Keep hostapd off CPU 3 — that core is reserved for the asyncio
+# main loop in raspimidihub.service. The remaining three cores
+# have plenty of headroom for the WiFi driver IRQs, hostapd,
+# dnsmasq, and the rest of userspace.
+CPUAffinity=0-2
+
+# No [Install] section: only raspimidihub.service starts us via
+# `systemctl start raspimidihub-hostapd`. We never run at boot
+# independently — raspimidihub decides when the AP comes up.
