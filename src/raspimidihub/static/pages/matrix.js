@@ -26,12 +26,25 @@ export function MatrixCell({ on, filtered, getMenuItems, showContextMenu, offlin
     </td>`;
 }
 
-export function MatrixHeader({ item, label, isPlugin, pluginType, sendsClock, multiClock, clockBeat, online, getMenuItems, showContextMenu, midiRate }) {
+export function MatrixHeader({ item, label, isPlugin, pluginType, sendsClock, clockBlocked, multiEffective, clockBeat, online, getMenuItems, showContextMenu, midiRate }) {
     const trigger = useTapMenu(showContextMenu, getMenuItems);
-    // Re-key the clock icon on each quarter-note SSE so the one-shot
-    // CSS animation replays in time with the source.
+    // Three-state clock icon:
+    //   blocked       → desaturated + faint  (still pulses so the user
+    //                   can confirm the device is firing, but clearly
+    //                   not driving anything)
+    //   multiEffective → orange clock-warn   (≥2 unblocked senders)
+    //   else          → green                (the sole effective
+    //                   sender, or the only sender period)
+    // Re-key the icon on each quarter-note SSE so the one-shot CSS
+    // animation replays in time with the source.
+    const cls = clockBlocked ? 'clock-blocked'
+              : multiEffective ? 'clock-warn'
+              : '';
+    const title = clockBlocked ? 'Sending clock (blocked from system clock)'
+                : multiEffective ? 'Multiple clock sources!'
+                : 'Sending clock';
     return html`<th class="row-header ${online ? '' : 'offline'} ${isPlugin ? 'plugin-row' : ''}" style="cursor:pointer"
-        onClick=${trigger.onClick} onContextMenu=${trigger.onContextMenu}>${isPlugin ? html`<${PluginIcon} type=${pluginType} />` : html`<span class="dev-icon din" style="display:inline-flex;vertical-align:middle;margin-right:3px">${IconDIN}</span>`} ${label}${sendsClock ? html`<span key=${clockBeat || 0} class="clock-icon ${multiClock ? 'clock-warn' : ''}" title="${multiClock ? 'Multiple clock sources!' : 'Sending clock'}"></span>` : ''}
+        onClick=${trigger.onClick} onContextMenu=${trigger.onContextMenu}>${isPlugin ? html`<${PluginIcon} type=${pluginType} />` : html`<span class="dev-icon din" style="display:inline-flex;vertical-align:middle;margin-right:3px">${IconDIN}</span>`} ${label}${sendsClock ? html`<span key=${clockBeat || 0} class="clock-icon ${cls}" title="${title}"></span>` : ''}
         <${RateMeter} rate=${midiRate} /></th>`;
 }
 
@@ -100,7 +113,16 @@ export function ConnectionMatrix({ devices, connections, showToast, clockSources
     };
 
     const clockClientIds = clockSources ? Object.keys(clockSources).map(Number) : [];
-    const multiClock = clockClientIds.length > 1;
+    // Per-device clock-veto map (built once per render). Hardware whose
+    // user has unticked "Drive system clock" sets clock_blocked: true
+    // in /api/devices, so we know to dim its icon and exclude it from
+    // the "multi clock" warning count.
+    const blockedById = {};
+    for (const d of devices) {
+        if (d.client_id != null && d.clock_blocked) blockedById[d.client_id] = true;
+    }
+    const effectiveSenderCount = clockClientIds.filter(id => !blockedById[id]).length;
+    const multiEffective = effectiveSenderCount > 1;
 
     if (inputs.length === 0 || outputs.length === 0) {
         return html`<div class="card"><p style="color:var(--text-dim)">No MIDI devices connected</p></div>`;
@@ -124,7 +146,9 @@ export function ConnectionMatrix({ devices, connections, showToast, clockSources
                         return html`
                         <tr>
                             <${MatrixHeader} item=${inp} label=${label(inp)} isPlugin=${inp.is_plugin} pluginType=${inp.plugin_type}
-                                sendsClock=${sendsClock} multiClock=${multiClock}
+                                sendsClock=${sendsClock}
+                                clockBlocked=${!!blockedById[inp.client_id]}
+                                multiEffective=${multiEffective}
                                 clockBeat=${clockQuarters && clockQuarters[inp.client_id]}
                                 online=${inp.online}
                                 getMenuItems=${() => getHeaderMenuItems ? getHeaderMenuItems(inp, 'input') : []}

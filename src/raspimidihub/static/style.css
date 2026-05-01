@@ -585,9 +585,22 @@ body {
 .clock-icon.clock-warn {
     border-left-color: var(--warn);
 }
+/* Sender is emitting clock but the user has unticked "Drive system
+   clock" on this device, so its ticks don't reach the bus. Keep the
+   beat pulse so the user can confirm it is still firing — just very
+   muted, no colour. */
+.clock-icon.clock-blocked {
+    border-left-color: var(--text-dim);
+    opacity: 0.16;
+    animation: clock-beat-muted 220ms ease-out;
+}
 @keyframes clock-beat {
     0%   { opacity: 1;    transform: scale(1.45); }
     100% { opacity: 0.55; transform: scale(1); }
+}
+@keyframes clock-beat-muted {
+    0%   { opacity: 0.32; transform: scale(1.15); }
+    100% { opacity: 0.16; transform: scale(1); }
 }
 
 /* --- MIDI Monitor --- */
