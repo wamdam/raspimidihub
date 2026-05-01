@@ -1,5 +1,5 @@
 PACKAGE = raspimidihub
-VERSION = 3.0.0a
+VERSION = 3.0.0a1
 DEB_NAME = $(PACKAGE)_$(VERSION)-1_all
 BUILD_DIR = build/$(DEB_NAME)
 DEB_FILE = dist/$(DEB_NAME).deb
@@ -20,7 +20,7 @@ all: deb deb-rosetup
 
 deb: $(DEB_FILE)
 
-$(DEB_FILE): src/raspimidihub/*.py src/raspimidihub/plugin_host/*.py src/raspimidihub/runtime/*.py src/raspimidihub/static/*.* $(wildcard src/raspimidihub/static/*/*.*) plugins/*/*.py plugins/*/*.svg systemd/raspimidihub.service systemd/raspimidihub-hostapd.service udev/90-raspimidihub.rules debian/postinst debian/postrm
+$(DEB_FILE): src/raspimidihub/*.py src/raspimidihub/plugin_host/*.py src/raspimidihub/runtime/*.py src/raspimidihub/static/*.* $(wildcard src/raspimidihub/static/*/*.*) plugins/*/*.py plugins/*/*.svg systemd/raspimidihub.service systemd/raspimidihub-hostapd.service udev/90-raspimidihub.rules debian/postinst debian/postrm CHANGELOG.txt
 	@mkdir -p dist
 	@rm -rf $(BUILD_DIR)
 	@mkdir -p $(BUILD_DIR)/DEBIAN
@@ -30,6 +30,7 @@ $(DEB_FILE): src/raspimidihub/*.py src/raspimidihub/plugin_host/*.py src/raspimi
 	@mkdir -p $(BUILD_DIR)/lib/udev/rules.d
 	@mkdir -p $(BUILD_DIR)/usr/lib/raspimidihub
 	@mkdir -p $(BUILD_DIR)/usr/local/bin
+	@mkdir -p $(BUILD_DIR)/usr/share/doc/$(PACKAGE)
 	cp src/raspimidihub/*.py $(BUILD_DIR)/usr/lib/python3/dist-packages/raspimidihub/
 	@for sub in plugin_host runtime; do \
 		if [ -d src/raspimidihub/$$sub ]; then \
@@ -47,6 +48,12 @@ $(DEB_FILE): src/raspimidihub/*.py src/raspimidihub/plugin_host/*.py src/raspimi
 	done
 	cp systemd/raspimidihub.service $(BUILD_DIR)/lib/systemd/system/
 	cp systemd/raspimidihub-hostapd.service $(BUILD_DIR)/lib/systemd/system/
+	# CHANGELOG.txt — full per-version delta. Lands at
+	# /usr/share/doc/raspimidihub/CHANGELOG.txt so an offline / SSH-
+	# only operator can `cat` everything that's changed since the
+	# last stable they had installed (the in-app UI reads the GitHub
+	# release body for the same content).
+	cp CHANGELOG.txt $(BUILD_DIR)/usr/share/doc/$(PACKAGE)/CHANGELOG.txt
 	cp udev/90-raspimidihub.rules $(BUILD_DIR)/lib/udev/rules.d/
 	cp scripts/reset-wifi.sh $(BUILD_DIR)/usr/local/bin/reset-wifi
 	chmod 755 $(BUILD_DIR)/usr/local/bin/reset-wifi

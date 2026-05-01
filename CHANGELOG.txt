@@ -4,6 +4,62 @@ User-visible changes. Short tagged one-liners, no code or commit
 hashes. Tags: Added, Improved, Fix, Changed, Removed.
 
 
+2026-05-01 — Version 3.0.0a1 (alpha)
+
+Second alpha. Carries every change from 3.0.0a (the section below)
+plus the items in this section.
+
+Arpeggiator
+- Added: Trigger Note — toggle in the Pattern group with a Base
+  wheel (MIDI Learn). Notes from Base..Base+14 set the Rate radio
+  live without being arpeggiated. Use to remap rate from a hardware
+  controller key.
+- Added: Arp Ch / Ctrl Ch — channel filters on the input. Default
+  Any (no behaviour change). Set Arp Ch = 1 + Ctrl Ch = 16 to wire a
+  separate keyboard / footswitch on ch16 that only flips Rate, never
+  plays — the same note range no longer has to be split between the
+  two functions.
+
+UI building blocks
+- Improved: ChannelSelect picks up an opt-in `allow_any` flag —
+  a leading 0 = "Any" tick. Lets any plugin reuse the control as a
+  channel filter rather than a fixed channel picker.
+
+Captive portal & web
+- Changed: Captive-portal endpoints now serve a tiny static landing
+  with a single "Open routing matrix" link instead of suppressing
+  the OS captive flow. A captive webview that fetches /generate_204
+  or /hotspot-detect.html stays inert (no JS, no SSE) — the user
+  taps the link to open the SPA in their main browser, which is the
+  only context where SSE legitimately runs. Microsoft NCSI keeps
+  its legacy success bodies.
+
+Updates
+- Added: "Include alpha / beta releases" toggle in Software
+  Versions — default off (stable channel). Persisted in
+  config.data["updates"]["include_prereleases"]; takes effect on
+  the next check-update click.
+- Added: Rollback insurance — the running version's deb is always
+  downloaded if not on disk and protected from prune, so after an
+  upgrade you can always one-tap-revert to the previous version.
+- Fix: Stored-deb regex accepts PEP-440 alpha/beta tags
+  (raspimidihub_3.0.0a-1_all.deb). Without this the just-installed
+  deb was silently dropped from the Software Versions list.
+
+Engine
+- Fix: Re-subscribe monitor port after CLIENT_EXIT/CLIENT_START
+  hotplug. Devices that re-enumerate with the same client id (typical
+  for Elektron over USB) had silently dropped off the rate meter,
+  clock indicator, and MIDI activity bar. Audio path was unaffected
+  (direct kernel subscriptions stayed up); only the UI lost the
+  device.
+
+Packaging
+- Added: CHANGELOG.txt installed at /usr/share/doc/raspimidihub/
+  inside the deb — same content as the GitHub release body, so an
+  offline / SSH-only operator can `cat` the full release delta.
+
+
 2026-05-01 — Version 3.0.0a (alpha)
 
 Major release. Controllers, drop buttons, ALSA queue scheduling, USB
