@@ -20,7 +20,7 @@ all: deb deb-rosetup
 
 deb: $(DEB_FILE)
 
-$(DEB_FILE): src/raspimidihub/*.py src/raspimidihub/plugin_host/*.py src/raspimidihub/runtime/*.py src/raspimidihub/static/*.* $(wildcard src/raspimidihub/static/*/*.*) plugins/*/*.py plugins/*/*.svg systemd/raspimidihub.service udev/90-raspimidihub.rules debian/postinst debian/postrm
+$(DEB_FILE): src/raspimidihub/*.py src/raspimidihub/plugin_host/*.py src/raspimidihub/runtime/*.py src/raspimidihub/static/*.* $(wildcard src/raspimidihub/static/*/*.*) plugins/*/*.py plugins/*/*.svg systemd/raspimidihub.service systemd/raspimidihub-hostapd.service udev/90-raspimidihub.rules debian/postinst debian/postrm
 	@mkdir -p dist
 	@rm -rf $(BUILD_DIR)
 	@mkdir -p $(BUILD_DIR)/DEBIAN
@@ -46,6 +46,7 @@ $(DEB_FILE): src/raspimidihub/*.py src/raspimidihub/plugin_host/*.py src/raspimi
 		test -f "$$d"icon.svg && cp "$$d"icon.svg "$(BUILD_DIR)/usr/lib/python3/dist-packages/raspimidihub/plugins/$$pname/" || true; \
 	done
 	cp systemd/raspimidihub.service $(BUILD_DIR)/lib/systemd/system/
+	cp systemd/raspimidihub-hostapd.service $(BUILD_DIR)/lib/systemd/system/
 	cp udev/90-raspimidihub.rules $(BUILD_DIR)/lib/udev/rules.d/
 	cp scripts/reset-wifi.sh $(BUILD_DIR)/usr/local/bin/reset-wifi
 	chmod 755 $(BUILD_DIR)/usr/local/bin/reset-wifi
