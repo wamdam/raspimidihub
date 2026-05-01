@@ -57,11 +57,35 @@ class ControllerBase(PluginBase):
     DROP_MODES = ("immediately", "bar", "2bar", "4bar", "8bar", "16bar")
     DROP_MODE_GRID_BARS = {"bar": 1, "2bar": 2, "4bar": 4, "8bar": 8, "16bar": 16}
 
+    # Drop-button auxiliary params that represent live-play state, NOT
+    # config: drop_states cycles through fire/capture/idle on every
+    # press; drop_schedule holds whatever fire is currently scheduled;
+    # drop_note_pressing is an SSE flag for the on-screen press-fill
+    # animation while a trigger note is held; cell_learn is a transient
+    # "next CC binds this cell" toggle. Captured snapshots, modes,
+    # labels, sync/fade flags, trigger-note bindings, theme, cell
+    # rename/rebind ARE config and stay outside this set.
+    _DROP_TRANSIENT_PARAMS = frozenset({
+        "drop_states", "drop_schedule", "drop_note_pressing", "cell_learn",
+    })
+
     def on_start(self):
         """Initialise non-schema state on first start (and after restore).
 
         Subclasses can override; if they do, they should call
         `super().on_start()` so the cached lookups stay populated."""
+        # Populate the dirty-skip set: drop-state transients plus every
+        # cell value param (k0..kN, f0..fN, m0..mN, x0..xN). Faders /
+        # knobs / XY positions move during normal play and shouldn't
+        # paint the Routing asterisk; only cell renames + rebinds +
+        # drop-button settings + bg should.
+        transient = set(self._DROP_TRANSIENT_PARAMS)
+        for p in self.params:
+            if isinstance(p, LayoutGrid):
+                for cell in p.cells:
+                    transient.add(cell.param.name)
+        self.transient_params = transient
+
         self._param_values.setdefault("cell_labels", {})
         self._param_values.setdefault("cell_bindings", {})
         self._param_values.setdefault("cell_learn", "")

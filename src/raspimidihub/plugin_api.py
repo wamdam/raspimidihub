@@ -527,6 +527,15 @@ class PluginBase:
     def __init__(self):
         self._param_values: dict[str, Any] = {}
         self._display_values: dict[str, Any] = {}
+        # Param names whose changes should NOT mark the routing state
+        # dirty. Used by Controller plugins so live-play motion (fader
+        # / knob / XY positions, drop-button transient states like
+        # fire / cancel signals) doesn't paint the bottom-nav Routing
+        # asterisk red — only edits to cell bindings, labels, drop
+        # button settings, theme, etc. are config and worth flagging.
+        # Empty for ordinary plugins; ControllerBase populates it in
+        # on_start from its own LayoutGrid + drop-state names.
+        self.transient_params: set[str] = set()
         # Injected by host:
         self._send_note_on = None
         self._send_note_off = None

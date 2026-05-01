@@ -323,7 +323,14 @@ class PluginHost:
         host_self_p = self
         instance_p = instance
         def _on_param_change(name, value):
-            if host_self_p._on_dirty_cb and not host_self_p._loading:
+            # Skip dirty-fire for params the plugin marked transient
+            # (live-play state on Controllers — fader / knob / XY
+            # positions, drop fire signals, learn-mode toggle). The
+            # bottom-nav Routing asterisk should reflect saveable
+            # config drift only, not knob movement.
+            if (host_self_p._on_dirty_cb
+                    and not host_self_p._loading
+                    and name not in instance_p.plugin.transient_params):
                 try:
                     host_self_p._on_dirty_cb()
                 except Exception:
