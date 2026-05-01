@@ -140,14 +140,27 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
     engine._dirty_loop = asyncio.get_event_loop()
     engine._dirty_sse_cb = server.send_sse
 
+    # Captive-portal probe access log. The phone's OS hits one of these
+    # endpoints periodically to decide whether the network has internet;
+    # if the response is slow or missing, the OS marks the network "no
+    # internet" and after a few failures de-associates. This log makes
+    # phone-disconnect post-mortem possible: grep for "captive:" and
+    # the time delta + client IP correlate against hostapd's own log.
+    import time as _t_cap
     for path, (body, status, fmt) in _CAPTIVE_ROUTES.items():
-        def _make_handler(b, s, f):
+        def _make_handler(b, s, f, p):
             async def handler(req: Request) -> Response:
+                t0 = _t_cap.monotonic()
                 if s == 204:
-                    return Response(status=204)
-                return Response.html(b) if f == "html" else Response.text(b)
+                    resp = Response(status=204)
+                else:
+                    resp = Response.html(b) if f == "html" else Response.text(b)
+                log.info("captive: %s %s %d %.1fms",
+                         req.client_addr or "?", p, s,
+                         (_t_cap.monotonic() - t0) * 1000.0)
+                return resp
             return handler
-        server.route("GET", path)(_make_handler(body, status, fmt))
+        server.route("GET", path)(_make_handler(body, status, fmt, path))
 
     # ================================================================
     # GET /api/system — system info

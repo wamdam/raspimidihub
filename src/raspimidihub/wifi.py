@@ -131,7 +131,15 @@ class WifiManager:
         return best
 
     def _render_hostapd_conf(self, ssid: str, password: str, channel: int) -> str:
-        """Build the hostapd config text without writing it."""
+        """Build the hostapd config text without writing it.
+
+        logger_syslog routes hostapd's own messages (associations,
+        deauth reasons, beacon failures) to systemd-journald so we
+        can correlate phone disconnects against the AP side. Without
+        this, hostapd -B daemonises and the events vanish — the only
+        symptom upstream is "the phone dropped" with no ground truth.
+        Module mask -1 = all subsystems; level 2 = info.
+        """
         return f"""interface={WLAN_IFACE}
 driver=nl80211
 ssid={ssid}
@@ -145,6 +153,8 @@ wpa=2
 wpa_passphrase={password}
 wpa_key_mgmt=WPA-PSK
 rsn_pairwise=CCMP
+logger_syslog=-1
+logger_syslog_level=2
 """
 
     def _render_dnsmasq_conf(self) -> str:
