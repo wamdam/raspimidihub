@@ -194,10 +194,45 @@ class DeviceRegistry:
         self._by_client: dict[int, StableDeviceInfo] = {}
         self._by_stable_id: dict[str, StableDeviceInfo] = {}
         self._custom_names: dict[str, str] = {}  # stable_id -> custom name
+        # Set of stable_ids whose CLOCK / START / STOP / CONTINUE
+        # events should NOT feed the global ClockBus. Used when more
+        # than one piece of hardware sends MIDI Clock and the user
+        # wants only one to drive the system tempo. Read on the
+        # engine's hot path (every clock tick) — keep it a set lookup.
+        self._clock_blocked: set[str] = set()
 
     def load_custom_names(self, names: dict[str, str]):
         """Load custom device names from config."""
         self._custom_names = dict(names)
+
+    def load_clock_blocked(self, stable_ids: list[str]) -> None:
+        """Restore the clock-blocked set from config at boot."""
+        self._clock_blocked = set(stable_ids or [])
+
+    def set_clock_blocked(self, stable_id: str, blocked: bool) -> None:
+        """Block (or unblock) a device's MIDI Clock from feeding the
+        ClockBus. Idempotent; survives hotplug because we key on
+        stable_id, not the volatile ALSA client_id."""
+        if blocked:
+            self._clock_blocked.add(stable_id)
+        else:
+            self._clock_blocked.discard(stable_id)
+
+    def is_clock_blocked(self, stable_id: str) -> bool:
+        return stable_id in self._clock_blocked
+
+    def is_client_clock_blocked(self, client_id: int) -> bool:
+        """Hot-path lookup used by the engine for every Clock event.
+        Returns False for unknown clients so a brand-new device that
+        plugged in before its scan finished still feeds the bus."""
+        info = self._by_client.get(client_id)
+        if info is None:
+            return False
+        return info.stable_id in self._clock_blocked
+
+    def get_clock_blocked(self) -> list[str]:
+        """Sorted list for stable JSON serialization in config."""
+        return sorted(self._clock_blocked)
 
     def scan(self, alsa_client_ids: list[int]) -> dict[int, StableDeviceInfo]:
         """Scan and register devices for the given ALSA client IDs."""

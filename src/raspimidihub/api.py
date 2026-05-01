@@ -311,6 +311,11 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
                 entry["pid"] = info.pid
                 entry["usb_path"] = info.usb_path
                 entry["is_plugin"] = info.is_plugin
+                # Hardware only — plugins never feed the bus from
+                # this gate (their feeds_clock_bus class attribute
+                # already governs them).
+                if not info.is_plugin:
+                    entry["clock_blocked"] = registry.is_clock_blocked(info.stable_id)
             entry["online"] = True
             # Add plugin instance info if this is a virtual device
             if info and info.is_plugin and engine._plugin_host:
@@ -422,6 +427,39 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
             # changes what /api/plugins/instances returns.
             _invalidate_instances_cache()
             return Response.json({"status": "renamed", "name": name})
+
+        # POST /api/devices/{client_id}/clock-source — toggle whether
+        # this device's MIDI Clock / Start / Stop feeds the global
+        # ClockBus. Body: {enabled: bool}. enabled=False adds the
+        # device's stable_id to the engine's clock-blocked set;
+        # enabled=True removes it. Persisted as `device_clock_blocked`
+        # so the choice survives reboots.
+        if path.endswith("/clock-source"):
+            try:
+                client_id = int(path[:-len("/clock-source")])
+            except ValueError:
+                return Response.error("Invalid client ID")
+
+            data = req.json
+            enabled = bool(data.get("enabled", True))
+
+            registry = engine.device_registry
+            info = registry.get_by_client(client_id)
+            if info is None:
+                return Response.not_found()
+            if info.is_plugin:
+                return Response.error(
+                    "Plugins gate clock via feeds_clock_bus, not this toggle", 400)
+
+            registry.set_clock_blocked(info.stable_id, blocked=not enabled)
+            config.data["device_clock_blocked"] = registry.get_clock_blocked()
+            await config.asave()
+            engine.mark_dirty()
+            return Response.json({
+                "status": "ok",
+                "stable_id": info.stable_id,
+                "clock_blocked": not enabled,
+            })
 
         # POST /api/devices/{client_id}/rename-port
         if path.endswith("/rename-port"):

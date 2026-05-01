@@ -774,6 +774,14 @@ class MidiEngine:
                     plugin_clients = self._plugin_host.get_plugin_client_ids()
                     is_plugin = ev.source.client in plugin_clients
                     feeds_bus = (not is_plugin) or self._plugin_host.client_feeds_clock_bus(ev.source.client)
+                    # Per-device clock veto: hardware sources the user
+                    # has unticked in the device-detail panel must not
+                    # drive the bus. Plugins already gate via
+                    # feeds_clock_bus and never appear here, so this
+                    # only narrows hardware (and self-loop plugins
+                    # never set feeds_clock_bus anyway).
+                    if feeds_bus and self._device_registry.is_client_clock_blocked(ev.source.client):
+                        feeds_bus = False
                     if ev.type == MidiEventType.CLOCK:
                         if ev.dest.port == self._monitor_port and feeds_bus:
                             self._plugin_host.clock_bus.on_clock_tick()

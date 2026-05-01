@@ -180,6 +180,13 @@ export function DeviceDetailPanel({ device, onClose, showToast, refresh, pluginD
     const swipe = useSwipeDismiss(close, panelRef);
 
     const [editName, setEditName] = useState(device.name);
+    // Per-device clock-source toggle. The engine drops Clock/Start/
+    // Stop/Continue from blocked devices before they reach the
+    // ClockBus, so a multi-clock setup can be tamed without unticking
+    // Clock/RT in every connection's filter card.
+    const [clockBlocked, setClockBlocked] = useState(!!device.clock_blocked);
+    useEffect(() => { setClockBlocked(!!device.clock_blocked); },
+              [device.client_id, device.clock_blocked]);
     const sid = device.stable_id || device.client_id;
     const _saved = useRef(JSON.parse(localStorage.getItem(`sender_${sid}`) || '{}'));
     const [sendChannel, _setSendChannel] = useState(_saved.current.ch || 0);
@@ -405,6 +412,43 @@ export function DeviceDetailPanel({ device, onClose, showToast, refresh, pluginD
                             <${SysExSenderControls}
                                 instanceId=${device.plugin_instance_id}
                                 showToast=${showToast} />`}
+                    </div>
+                `}
+
+                ${/* Per-device clock veto — hardware only, online only.
+                    Plugins gate via PluginBase.feeds_clock_bus and don't
+                    need a runtime toggle. Off = engine drops this device's
+                    Clock/Start/Stop/Continue before they reach the bus. */ ''}
+                ${!isPlugin && device.online !== false && html`
+                    <div class="card">
+                        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+                            <div style="flex:1">
+                                <div style="font-size:13px;font-weight:600">Drive system clock</div>
+                                <div style="font-size:11px;color:var(--text-dim);margin-top:2px;line-height:1.4">
+                                    Off = ignore MIDI Clock / Start / Stop from this device.
+                                    Use this when more than one source is sending clock.
+                                </div>
+                            </div>
+                            <button class="rubber-btn ${clockBlocked ? '' : 'active'}"
+                                onclick=${async () => {
+                                    const next = !clockBlocked;
+                                    setClockBlocked(next);
+                                    const r = await api(`/devices/${device.client_id}/clock-source`, {
+                                        method: 'POST',
+                                        body: JSON.stringify({ enabled: !next }),
+                                    });
+                                    if (!r || r.error) {
+                                        setClockBlocked(!next);
+                                        showToast('Failed: ' + ((r && r.error) || 'unknown'));
+                                    } else {
+                                        showToast(next ? 'Clock blocked' : 'Clock enabled');
+                                        if (refresh) refresh();
+                                    }
+                                }}>
+                                <div class="btn-led green"></div>
+                                <span class="btn-text">${clockBlocked ? 'Off' : 'On'}</span>
+                            </button>
+                        </div>
                     </div>
                 `}
 

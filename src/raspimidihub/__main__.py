@@ -269,6 +269,11 @@ async def async_main() -> None:
         if device_names:
             engine.device_registry.load_custom_names(device_names)
 
+        # Load per-device clock-source veto from config. List of
+        # stable_ids whose Clock / Start / Stop won't feed the bus.
+        engine.device_registry.load_clock_blocked(
+            config.data.get("device_clock_blocked", []))
+
         # Restore plugin instances from config BEFORE the initial scan so plugin
         # ALSA clients are visible when saved connections are applied.
         saved_plugins = config.data.get("plugins", [])
