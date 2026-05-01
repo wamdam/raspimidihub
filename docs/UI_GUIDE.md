@@ -170,6 +170,8 @@ More plugin examples:
 | MIDI Delay | Scale Remapper | CC Smoother with scopes |
 | ![Master Clock](screenshots/13-plugin-master-clock.png) | ![Hold](screenshots/22-plugin-hold.png) | ![Clock Divider](screenshots/21-plugin-clock-divider.png) |
 | Master Clock with bar counter | Hold (latch notes) | Clock Divider |
+| ![SysEx Sender](screenshots/27-plugin-sysex-sender.png) | | |
+| SysEx Sender (file picker) | | |
 
 ---
 

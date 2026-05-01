@@ -1550,6 +1550,37 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         data = engine._plugin_host.get_instance_data(instance.id)
         return Response.json(data, status=201)
 
+    @server.route("POST", "/api/plugins/instances/", exact=False)
+    async def api_plugins_instance_post(req: Request) -> Response:
+        """POST sub-resources on a plugin instance. Currently just
+        `.../sysex` — body is the raw .syx payload, gets streamed out
+        the OUT port via send_sysex() (chunked + paced). Bytes are
+        not persisted; one upload = one send."""
+        # Path format: /api/plugins/instances/<id>/<action>
+        suffix = req.path[len("/api/plugins/instances/"):].strip("/")
+        parts = suffix.split("/")
+        if len(parts) != 2 or parts[1] != "sysex":
+            return Response.error("Not found", 404)
+        instance_id = parts[0]
+        if not engine._plugin_host:
+            return Response.error("Plugin host not available", 503)
+        instance = engine._plugin_host.get_instance(instance_id)
+        if instance is None:
+            return Response.error("Instance not found", 404)
+        payload = req.body
+        if not payload:
+            return Response.error("Empty payload", 400)
+        # Run the chunked send off the asyncio loop — large dumps with
+        # 5ms gaps between 256-byte chunks can take ~1s for a 50KB
+        # bank, which would otherwise stall every other request.
+        import time as _t
+        t0 = _t.monotonic()
+        loop = asyncio.get_event_loop()
+        sent = await loop.run_in_executor(
+            None, instance.plugin.send_sysex, payload)
+        elapsed_ms = (_t.monotonic() - t0) * 1000.0
+        return Response.json({"sent": sent, "ms": round(elapsed_ms, 1)})
+
     @server.route("GET", "/api/plugins/instances/", exact=False)
     async def api_plugins_instance_get(req: Request) -> Response:
         """Get a single plugin instance config + params."""

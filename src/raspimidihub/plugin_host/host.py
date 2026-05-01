@@ -290,6 +290,10 @@ class PluginHost:
             alsa_client.send_event_at(when, MidiEventType.CONTINUE, tag=tag)
         instance.plugin._cancel_scheduled = lambda tag: alsa_client.cancel_tag(tag)
 
+        # Bulk SysEx output for the SysEx Sender plugin. Routed straight
+        # to alsa_client.send_sysex which chunks + paces the dump.
+        instance.plugin._send_sysex = alsa_client.send_sysex
+
         # Wire display output through the trailing-edge coalescer.
         # Plugins may call _notify_display rapidly (a sine-wave scope
         # sampling at any rate) — coalesced to 10 Hz per (instance,

@@ -120,6 +120,11 @@ SND_SEQ_TIME_MODE_ABS = 0x00        # bit 1 cleared = absolute (vs relative)
 SND_SEQ_REMOVE_OUTPUT = 0x02
 SND_SEQ_REMOVE_TAG_MATCH = 0x200
 
+# Variable-length payload bit. Set in ev.flags for SYSEX events whose
+# payload lives in data.ext.{len, ptr}. Without it the kernel reads
+# fixed-layout fields and the SysEx bytes never leave userspace.
+SND_SEQ_EVENT_LENGTH_VARIABLE = 0x01
+
 
 # --- snd_seq_client_info_t / snd_seq_port_info_t (opaque) ---
 
@@ -195,10 +200,22 @@ class SndSeqEventCtrl(Structure):
         ("value", c_int),
     ]
 
+class SndSeqEventExt(Structure):
+    """Variable-length payload descriptor used by SYSEX events.
+    Packed (no padding) so on 64-bit ptr sits at offset 4 and the
+    whole thing still fits the 12-byte event-data union — matches
+    ALSA's `__attribute__((packed))` snd_seq_ev_ext_t."""
+    _pack_ = 1
+    _fields_ = [
+        ("len", c_uint),
+        ("ptr", c_void_p),
+    ]
+
 class SndSeqEventData(ctypes.Union):
     _fields_ = [
         ("note", SndSeqEventNote),
         ("control", SndSeqEventCtrl),
+        ("ext", SndSeqEventExt),
         ("raw8", c_uint8 * 12),
     ]
 

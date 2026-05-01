@@ -38,6 +38,7 @@ Routing & workflow
 - Changed: All matrix interactions go through the menu (no more dual tap-or-long-press)
 
 Plugins
+- Added: SysEx Sender — pick a .syx file in the device-detail panel, bytes stream straight to the connected destination (256-byte chunks, ~5 ms gap; nothing saved)
 - Added: Clock Divider — emit one MIDI Clock for every N received (2..32)
 - Added: UI Demo — showcase of every UI control type, makes no MIDI
 - Improved: Master Clock — clock ticks pre-scheduled through the kernel queue, rock-solid 24-PPQN under load

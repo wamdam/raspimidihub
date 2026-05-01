@@ -35,6 +35,7 @@ not touched; press **Load Config** in Settings to restore it.
 | `24-controller-xy-4-config.png` | XY 4 device-detail config panel |
 | `25-controller-fx-6-config.png` | FX 6 device-detail config panel |
 | `26-controller-performance-16-config.png` | Performance 16 device-detail config panel |
+| `27-plugin-sysex-sender.png` | SysEx Sender (file picker, no params) |
 | `controller-mixer-8.png` | Mixer 8 fullscreen play surface |
 | `controller-xy-4.png` | XY 4 fullscreen play surface |
 | `controller-fx-6.png` | FX 6 fullscreen play surface |

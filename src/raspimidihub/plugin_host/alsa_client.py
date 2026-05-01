@@ -207,6 +207,49 @@ class PluginAlsaClient:
         self._alsa.snd_seq_event_output(self._handle, ctypes.pointer(ev))
         self._alsa.snd_seq_drain_output(self._handle)
 
+    def send_sysex(self, payload: bytes,
+                   chunk_size: int = 256, gap_s: float = 0.005) -> int:
+        """Stream a complete SysEx dump out the OUT port. Splits into
+        `chunk_size`-byte SYSEX events with `gap_s` seconds between
+        them so old synths' input buffers (DX7-class hardware) don't
+        overrun. ALSA bundles each chunk's bytes via the variable-
+        length payload pointer in `data.ext`. The userspace buffer
+        only needs to live until snd_seq_event_output_direct returns
+        — the kernel copies on output.
+
+        Returns the number of bytes actually fed to ALSA. The rate
+        limiter that protects the matrix from runaway plugins is
+        bypassed: a SysEx dump is one user-initiated action, not a
+        loop in a tight callback."""
+        if not payload:
+            return 0
+        from ..alsa_seq import SND_SEQ_EVENT_LENGTH_VARIABLE
+        MidiEventType = self._alsa.MidiEventType
+
+        sent = 0
+        n = len(payload)
+        i = 0
+        while i < n:
+            chunk = payload[i:i + chunk_size]
+            buf = (ctypes.c_uint8 * len(chunk)).from_buffer_copy(chunk)
+            ev = self._alsa.SndSeqEvent()
+            ev.type = MidiEventType.SYSEX
+            ev.flags = SND_SEQ_EVENT_LENGTH_VARIABLE
+            ev.source.client = self._client_id
+            ev.source.port = self._out_port
+            ev.dest.client = SND_SEQ_ADDRESS_SUBSCRIBERS
+            ev.dest.port = 0
+            ev.queue = SND_SEQ_QUEUE_DIRECT
+            ev.data.ext.len = len(chunk)
+            ev.data.ext.ptr = ctypes.cast(buf, ctypes.c_void_p)
+            self._alsa.snd_seq_event_output_direct(
+                self._handle, ctypes.pointer(ev))
+            sent += len(chunk)
+            i += chunk_size
+            if i < n:
+                time.sleep(gap_s)
+        return sent
+
     def cancel_tag(self, tag: int) -> None:
         """Remove all pending queued events from this client tagged `tag`.
         Used to undo a scheduled drop fire when the user cancels before

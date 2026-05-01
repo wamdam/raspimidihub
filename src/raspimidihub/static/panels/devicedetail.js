@@ -8,6 +8,7 @@ import { html, api, animateClose, useEscapeClose, useSwipeDismiss } from '../ui/
 import { useSSESubscription } from '../ui/sse-subscriptions.js';
 import { noteName } from '../state/constants.js';
 import { PluginConfigPanel, PluginWheel, PluginFader } from '../plugin-controls.js';
+import { SysExSenderControls } from '../components/sysexsender.js';
 import { usePluginParams } from '../ui/plugin-params.js';
 import { IconMaximize } from '../ui/icons.js';
 import { touchTs } from '../ui/storage.js';
@@ -400,6 +401,10 @@ export function DeviceDetailPanel({ device, onClose, showToast, refresh, pluginD
                             ccInputs=${pluginData.cc_inputs}
                             displayOutputs=${pluginData.display_outputs}
                             displayValues=${displayValues} />
+                        ${pluginData.type === 'sysex_sender' && html`
+                            <${SysExSenderControls}
+                                instanceId=${device.plugin_instance_id}
+                                showToast=${showToast} />`}
                     </div>
                 `}
 

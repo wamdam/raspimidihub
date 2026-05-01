@@ -45,7 +45,7 @@ See all screenshots in [docs/screenshots/](docs/screenshots/) and the full [UI G
 - **Loop prevention** and **multi-port devices** fully supported
 
 ### Virtual Instruments and Plugins
-- **14 built-in plugins** that appear as routable MIDI devices
+- **15 built-in plugins** that appear as routable MIDI devices
 - **Plugins start unconnected** -- route them manually for precise control
 - **Custom UI controls** -- wheels, faders, knobs, XY pads, toggles, step editors, curve editors, scopes, meters
 - **MIDI clock sync** -- plugins can sync to external clock or generate their own
@@ -70,6 +70,7 @@ See all screenshots in [docs/screenshots/](docs/screenshots/) and the full [UI G
 | Note Transpose | Shifts all notes up or down by semitones |
 | Panic Button | Momentary trigger -- All Notes Off; second tap upgrades to All Sound Off |
 | Scale Remapper | Quantizes notes to a scale (major, minor, pentatonic, blues, ...) with labeled root selector |
+| SysEx Sender | Upload a .syx file in the panel; bytes stream straight to the destination (256-byte chunks, ~5 ms gap; nothing saved) |
 | Velocity Curve | Drawable 128-point velocity response curve with shape presets |
 | Velocity Equalizer | Normalize velocity to a fixed value or compress the range |
 

@@ -65,6 +65,8 @@ class PluginHarness:
         plugin._send_start = lambda: self.sent.append(("start",))
         plugin._send_stop = lambda: self.sent.append(("stop",))
         plugin._send_continue = lambda: self.sent.append(("continue",))
+        plugin._send_sysex = lambda payload: (
+            self.sent.append(("sysex", bytes(payload))) or len(payload))
         plugin._notify_param_change = lambda iid, name, val: None
         plugin._notify_display = lambda name, val: None
 

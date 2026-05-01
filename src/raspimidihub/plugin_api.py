@@ -553,6 +553,10 @@ class PluginBase:
         self._send_stop_at = None
         self._send_continue_at = None
         self._cancel_scheduled = None
+        # Bulk SysEx output. Set by the host; the SysEx Sender plugin
+        # uses this to stream a user-uploaded .syx file out the OUT port.
+        # Returns the byte count actually transmitted.
+        self._send_sysex = None
         self._notify_param_change = None  # callback to notify UI of param update
         self._notify_display = None  # callback to push display updates to UI
 
@@ -709,6 +713,15 @@ class PluginBase:
         """Send MIDI Clock tick (24 PPQ)."""
         if self._send_clock:
             self._send_clock()
+
+    def send_sysex(self, payload: bytes) -> int:
+        """Stream a complete SysEx message out the OUT port. Bytes
+        are chunked + paced inside the host so old synths' input
+        buffers don't overrun. Returns bytes transmitted (0 if no
+        host hook is wired)."""
+        if self._send_sysex:
+            return self._send_sysex(payload)
+        return 0
 
     def send_start(self) -> None:
         """Send MIDI Start (transport)."""
