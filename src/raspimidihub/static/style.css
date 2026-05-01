@@ -51,6 +51,11 @@ body {
     z-index: 10;
 }
 .header h1 { font-size: 16px; font-weight: 600; }
+.header-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
 .header .status {
     font-size: 12px;
     color: var(--text-dim);
@@ -58,6 +63,41 @@ body {
 .header .status.ok { color: var(--success); }
 .header .status.warn { color: var(--warn); }
 .header .status.err { color: var(--error); }
+
+/* Stale-build indicator — small red dot next to "RaspiMIDIHub" that
+   appears only when the server's build token has moved since this
+   tab loaded. Click anywhere on the dot triggers hardReload. */
+.stale-dot {
+    display: inline-block;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--danger, #d33);
+    margin-left: 8px;
+    cursor: pointer;
+    vertical-align: middle;
+    box-shadow: 0 0 6px rgba(211, 51, 51, 0.5);
+    animation: stale-pulse 1.4s ease-in-out infinite;
+}
+@keyframes stale-pulse {
+    0%, 100% { opacity: 1;   transform: scale(1); }
+    50%      { opacity: 0.55; transform: scale(0.85); }
+}
+
+/* Fullscreen toggle. Sits to the right of the device-count text. */
+.fullscreen-btn {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    cursor: pointer;
+    padding: 2px 4px;
+    display: inline-flex;
+    align-items: center;
+    line-height: 1;
+}
+.fullscreen-btn:hover, .fullscreen-btn:active {
+    color: var(--text);
+}
 
 /* --- Main content --- */
 .main {

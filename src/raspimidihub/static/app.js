@@ -14,7 +14,7 @@ import { useState, useEffect, useRef, useCallback } from './lib/hooks.module.js'
 import { html, api, useSSE, Toast, MidiBar, hardReload } from './ui/common.js';
 import { ContextMenu } from './ui/contextmenu.js';
 import { setSSEConnectionId, useSSESubscription } from './ui/sse-subscriptions.js';
-import { IconRouting, IconController, IconPreset, IconSettings } from './ui/icons.js';
+import { IconRouting, IconController, IconPreset, IconSettings, IconFullscreen, IconFullscreenExit } from './ui/icons.js';
 import { runStorageCleanup } from './ui/storage.js';
 import { useRouter } from './ui/router.js';
 import { noteName } from './state/constants.js';
@@ -24,9 +24,10 @@ import { ControllerPage } from './pages/controller.js';
 import { PresetsPage } from './pages/presets.js';
 import { SettingsPage } from './pages/settings.js';
 
-// Header badge: "v2.0.9·a1b2c3d4" plus a "stale, reload" warning when
-// the loaded JS bundle's build token differs from the server's current
-// one. Lets the user verify they're running fresh code at a glance.
+// Header badge: "RaspiMIDIHub [● if stale] v2.0.9·a1b2c3d4". The red
+// dot is the only visual when the loaded JS bundle's build token
+// differs from the server's current one — clicking it triggers
+// hardReload, same as the old "stale, reload" link did.
 function VersionBadge({ version, loadedBuild, serverBuild }) {
     if (!version) return html`<h1>RaspiMIDIHub</h1>`;
     // loadedBuild looks like "2.0.9-69ee5610" (?v=<version>-<token>);
@@ -34,14 +35,49 @@ function VersionBadge({ version, loadedBuild, serverBuild }) {
     // compare apples to apples.
     const loadedToken = loadedBuild ? loadedBuild.split('-').pop() : '';
     const stale = serverBuild && loadedToken && serverBuild !== loadedToken;
-    return html`<h1>RaspiMIDIHub
+    return html`<h1>RaspiMIDIHub${stale ? html`<span class="stale-dot"
+            title="Server has been redeployed since this tab loaded — tap to reload"
+            onclick=${hardReload}></span>` : ''}
         <span style="font-size:11px;font-weight:400;color:var(--text-dim);margin-left:10px">
             v${version}${loadedToken ? '·' + loadedToken : ''}
-            ${stale ? html`<span style="color:#f80;cursor:pointer;margin-left:6px"
-                title="Server has been redeployed since this tab loaded — click to reload"
-                onclick=${hardReload}>· stale, reload</span>` : ''}
         </span>
     </h1>`;
+}
+
+// Fullscreen toggle in the header. Uses the standard Fullscreen API
+// — works on Android Chrome / Firefox / Edge, no-op on iOS Safari
+// (which only supports fullscreen on <video>; iPhone users get
+// edge-to-edge via the PWA "Add to Home Screen" path instead).
+// Tracks document.fullscreenElement so the icon flips when the
+// user exits via the system gesture (e.g. swipe-down on Android).
+function FullscreenButton() {
+    const [isFs, setIsFs] = useState(
+        typeof document !== 'undefined' && !!document.fullscreenElement);
+    useEffect(() => {
+        const onChange = () => setIsFs(!!document.fullscreenElement);
+        document.addEventListener('fullscreenchange', onChange);
+        return () => document.removeEventListener('fullscreenchange', onChange);
+    }, []);
+    const toggle = async () => {
+        try {
+            if (document.fullscreenElement) {
+                await document.exitFullscreen();
+            } else if (document.documentElement.requestFullscreen) {
+                await document.documentElement.requestFullscreen();
+            }
+        } catch {}
+    };
+    // Hide entirely on browsers without the API (iOS Safari) so we
+    // don't ship a button that does nothing.
+    if (typeof document === 'undefined'
+            || !document.documentElement.requestFullscreen) {
+        return null;
+    }
+    return html`<button class="fullscreen-btn"
+        title=${isFs ? 'Exit fullscreen' : 'Enter fullscreen'}
+        onclick=${toggle}>
+        ${isFs ? IconFullscreenExit : IconFullscreen}
+    </button>`;
 }
 
 function App() {
@@ -337,7 +373,10 @@ function App() {
     return html`
         <div class="header">
             <${VersionBadge} version=${version} loadedBuild=${loadedBuild} serverBuild=${serverBuild} />
-            <span class="status ${sseConnected ? (devices.length > 0 ? 'ok' : '') : 'err'}">${sseConnected ? `${devices.length} device${devices.length !== 1 ? 's' : ''}` : 'Connection lost'}</span>
+            <div class="header-right">
+                <span class="status ${sseConnected ? (devices.length > 0 ? 'ok' : '') : 'err'}">${sseConnected ? `${devices.length} device${devices.length !== 1 ? 's' : ''}` : 'Connection lost'}</span>
+                <${FullscreenButton} />
+            </div>
         </div>
         ${configFallback && html`<div class="banner">Config unreadable — using default all-to-all routing. Save to fix.</div>`}
         <div class="main ${showMidiBar ? 'with-midi-bar' : ''}">${page}</div>
