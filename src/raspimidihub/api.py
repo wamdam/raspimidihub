@@ -1142,10 +1142,14 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
 
         fetcher = UpdateFetcher(wifi, config)
 
+        include_pre = bool(
+            config.data.get("updates", {}).get("include_prereleases", False))
+
         async def run_orchestrator():
             try:
                 await fetcher.run(
-                    lambda: download_newer_releases(__version__),
+                    lambda: download_newer_releases(
+                        __version__, include_prereleases=include_pre),
                     version_label="check",
                 )
             except NoInternetError:
@@ -1162,11 +1166,28 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
     @server.route("GET", "/api/system/versions")
     async def api_system_versions(req: Request) -> Response:
         """List stored debs (newest first) plus the running version so
-        the UI can mark which one's currently installed."""
+        the UI can mark which one's currently installed. Also returns
+        the prerelease-channel toggle so the Settings card can render
+        its state without a separate fetch."""
         return Response.json({
             "running": __version__,
             "stored": list_stored_versions(),
+            "include_prereleases": bool(
+                config.data.get("updates", {}).get("include_prereleases", False)),
         })
+
+    @server.route("POST", "/api/system/include-prereleases")
+    async def api_set_include_prereleases(req: Request) -> Response:
+        """Toggle whether `download_newer_releases` considers GitHub
+        releases marked as prerelease (alpha / beta tags). Persists in
+        config.data["updates"]["include_prereleases"]; takes effect on
+        the next check-update click — does not retroactively download
+        previously-skipped prereleases."""
+        enabled = bool(req.json.get("enabled", False))
+        updates_cfg = config.data.setdefault("updates", {})
+        updates_cfg["include_prereleases"] = enabled
+        await config.asave()
+        return Response.json({"status": "ok", "include_prereleases": enabled})
 
     @server.route("POST", "/api/system/install")
     async def api_system_install(req: Request) -> Response:

@@ -40,7 +40,7 @@ import re
 import subprocess
 import time
 import urllib.request
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Iterable
 from pathlib import Path
 from typing import Any
 
@@ -196,13 +196,19 @@ def _rw_rootfs():
                        check=False, capture_output=True, timeout=5)
 
 
+# Accept an optional alpha/beta tag after the patch number — e.g.
+# 3.0.0a, 3.0.0a1, 3.0.0b2 — so prereleases land in the stored list
+# and get parsed by parse_version (which sorts them below the
+# matching plain version).
 _DEB_NAME_RE = re.compile(
-    r"^raspimidihub_(?P<ver>[0-9]+\.[0-9]+\.[0-9]+)-(?P<rev>\d+)_all\.deb$"
+    r"^raspimidihub_(?P<ver>[0-9]+\.[0-9]+\.[0-9]+[a-z0-9]*)-(?P<rev>\d+)_all\.deb$"
 )
 
 
-def _version_tuple(version: str) -> tuple[int, ...]:
-    return tuple(int(p) for p in version.split(".") if p.isdigit())
+def _version_tuple(version: str) -> tuple:
+    """Sort key for `list_stored_versions`. Delegates to parse_version
+    so 2.0.9 < 3.0.0a < 3.0.0 — same ordering the update-check uses."""
+    return parse_version(version)
 
 
 def list_stored_versions() -> list[dict[str, Any]]:
@@ -236,16 +242,26 @@ def list_stored_versions() -> list[dict[str, Any]]:
     return out
 
 
-def prune_stored(keep: int = KEEP_VERSIONS) -> list[str]:
+def prune_stored(keep: int = KEEP_VERSIONS,
+                 protect: Iterable[str] = ()) -> list[str]:
     """Delete all but the N newest stored debs (and their changelogs).
+    Versions listed in `protect` are kept regardless of position —
+    used so the running version always survives prune (otherwise a
+    user who's upgraded N+1 times can no longer one-tap-rollback to
+    the version they're currently running).
+
     Returns the removed deb names. Wrapped in rw remount because
     UPDATES_DIR is on the read-only rootfs."""
     versions = list_stored_versions()
-    if len(versions) <= keep:
+    protect_set = set(protect)
+    keep_set = {v["version"] for v in versions[:keep]} | protect_set
+    if all(v["version"] in keep_set for v in versions):
         return []
     removed: list[str] = []
     with _rw_rootfs():
-        for entry in versions[keep:]:
+        for entry in versions:
+            if entry["version"] in keep_set:
+                continue
             deb = Path(entry["deb_path"])
             cl = deb.with_suffix(".changelog.md")
             for p in (deb, cl):
@@ -254,8 +270,8 @@ def prune_stored(keep: int = KEEP_VERSIONS) -> list[str]:
                 except OSError:
                     pass
             removed.append(entry["deb_name"])
-    log.info("Pruned %d old deb(s) from %s (kept newest %d): %s",
-             len(removed), UPDATES_DIR, keep, removed)
+    log.info("Pruned %d old deb(s) from %s (kept newest %d, protected %s): %s",
+             len(removed), UPDATES_DIR, keep, sorted(protect_set), removed)
     return removed
 
 
@@ -524,7 +540,9 @@ class UpdateFetcher:
 
 # --- Concrete work callable: fetch + download newer releases ---------------
 
-async def download_newer_releases(current_version: str) -> dict[str, Any]:
+async def download_newer_releases(current_version: str,
+                                   include_prereleases: bool = False
+                                   ) -> dict[str, Any]:
     """Async work the orchestrator runs once internet is reachable.
 
     Pulls the GitHub releases list, downloads every release strictly
@@ -532,12 +550,20 @@ async def download_newer_releases(current_version: str) -> dict[str, Any]:
     prunes back to KEEP_VERSIONS. Each step writes a status breadcrumb
     so the UI poll can show precise progress.
 
+    `include_prereleases` controls whether GitHub prereleases (alpha /
+    beta tags) are eligible for download. Default False — the stable
+    channel — matches how Chrome / Firefox separate channels.
+
+    Always ensures the running version's own deb stays on disk (and
+    survives prune) so a one-tap rollback is possible after upgrade.
+
     Designed to be passed into `UpdateFetcher.run()`:
-        await fetcher.run(lambda: download_newer_releases(__version__))
+        await fetcher.run(lambda: download_newer_releases(
+            __version__, include_prereleases=cfg["include_prereleases"]))
     """
     loop = asyncio.get_event_loop()
-    log.info("download_newer_releases: current=%s, fetching list...",
-             current_version)
+    log.info("download_newer_releases: current=%s prereleases=%s, fetching list...",
+             current_version, include_prereleases)
     write_status({"step": "fetching-release-list"})
     releases = await loop.run_in_executor(None, fetch_github_releases)
     current = parse_version(current_version)
@@ -545,9 +571,34 @@ async def download_newer_releases(current_version: str) -> dict[str, Any]:
     log.info("download_newer_releases: %d already on disk: %s",
              len(stored_versions), sorted(stored_versions))
 
+    # Rollback insurance: the user can switch back to the running
+    # version only if its deb is on disk. After a fresh install via
+    # apt the deb may not be in /var/lib/raspimidihub/updates/ yet —
+    # download it once on the next check. No-op on subsequent checks.
+    if current_version not in stored_versions:
+        for rel in releases:
+            if rel["version"] == current_version:
+                log.info("  v%s: downloading (running version, for rollback)",
+                         current_version)
+                dest = UPDATES_DIR / f"raspimidihub_{current_version}-1_all.deb"
+                write_status({"step": "downloading", "version": current_version})
+                ok, err = await loop.run_in_executor(
+                    None, download_release,
+                    rel["deb_url"], dest, rel["changelog"])
+                if ok:
+                    stored_versions.add(current_version)
+                else:
+                    log.warning("  v%s: rollback-deb download failed: %s",
+                                current_version, err)
+                break
+
     newly_downloaded: list[str] = []
     for rel in releases:
         ver = rel["version"]
+        if rel.get("prerelease") and not include_prereleases:
+            log.info("  v%s: skipping (prerelease; include_prereleases=False)",
+                     ver)
+            continue
         if parse_version(ver) <= current:
             log.info("  v%s: skipping (not newer than current v%s)",
                      ver, current_version)
@@ -568,7 +619,7 @@ async def download_newer_releases(current_version: str) -> dict[str, Any]:
             continue
         newly_downloaded.append(ver)
 
-    pruned = prune_stored()
+    pruned = prune_stored(protect=[current_version])
     log.info("download_newer_releases: result newly_downloaded=%s pruned=%s",
              newly_downloaded, pruned)
     return {

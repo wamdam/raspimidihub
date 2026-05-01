@@ -281,6 +281,28 @@ function VersionsCard({ showToast, onUpdatingChange }) {
                     onclick=${checkForUpdates} disabled=${checking || installing}>
                     ${checking ? 'Checking...' : 'Check GitHub for newer versions'}
                 </button>
+                <label style="display:flex;align-items:center;gap:8px;margin-top:8px;font-size:12px;color:var(--text-dim);cursor:pointer">
+                    <input type="checkbox"
+                        checked=${!!versions.include_prereleases}
+                        onchange=${async (e) => {
+                            const enabled = e.target.checked;
+                            try {
+                                const r = await fetch('/api/system/include-prereleases', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ enabled }),
+                                });
+                                if (!r.ok) throw new Error(await r.text());
+                                refresh();
+                                showToast(enabled
+                                    ? 'Alpha / beta releases will be included'
+                                    : 'Stable releases only');
+                            } catch (err) {
+                                showToast('Failed: ' + (err.message || err));
+                            }
+                        }} />
+                    Include alpha / beta releases
+                </label>
                 ${(statusMsg || statusErr) && html`
                     <p data-testid="update-status" style="font-size:13px;margin-top:8px;text-align:center;font-weight:500;${statusErr ? 'color:var(--danger)' : 'color:var(--warn)'}">
                         ${statusErr || statusMsg}
