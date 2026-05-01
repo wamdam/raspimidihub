@@ -12,8 +12,10 @@ import threading
 import time
 
 from raspimidihub.plugin_api import (
+    Button,
     Group,
     Knob,
+    NoteSelect,
     PluginBase,
     Radio,
     StepEditor,
@@ -60,17 +62,37 @@ Set offsets to create melodic variations on each step.
 Set some steps off to create rhythmic gaps.
 
 Sync: Free=internal BPM, Tempo=external clock, Transport=clock+Start/Stop.
-Gate % = note length (100=legato, 10=staccato)."""
+Gate % = note length (100=legato, 10=staccato).
+
+Trigger Note: when on, MIDI notes from `Base` upward set the rate
+live. Base = first rate (4/1), Base+1 semitone = 4/1T, +2 = 2/1, …
+covering all 15 rates. Trigger notes are consumed — they don't get
+arpeggiated. Pick a Base outside your playing range (default C1).
+Use MIDI Learn on the Base wheel to capture from a controller."""
+
+    # Single source of truth for the rate Radio's options AND the
+    # rate-trigger note→rate mapping. Index N in this list is the rate
+    # selected when (note - rate_base) == N.
+    _RATE_OPTIONS = [
+        "4/1", "4/1T", "2/1", "2/1T", "1/1", "1/1T",
+        "1/2", "1/2T", "1/4", "1/4T", "1/8", "1/8T",
+        "1/16", "1/16T", "1/32",
+    ]
 
     params = [
         Group("Pattern", [
             Radio("pattern", "Pattern", ["up", "down", "up-down", "random", "as-played"],
                   default="up"),
-            Radio("rate", "Rate",
-                  ["4/1", "4/1T", "2/1", "2/1T", "1/1", "1/1T",
-                   "1/2", "1/2T", "1/4", "1/4T", "1/8", "1/8T",
-                   "1/16", "1/16T", "1/32"],
-                  default="1/8"),
+            # Live-rate trigger: when enabled, a MIDI note in the
+            # [rate_base, rate_base + len(_RATE_OPTIONS)) range sets
+            # the Rate radio without being arpeggiated. Hit MIDI Learn
+            # on the Base wheel and play the lowest rate-trigger key
+            # to capture; the next 14 semitones cover the remaining
+            # rates in the order they appear in the radio below.
+            Button("rate_trigger", "Trigger Note", default=False, color="green"),
+            NoteSelect("rate_base", "Base", default=24,  # C1 — well below
+                       visible_when=("rate_trigger", True)),  # most playing ranges
+            Radio("rate", "Rate", _RATE_OPTIONS, default="1/8"),
         ]),
         Group("Steps", [
             Wheel("step_count", "Steps", min=1, max=32, default=8),
@@ -89,7 +111,9 @@ Gate % = note length (100=legato, 10=staccato)."""
     cc_inputs = {74: "rate", 75: "gate"}
     cc_outputs = []
 
-    inputs = ["Notes", "CC#74 (rate)", "CC#75 (gate)", "Clock", "Aftertouch", "Pitch Bend"]
+    inputs = ["Notes", "CC#74 (rate)", "CC#75 (gate)",
+              "Notes in [Base, Base+15) when Trigger Note is on (sets Rate)",
+              "Clock", "Aftertouch", "Pitch Bend"]
     outputs = ["Notes (arpeggiated)", "Aftertouch (pass-through)", "Pitch Bend (pass-through)"]
 
     clock_divisions = [
@@ -136,7 +160,31 @@ Gate % = note length (100=legato, 10=staccato)."""
             self._transport_playing = False
             self._silence_all()
 
+    def _rate_trigger_index(self, note: int) -> int | None:
+        """Return rate-table index N if `note` is the Nth semitone of
+        the rate-trigger range, else None. The trigger feature is
+        opt-in via the Pattern group's "Trigger Note" toggle; when
+        off, this always returns None and notes flow into the arp
+        normally."""
+        if not self.get_param("rate_trigger"):
+            return None
+        base = self.get_param("rate_base")
+        if base is None:
+            return None
+        idx = note - int(base)
+        if 0 <= idx < len(self._RATE_OPTIONS):
+            return idx
+        return None
+
     def on_note_on(self, channel, note, velocity):
+        # Rate trigger notes are consumed: they set the Rate radio and
+        # do NOT join the held-notes set, so the trigger range can't
+        # be accidentally arpeggiated. set_param broadcasts the change
+        # to the UI via SSE so the user sees the radio flip live.
+        idx = self._rate_trigger_index(note)
+        if idx is not None:
+            self.set_param("rate", self._RATE_OPTIONS[idx])
+            return
         with self._lock:
             self._held_notes.append((note, velocity, channel))
             self._sorted_notes = sorted(self._held_notes, key=lambda x: x[0])
@@ -149,6 +197,10 @@ Gate % = note length (100=legato, 10=staccato)."""
                     self._start_free_runner()
 
     def on_note_off(self, channel, note):
+        # Symmetric: trigger-range note-offs are also consumed, so the
+        # held-notes list never sees them at all.
+        if self._rate_trigger_index(note) is not None:
+            return
         with self._lock:
             self._held_notes = [(n, v, c) for n, v, c in self._held_notes if n != note]
             self._sorted_notes = sorted(self._held_notes, key=lambda x: x[0])
