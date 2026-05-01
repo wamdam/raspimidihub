@@ -6,13 +6,15 @@ case "$1" in
         # Reload udev rules
         udevadm control --reload-rules 2>/dev/null || true
 
-        # Unmask hostapd (Debian masks it by default) and stop default dnsmasq
-        # Our service manages these itself
-        systemctl unmask hostapd 2>/dev/null || true
-        systemctl disable hostapd 2>/dev/null || true
+        # Unmask hostapd (Debian masks it by default) and disable +
+        # stop hostapd / dnsmasq — our service manages these itself.
+        # `--no-reload` per op + the single daemon-reload below
+        # collapses the per-call "Synchronizing state of …" noise.
+        systemctl --no-reload unmask hostapd 2>/dev/null || true
+        systemctl --no-reload disable hostapd 2>/dev/null || true
         systemctl stop hostapd 2>/dev/null || true
         systemctl stop dnsmasq 2>/dev/null || true
-        systemctl disable dnsmasq 2>/dev/null || true
+        systemctl --no-reload disable dnsmasq 2>/dev/null || true
 
         # Set hostname for mDNS discovery (raspimidihub.local)
         if [ "$(hostname)" != "raspimidihub" ]; then

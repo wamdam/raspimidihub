@@ -104,16 +104,30 @@ SERVICES_TO_DISABLE=(
 disable_services() {
     log "Pass 1/2: disabling services + timers that don't contribute to MIDI"
     local disabled=0 skipped=0
+    # `--no-reload` per disable + a single trailing daemon-reload
+    # below cuts dpkg-install noise dramatically: each plain
+    # `disable --now` would fire the SysV compat shim and print a
+    # "Synchronizing state of <unit>.service ..." block, so disabling
+    # 10 services produced 10 such blocks during install. With
+    # --no-reload we batch the symlink updates and reload once.
+    local need_reload=false
     for unit in "${SERVICES_TO_DISABLE[@]}"; do
         # `systemctl is-enabled` returns 0 only when the unit is
         # actually enabled; missing units exit non-zero. We skip
         # silently in that case.
-        if systemctl is-enabled --quiet "$unit" 2>/dev/null \
-                || systemctl is-active --quiet "$unit" 2>/dev/null; then
+        local was_active=false
+        if systemctl is-active --quiet "$unit" 2>/dev/null; then
+            was_active=true
+        fi
+        if systemctl is-enabled --quiet "$unit" 2>/dev/null || $was_active; then
             if $DRY_RUN; then
                 log "Would disable + stop $unit"
             else
-                systemctl disable --now "$unit" >/dev/null 2>&1 || true
+                systemctl --no-reload disable "$unit" >/dev/null 2>&1 || true
+                if $was_active; then
+                    systemctl stop "$unit" >/dev/null 2>&1 || true
+                fi
+                need_reload=true
                 log "disabled $unit"
             fi
             disabled=$((disabled + 1))
@@ -121,6 +135,9 @@ disable_services() {
             skipped=$((skipped + 1))
         fi
     done
+    if $need_reload && ! $DRY_RUN; then
+        systemctl daemon-reload
+    fi
     log "$disabled disabled, $skipped already inactive / not installed"
 }
 
