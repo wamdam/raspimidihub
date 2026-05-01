@@ -168,12 +168,8 @@ function App() {
             setConfigDirty(!!data.dirty);
         }
         if (type === 'midi-activity') {
-            // Track clock sources regardless of connections
-            if (data.event === 'Clock') {
-                setClockSources(prev => ({...prev, [data.src_client]: Date.now()}));
-                return;
-            }
-
+            // Clock is no longer broadcast as midi-activity (server
+            // sends clock-quarter at 1/24 the rate; see __main__).
             // Only show non-clock events from devices that have active connections
             const hasConn = connectionsRef.current.some(c => c.src_client === data.src_client);
             if (!hasConn) return;
@@ -208,7 +204,15 @@ function App() {
             }));
         }
         if (type === 'clock-quarter') {
+            // Both maps key on src_client. clockQuarters drives the
+            // pulse (re-keying the icon retriggers its CSS animation
+            // every quarter), clockSources gates whether the icon
+            // shows at all + flips the multi-clock warning colour.
+            // We populate both from clock-quarter because clock
+            // midi-activity is suppressed for SSE-traffic reasons
+            // (see __main__.on_midi_event).
             setClockQuarters(prev => ({ ...prev, [data.src_client]: Date.now() }));
+            setClockSources(prev => ({ ...prev, [data.src_client]: Date.now() }));
         }
         if (type === 'clock-position') {
             const now = Date.now();
