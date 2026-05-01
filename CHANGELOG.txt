@@ -4,7 +4,12 @@ User-visible changes. Short tagged one-liners, no code or commit
 hashes. Tags: Added, Improved, Fix, Changed, Removed.
 
 
-2.1 — Unreleased
+2026-05-01 — Version 3.0.0a (alpha)
+
+Major release. Controllers, drop buttons, ALSA queue scheduling, USB
+tethering, in-app updates, per-device clock vetoes, hostapd via
+systemd, and a SysEx Sender plugin. Entry-level alpha to flush out
+the upgrade path before tagging a final 3.0.0.
 
 Controllers
 - Added: Controller tab in the top nav — fullscreen play surface, swipe / arrow / dropdown to switch between instances, last-viewed remembered
@@ -35,6 +40,10 @@ Routing & workflow
 - Improved: Load Config only reapplies what changed; unrelated routing keeps flowing
 - Improved: Multi-tab — several phones / browsers can be open at once without one being pushed out
 - Improved: MIDI monitor on a destination device (e.g. Mixer 8) shows incoming events from upstream devices
+- Improved: Bottom-nav Routing asterisk skips Controller live-play state — fader / knob / XY moves and drop-button fires don't dirty the config; only cell rename, rebind, drop button settings, captured snapshots, theme do
+- Added: Per-device clock veto — every hardware device's detail panel has a "Drive system clock" toggle; off = engine drops Clock / Start / Stop / Continue from that source before they reach the bus, so multiple clock sources can be tamed without unticking Clock/RT in every connection's filter
+- Added: Matrix clock indicator — 3-state (sole green / multi orange / blocked dim grey) so a configured-out clock source is still visible but obviously not driving the bus
+- Fix: Engine re-subscribes the monitor port after CLIENT_EXIT/CLIENT_START hotplug — devices that re-enumerated with the same client id (typical for Elektron over USB) silently disappeared from the rate meter, clock indicator, and MIDI activity bar; audio path was unaffected because direct kernel subscriptions stayed up
 - Changed: All matrix interactions go through the menu (no more dual tap-or-long-press)
 
 Plugins
@@ -55,6 +64,8 @@ WiFi, updates & networking
 - Added: Update progress UI — live status, "we're alive" hopping dot, "reconnect to AP" help after 90 s of failed polls
 - Improved: "Reload App" + "stale, reload" reliably picks up the new build on phones (was getting stuck on Safari bf-cache)
 - Changed: Settings WiFi card consolidated — one panel with status badge, mode-pref radio, Home WiFi and AP password rows
+- Changed: hostapd now runs as raspimidihub-hostapd.service (systemd) instead of subprocess.Popen + taskset + -B daemonise — cleaner stderr → journald capture under its own unit, automatic Restart=on-failure, CPU pin via CPUAffinity drop-in (still 0–2, leaves CPU 3 to the asyncio loop)
+- Added: Captive-portal probe access log + hostapd syslog routing — every /generate_204 etc. hit logs path + client IP + response time; hostapd associate / deauth events land in the journal under raspimidihub-hostapd.service so phone-disconnect post-mortems are possible
 - Fix: AP service restart heals "no AP" / "two hostapds racing" states
 - Fix: First hostapd spawn that loses the race against NetworkManager retries automatically
 - Fix: Pi 3 WiFi power-save quirk — phones can re-associate cleanly after a client→AP cycle
@@ -65,9 +76,10 @@ System & performance
 - Improved: Heavy-controller load — 4 LaunchControl faders into Mixer 8 used to pin CPU at 100+ %; now ~80 % with single-digit-ms lag and zero SSE backlog
 - Improved: SSE traffic cut roughly in half (clock dedup, plugin display throttle, ui_demo scope/meter halved)
 - Improved: SSE connections clean up immediately when a tab closes (was waiting up to 30 s for the next heartbeat)
-- Improved: System prepare on install disables services that contribute nothing to a single-purpose MIDI appliance (Bluetooth, ModemManager, cloud-init, cron, …)
+- Improved: System prepare on install disables services that contribute nothing to a single-purpose MIDI appliance (Bluetooth, ModemManager, cloud-init, cron, ntpsec / systemd-timesyncd, …)
+- Improved: System prepare wraps service-disable + drop-in writes in a remount-rw / remount-ro pair — without it, `systemctl disable --now` was failing silently on the rosetup-managed read-only root because the SysV-init compat shim tries to update /etc/init.d/, leaving the unit "disabled" in our log but actually still running. Several service-disable entries (cloud-init, NTP, …) only actually take effect now
+- Removed: rosetup deb's `Recommends: ntpsec` so a fresh install doesn't pull NTP in just to immediately disable it
 - Added: Settings stats — Loop lag, MIDI in→out and Control in→MIDI out latency probes, process CPU %, SSE / sec, SSE backlog
-- Added: Top-bar version badge with a "stale, reload" link when the server has been redeployed
 - Added: Knob / wheel tick sounds toggle (Display section)
 
 UI building blocks
@@ -82,6 +94,7 @@ UI building blocks
 - Improved: Meter — read-only green-LED knob instead of a flat bar
 - Improved: Cell config (Controller edit mode) — one card per cell with type / name / Ch / CC / Learn / On / Off
 - Improved: Matrix clock indicator — pulses with the source's quarter notes
+- Changed: Top-bar redesign — version + token stays in dim text, the old "stale, reload" inline link becomes a small pulsing red dot next to "RaspiMIDIHub" (tap = same hardReload), and a fullscreen toggle button sits to the right of "n devices" (uses the standard Fullscreen API, hides on iOS Safari which only supports it on <video>)
 - Changed: Switch toggles unified into LED buttons (green = on, red = destructive)
 - Fix: Vertical fader fill no longer overshoots the rounded top at max
 - Fix: Plugin panel — turning a wheel / knob no longer slides the panel away
