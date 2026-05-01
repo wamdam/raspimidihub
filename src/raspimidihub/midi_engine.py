@@ -287,26 +287,34 @@ class MidiEngine:
         self._active_notes.clear()
 
     def _update_monitor_subscriptions(self) -> None:
-        """Subscribe monitor port to all device output ports for MIDI activity UI."""
+        """Subscribe monitor port to all device output ports for MIDI activity UI.
+
+        Always re-issues `snd_seq_subscribe_port` rather than relying on
+        `_monitored_clients` as a cache of "is this client subscribed?".
+        Reason: when a device hot-plugs (CLIENT_EXIT followed by
+        CLIENT_START with the same numeric client id — typical for an
+        Elektron over USB) the kernel destroys our subscription at
+        CLIENT_EXIT but the rescan that runs after the start sees the
+        device is "still" in `_monitored_clients` and skips. Result:
+        clock-quarter SSE / rate meter / clock indicator silently stop
+        showing that device. The kernel returns EBUSY on a duplicate
+        subscribe which we already swallow, so just always try."""
         if self._monitor_port < 0 or not self._seq:
             return
 
-        # Unsubscribe from devices that are gone
-        for client_id in list(self._monitored_clients):
-            if client_id not in {d.client_id for d in self._devices}:
-                self._monitored_clients.discard(client_id)
+        live_clients = {d.client_id for d in self._devices}
+        # Drop bookkeeping for devices that are gone, so the set doesn't
+        # grow without bound across hotplugs.
+        self._monitored_clients &= live_clients
 
-        # Subscribe to new devices
         for dev in self._devices:
-            if dev.client_id in self._monitored_clients:
-                continue
             for port in dev.input_ports:  # input = produces MIDI data
                 try:
                     self._seq.subscribe(dev.client_id, port.port_id,
                                         self._seq.client_id, self._monitor_port)
-                    self._monitored_clients.add(dev.client_id)
                 except OSError:
-                    pass
+                    pass  # already subscribed (EBUSY) — re-attempt is harmless
+                self._monitored_clients.add(dev.client_id)
 
     def _snapshot_live_state(self) -> tuple[list[dict], dict[str, dict]]:
         """Capture current connections + filters/mappings before teardown."""
