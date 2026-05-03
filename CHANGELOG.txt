@@ -4,13 +4,19 @@ User-visible changes. Short tagged one-liners, no code or commit
 hashes. Tags: Added, Improved, Fix, Changed, Removed.
 
 
-2026-05-03 — Version 3.0.0
+2026-05-03 — Version 3.0.1
 
 Major release. Bluetooth MIDI, Controllers (Mixer 8 / FX 6 /
 Performance 16 / XY 4), drop buttons with bar-quantised fire, ALSA
 queue scheduling for sample-accurate plugin output, USB tethering,
 in-app updates with apt-resolved dependencies, per-device clock
 vetoes, hostapd via systemd, SysEx Sender plugin.
+
+Numbered 3.0.1 (skipping 3.0.0) because Debian's version comparator
+treats `3.0.0a2-1` as **greater** than `3.0.0-1` — without an
+explicit `~` separator the alpha trailer counts as a newer suffix.
+Anyone testing the 3.0.0a2 alpha would have seen apt refuse the
+upgrade to 3.0.0 as a downgrade.
 
 Bluetooth MIDI
 - Added: BLE-MIDI bridge — paired devices appear in the matrix with a
