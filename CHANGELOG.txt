@@ -4,133 +4,40 @@ User-visible changes. Short tagged one-liners, no code or commit
 hashes. Tags: Added, Improved, Fix, Changed, Removed.
 
 
-2026-05-03 — Version 3.0.0a2 (alpha)
+2026-05-XX — Version 3.0.0
 
-Third alpha. Bluetooth MIDI is now functional end-to-end — pairing,
-auto-reconnect, full message-type coverage, persistence, UI for
-pair / connect / disconnect / reconnect / forget. Plus a bundle of
-matrix-UI responsiveness and update-flow fixes.
+Major release. Bluetooth MIDI, Controllers (Mixer 8 / FX 6 /
+Performance 16 / XY 4), drop buttons with bar-quantised fire, ALSA
+queue scheduling for sample-accurate plugin output, USB tethering,
+in-app updates with apt-resolved dependencies, per-device clock
+vetoes, hostapd via systemd, SysEx Sender plugin.
 
 Bluetooth MIDI
-- Added: BLE-MIDI bridge — paired devices appear in the matrix with
-  a Bluetooth icon (separate row + column for IN / OUT). End-to-end
+- Added: BLE-MIDI bridge — paired devices appear in the matrix with a
+  Bluetooth icon (separate row + column for IN / OUT). End-to-end
   message coverage: notes, CC, program change, pitch bend, channel /
   poly aftertouch, plus MIDI Clock, Start, Stop, Continue and Song
-  Position. SysEx is the one remaining gap.
+  Position. SysEx pending.
 - Added: Add Device → Bluetooth section — Scan, Connect, Disconnect,
   Forget. MIDI-only filter on by default; "Show all (N other)"
   reveals every BLE peripheral in range.
 - Added: Just-Works pairing agent registered automatically. WIDI
   Master and similar peripherals that demand encrypted GATT subscribe
   pair without user interaction.
-- Added: Auto-reconnect on raspimidihub service restart for paired
-  BLE-MIDI devices, including peripherals that powered up after the
-  Pi booted.
+- Added: Auto-reconnect on service restart for paired BLE-MIDI
+  devices.
 - Added: Reconnect entry in the matrix context menu for paired-but-
   offline BLE-MIDI devices, alongside Forget.
 - Added: BlueZ disconnect detection — when a peripheral goes out of
   range or is powered off, the matrix flips its row/column to offline
   within ~1-2 seconds.
+- Added: /var/lib/bluetooth persistence under read-only root — tmpfs
+  at boot restored from a tarball on /boot/firmware, snapshot taken
+  on every change via inotify so bonds survive immediate power-off
+  without a graceful shutdown.
 - Changed: BlueZ's built-in `midi` plugin is disabled (systemd drop-
-  in, `bluetoothd -P midi`) because it creates an ALSA seq client but
-  doesn't actually forward GATT notifications. We bridge BLE-MIDI in
-  Python instead.
-- Added: /var/lib/bluetooth persistence under read-only root —
-  tmpfs at boot restored from a tarball on /boot/firmware, snapshot
-  taken on every change via inotify so bonds survive immediate
-  power-off, no graceful shutdown required.
-- Fix: Filter-panel rapid-fire toggling no longer reverts on stale
-  SSE echoes — the panel now ignores server state until the server
-  catches up to its most recent local edit. Click as fast as you
-  like; the UI stays correct.
-- Fix: Saved BLE-targeting connections silently dropped on the
-  post-hotplug rescan when /api/devices was polled in the same
-  window; now stable.
-- Fix: bluetoothctl-pair-list cache (10 s TTL, invalidated on BT
-  operations) — /api/devices went from ~400 ms to ~80 ms.
-- Fix: Clock symbol blinked at 8th-note rate (and ClockBus-driven
-  plugins ran double-time) when any source had a userspace
-  MidiFilter on one of its routes. The engine was firing the per-
-  source MIDI-activity callback for each delivery to its own ALSA
-  seq client — both monitor port AND filter read-port — so each
-  real Clock counted twice. Now restricted to monitor-port arrivals.
-
-Update flow
-- Changed: Install now uses `apt install` instead of `dpkg -i`, so
-  upgrades that introduce new optional packages (Recommends) pull them
-  automatically when the Pi is online. The orchestrator inspects the
-  deb's hard Depends and, if any are missing, routes the install
-  through the same transient WiFi-switch dance used by
-  Check-for-updates so it can never fail with a half-configured
-  package. Offline downgrades to a stored version with already-
-  satisfied deps still skip the dance and install fully offline.
-
-Bluetooth MIDI dependency
-- Changed: python3-dbus-next moved from Depends to Recommends. Pis
-  upgrading from 2.x via the old dpkg path will install cleanly even
-  when they can't reach apt, but BLE-MIDI silently disables until
-  python3-dbus-next is installed (UI surfaces the apt command needed).
-  3.x → 3.x+1 via the new apt-based install pulls Recommends by
-  default, so the bridge works without intervention as long as the
-  Pi is online during the install.
-
-Arpeggiator
-- Added: Trigger Note — toggle in the Pattern group with a Base
-  wheel (MIDI Learn). Notes from Base..Base+14 set the Rate radio
-  live without being arpeggiated. Use to remap rate from a hardware
-  controller key.
-- Added: Arp Ch / Ctrl Ch — channel filters on the input. Default
-  Any (no behaviour change). Set Arp Ch = 1 + Ctrl Ch = 16 to wire a
-  separate keyboard / footswitch on ch16 that only flips Rate, never
-  plays — the same note range no longer has to be split between the
-  two functions.
-
-UI building blocks
-- Improved: ChannelSelect picks up an opt-in `allow_any` flag —
-  a leading 0 = "Any" tick. Lets any plugin reuse the control as a
-  channel filter rather than a fixed channel picker.
-
-Captive portal & web
-- Changed: Captive-portal endpoints now serve a tiny static landing
-  with a single "Open routing matrix" link instead of suppressing
-  the OS captive flow. A captive webview that fetches /generate_204
-  or /hotspot-detect.html stays inert (no JS, no SSE) — the user
-  taps the link to open the SPA in their main browser, which is the
-  only context where SSE legitimately runs. Microsoft NCSI keeps
-  its legacy success bodies.
-
-Updates
-- Added: "Include alpha / beta releases" toggle in Software
-  Versions — default off (stable channel). Persisted in
-  config.data["updates"]["include_prereleases"]; takes effect on
-  the next check-update click.
-- Added: Rollback insurance — the running version's deb is always
-  downloaded if not on disk and protected from prune, so after an
-  upgrade you can always one-tap-revert to the previous version.
-- Fix: Stored-deb regex accepts PEP-440 alpha/beta tags
-  (raspimidihub_3.0.0a-1_all.deb). Without this the just-installed
-  deb was silently dropped from the Software Versions list.
-
-Engine
-- Fix: Re-subscribe monitor port after CLIENT_EXIT/CLIENT_START
-  hotplug. Devices that re-enumerate with the same client id (typical
-  for Elektron over USB) had silently dropped off the rate meter,
-  clock indicator, and MIDI activity bar. Audio path was unaffected
-  (direct kernel subscriptions stayed up); only the UI lost the
-  device.
-
-Packaging
-- Added: CHANGELOG.txt installed at /usr/share/doc/raspimidihub/
-  inside the deb — same content as the GitHub release body, so an
-  offline / SSH-only operator can `cat` the full release delta.
-
-
-2026-05-01 — Version 3.0.0a (alpha)
-
-Major release. Controllers, drop buttons, ALSA queue scheduling, USB
-tethering, in-app updates, per-device clock vetoes, hostapd via
-systemd, and a SysEx Sender plugin. Entry-level alpha to flush out
-the upgrade path before tagging a final 3.0.0.
+  in, `bluetoothd -P midi`) because it doesn't actually forward GATT
+  notifications. We bridge BLE-MIDI in Python instead.
 
 Controllers
 - Added: Controller tab in the top nav — fullscreen play surface, swipe / arrow / dropdown to switch between instances, last-viewed remembered
@@ -171,6 +78,8 @@ Plugins
 - Added: SysEx Sender — pick a .syx file in the device-detail panel, bytes stream straight to the connected destination (256-byte chunks, ~5 ms gap; nothing saved)
 - Added: Clock Divider — emit one MIDI Clock for every N received (2..32)
 - Added: UI Demo — showcase of every UI control type, makes no MIDI
+- Added: Arpeggiator Trigger Note — toggle in the Pattern group with a Base wheel (MIDI Learn). Notes from Base..Base+14 set the Rate radio live without being arpeggiated. Use to remap rate from a hardware controller key
+- Added: Arpeggiator Arp Ch / Ctrl Ch — channel filters on the input. Default Any. Set Arp Ch = 1 + Ctrl Ch = 16 to wire a separate keyboard / footswitch on ch 16 that only flips Rate, never plays
 - Improved: Master Clock — clock ticks pre-scheduled through the kernel queue, rock-solid 24-PPQN under load
 - Improved: MIDI Delay — every echo pre-scheduled at note-on time. Delay (ms) is now a Fader; sync rate covers 4 bars down to 1/16 with triplets
 - Improved: Arpeggiator — gate parameter actually controls staccato/legato now (was effectively 100 % before)
@@ -180,13 +89,17 @@ Plugins
 WiFi, updates & networking
 - Added: USB tethering — plug a phone into a USB-A port, Settings shows the tethered URL as a clickable link
 - Added: WiFi mode preference — radio between AP only / WiFi for updates / WiFi always
-- Added: Software Updates card — auto-downloads newer GitHub releases, keeps the latest 3, installs offline with one tap
+- Added: Software Updates card — auto-downloads newer GitHub releases, keeps the latest 3, installs with one tap
+- Added: Software Updates "Include alpha / beta releases" toggle — default off (stable channel)
+- Added: Rollback insurance — the running version's deb is always downloaded if not on disk and protected from prune, so after an upgrade you can always one-tap-revert
 - Added: Update watchdog — forces the Pi back to AP mode if the orchestrator hangs in client mode
 - Added: Update progress UI — live status, "we're alive" hopping dot, "reconnect to AP" help after 90 s of failed polls
+- Added: Captive-portal probe access log + hostapd syslog routing — every /generate_204 etc. hit logs path + client IP + response time; hostapd associate / deauth events land in the journal under raspimidihub-hostapd.service so phone-disconnect post-mortems are possible
 - Improved: "Reload App" + "stale, reload" reliably picks up the new build on phones (was getting stuck on Safari bf-cache)
+- Changed: Install uses `apt install` (not `dpkg -i`), so upgrades that introduce new transitive packages pull them automatically when the Pi is online. The orchestrator inspects the deb's Depends and, if any are missing, routes the install through the same transient WiFi-switch dance used by Check-for-updates so it can never fail with a half-configured package. Offline downgrades to a stored version with already-satisfied deps still skip the dance and install fully offline.
+- Changed: Captive-portal endpoints now serve a tiny static landing with a single "Open routing matrix" link instead of suppressing the OS captive flow. Captive webview stays inert (no JS, no SSE) — the user taps the link to open the SPA in their main browser
 - Changed: Settings WiFi card consolidated — one panel with status badge, mode-pref radio, Home WiFi and AP password rows
 - Changed: hostapd now runs as raspimidihub-hostapd.service (systemd) instead of subprocess.Popen + taskset + -B daemonise — cleaner stderr → journald capture under its own unit, automatic Restart=on-failure, CPU pin via CPUAffinity drop-in (still 0–2, leaves CPU 3 to the asyncio loop)
-- Added: Captive-portal probe access log + hostapd syslog routing — every /generate_204 etc. hit logs path + client IP + response time; hostapd associate / deauth events land in the journal under raspimidihub-hostapd.service so phone-disconnect post-mortems are possible
 - Fix: AP service restart heals "no AP" / "two hostapds racing" states
 - Fix: First hostapd spawn that loses the race against NetworkManager retries automatically
 - Fix: Pi 3 WiFi power-save quirk — phones can re-associate cleanly after a client→AP cycle
@@ -209,6 +122,7 @@ UI building blocks
 - Added: LayoutGrid — fixed-position param container with multi-cell spans
 - Added: Param span — any control can occupy 1, 2, 3 or 4 cells of the row
 - Added: Mini variant for Wheel + Button (half-height) — used in dense edit panels
+- Improved: ChannelSelect — opt-in `allow_any` flag, leading 0 = "Any" tick. Lets any plugin reuse the control as a channel filter rather than a fixed channel picker
 - Improved: Plugin panel — 4-column responsive grid that fits a 360 px phone; brushed-metal cards
 - Improved: Plugin controls — multi-touch fixed, smoother drag, cross-browser sync via watchdog
 - Improved: Buttons — same height as wheels (52 px) so mixed rows align
@@ -217,11 +131,11 @@ UI building blocks
 - Improved: Matrix clock indicator — pulses with the source's quarter notes
 - Changed: Top-bar redesign — version + token stays in dim text, the old "stale, reload" inline link becomes a small pulsing red dot next to "RaspiMIDIHub" (tap = same hardReload), and a fullscreen toggle button sits to the right of "n devices" (uses the standard Fullscreen API, hides on iOS Safari which only supports it on <video>)
 - Changed: Switch toggles unified into LED buttons (green = on, red = destructive)
-- Fix: Vertical fader fill no longer overshoots the rounded top at max
-- Fix: Plugin panel — turning a wheel / knob no longer slides the panel away
-- Fix: Radio buttons — active pill no longer shifts neighbours by 1 px
-- Fix: Note wheel — active value now centred on the indicator
-- Fix: Wheel ticks no longer paint over a sticky panel header during scroll
+
+Packaging
+- Added: CHANGELOG.txt installed at /usr/share/doc/raspimidihub/ inside the deb — same content as the GitHub release body, so an offline / SSH-only operator can `cat` the full release delta
+- Changed: install.sh shipped with each GitHub release pins to that release's tag. Running an old install.sh installs the version it came from, not whatever's now /latest
+- Changed: python3-dbus-next is a Recommends, not a hard Depends — Pis upgrading from 2.x via the legacy dpkg path install cleanly even when offline; BLE-MIDI silently disables until python3-dbus-next is installed (UI surfaces a one-tap Reinstall button that pulls the dep via the WiFi-dance). 3.x → 3.x+1 via the new apt-based install pulls Recommends by default
 
 
 2026-04-25 - Version 2.0.9

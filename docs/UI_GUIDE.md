@@ -20,7 +20,7 @@ A pulsing play icon appears next to devices sending MIDI clock. If multiple devi
 
 Tap a device label (row / column header) to open its menu, and pick **Edit** to open the device-detail panel. Renamed devices also show the original ALSA name in gray.
 
-The **Add** button at the bottom of the matrix lets you add a new plugin or controller instance. Select a type from the list and it appears as a new device with its own IN / OUT ports.
+The **Add** button at the bottom of the matrix lets you add a new plugin, controller instance, or **Bluetooth MIDI device**. The Bluetooth section has a Scan button and lists paired peripherals; tap **Connect** on a device to bring it online. See [Bluetooth MIDI](BLUETOOTH.md) for the full pairing / reconnection flow.
 
 **Clipboards.** The cell menu offers Copy / Paste; a connection's filter and mappings can be cloned to any other cell. The same works for plugin instances ("Paste-as-new" duplicates the plugin with its current params) and individual mappings (paste-with-bump auto-resolves duplicate-conflicts onto a free slot).
 
