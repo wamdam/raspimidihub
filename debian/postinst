@@ -41,7 +41,10 @@ case "$1" in
         # what makes a connected BLE-MIDI device expose itself via ALSA
         # seq, which the engine then picks up via its normal scan.
         # Drop-in (not a file edit) so the package's stock unit stays
-        # untouched and an apt purge cleanly reverts.
+        # untouched and an apt purge cleanly reverts. Also unmask +
+        # enable + start bluetooth.service and bluealsa.service —
+        # an earlier system-prepare run may have disabled them as
+        # part of the "MIDI-only appliance" trim.
         if [ -x /usr/bin/bluealsa ]; then
             mkdir -p /etc/systemd/system/bluealsa.service.d
             cat > /etc/systemd/system/bluealsa.service.d/midi.conf << 'CONF'
@@ -49,7 +52,9 @@ case "$1" in
 ExecStart=
 ExecStart=/usr/bin/bluealsa -S -p a2dp-source -p a2dp-sink -p midi
 CONF
+            systemctl --no-reload unmask bluetooth bluealsa 2>/dev/null || true
             systemctl daemon-reload
+            systemctl enable --now bluetooth 2>/dev/null || true
             systemctl restart bluealsa 2>/dev/null || true
         fi
 
