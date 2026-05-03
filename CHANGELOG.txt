@@ -4,7 +4,7 @@ User-visible changes. Short tagged one-liners, no code or commit
 hashes. Tags: Added, Improved, Fix, Changed, Removed.
 
 
-2026-05-XX — Version 3.0.0
+2026-05-03 — Version 3.0.0
 
 Major release. Bluetooth MIDI, Controllers (Mixer 8 / FX 6 /
 Performance 16 / XY 4), drop buttons with bar-quantised fire, ALSA
