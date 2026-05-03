@@ -127,12 +127,23 @@ release: $(DEB_FILE) $(ROSETUP_DEB_FILE)
 		echo "Error: uncommitted changes. Commit first."; exit 1; \
 	fi
 	@echo "=== Releasing v$(VERSION) ==="
+	@# Bake the version into a copy of install.sh so the uploaded
+	@# script always installs THIS release, not whatever happens to be
+	@# /latest at the moment a user runs it. Source scripts/install.sh
+	@# has BUILD_TAG="unreleased" as a placeholder; dist/install.sh
+	@# replaces just that one line and is the per-release artifact
+	@# uploaded by gh release create.
+	sed 's/^BUILD_TAG="unreleased"$$/BUILD_TAG="v$(VERSION)"/' \
+		scripts/install.sh > dist/install.sh
+	@grep -q "^BUILD_TAG=\"v$(VERSION)\"$$" dist/install.sh || \
+		(echo "ERROR: install.sh BUILD_TAG substitution failed"; exit 1)
+	chmod +x dist/install.sh
 	git tag -a v$(VERSION) -m "v$(VERSION)"
 	git push origin HEAD --tags
 	gh release create v$(VERSION) \
 		$(DEB_FILE) \
 		$(ROSETUP_DEB_FILE) \
-		scripts/install.sh \
+		dist/install.sh \
 		--title "v$(VERSION)" \
 		--notes "$${NOTES:-Release v$(VERSION)}"
 	@echo "=== Released: https://github.com/wamdam/raspimidihub/releases/tag/v$(VERSION) ==="
