@@ -36,6 +36,23 @@ case "$1" in
         # the build host.
         mkdir -p /var/lib/raspimidihub/updates 2>/dev/null || true
 
+        # Enable BLE-MIDI profile in bluealsa (if installed). bluealsa
+        # ships a2dp / hfp profiles by default; the `midi` profile is
+        # what makes a connected BLE-MIDI device expose itself via ALSA
+        # seq, which the engine then picks up via its normal scan.
+        # Drop-in (not a file edit) so the package's stock unit stays
+        # untouched and an apt purge cleanly reverts.
+        if [ -x /usr/bin/bluealsa ]; then
+            mkdir -p /etc/systemd/system/bluealsa.service.d
+            cat > /etc/systemd/system/bluealsa.service.d/midi.conf << 'CONF'
+[Service]
+ExecStart=
+ExecStart=/usr/bin/bluealsa -S -p a2dp-source -p a2dp-sink -p midi
+CONF
+            systemctl daemon-reload
+            systemctl restart bluealsa 2>/dev/null || true
+        fi
+
         # Trim system services + reserve a CPU core. Idempotent: safe
         # to run on every install / upgrade. Service / timer disable
         # takes effect immediately; CPU pin (AllowedCPUs=3) takes

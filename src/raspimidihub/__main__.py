@@ -7,6 +7,7 @@ import asyncio
 import logging
 import os
 import signal
+import subprocess
 import sys
 
 from . import __version__
@@ -100,8 +101,24 @@ async def async_main() -> None:
     port = 80 if os.geteuid() == 0 else 8080
     server = WebServer(port=port)
 
+    # Bluetooth MIDI: unblock the radio (rfkill may have it blocked
+    # at boot on some Pi-OS variants), spin up the BlueZ wrapper +
+    # BLE-MIDI bridge. Both are no-ops if the host has no BT
+    # hardware / dbus-next isn't installed.
+    from .ble_midi_bridge import BleMidiBridge
+    from .bluetooth import BluetoothMidi
+    try:
+        subprocess.run(["rfkill", "unblock", "bluetooth"],
+                       capture_output=True, timeout=5)
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass
+    bt = BluetoothMidi()
+    ble_bridge = BleMidiBridge()
+    bt.ble_bridge = ble_bridge
+    engine._ble_bridge = ble_bridge  # so device scans see BLE clients
+
     # Register API routes
-    register_api(server, engine, config, wifi)
+    register_api(server, engine, config, wifi, bt)
 
     # Wire up LED and SSE to hotplug events
     def on_change():

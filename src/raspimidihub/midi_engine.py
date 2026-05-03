@@ -206,20 +206,46 @@ class MidiEngine:
         """Scan for MIDI devices and return them."""
         if not self._seq:
             return []
-        # Include plugin ALSA client IDs so they're discovered as devices
-        plugin_clients = set()
+        # Include plugin and BLE-bridge ALSA client IDs so they're
+        # discovered as devices alongside hardware. Both are user-
+        # type ALSA clients (not kernel cards) and would otherwise be
+        # filtered out by scan_devices' default hardware-only mode.
+        user_clients: set[int] = set()
         if self._plugin_host:
-            plugin_clients = self._plugin_host.get_plugin_client_ids()
-        self._devices = self._seq.scan_devices(include_user_clients=plugin_clients)
+            user_clients |= self._plugin_host.get_plugin_client_ids()
+        ble_bridge = getattr(self, "_ble_bridge", None)
+        ble_client_ids: set[int] = set()
+        if ble_bridge is not None:
+            ble_client_ids = set(ble_bridge.get_alsa_client_ids())
+            user_clients |= ble_client_ids
+        self._devices = self._seq.scan_devices(include_user_clients=user_clients)
         # Update device registry with stable IDs (hardware devices via sysfs)
-        hw_client_ids = [d.client_id for d in self._devices if d.client_id not in plugin_clients]
-        self._device_registry.scan(hw_client_ids)
+        hw_client_ids = [d.client_id for d in self._devices
+                         if d.client_id not in user_clients]
+        # Pass {client_id: name} so DeviceRegistry can identify
+        # BlueALSA-managed BLE-MIDI clients by name and key them on
+        # `bt-<MAC>` instead of trying to read sysfs (they don't have
+        # a card). Names come from the scan we just did.
+        client_names = {d.client_id: d.name for d in self._devices}
+        self._device_registry.scan(hw_client_ids, client_names=client_names)
         # Register plugin devices in the registry
         if self._plugin_host:
             for inst in self._plugin_host.get_instances():
                 if inst.alsa_client:
                     self._device_registry.register_plugin(
                         inst.alsa_client.client_id, inst.id, inst.name)
+        # Register BLE-MIDI bridge devices in the registry. We reuse
+        # register_plugin to land them in _by_client / _by_stable_id,
+        # then flip is_plugin → False / is_bluetooth → True so the
+        # rest of the codebase treats them as hardware-ish.
+        if ble_bridge is not None:
+            for b in ble_bridge.get_bridges():
+                cid = b.get("alsa_client_id")
+                if cid and cid in ble_client_ids:
+                    info = self._device_registry.register_plugin(
+                        cid, f"ble-{b['address']}", b["name"])
+                    info.is_plugin = False
+                    info.is_bluetooth = True
         return self._devices
 
     def connect_all(self) -> set[Connection]:

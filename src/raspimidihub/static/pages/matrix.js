@@ -72,7 +72,7 @@ export function ConnectionMatrix({ devices, connections, showToast, clockSources
         const inCount = dev.ports.filter(p => p.is_input).length;
         const outCount = dev.ports.filter(p => p.is_output).length;
         for (const p of dev.ports) {
-            const extra = { client_id: dev.client_id, dev_name: dev.name, dev_default_name: dev.default_name || dev.name, port_name: p.name, port_default_name: p.default_name || p.name, online: dev.online !== false, stable_id: dev.stable_id, is_plugin: !!dev.is_plugin, plugin_type: dev.plugin_type };
+            const extra = { client_id: dev.client_id, dev_name: dev.name, dev_default_name: dev.default_name || dev.name, port_name: p.name, port_default_name: p.default_name || p.name, online: dev.online !== false, stable_id: dev.stable_id, is_plugin: !!dev.is_plugin, plugin_type: dev.plugin_type, is_bluetooth: !!dev.is_bluetooth };
             if (p.is_input) inputs.push({ ...p, ...extra, multi: inCount > 1 });
             if (p.is_output) outputs.push({ ...p, ...extra, multi: outCount > 1 });
         }
@@ -101,15 +101,19 @@ export function ConnectionMatrix({ devices, connections, showToast, clockSources
     const isSelf = (inp, out) => inp.client_id && inp.client_id === out.client_id;
     const isOffline = (inp, out) => !inp.online || !out.online;
 
-    // label(): short text shown in matrix row/column headers
+    // label(): short text shown in matrix row/column headers.
+    // BLE-MIDI devices get a leading ᛒ rune (U+16D2) so they're
+    // distinguishable from USB MIDI at a glance — the icon column
+    // is already used by plugin svgs / DIN icons for hardware.
     const label = (item) => {
+        const bt = item.is_bluetooth ? 'ᛒ ' : '';
         if (item.multi && item.port_name !== item.port_default_name) {
-            return item.port_name;
+            return bt + item.port_name;
         }
         let short = item.dev_name;
         if (item.multi) short += ` p${item.port_id + 1}`;
         if (short.length > 20) short = short.slice(0, 19) + '…';
-        return short;
+        return bt + short;
     };
 
     const clockClientIds = clockSources ? Object.keys(clockSources).map(Number) : [];
