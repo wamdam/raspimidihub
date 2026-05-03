@@ -2156,6 +2156,38 @@ before implementation.
   active wins, others ignored) and how the choice persists across
   hotplug.
 
+- **TODO: MIDI path latency probe + Settings stats card** — current
+  Settings page shows four aggregate latency metrics (`loop_lag`,
+  `midi_in_sse_out`, `midi_in_midi_out`, `control_in_midi_out`), all
+  running-max snapshots over a 1 s window. None of them tell you the
+  round-trip time of a *specific* chain like Impact → VelEQ → Hold →
+  Arp → Digitone → S-1 — direct kernel-routed cells contribute zero
+  to `midi_in_midi_out` because the filter engine never sees them.
+  Design: a new `runtime/probe.py` `MidiProbe` helper owning a
+  dedicated ALSA seq client with `probe-out` + `probe-watch` ports.
+  A run subscribes `probe-out` to the same downstream subscribers as
+  the user-chosen source port, subscribes `probe-watch` to the same
+  upstream feeders as the destination port, sends a uniquely-tagged
+  event (sysex with a 4-byte nonce, or a CC119 hi/lo pair) from
+  `probe-out`, and records the time delta on `probe-watch`. Works
+  uniformly across kernel-direct, filtered, and multi-plugin chains
+  because the watcher sees the event the instant any actual upstream
+  of the destination would. Add `POST /api/probe/run` (synchronous,
+  ≤200 ms timeout, returns `{status, latency_ms, hops_seen}`) and a
+  history ring buffer surfaced via `GET /api/probe/history`. UI: a
+  "MIDI Path Latency" card in Settings below the existing aggregate
+  stats — two device pickers (From / To), a Probe button, last
+  result inline, table of last 10 probes. Reuse the existing
+  `snd_seq_query_subscribe_*` ctypes bindings (already in
+  `alsa_seq.py:302-308`); same `time.monotonic()` clock as the
+  other latency probes so results are directly comparable. Verify
+  on (a) two plugins wired direct (≤1 ms expected), (b) same wired
+  through a filter (~1-3 ms userspace add), (c) the user's
+  Impact → S-1 chain (multi-hop through plugins). Also useful for
+  reproducing the boot-warmup pattern — probe immediately after
+  service restart and watch results decrease over the first ~2 min.
+  Full design notes in `~/.claude/plans/tranquil-enchanting-sonnet.md`.
+
 ## Dropped
 
 - **USB Network gadget** (formerly §9). Pi 3 routes USB through a
