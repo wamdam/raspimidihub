@@ -13,10 +13,29 @@ Stable ID format:
 import logging
 import re
 import subprocess
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
 log = logging.getLogger(__name__)
+
+# Cache for `_get_bluealsa_macs()`. Two `bluetoothctl devices ...`
+# subprocesses run per call (~100 ms each), and scan_devices() calls
+# this twice (engine + registry), so every refresh of /api/devices was
+# spending ~400 ms on what's almost always the same data. Pair/connect
+# state changes rarely; cache for a few seconds and invalidate
+# explicitly from the BT API endpoints when needed.
+_BT_MACS_TTL_S = 10.0
+_bt_macs_cache: dict = {"value": None, "ts": 0.0}
+
+
+def invalidate_bluealsa_macs_cache() -> None:
+    """Force the next `_get_bluealsa_macs()` call to re-query bluetoothctl.
+
+    Call after any operation that changes BT pair / connect state so
+    a follow-up device scan sees the new device or its absence."""
+    _bt_macs_cache["value"] = None
+    _bt_macs_cache["ts"] = 0.0
 
 
 @dataclass
@@ -190,22 +209,39 @@ def alsa_client_to_card(client_id: int) -> int | None:
 
 
 def _get_bluealsa_macs() -> dict[str, str]:
-    """Map paired BlueALSA device names → MAC addresses via bluetoothctl.
+    """Map BT device names → MAC addresses via bluetoothctl.
+
+    Covers BOTH Paired and Connected devices because BLE-MIDI peripherals
+    (e.g. WIDI Master) often show up Connected without being Paired —
+    BlueZ creates an ALSA seq client for them either way. The legacy
+    `paired-devices` subcommand was removed from bluetoothctl years ago;
+    `devices Paired` / `devices Connected` are the current syntax.
+
+    Cached for `_BT_MACS_TTL_S` seconds; the BT API endpoints call
+    `invalidate_bluealsa_macs_cache()` after any operation that mutates
+    pair / connect state.
 
     Returns {} silently on any error so callers can blindly use the dict
     as a "is this name a BT device?" lookup without try/except blocks."""
+    now = time.monotonic()
+    cached = _bt_macs_cache["value"]
+    if cached is not None and (now - _bt_macs_cache["ts"]) < _BT_MACS_TTL_S:
+        return cached
     macs: dict[str, str] = {}
-    try:
-        result = subprocess.run(
-            ["bluetoothctl", "paired-devices"],
-            capture_output=True, text=True, timeout=5,
-        )
-        for line in result.stdout.splitlines():
-            m = re.match(r"^Device\s+([0-9A-Fa-f:]{17})\s+(.+)$", line)
-            if m:
-                macs[m.group(2)] = m.group(1)  # name → MAC
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        pass
+    for sub in ("Paired", "Connected"):
+        try:
+            result = subprocess.run(
+                ["bluetoothctl", "devices", sub],
+                capture_output=True, text=True, timeout=5,
+            )
+            for line in result.stdout.splitlines():
+                m = re.match(r"^Device\s+([0-9A-Fa-f:]{17})\s+(.+)$", line)
+                if m:
+                    macs[m.group(2)] = m.group(1)  # name → MAC
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            pass
+    _bt_macs_cache["value"] = macs
+    _bt_macs_cache["ts"] = now
     return macs
 
 
@@ -280,12 +316,14 @@ class DeviceRegistry:
         for client_id in sorted(alsa_client_ids):
             name = client_names.get(client_id, "") if client_names else ""
 
-            # BLE-MIDI via BlueALSA: client name typically contains
-            # "bluealsa". Use the device's MAC as the stable id so the
-            # routing survives reconnects (MAC is the only stable
-            # identifier — BlueALSA's client id changes per session).
-            if name and "bluealsa" in name.lower():
-                mac = bt_macs.get(name) or bt_macs.get(client_id)
+            # BLE-MIDI: BlueZ (or bluealsa with `-p midi`) creates an
+            # ALSA seq client whose name == the BT device alias when a
+            # BLE-MIDI peripheral is connected. Match against the
+            # name→MAC table from bluetoothctl. Use the MAC as the
+            # stable id so routing survives reconnects (the ALSA
+            # client id changes every session).
+            if name and name in bt_macs:
+                mac = bt_macs.get(name)
                 if mac:
                     stable_id = f"bt-{mac}"
                     info = StableDeviceInfo(

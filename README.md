@@ -91,6 +91,14 @@ Fullscreen play surfaces that send CCs over MIDI. Each cell is renameable, MIDI-
 - **8 dark themes** per controller (Default / Navy / Forest / Wine / Plum / Teal / Sienna / Slate)
 - **Top nav** -- swipe / arrow / dropdown to switch between instances; last-viewed remembered
 
+### Bluetooth MIDI (BLE-MIDI)
+- **Pair, connect, disconnect, forget** any BLE-MIDI peripheral from the matrix UI -- Add Device → Bluetooth → Scan
+- **Bluetooth icon and color** in matrix headers; offline devices stay visible with a "Reconnect" entry in the context menu
+- **Auto-reconnect on boot** for paired devices (Pi initiates the BLE connection -- BLE peripherals don't auto-reconnect on their own)
+- **Auto-disconnect detection** -- when a peripheral leaves range or powers off, its row/column flips to offline within a couple of seconds
+- **Full message coverage** -- notes, CC, PC, pitch bend, aftertouch, MIDI Clock, Start/Stop/Continue, Song Position. (SysEx pending.)
+- **Persistent bonds across power-off** -- BlueZ state lives on tmpfs and is snapshotted to `/boot/firmware` on every change via inotify, so re-pairing isn't needed even on read-only-root appliances that get yanked from power
+
 ### MIDI Filtering and Mapping
 - **Per-connection channel filtering** -- enable/disable any of 16 MIDI channels
 - **Message type filtering** -- block notes, CCs, program changes, pitch bend, aftertouch, SysEx, or clock
@@ -282,6 +290,7 @@ Tests run without ALSA hardware (`RASPIMIDIHUB_TEST_MODE=1`). No Raspberry Pi re
 ## Documentation
 
 - [UI Guide](docs/UI_GUIDE.md) -- Walkthrough of every screen
+- [Bluetooth MIDI](docs/BLUETOOTH.md) -- Pairing, reconnection, and troubleshooting
 - [Plugin Developer Guide](plugins/README.md) -- Creating custom plugins
 - [Building from Source](docs/BUILDING.md) -- How to build the .deb packages
 - [Changelog](CHANGELOG.txt) -- Release history

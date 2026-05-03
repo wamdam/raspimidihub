@@ -9,7 +9,7 @@
  * it sees the clipboard and the connection id, runs the retry loop.
  */
 
-import { useState, useEffect } from '../lib/hooks.module.js';
+import { useState, useEffect, useRef } from '../lib/hooks.module.js';
 import { html, animateClose, useSwipeDismiss } from '../ui/common.js';
 import { useTapMenu } from '../ui/contextmenu.js';
 import { MSG_TYPES, MSG_LABELS } from '../state/constants.js';
@@ -35,12 +35,39 @@ export function FilterPanel({ connId, filter, mappings, onClose, onApply, onMapp
     const [msgTypes, setMsgTypes] = useState(new Set(filter ? filter.msg_types : MSG_TYPES));
     const [mappingForm, setMappingForm] = useState(null); // null | { editing: null|obj, index: null|int }
 
-    // Sync state when filter prop changes from outside (other device updated via SSE)
+    // Track the most recent write we've sent to the server. Server SSE
+    // echoes that match it = "server caught up" (clear pending and
+    // accept future SSE updates as authoritative). Echoes that don't
+    // match = stale server snapshots racing the user's rapid-fire
+    // toggling — ignore them and let local state stay ahead. Without
+    // this, fast filter clicks were getting overwritten by SSE for the
+    // *previous* state, so toggles appeared to undo themselves.
+    const pendingRef = useRef(null); // { mask, types: [] } | null
+    const sameAsFilter = (mask, types, f) => {
+        if (!f || mask !== f.channel_mask) return false;
+        const a = new Set(types);
+        const b = new Set(f.msg_types);
+        if (a.size !== b.size) return false;
+        for (const t of a) if (!b.has(t)) return false;
+        return true;
+    };
     const filterKey = filter ? `${filter.channel_mask}:${filter.msg_types.join(',')}` : 'none';
     useEffect(() => {
+        if (pendingRef.current !== null) {
+            if (sameAsFilter(pendingRef.current.mask,
+                              pendingRef.current.types, filter)) {
+                pendingRef.current = null;
+            }
+            return; // ignore SSE while local edits are unsettled
+        }
         setChannelMask(filter ? filter.channel_mask : 0xFFFF);
         setMsgTypes(new Set(filter ? filter.msg_types : MSG_TYPES));
     }, [filterKey]);
+
+    const sendApply = (mask, types) => {
+        pendingRef.current = { mask, types: [...types] };
+        onApply(connId, mask, [...types]);
+    };
 
     // ESC to close (with mapping-form precedence)
     useEffect(() => {
@@ -51,23 +78,21 @@ export function FilterPanel({ connId, filter, mappings, onClose, onApply, onMapp
 
     const swipe = useSwipeDismiss(close, panelRef);
 
-    const applyFilter = (mask, types) => onApply(connId, mask, [...types]);
-
     const toggleChannel = (ch) => {
         const newMask = channelMask ^ (1 << ch);
         setChannelMask(newMask);
-        applyFilter(newMask, msgTypes);
+        sendApply(newMask, msgTypes);
     };
     const toggleAllChannels = () => {
         const newMask = channelMask === 0xFFFF ? 0 : 0xFFFF;
         setChannelMask(newMask);
-        applyFilter(newMask, msgTypes);
+        sendApply(newMask, msgTypes);
     };
     const toggleMsgType = (t) => {
         const n = new Set(msgTypes);
         n.has(t) ? n.delete(t) : n.add(t);
         setMsgTypes(n);
-        applyFilter(channelMask, n);
+        sendApply(channelMask, n);
     };
 
     const handleMappingSubmit = async (data) => {

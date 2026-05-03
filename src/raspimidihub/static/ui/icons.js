@@ -22,6 +22,10 @@ export const IconSettings = html`<svg viewBox="0 0 24 24" fill="none" stroke="cu
 // DIN MIDI connector icon (5-pin) for hardware devices
 export const IconDIN = html`<svg viewBox="0 0 20 20" class="dev-icon din"><circle cx="10" cy="10" r="8" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="6" cy="8" r="1.2" fill="currentColor"/><circle cx="14" cy="8" r="1.2" fill="currentColor"/><circle cx="10" cy="13" r="1.2" fill="currentColor"/><circle cx="7" cy="12" r="1.2" fill="currentColor"/><circle cx="13" cy="12" r="1.2" fill="currentColor"/></svg>`;
 
+// Bluetooth logo for BLE-MIDI devices. Standard "B" rune shape: vertical
+// spine + two crossing diagonals to the upper/lower right corners.
+export const IconBluetooth = html`<svg viewBox="0 0 20 20" class="dev-icon bt"><path d="M7 5 L13 15 L10 17 L10 3 L13 5 L7 15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+
 // Plugin icon: fetched from /api/plugins/icon/{type} and injected inline so currentColor works.
 const _iconCache = {};
 export function PluginIcon({ type }) {
@@ -38,5 +42,6 @@ export function PluginIcon({ type }) {
 
 export function DeviceIcon({ device }) {
     if (device.is_plugin && device.plugin_type) return html`<${PluginIcon} type=${device.plugin_type} />`;
+    if (device.is_bluetooth) return IconBluetooth;
     return IconDIN;
 }

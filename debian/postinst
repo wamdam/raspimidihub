@@ -36,6 +36,32 @@ case "$1" in
         # the build host.
         mkdir -p /var/lib/raspimidihub/updates 2>/dev/null || true
 
+        # BlueZ's built-in `midi` plugin is disabled via a systemd
+        # drop-in (etc/systemd/system/bluetooth.service.d/no-midi.conf
+        # passes -P midi to bluetoothd). It creates a stub ALSA seq
+        # client per BLE-MIDI device but doesn't forward GATT
+        # notifications — verified with btmon + aseqdump on WIDI
+        # Master. We bridge BLE-MIDI ourselves in
+        # raspimidihub.ble_midi_bridge instead. (An earlier attempt
+        # to disable via main.conf `DisablePlugins = midi` was a
+        # no-op: BlueZ 5.82 prints "Unknown key DisablePlugins".)
+        if [ -f /etc/bluetooth/main.conf ]; then
+            sed -i '/^DisablePlugins.*midi/d' /etc/bluetooth/main.conf
+        fi
+
+        # BlueZ persistent state on read-only root: tmpfs at
+        # /var/lib/bluetooth restored from a snapshot tarball on
+        # /boot/firmware. Activated by the raspimidihub-bt-state
+        # oneshot service ordered Before=bluetooth.service.
+        systemctl --no-reload enable raspimidihub-bt-state.service \
+            2>/dev/null || true
+
+        # Restart bluetooth so the new drop-ins (no-midi + tmpfs
+        # state mount) take effect right away rather than waiting
+        # for the next reboot.
+        systemctl restart raspimidihub-bt-state.service 2>/dev/null || true
+        systemctl restart bluetooth.service 2>/dev/null || true
+
         # Enable BLE-MIDI profile in bluealsa (if installed). bluealsa
         # ships a2dp / hfp profiles by default; the `midi` profile is
         # what makes a connected BLE-MIDI device expose itself via ALSA

@@ -149,6 +149,18 @@ async def async_main() -> None:
         # Only process known MIDI events, not system/subscription events
         if ev.type not in _EVENT_NAMES:
             return
+        # The engine's ALSA seq client receives copies of source events
+        # at MULTIPLE ports: the monitor port (always) plus any filter
+        # read-ports for routes that have a userspace MidiFilter
+        # attached. Counting those copies as separate events made the
+        # clock-quarter counter tick 2× per real source clock for any
+        # device that had a filtered connection — visual pulsed at 8th
+        # rate, ClockBus-driven plugin sync ran double-time. Restrict
+        # all activity bookkeeping to the monitor port — exactly the
+        # one delivery per source the engine itself uses for its own
+        # rate / latency / clock-bus accounting.
+        if ev.dest.port != engine.monitor_port:
+            return
         # Clock: gentle heartbeat per beat; other MIDI: sharp blink
         if ev.type == 36:  # CLOCK
             led.clock_pulse()
@@ -326,6 +338,15 @@ async def async_main() -> None:
                 )
             except Exception:
                 log.warning("WiFi AP setup failed (no wlan0?), continuing without AP")
+
+        # Re-attach BLE-MIDI bridges for devices BlueZ still has
+        # connected from before this process restarted, AND initiate
+        # connect for paired-but-disconnected ones (BLE peripherals
+        # don't auto-reconnect from the host side). Late-arrival case
+        # (WIDI powered up after boot) is handled by the explicit
+        # Connect button in the Add Device → Bluetooth panel — no
+        # background polling.
+        asyncio.ensure_future(bt.restore_connected_bridges())
 
         notify_systemd("READY=1")
         log.info("Service ready (web on port %d)", port)

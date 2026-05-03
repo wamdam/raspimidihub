@@ -46,19 +46,36 @@ class BluetoothMidi:
         return address
 
     @staticmethod
-    def is_available() -> bool:
-        """Check if Bluetooth hardware and bluez-alsa are available."""
+    def availability() -> dict:
+        """Report Bluetooth-MIDI availability with the reason if it
+        isn't. Three things have to line up: BT radio powered, bluealsa
+        on PATH, and python3-dbus-next importable (the GATT bridge runs
+        through it). dbus-next is a Recommends, not a Depends, so a Pi
+        that came up via plain `dpkg -i` may have everything else and
+        still be missing the bridge — we surface a specific reason so
+        the UI can tell the user `apt install python3-dbus-next` is the
+        fix."""
         try:
             result = _run(["bluetoothctl", "show"], timeout=5)
             if "Powered: yes" not in result.stdout:
-                # Try to power on
                 _btctl("power", "on", timeout=5)
                 result = _run(["bluetoothctl", "show"], timeout=5)
-            has_bt = "Powered: yes" in result.stdout
-            has_bluealsa = _run(["which", "bluealsa"], timeout=5).returncode == 0
-            return has_bt and has_bluealsa
+            if "Powered: yes" not in result.stdout:
+                return {"available": False, "reason": "no-bt-radio"}
+            if _run(["which", "bluealsa"], timeout=5).returncode != 0:
+                return {"available": False, "reason": "bluealsa-missing"}
         except (subprocess.TimeoutExpired, FileNotFoundError):
-            return False
+            return {"available": False, "reason": "no-bt-radio"}
+        try:
+            import dbus_next  # noqa: F401
+        except ImportError:
+            return {"available": False, "reason": "dbus-next-missing"}
+        return {"available": True, "reason": None}
+
+    @staticmethod
+    def is_available() -> bool:
+        """Back-compat boolean; new callers should prefer availability()."""
+        return BluetoothMidi.availability()["available"]
 
     async def scan(self, timeout: int = 10) -> list[dict]:
         """Scan for BLE-MIDI devices. Returns list of {name, address, rssi, paired}."""
@@ -159,17 +176,19 @@ class BluetoothMidi:
             return False
 
     async def connect(self, address: str) -> bool:
-        """Reconnect an already-paired device via BLE-MIDI bridge.
+        """Hand off to the Python BLE-MIDI bridge.
 
-        The bridge handles the D-Bus connection (keeps it alive) and
-        GATT service discovery. We don't use bluetoothctl connect because
-        it drops the connection when the process exits.
-        """
+        BlueZ's built-in `midi` plugin doesn't actually forward GATT
+        notifications to its ALSA seq client (see the design docstring
+        at the top of ble_midi_bridge.py for the verification trail),
+        so we own the bridging end-to-end. The bridge does its own
+        D-Bus Connect, force-bounces stuck GATT state if needed,
+        subscribes to notifications, and pumps events into ALSA seq.
+        Every D-Bus call has a timeout, so this returns within ~10s
+        in the worst case rather than hanging the UI."""
         if self.ble_bridge:
             name = self._get_device_name(address)
-            ok = await self.ble_bridge.start_bridge(address, name)
-            return ok
-        # Fallback if no bridge
+            return await self.ble_bridge.start_bridge(address, name)
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(None, self._connect_sync, address)
 
@@ -220,6 +239,97 @@ class BluetoothMidi:
         """List paired BLE-MIDI devices with connection state."""
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(None, self._get_paired_sync)
+
+    async def restore_connected_bridges(self) -> None:
+        """On startup: bring known BLE-MIDI devices back online.
+
+        Two cases:
+
+        1. Service-restart only (Pi stayed powered): BlueZ kept the BLE
+           link alive, so the device is already `Connected: yes`. We just
+           need to re-attach our Python bridge.
+        2. Full reboot: BlueZ reloaded its bond from /var/lib/bluetooth
+           (tmpfs restored from the boot snapshot) but does NOT initiate
+           connections to peripherals on its own — BLE-MIDI peripherals
+           wait to be told. We iterate paired+trusted BLE-MIDI devices
+           and ask BlueZ to Connect() each one.
+
+        Both cases end with start_bridge(), which short-circuits if the
+        bridge is already running for that address.
+        """
+        if not self.ble_bridge:
+            return
+        loop = asyncio.get_event_loop()
+        try:
+            paired = await loop.run_in_executor(
+                None, self._list_paired_midi_sync)
+        except Exception as e:
+            log.warning("restore_connected_bridges: enumerate failed: %s", e)
+            return
+        connected_addrs = {p["address"] for p in paired if p["connected"]}
+        log.info("restore_connected_bridges: %d paired BLE-MIDI "
+                 "device(s) (%d already connected)",
+                 len(paired), len(connected_addrs))
+        for d in paired:
+            try:
+                if d["address"] not in connected_addrs:
+                    log.info("Reconnecting BLE-MIDI device %s (%s)",
+                             d["name"], d["address"])
+                    # Initiate D-Bus connect — bridge.start_bridge will
+                    # do this anyway, but giving BlueZ a head start
+                    # before bridging keeps the timing predictable.
+                    await asyncio.wait_for(
+                        loop.run_in_executor(
+                            None, self._connect_sync, d["address"]),
+                        timeout=20.0,
+                    )
+                ok = await self.ble_bridge.start_bridge(
+                    d["address"], d["name"])
+                if ok:
+                    log.info("Re-bridged BLE-MIDI device %s (%s) on startup",
+                             d["name"], d["address"])
+                else:
+                    log.warning("Could not re-bridge %s on startup",
+                                d["address"])
+            except asyncio.TimeoutError:
+                log.warning("Reconnect of %s timed out — peripheral "
+                            "likely out of range", d["address"])
+            except Exception as e:
+                log.warning("Re-bridge of %s failed: %s", d["address"], e)
+
+    def _list_paired_midi_sync(self) -> list[dict]:
+        """All paired BLE-MIDI devices with their connected state."""
+        out = _btctl("devices", "Paired", timeout=5)
+        devs = []
+        for line in out.splitlines():
+            m = re.match(r"^Device\s+([0-9A-Fa-f:]{17})\s+(.+)$", line)
+            if not m:
+                continue
+            address, name = m.group(1), m.group(2)
+            info = _btctl("info", address, timeout=5)
+            if MIDI_SERVICE_UUID not in info.lower():
+                continue
+            devs.append({
+                "address": address,
+                "name": name,
+                "connected": "Connected: yes" in info,
+            })
+        return devs
+
+
+    def _list_connected_midi_sync(self) -> list[dict]:
+        out = _btctl("devices", "Connected", timeout=5)
+        out_devs = []
+        for line in out.splitlines():
+            m = re.match(r"^Device\s+([0-9A-Fa-f:]{17})\s+(.+)$", line)
+            if not m:
+                continue
+            address, name = m.group(1), m.group(2)
+            info = _btctl("info", address, timeout=5)
+            if MIDI_SERVICE_UUID not in info.lower():
+                continue
+            out_devs.append({"address": address, "name": name})
+        return out_devs
 
     def _get_paired_sync(self) -> list[dict]:
         output = _btctl("devices", "Paired", timeout=5)

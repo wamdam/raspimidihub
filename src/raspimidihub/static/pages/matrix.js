@@ -15,7 +15,7 @@
 
 import { html } from '../ui/common.js';
 import { useTapMenu } from '../ui/contextmenu.js';
-import { IconDIN, PluginIcon } from '../ui/icons.js';
+import { IconDIN, IconBluetooth, PluginIcon } from '../ui/icons.js';
 
 export function MatrixCell({ on, filtered, getMenuItems, showContextMenu, offline }) {
     const trigger = useTapMenu(showContextMenu, getMenuItems);
@@ -26,7 +26,7 @@ export function MatrixCell({ on, filtered, getMenuItems, showContextMenu, offlin
     </td>`;
 }
 
-export function MatrixHeader({ item, label, isPlugin, pluginType, sendsClock, clockBlocked, multiEffective, clockBeat, online, getMenuItems, showContextMenu, midiRate }) {
+export function MatrixHeader({ item, label, isPlugin, pluginType, isBluetooth, sendsClock, clockBlocked, multiEffective, clockBeat, online, getMenuItems, showContextMenu, midiRate }) {
     const trigger = useTapMenu(showContextMenu, getMenuItems);
     // Three-state clock icon:
     //   blocked       → desaturated + faint  (still pulses so the user
@@ -43,14 +43,14 @@ export function MatrixHeader({ item, label, isPlugin, pluginType, sendsClock, cl
     const title = clockBlocked ? 'Sending clock (blocked from system clock)'
                 : multiEffective ? 'Multiple clock sources!'
                 : 'Sending clock';
-    return html`<th class="row-header ${online ? '' : 'offline'} ${isPlugin ? 'plugin-row' : ''}" style="cursor:pointer"
-        onClick=${trigger.onClick} onContextMenu=${trigger.onContextMenu}>${isPlugin ? html`<${PluginIcon} type=${pluginType} />` : html`<span class="dev-icon din" style="display:inline-flex;vertical-align:middle;margin-right:3px">${IconDIN}</span>`} ${label}${sendsClock ? html`<span key=${clockBeat || 0} class="clock-icon ${cls}" title="${title}"></span>` : ''}
+    return html`<th class="row-header ${online ? '' : 'offline'} ${isPlugin ? 'plugin-row' : ''} ${isBluetooth ? 'bt-row' : ''}" style="cursor:pointer"
+        onClick=${trigger.onClick} onContextMenu=${trigger.onContextMenu}>${isPlugin ? html`<${PluginIcon} type=${pluginType} />` : html`<span class="dev-icon ${isBluetooth ? 'bt' : 'din'}" style="display:inline-flex;vertical-align:middle;margin-right:3px">${isBluetooth ? IconBluetooth : IconDIN}</span>`} ${label}${sendsClock ? html`<span key=${clockBeat || 0} class="clock-icon ${cls}" title="${title}"></span>` : ''}
         <${RateMeter} rate=${midiRate} /></th>`;
 }
 
 export function ColumnHeader({ item, label, getMenuItems, showContextMenu }) {
     const trigger = useTapMenu(showContextMenu, getMenuItems);
-    return html`<th class="${item.online ? '' : 'offline'} ${item.is_plugin ? 'plugin-col' : ''}" style="cursor:pointer"
+    return html`<th class="${item.online ? '' : 'offline'} ${item.is_plugin ? 'plugin-col' : ''} ${item.is_bluetooth ? 'bt-col' : ''}" style="cursor:pointer"
         title="${item.multi ? item.dev_name + ': ' + item.port_name : item.dev_name}"
         onClick=${trigger.onClick} onContextMenu=${trigger.onContextMenu}><span>${label}</span></th>`;
 }
@@ -102,18 +102,16 @@ export function ConnectionMatrix({ devices, connections, showToast, clockSources
     const isOffline = (inp, out) => !inp.online || !out.online;
 
     // label(): short text shown in matrix row/column headers.
-    // BLE-MIDI devices get a leading ᛒ rune (U+16D2) so they're
-    // distinguishable from USB MIDI at a glance — the icon column
-    // is already used by plugin svgs / DIN icons for hardware.
+    // BLE-MIDI devices used to get a leading ᛒ rune; now the
+    // bluetooth icon in the row/column header carries that signal.
     const label = (item) => {
-        const bt = item.is_bluetooth ? 'ᛒ ' : '';
         if (item.multi && item.port_name !== item.port_default_name) {
-            return bt + item.port_name;
+            return item.port_name;
         }
         let short = item.dev_name;
         if (item.multi) short += ` p${item.port_id + 1}`;
         if (short.length > 20) short = short.slice(0, 19) + '…';
-        return bt + short;
+        return short;
     };
 
     const clockClientIds = clockSources ? Object.keys(clockSources).map(Number) : [];
@@ -150,6 +148,7 @@ export function ConnectionMatrix({ devices, connections, showToast, clockSources
                         return html`
                         <tr>
                             <${MatrixHeader} item=${inp} label=${label(inp)} isPlugin=${inp.is_plugin} pluginType=${inp.plugin_type}
+                                isBluetooth=${inp.is_bluetooth}
                                 sendsClock=${sendsClock}
                                 clockBlocked=${!!blockedById[inp.client_id]}
                                 multiEffective=${multiEffective}

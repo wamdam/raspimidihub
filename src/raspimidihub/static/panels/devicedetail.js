@@ -230,6 +230,27 @@ export function DeviceDetailPanel({ device, onClose, showToast, refresh, pluginD
         if (refresh) refresh();
     };
 
+    const isBluetooth = !!device.is_bluetooth;
+    // bt-<MAC> is the stable_id format from device_id.py — strip the
+    // prefix to get the raw MAC for the bluetooth API.
+    const btAddress = (isBluetooth && device.stable_id && device.stable_id.startsWith('bt-'))
+        ? device.stable_id.slice(3) : null;
+    const disconnectBt = async () => {
+        if (!btAddress) return;
+        await api('/bluetooth/disconnect', { method: 'POST', body: JSON.stringify({ address: btAddress }) });
+        showToast('Bluetooth device disconnected');
+        close();
+        if (refresh) refresh();
+    };
+    const forgetBt = async () => {
+        if (!btAddress) return;
+        if (!confirm(`Forget ${device.name}? It will need to be reconnected manually.`)) return;
+        await api(`/bluetooth/${encodeURIComponent(btAddress)}`, { method: 'DELETE' });
+        showToast('Bluetooth device removed');
+        close();
+        if (refresh) refresh();
+    };
+
     const outPorts = device.ports.filter(p => p.is_output);
 
     const monitorRef = useRef(null);
@@ -528,6 +549,13 @@ export function DeviceDetailPanel({ device, onClose, showToast, refresh, pluginD
                 ${isPlugin && html`
                     <div style="margin-top:16px;padding:16px 0">
                         <button class="btn btn-danger btn-block" onclick=${deletePlugin}>Delete Plugin</button>
+                    </div>
+                `}
+
+                ${isBluetooth && btAddress && html`
+                    <div style="margin-top:16px;padding:16px 0;display:flex;gap:8px">
+                        <button class="btn btn-block" style="flex:1" onclick=${disconnectBt}>Disconnect</button>
+                        <button class="btn btn-danger btn-block" style="flex:1" onclick=${forgetBt}>Forget</button>
                     </div>
                 `}
             </div>

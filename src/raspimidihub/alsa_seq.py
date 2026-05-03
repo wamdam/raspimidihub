@@ -166,6 +166,7 @@ class MidiEventType(IntEnum):
     STOP = 32           # SND_SEQ_EVENT_STOP
     TICK = 33           # SND_SEQ_EVENT_TICK
     SENSING = 35        # SND_SEQ_EVENT_SENSING
+    SONGPOS = 38        # SND_SEQ_EVENT_SONGPOS
 
 
 # Message type groups for filtering UI
@@ -394,43 +395,58 @@ def check(ret: int, msg: str = "ALSA error"):
 class AlsaSeq:
     """Wrapper around an ALSA sequencer client handle."""
 
-    def __init__(self, client_name: str = "RaspiMIDIHub"):
+    def __init__(self, client_name: str = "RaspiMIDIHub",
+                 default_ports: bool = True):
+        """Wrap an ALSA seq client.
+
+        `default_ports=True` (the historical behaviour) auto-creates
+        an announce-listener port and a generic "output" port. Set
+        False when the caller wants a clean slate — e.g. the BLE-MIDI
+        bridge creates its own OUT / IN ports and would otherwise end
+        up with a confusing extra "output" port hanging off the same
+        client."""
         self._handle = SndSeqPtr()
         check(snd_seq_open(byref(self._handle), b"default", SND_SEQ_OPEN_DUPLEX, SND_SEQ_NONBLOCK),
               "Failed to open ALSA sequencer")
         snd_seq_set_client_name(self._handle, client_name.encode())
         self._client_id = snd_seq_client_id(self._handle)
 
-        # Create a port to receive system announce events
-        self._announce_port = snd_seq_create_simple_port(
-            self._handle,
-            b"listen:announce",
-            SND_SEQ_PORT_CAP_WRITE | SND_SEQ_PORT_CAP_SUBS_WRITE,
-            SND_SEQ_PORT_TYPE_APPLICATION,
-        )
-        check(self._announce_port, "Failed to create announce port")
+        self._announce_port = -1
+        self._output_port = -1
+        if default_ports:
+            # Create a port to receive system announce events
+            self._announce_port = snd_seq_create_simple_port(
+                self._handle,
+                b"listen:announce",
+                SND_SEQ_PORT_CAP_WRITE | SND_SEQ_PORT_CAP_SUBS_WRITE,
+                SND_SEQ_PORT_TYPE_APPLICATION,
+            )
+            check(self._announce_port, "Failed to create announce port")
 
-        # Create an output port for sending test events
-        self._output_port = snd_seq_create_simple_port(
-            self._handle,
-            b"output",
-            SND_SEQ_PORT_CAP_READ | SND_SEQ_PORT_CAP_SUBS_READ,
-            SND_SEQ_PORT_TYPE_MIDI_GENERIC | SND_SEQ_PORT_TYPE_APPLICATION,
-        )
-        check(self._output_port, "Failed to create output port")
+            # Create an output port for sending test events
+            self._output_port = snd_seq_create_simple_port(
+                self._handle,
+                b"output",
+                SND_SEQ_PORT_CAP_READ | SND_SEQ_PORT_CAP_SUBS_READ,
+                SND_SEQ_PORT_TYPE_MIDI_GENERIC | SND_SEQ_PORT_TYPE_APPLICATION,
+            )
+            check(self._output_port, "Failed to create output port")
 
         # CC coalescing state for send_event_coalesced
         self._cc_pending: dict = {}  # (dest, port, ch, cc) -> value
         self._cc_flush_timer = None
 
-        # Subscribe to system announcements
-        check(
-            snd_seq_connect_from(
-                self._handle, self._announce_port,
-                SND_SEQ_CLIENT_SYSTEM, SND_SEQ_PORT_SYSTEM_ANNOUNCE,
-            ),
-            "Failed to subscribe to system announce",
-        )
+        # Subscribe to system announcements (only if we created the
+        # announce port; bridge clients with default_ports=False don't
+        # need to listen for hotplug — that's the engine's job).
+        if self._announce_port >= 0:
+            check(
+                snd_seq_connect_from(
+                    self._handle, self._announce_port,
+                    SND_SEQ_CLIENT_SYSTEM, SND_SEQ_PORT_SYSTEM_ANNOUNCE,
+                ),
+                "Failed to subscribe to system announce",
+            )
 
     @property
     def client_id(self) -> int:
@@ -516,6 +532,31 @@ class AlsaSeq:
             snd_seq_port_info_free(pinfo)
 
         return devices
+
+    def list_user_client_names(self) -> dict[int, str]:
+        """Return {client_id: name} for every USER-type ALSA seq client.
+
+        Used to spot externally-created BLE-MIDI clients (BlueZ creates
+        an ALSA seq client per connected BLE-MIDI device, named after
+        the device) so the engine can opt them into the main scan even
+        though they're not in the plugin / Python-bridge whitelist."""
+        result: dict[int, str] = {}
+        cinfo = SndSeqClientInfoPtr()
+        check(snd_seq_client_info_malloc(byref(cinfo)), "malloc client_info")
+        try:
+            snd_seq_client_info_set_client(cinfo, -1)
+            while snd_seq_query_next_client(self._handle, cinfo) >= 0:
+                cid = snd_seq_client_info_get_client(cinfo)
+                if cid in (SND_SEQ_CLIENT_SYSTEM, MIDI_THROUGH_CLIENT_ID, self._client_id):
+                    continue
+                if snd_seq_client_info_get_type(cinfo) != SND_SEQ_USER_CLIENT:
+                    continue
+                name_raw = snd_seq_client_info_get_name(cinfo)
+                name = name_raw.decode("utf-8", errors="replace") if name_raw else ""
+                result[cid] = name
+        finally:
+            snd_seq_client_info_free(cinfo)
+        return result
 
     def subscribe(self, src_client: int, src_port: int, dst_client: int, dst_port: int) -> None:
         """Create a port subscription (src output -> dst input)."""
