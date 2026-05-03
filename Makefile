@@ -140,11 +140,15 @@ release: $(DEB_FILE) $(ROSETUP_DEB_FILE)
 	chmod +x dist/install.sh
 	git tag -a v$(VERSION) -m "v$(VERSION)"
 	git push origin HEAD --tags
+	@# Auto-mark alpha / beta / rc versions as prereleases. Stable
+	@# (e.g. 3.0.0) versions don't carry a letter suffix.
+	$(eval PRERELEASE := $(shell echo $(VERSION) | grep -qE '[a-z]' && echo --prerelease))
 	gh release create v$(VERSION) \
 		$(DEB_FILE) \
 		$(ROSETUP_DEB_FILE) \
 		dist/install.sh \
 		--title "v$(VERSION)" \
+		$(PRERELEASE) \
 		--notes "$${NOTES:-Release v$(VERSION)}"
 	@echo "=== Released: https://github.com/wamdam/raspimidihub/releases/tag/v$(VERSION) ==="
 
