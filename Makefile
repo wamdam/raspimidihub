@@ -21,6 +21,16 @@ all: deb deb-rosetup
 deb: $(DEB_FILE)
 
 $(DEB_FILE): src/raspimidihub/*.py src/raspimidihub/plugin_host/*.py src/raspimidihub/runtime/*.py src/raspimidihub/static/*.* $(wildcard src/raspimidihub/static/*/*.*) plugins/*/*.py plugins/*/*.svg systemd/raspimidihub.service systemd/raspimidihub-hostapd.service udev/90-raspimidihub.rules debian/postinst debian/postrm CHANGELOG.txt
+	@# Belt-and-braces: fail the build if Makefile VERSION and the
+	@# Python __version__ have drifted. The Python value is what the
+	@# header badge in the UI shows, and 3.0.0a2 shipped with it stuck
+	@# at 3.0.0a1 because nothing checked.
+	@PY_VER=$$(grep -oP '^__version__ = "\K[^"]+' src/raspimidihub/__init__.py); \
+	if [ "$$PY_VER" != "$(VERSION)" ]; then \
+		echo "ERROR: Makefile VERSION=$(VERSION) but src/raspimidihub/__init__.py __version__=$$PY_VER"; \
+		echo "       Bump src/raspimidihub/__init__.py to match before building."; \
+		exit 1; \
+	fi
 	@mkdir -p dist
 	@rm -rf $(BUILD_DIR)
 	@mkdir -p $(BUILD_DIR)/DEBIAN
