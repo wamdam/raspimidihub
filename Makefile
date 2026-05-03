@@ -1,5 +1,5 @@
 PACKAGE = raspimidihub
-VERSION = 3.0.0a1
+VERSION = 3.0.0a2
 DEB_NAME = $(PACKAGE)_$(VERSION)-1_all
 BUILD_DIR = build/$(DEB_NAME)
 DEB_FILE = dist/$(DEB_NAME).deb
@@ -66,12 +66,17 @@ $(DEB_FILE): src/raspimidihub/*.py src/raspimidihub/plugin_host/*.py src/raspimi
 	chmod 755 $(BUILD_DIR)/usr/local/bin/raspimidihub-update-watchdog
 	cp scripts/raspimidihub-install-deb.sh $(BUILD_DIR)/usr/local/bin/raspimidihub-install-deb
 	chmod 755 $(BUILD_DIR)/usr/local/bin/raspimidihub-install-deb
+	cp scripts/raspimidihub-bt-state.sh $(BUILD_DIR)/usr/local/bin/raspimidihub-bt-state
+	chmod 755 $(BUILD_DIR)/usr/local/bin/raspimidihub-bt-state
+	cp systemd/raspimidihub-bt-state.service $(BUILD_DIR)/lib/systemd/system/
+	@mkdir -p $(BUILD_DIR)/etc/systemd/system/bluetooth.service.d
+	cp systemd/bluetooth-no-midi.conf $(BUILD_DIR)/etc/systemd/system/bluetooth.service.d/no-midi.conf
 	@echo "Package: $(PACKAGE)" > $(BUILD_DIR)/DEBIAN/control
 	@echo "Version: $(VERSION)-1" >> $(BUILD_DIR)/DEBIAN/control
 	@echo "Architecture: all" >> $(BUILD_DIR)/DEBIAN/control
 	@echo "Maintainer: Daniel Kraft <wam@poplr.de>" >> $(BUILD_DIR)/DEBIAN/control
-	@echo "Depends: python3 (>= 3.9), libasound2t64 | libasound2, alsa-utils, avahi-daemon, hostapd, dnsmasq, iw" >> $(BUILD_DIR)/DEBIAN/control
-	@echo "Recommends: raspimidihub-rosetup" >> $(BUILD_DIR)/DEBIAN/control
+	@echo "Depends: python3 (>= 3.9), libasound2t64 | libasound2, alsa-utils, avahi-daemon, hostapd, dnsmasq, iw, rfkill, bluez, inotify-tools" >> $(BUILD_DIR)/DEBIAN/control
+	@echo "Recommends: raspimidihub-rosetup, bluez-alsa-utils, libasound2-plugin-bluez, python3-dbus-next" >> $(BUILD_DIR)/DEBIAN/control
 	@echo "Section: sound" >> $(BUILD_DIR)/DEBIAN/control
 	@echo "Priority: optional" >> $(BUILD_DIR)/DEBIAN/control
 	@echo "Description: Automatic USB MIDI hub for Raspberry Pi" >> $(BUILD_DIR)/DEBIAN/control
@@ -144,7 +149,7 @@ deploy-website:
 
 deploy: $(DEB_FILE)
 	scp $(DEB_FILE) $(PI_HOST):/tmp/$(DEB_NAME).deb
-	ssh $(PI_HOST) 'sudo dpkg -i /tmp/$(DEB_NAME).deb'
+	ssh $(PI_HOST) 'sudo mount -o remount,rw / && sudo dpkg -i /tmp/$(DEB_NAME).deb; r=$$?; sudo mount -o remount,ro /; exit $$r'
 
 install: deploy
 

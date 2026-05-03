@@ -1561,6 +1561,7 @@ body {
 .dev-icon { width: 18px; height: 18px; vertical-align: middle; flex-shrink: 0; }
 .dev-icon svg { width: 18px; height: 18px; display: block; }
 .dev-icon.din { color: var(--text-dim); }
+.dev-icon.bt { color: #4488ff; }
 .dev-icon.plugin { color: #4dd9c0; display: inline-flex; }
 .dev-icon.plugin svg { color: #4dd9c0; }
 
@@ -1568,6 +1569,8 @@ body {
 .dev-name-plugin { color: #4dd9c0; }
 .matrix .plugin-row { color: #4dd9c0; }
 .matrix .plugin-col { color: #4dd9c0; }
+.matrix .bt-row { color: #4488ff; }
+.matrix .bt-col { color: #4488ff; }
 
 /* Device list offline dot */
 .dot.offline { background: #555 !important; }

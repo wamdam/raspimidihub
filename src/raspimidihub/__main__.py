@@ -7,6 +7,7 @@ import asyncio
 import logging
 import os
 import signal
+import subprocess
 import sys
 
 from . import __version__
@@ -100,8 +101,24 @@ async def async_main() -> None:
     port = 80 if os.geteuid() == 0 else 8080
     server = WebServer(port=port)
 
+    # Bluetooth MIDI: unblock the radio (rfkill may have it blocked
+    # at boot on some Pi-OS variants), spin up the BlueZ wrapper +
+    # BLE-MIDI bridge. Both are no-ops if the host has no BT
+    # hardware / dbus-next isn't installed.
+    from .ble_midi_bridge import BleMidiBridge
+    from .bluetooth import BluetoothMidi
+    try:
+        subprocess.run(["rfkill", "unblock", "bluetooth"],
+                       capture_output=True, timeout=5)
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass
+    bt = BluetoothMidi()
+    ble_bridge = BleMidiBridge()
+    bt.ble_bridge = ble_bridge
+    engine._ble_bridge = ble_bridge  # so device scans see BLE clients
+
     # Register API routes
-    register_api(server, engine, config, wifi)
+    register_api(server, engine, config, wifi, bt)
 
     # Wire up LED and SSE to hotplug events
     def on_change():
@@ -131,6 +148,18 @@ async def async_main() -> None:
     def on_midi_event(ev):
         # Only process known MIDI events, not system/subscription events
         if ev.type not in _EVENT_NAMES:
+            return
+        # The engine's ALSA seq client receives copies of source events
+        # at MULTIPLE ports: the monitor port (always) plus any filter
+        # read-ports for routes that have a userspace MidiFilter
+        # attached. Counting those copies as separate events made the
+        # clock-quarter counter tick 2× per real source clock for any
+        # device that had a filtered connection — visual pulsed at 8th
+        # rate, ClockBus-driven plugin sync ran double-time. Restrict
+        # all activity bookkeeping to the monitor port — exactly the
+        # one delivery per source the engine itself uses for its own
+        # rate / latency / clock-bus accounting.
+        if ev.dest.port != engine.monitor_port:
             return
         # Clock: gentle heartbeat per beat; other MIDI: sharp blink
         if ev.type == 36:  # CLOCK
@@ -309,6 +338,15 @@ async def async_main() -> None:
                 )
             except Exception:
                 log.warning("WiFi AP setup failed (no wlan0?), continuing without AP")
+
+        # Re-attach BLE-MIDI bridges for devices BlueZ still has
+        # connected from before this process restarted, AND initiate
+        # connect for paired-but-disconnected ones (BLE peripherals
+        # don't auto-reconnect from the host side). Late-arrival case
+        # (WIDI powered up after boot) is handled by the explicit
+        # Connect button in the Add Device → Bluetooth panel — no
+        # background polling.
+        asyncio.ensure_future(bt.restore_connected_bridges())
 
         notify_systemd("READY=1")
         log.info("Service ready (web on port %d)", port)

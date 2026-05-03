@@ -15,7 +15,7 @@
 
 import { html } from '../ui/common.js';
 import { useTapMenu } from '../ui/contextmenu.js';
-import { IconDIN, PluginIcon } from '../ui/icons.js';
+import { IconDIN, IconBluetooth, PluginIcon } from '../ui/icons.js';
 
 export function MatrixCell({ on, filtered, getMenuItems, showContextMenu, offline }) {
     const trigger = useTapMenu(showContextMenu, getMenuItems);
@@ -26,7 +26,7 @@ export function MatrixCell({ on, filtered, getMenuItems, showContextMenu, offlin
     </td>`;
 }
 
-export function MatrixHeader({ item, label, isPlugin, pluginType, sendsClock, clockBlocked, multiEffective, clockBeat, online, getMenuItems, showContextMenu, midiRate }) {
+export function MatrixHeader({ item, label, isPlugin, pluginType, isBluetooth, sendsClock, clockBlocked, multiEffective, clockBeat, online, getMenuItems, showContextMenu, midiRate }) {
     const trigger = useTapMenu(showContextMenu, getMenuItems);
     // Three-state clock icon:
     //   blocked       → desaturated + faint  (still pulses so the user
@@ -43,14 +43,14 @@ export function MatrixHeader({ item, label, isPlugin, pluginType, sendsClock, cl
     const title = clockBlocked ? 'Sending clock (blocked from system clock)'
                 : multiEffective ? 'Multiple clock sources!'
                 : 'Sending clock';
-    return html`<th class="row-header ${online ? '' : 'offline'} ${isPlugin ? 'plugin-row' : ''}" style="cursor:pointer"
-        onClick=${trigger.onClick} onContextMenu=${trigger.onContextMenu}>${isPlugin ? html`<${PluginIcon} type=${pluginType} />` : html`<span class="dev-icon din" style="display:inline-flex;vertical-align:middle;margin-right:3px">${IconDIN}</span>`} ${label}${sendsClock ? html`<span key=${clockBeat || 0} class="clock-icon ${cls}" title="${title}"></span>` : ''}
+    return html`<th class="row-header ${online ? '' : 'offline'} ${isPlugin ? 'plugin-row' : ''} ${isBluetooth ? 'bt-row' : ''}" style="cursor:pointer"
+        onClick=${trigger.onClick} onContextMenu=${trigger.onContextMenu}>${isPlugin ? html`<${PluginIcon} type=${pluginType} />` : html`<span class="dev-icon ${isBluetooth ? 'bt' : 'din'}" style="display:inline-flex;vertical-align:middle;margin-right:3px">${isBluetooth ? IconBluetooth : IconDIN}</span>`} ${label}${sendsClock ? html`<span key=${clockBeat || 0} class="clock-icon ${cls}" title="${title}"></span>` : ''}
         <${RateMeter} rate=${midiRate} /></th>`;
 }
 
 export function ColumnHeader({ item, label, getMenuItems, showContextMenu }) {
     const trigger = useTapMenu(showContextMenu, getMenuItems);
-    return html`<th class="${item.online ? '' : 'offline'} ${item.is_plugin ? 'plugin-col' : ''}" style="cursor:pointer"
+    return html`<th class="${item.online ? '' : 'offline'} ${item.is_plugin ? 'plugin-col' : ''} ${item.is_bluetooth ? 'bt-col' : ''}" style="cursor:pointer"
         title="${item.multi ? item.dev_name + ': ' + item.port_name : item.dev_name}"
         onClick=${trigger.onClick} onContextMenu=${trigger.onContextMenu}><span>${label}</span></th>`;
 }
@@ -72,7 +72,7 @@ export function ConnectionMatrix({ devices, connections, showToast, clockSources
         const inCount = dev.ports.filter(p => p.is_input).length;
         const outCount = dev.ports.filter(p => p.is_output).length;
         for (const p of dev.ports) {
-            const extra = { client_id: dev.client_id, dev_name: dev.name, dev_default_name: dev.default_name || dev.name, port_name: p.name, port_default_name: p.default_name || p.name, online: dev.online !== false, stable_id: dev.stable_id, is_plugin: !!dev.is_plugin, plugin_type: dev.plugin_type };
+            const extra = { client_id: dev.client_id, dev_name: dev.name, dev_default_name: dev.default_name || dev.name, port_name: p.name, port_default_name: p.default_name || p.name, online: dev.online !== false, stable_id: dev.stable_id, is_plugin: !!dev.is_plugin, plugin_type: dev.plugin_type, is_bluetooth: !!dev.is_bluetooth };
             if (p.is_input) inputs.push({ ...p, ...extra, multi: inCount > 1 });
             if (p.is_output) outputs.push({ ...p, ...extra, multi: outCount > 1 });
         }
@@ -101,7 +101,9 @@ export function ConnectionMatrix({ devices, connections, showToast, clockSources
     const isSelf = (inp, out) => inp.client_id && inp.client_id === out.client_id;
     const isOffline = (inp, out) => !inp.online || !out.online;
 
-    // label(): short text shown in matrix row/column headers
+    // label(): short text shown in matrix row/column headers.
+    // BLE-MIDI devices used to get a leading ᛒ rune; now the
+    // bluetooth icon in the row/column header carries that signal.
     const label = (item) => {
         if (item.multi && item.port_name !== item.port_default_name) {
             return item.port_name;
@@ -146,6 +148,7 @@ export function ConnectionMatrix({ devices, connections, showToast, clockSources
                         return html`
                         <tr>
                             <${MatrixHeader} item=${inp} label=${label(inp)} isPlugin=${inp.is_plugin} pluginType=${inp.plugin_type}
+                                isBluetooth=${inp.is_bluetooth}
                                 sendsClock=${sendsClock}
                                 clockBlocked=${!!blockedById[inp.client_id]}
                                 multiEffective=${multiEffective}

@@ -29,6 +29,77 @@ export function RoutingPage({ devices, connections, refresh, showToast, clockSou
         setShowAddPlugin(false);
         refresh();
     };
+    // Bluetooth MIDI: state + handlers for the Add Device overlay's
+    // BT section. `btAvailable === false` hides the section entirely
+    // (Pi-OS variants without bluez / bluealsa). Scan results merge
+    // with the paired-devices list so a found-but-not-yet-paired
+    // device shows alongside already-paired ones.
+    const [btAvailable, setBtAvailable] = useState(false);
+    // When unavailable, the API returns a reason — `dbus-next-missing`
+    // is the common one on Pis upgraded via the old dpkg-i path
+    // (python3-dbus-next is a Recommends since the BLE-MIDI bridge
+    // was added; dpkg ignores Recommends so it lands missing). We
+    // show a banner with the apt command that fixes it.
+    const [btReason, setBtReason] = useState(null);
+    const [btDevices, setBtDevices] = useState([]);
+    const [btScanning, setBtScanning] = useState(false);
+    const [btConnecting, setBtConnecting] = useState(null);
+    // Default to MIDI-only — a BLE scan picks up dozens of unrelated
+    // peripherals (random-MAC trackers, watches, sensors) which is
+    // overwhelming when looking for a synth. Toggle reveals them all
+    // for the rare case where a known BLE-MIDI device doesn't
+    // advertise the MIDI UUID until after first connection.
+    const [btShowAll, setBtShowAll] = useState(false);
+    const loadBt = () => { api('/bluetooth').then(r => {
+        setBtAvailable(!!r.available);
+        setBtReason(r.available ? null : (r.reason || null));
+        setBtDevices(r.devices || []);
+    }).catch(() => {}); };
+    const btScan = async () => {
+        setBtScanning(true);
+        try {
+            const found = await api('/bluetooth/scan', { method: 'POST' });
+            setBtDevices(prev => {
+                const known = new Set(prev.map(d => d.address));
+                const merged = [...prev];
+                for (const d of found || []) { if (!known.has(d.address)) merged.push(d); }
+                return merged;
+            });
+        } catch (e) { showToast('BT scan failed'); }
+        setBtScanning(false);
+    };
+    const btConnect = async (address) => {
+        // Single /connect call — the backend's BLE-MIDI bridge handles
+        // the D-Bus Connect itself and waits for GATT services to
+        // resolve. /pair via bluetoothctl was a) often the wrong thing
+        // (most BLE-MIDI peripherals don't bond) and b) added ~10s
+        // before the real connect even started.
+        setBtConnecting(address);
+        try {
+            const r = await api('/bluetooth/connect', { method: 'POST', body: JSON.stringify({ address }) });
+            if (r && r.error) {
+                showToast(r.error || 'BT connect failed');
+            } else {
+                showToast('Bluetooth device connected');
+                setShowAddPlugin(false);
+                refresh();
+            }
+        } catch (e) { showToast('BT connect failed'); }
+        setBtConnecting(null);
+    };
+    const btDisconnect = async (address) => {
+        await api('/bluetooth/disconnect', { method: 'POST', body: JSON.stringify({ address }) });
+        showToast('Bluetooth device disconnected');
+        loadBt();
+        refresh();
+    };
+    const btForget = async (address, name) => {
+        if (!confirm('Forget ' + (name || address) + '?')) return;
+        await api('/bluetooth/' + encodeURIComponent(address), { method: 'DELETE' });
+        showToast('Bluetooth device removed');
+        loadBt();
+        refresh();
+    };
     const filterConn = filterConnId ? connections.find(c => c.id === filterConnId) || null : null;
 
     const onToggle = async (inp, out, connect) => {
@@ -349,10 +420,27 @@ export function RoutingPage({ devices, connections, refresh, showToast, clockSou
         // plugins shouldn't exist (instances live as long as we keep
         // them), so they get the full plugin menu.
         if (!item.online && !item.is_plugin) {
-            return [
-                { label: 'Remove', danger: true,
-                  action: () => item.stable_id && onRemoveDevice && onRemoveDevice(item.stable_id) },
-            ];
+            const items = [];
+            // Offline BT devices — paired but not currently connected.
+            // Surface a Reconnect right here so the user doesn't have to
+            // dig into Add Device → Bluetooth list.
+            if (item.is_bluetooth && item.stable_id && item.stable_id.startsWith('bt-')) {
+                const addr = item.stable_id.slice(3);
+                items.push({
+                    label: 'Reconnect',
+                    action: async () => {
+                        showToast('Reconnecting…');
+                        try {
+                            const r = await api('/bluetooth/connect', { method: 'POST', body: JSON.stringify({ address: addr }) });
+                            if (r && r.error) showToast(r.error || 'Reconnect failed');
+                            else { showToast('Reconnected'); refresh(); }
+                        } catch (e) { showToast('Reconnect failed'); }
+                    },
+                });
+            }
+            items.push({ label: 'Remove', danger: true,
+                action: () => item.stable_id && onRemoveDevice && onRemoveDevice(item.stable_id) });
+            return items;
         }
         if (item.is_plugin) {
             const isCompat = clipboard && clipboard.kind === 'plugin';
@@ -391,7 +479,7 @@ export function RoutingPage({ devices, connections, refresh, showToast, clockSou
             srcClientId=${filterConn.src_client} />`}
         <${ConnectionMatrix} devices=${devices} connections=${connections}
             showToast=${showToast} clockSources=${clockSources} clockQuarters=${clockQuarters} midiRates=${midiRates}
-            onAddPlugin=${() => { loadPluginTypes(); setShowAddPlugin(true); }}
+            onAddPlugin=${() => { loadPluginTypes(); loadBt(); setShowAddPlugin(true); }}
             getCellMenuItems=${cellMenuItems} getHeaderMenuItems=${headerMenuItems}
             showContextMenu=${showContextMenu} />
         <div class="btn-group">
@@ -414,12 +502,13 @@ export function RoutingPage({ devices, connections, refresh, showToast, clockSou
         </div>
         ${showAddPlugin && html`
             <div class="filter-overlay" onclick=${(e) => e.target.className === 'filter-overlay' && setShowAddPlugin(false)}>
-                <div class="filter-panel" style="max-height:70vh">
+                <div class="filter-panel" style="max-height:80vh;overflow-y:auto">
                     <div class="panel-header"><div class="panel-handle"></div></div>
                     <div class="panel-header">
-                        <h3>Add Virtual Device</h3>
+                        <h3>Add Device</h3>
                         <button class="panel-close" onclick=${() => setShowAddPlugin(false)}>\u2715</button>
                     </div>
+                    <div style="font-size:11px;text-transform:uppercase;color:var(--text-dim);letter-spacing:1px;margin:12px 0 8px;font-weight:600">Virtual Instruments</div>
                     ${Object.entries(pluginTypes).filter(([t]) => !t.startsWith('_')).map(([type, info]) => html`
                         <div class="device" style="cursor:pointer;padding:12px 0;display:flex;align-items:center;gap:10px" onclick=${() => addPlugin(type)}>
                             <${PluginIcon} type=${type} />
@@ -430,6 +519,80 @@ export function RoutingPage({ devices, connections, refresh, showToast, clockSou
                             <span style="color:var(--accent);font-size:13px;font-weight:600">Add</span>
                         </div>
                     `)}
+                    ${!btAvailable && btReason === 'dbus-next-missing' && html`
+                        <div style="margin-top:20px;padding:12px;background:var(--bg);border:1px solid var(--surface2);border-radius:6px;font-size:12px;color:var(--text-dim);line-height:1.5">
+                            <div style="font-weight:600;color:var(--text);margin-bottom:6px">Bluetooth MIDI unavailable</div>
+                            The BLE-MIDI bridge needs <code>python3-dbus-next</code>, which is an optional package
+                            that wasn't installed when this Pi was upgraded. Click below to fetch it; the Pi will
+                            briefly join WiFi to reach apt, install it, and return to the AP.
+                            <button class="btn btn-secondary btn-block" style="margin-top:10px;font-size:13px"
+                                onclick=${async () => {
+                                    try {
+                                        const r = await api('/system/reinstall', { method: 'POST' });
+                                        if (r && r.error) showToast(r.error);
+                                        else showToast('Reinstalling — watch Settings for progress');
+                                    } catch (e) { showToast('Reinstall failed to start'); }
+                                }}>
+                                Reinstall to enable Bluetooth
+                            </button>
+                            <div style="font-size:11px;color:var(--text-dim);margin-top:6px">
+                                Or, from a terminal: <code>sudo apt install python3-dbus-next</code>
+                            </div>
+                        </div>
+                    `}
+                    ${btAvailable && html`
+                        <div style="font-size:11px;text-transform:uppercase;color:var(--text-dim);letter-spacing:1px;margin:20px 0 8px;font-weight:600;border-top:1px solid var(--surface2);padding-top:16px">Bluetooth MIDI</div>
+                        <button class="btn btn-secondary btn-block" style="margin-bottom:8px;font-size:13px"
+                            onclick=${btScan} disabled=${btScanning}>
+                            ${btScanning ? 'Scanning\u2026' : 'Scan for BLE-MIDI Devices'}
+                        </button>
+                        ${(() => {
+                            // The scan returns every BLE peripheral in
+                            // range. Default view filters to entries
+                            // that advertise the MIDI service UUID OR
+                            // are already paired with us (some devices
+                            // only expose MIDI post-pair).
+                            const midiOnly = btDevices.filter(
+                                d => d.midi || d.paired || d.connected);
+                            const nonMidiCount = btDevices.length - midiOnly.length;
+                            const visible = btShowAll ? btDevices : midiOnly;
+                            return html`
+                                ${nonMidiCount > 0 && html`
+                                    <div style="display:flex;align-items:center;justify-content:space-between;font-size:11px;color:var(--text-dim);margin-bottom:8px">
+                                        <span>${midiOnly.length} MIDI-capable device${midiOnly.length === 1 ? '' : 's'}</span>
+                                        <label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer">
+                                            <input type="checkbox" checked=${btShowAll}
+                                                onchange=${e => setBtShowAll(e.target.checked)} />
+                                            <span>Show all (${nonMidiCount} other)</span>
+                                        </label>
+                                    </div>
+                                `}
+                                ${visible.length === 0 && !btScanning && html`
+                                    <div style="font-size:13px;color:var(--text-dim);text-align:center;padding:8px 0">No Bluetooth MIDI devices found</div>
+                                `}
+                                ${visible.map(d => html`
+                                    <div class="device" style="padding:10px 0;display:flex;align-items:center;gap:10px">
+                                        <span style="font-size:18px;color:#4488ff">\u16d2</span>
+                                        <div style="flex:1">
+                                            <div style="font-weight:600;margin-bottom:2px;color:#4488ff">${d.name || d.address}</div>
+                                            <div style="font-size:11px;color:var(--text-dim)">${d.address}${d.midi ? ' \u2022 MIDI' : ''}${d.paired ? ' \u2022 paired' : ''}${d.connected ? ' \u2022 connected' : ''}</div>
+                                        </div>
+                                        ${d.connected ? html`
+                                            <button style="background:none;border:1px solid var(--text-dim);color:var(--text-dim);border-radius:4px;padding:4px 10px;font-size:12px;cursor:pointer"
+                                                onclick=${() => btDisconnect(d.address)}>Disconnect</button>
+                                            <button style="background:none;border:1px solid var(--accent);color:var(--accent);border-radius:4px;padding:4px 10px;font-size:12px;cursor:pointer"
+                                                onclick=${() => btForget(d.address, d.name)}>Forget</button>
+                                        ` : html`
+                                            <button style="background:var(--accent);color:#fff;border:none;border-radius:4px;padding:5px 12px;font-size:12px;font-weight:600;cursor:pointer"
+                                                onclick=${() => btConnect(d.address)} disabled=${btConnecting === d.address}>
+                                                ${btConnecting === d.address ? 'Connecting\u2026' : 'Connect'}
+                                            </button>
+                                        `}
+                                    </div>
+                                `)}
+                            `;
+                        })()}
+                    `}
                 </div>
             </div>
         `}

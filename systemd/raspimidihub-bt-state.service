@@ -1,0 +1,39 @@
+# BlueZ persistent-state shim for the read-only appliance root.
+#
+# /var/lib/bluetooth lives on the read-only ext4 root, so bluetoothd
+# can't store bond keys or device cache between reboots. This unit:
+#
+#   1. (ExecStartPre) Mounts a tmpfs over /var/lib/bluetooth and
+#      extracts the last snapshot from /boot/firmware if present.
+#   2. (ExecStart) Long-running inotify watcher: every time bluetoothd
+#      writes a file under the tmpfs, the watcher debounces 2s and
+#      tars the contents back to /boot/firmware. Required because the
+#      appliance is power-cut without a graceful shutdown — ExecStop
+#      would never run.
+#   3. (ExecStop) On rare graceful shutdown, take one final snapshot.
+#
+# Ordered Before=bluetooth.service so bluetoothd sees the populated
+# tmpfs. Snapshot tarball is uncompressed (handful of files); the
+# /boot/firmware partition is briefly remounted RW per snapshot.
+[Unit]
+Description=RaspiMIDIHub: BlueZ tmpfs + snapshot persistence
+# Must run AFTER /boot/firmware is mounted, otherwise restore reads
+# from an empty path, declares "no snapshot — starting fresh", and the
+# inotify watcher then overwrites the on-disk snapshot with the
+# empty-state version BlueZ just wrote (losing bonds permanently).
+# Default dependencies pull in After=local-fs.target which is exactly
+# what we need; the previous DefaultDependencies=no broke that.
+Requires=boot-firmware.mount
+After=boot-firmware.mount
+Before=bluetooth.service
+
+[Service]
+Type=simple
+ExecStartPre=/usr/local/bin/raspimidihub-bt-state restore
+ExecStart=/usr/local/bin/raspimidihub-bt-state watch
+ExecStop=/usr/local/bin/raspimidihub-bt-state snapshot
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

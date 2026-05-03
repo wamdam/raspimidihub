@@ -12,6 +12,7 @@ import subprocess
 from pathlib import Path
 
 from . import __version__
+from .bluetooth import BluetoothMidi
 from .config import Config
 from .midi_engine import Connection, MidiEngine
 from .midi_filter import (
@@ -173,7 +174,8 @@ _CAPTIVE_PASSTHROUGH = {
 
 
 def register_api(server: WebServer, engine: MidiEngine, config: Config,
-                  wifi: WifiManager | None = None):
+                  wifi: WifiManager | None = None,
+                  bluetooth: BluetoothMidi | None = None):
     """Register all API routes on the web server."""
 
     # Wire the dirty-tracker SSE side so mark_dirty / clear_dirty can fan
@@ -379,6 +381,8 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
                 entry["pid"] = info.pid
                 entry["usb_path"] = info.usb_path
                 entry["is_plugin"] = info.is_plugin
+                if info.is_bluetooth:
+                    entry["is_bluetooth"] = True
                 # Hardware only — plugins never feed the bus from
                 # this gate (their feeds_clock_bus class attribute
                 # already governs them).
@@ -420,6 +424,10 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
                 "default_name": name,
                 "ports": ports,
                 "online": False,
+                # Carry the BT flag through to offline entries so the
+                # matrix's "Reconnect" context-menu item shows up for
+                # paired-but-disconnected BLE-MIDI devices.
+                "is_bluetooth": sid.startswith("bt-"),
             })
 
         return Response.json(result)
@@ -1171,17 +1179,24 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
     # ================================================================
     # Phase 5.5 update flow: orchestrator-backed check & install
     #
-    # Two-stage by design: download is online (transient WiFi switch
-    # when needed), install is offline (just dpkg of an already-stored
-    # deb). Splitting them lets the user install an older stored
-    # version without touching the network, and lets the network dance
-    # run under a watchdog without dpkg sitting on the AP.
+    # Check: WiFi dance → fetch release list + download newer debs →
+    # back to AP. Stored debs sit in /var/lib/raspimidihub/updates so
+    # the user can downgrade offline.
     #
-    # The check kickoff returns immediately (the orchestrator runs as
-    # a backgrounded asyncio task) — otherwise switching to WiFi client
-    # mode tears down the AP and would kill the held-open HTTP request
-    # from a phone. The UI polls GET /api/system/update-status and
-    # silently absorbs fetches that fail during the AP outage.
+    # Install: peeks the deb's Depends. If every dep is already
+    # satisfied (typical for downgrades) the install runs offline, no
+    # WiFi dance. If any dep is missing (typical for upgrades that
+    # add new packages, e.g. python3-dbus-next for BLE-MIDI) the
+    # install is wrapped in UpdateFetcher.run() so the same dance
+    # used by the check makes apt come back online for the dep fetch.
+    # `apt install <path.deb>` then resolves and pulls anything
+    # missing transparently.
+    #
+    # All kickoffs return immediately (the orchestrator runs as a
+    # backgrounded asyncio task) — otherwise switching WiFi tears
+    # down the AP and would kill the held-open HTTP request from a
+    # phone. The UI polls GET /api/system/update-status and silently
+    # absorbs fetches that fail during the AP outage.
     # ================================================================
 
     # One in-flight orchestrator task at a time; second click returns
@@ -1244,12 +1259,56 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         await config.asave()
         return Response.json({"status": "ok", "include_prereleases": enabled})
 
+    def _deb_unmet_deps(deb_path: str) -> list[str]:
+        """Return the list of Depends in the deb that aren't satisfied
+        on the current system. Empty list = the install can run fully
+        offline."""
+        try:
+            depends_raw = subprocess.run(
+                ["dpkg-deb", "-f", deb_path, "Depends"],
+                capture_output=True, text=True, timeout=5,
+            ).stdout.strip()
+        except Exception:
+            return []  # can't tell — let apt sort it out
+        if not depends_raw:
+            return []
+        # dpkg's Depends syntax: "pkg1 (>= 1.0), pkg2 | pkg3, pkg4".
+        # We're looking for any clause where NONE of the alternatives
+        # is installed; version constraints are best-effort (we just
+        # check pkg presence — apt will reject version mismatches
+        # later, but those only happen on a corrupted system).
+        unmet: list[str] = []
+        for clause in depends_raw.split(","):
+            alts = [a.strip().split()[0] for a in clause.split("|") if a.strip()]
+            if not alts:
+                continue
+            # Strip ${...} substvars resolved at build time.
+            alts = [a for a in alts if not a.startswith("${")]
+            if not alts:
+                continue
+            satisfied = False
+            for alt in alts:
+                rc = subprocess.run(
+                    ["dpkg-query", "-W", "-f=${Status}", alt],
+                    capture_output=True, text=True, timeout=5,
+                ).stdout
+                if "install ok installed" in rc:
+                    satisfied = True
+                    break
+            if not satisfied:
+                unmet.append(clause.strip())
+        return unmet
+
     @server.route("POST", "/api/system/install")
     async def api_system_install(req: Request) -> Response:
         """Install a previously-downloaded deb. Body: {version: "X.Y.Z"}.
-        Runs the install script as a detached subprocess — dpkg will
-        restart raspimidihub.service, so the response goes out before
-        the service dies."""
+
+        If the deb has unmet deps, the install runs through
+        UpdateFetcher so a transient WiFi switch happens automatically
+        and apt can fetch them. Otherwise the install runs offline —
+        no AP outage, no dance. Returns immediately (the install is
+        backgrounded) because dpkg restarts raspimidihub.service mid-
+        flight."""
         version = req.json.get("version", "")
         if not version:
             return Response.error("version required")
@@ -1259,13 +1318,112 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
             return Response.error(f"Version {version} not in storage", 404)
         if not INSTALL_DEB_SCRIPT.is_file():
             return Response.error("Install script missing", 500)
-        write_status({"step": "installing", "version": version})
-        subprocess.Popen(
-            [str(INSTALL_DEB_SCRIPT), match["deb_path"]],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-            start_new_session=True,
-        )
-        return Response.json({"status": "started", "version": version})
+
+        unmet = _deb_unmet_deps(match["deb_path"])
+        log.info("install %s: unmet deps = %r", version, unmet)
+
+        if not unmet:
+            # Offline-capable path: run the install script directly.
+            write_status({"step": "installing", "version": version})
+            subprocess.Popen(
+                [str(INSTALL_DEB_SCRIPT), match["deb_path"]],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+            return Response.json({
+                "status": "started", "version": version, "online": False,
+            })
+
+        # Online-required path: wrap the install in the UpdateFetcher
+        # so the same WiFi dance used by check-update kicks in.
+        if wifi is None:
+            return Response.error(
+                "Install needs network for new deps but WiFi manager "
+                "is unavailable", 503)
+        if in_flight_check[0] and not in_flight_check[0].done():
+            return Response.error(
+                "Update flow already running", 409)
+
+        async def install_work():
+            # The install script is blocking; run it in the executor
+            # so the orchestrator's status pump keeps moving. The
+            # script itself updates the status JSON ("installing" /
+            # "done" / "error-install"), so we just need to await it.
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(
+                None,
+                lambda: subprocess.run(
+                    [str(INSTALL_DEB_SCRIPT), match["deb_path"]],
+                    capture_output=True),
+            )
+
+        fetcher = UpdateFetcher(wifi, config)
+
+        async def run_orchestrator():
+            try:
+                await fetcher.run(install_work, version_label=version)
+            except NoInternetError:
+                # _abort already wrote the actionable status.
+                pass
+            except Exception as e:
+                log.exception("install %s failed", version)
+                write_status({"step": "error-install",
+                              "version": version, "message": str(e)})
+
+        write_status({"step": "starting", "version": version})
+        in_flight_check[0] = asyncio.get_event_loop().create_task(
+            run_orchestrator())
+        return Response.json({
+            "status": "started", "version": version, "online": True,
+            "unmet_deps": unmet,
+        })
+
+    @server.route("POST", "/api/system/reinstall")
+    async def api_system_reinstall(req: Request) -> Response:
+        """Reinstall the currently-running version with apt's
+        Recommends pulled in. Used to recover from upgrades that came
+        via the old `dpkg -i` path: those skip Recommends, so the
+        BLE-MIDI bridge silently has no python3-dbus-next on it.
+        Always routes through UpdateFetcher because the whole point
+        is to fetch missing optional packages — needs network."""
+        match = next((v for v in list_stored_versions()
+                      if v["version"] == __version__), None)
+        if match is None:
+            return Response.error(
+                f"No stored deb for the running version ({__version__}). "
+                "Run check-for-updates first to download it.", 404)
+        if not INSTALL_DEB_SCRIPT.is_file():
+            return Response.error("Install script missing", 500)
+        if wifi is None:
+            return Response.error("WiFi manager unavailable", 503)
+        if in_flight_check[0] and not in_flight_check[0].done():
+            return Response.error("Update flow already running", 409)
+
+        async def reinstall_work():
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(
+                None,
+                lambda: subprocess.run(
+                    [str(INSTALL_DEB_SCRIPT), match["deb_path"], "--reinstall"],
+                    capture_output=True),
+            )
+
+        fetcher = UpdateFetcher(wifi, config)
+
+        async def run_orchestrator():
+            try:
+                await fetcher.run(reinstall_work, version_label=__version__)
+            except NoInternetError:
+                pass
+            except Exception as e:
+                log.exception("reinstall failed")
+                write_status({"step": "error-install",
+                              "version": __version__, "message": str(e)})
+
+        write_status({"step": "starting", "version": __version__})
+        in_flight_check[0] = asyncio.get_event_loop().create_task(
+            run_orchestrator())
+        return Response.json({"status": "started", "version": __version__})
 
     @server.route("GET", "/api/system/update-status")
     async def api_update_status(req: Request) -> Response:
@@ -1440,6 +1598,89 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         if ok:
             return Response.json({"status": "configured", "interface": iface})
         return Response.error("Failed to configure interface", 500)
+
+    # ================================================================
+    # Bluetooth MIDI API
+    # ================================================================
+    # All BT routes are gated on the manager being available — i.e.
+    # bluez + bluealsa installed and a BT radio present. Bare GET
+    # /api/bluetooth always returns a payload so the UI can render
+    # an "unsupported on this hardware" hint without polling 404s.
+
+    bt_avail = bluetooth.availability() if bluetooth else \
+        {"available": False, "reason": "no-bluetooth-manager"}
+    if bluetooth and bt_avail["available"]:
+        @server.route("GET", "/api/bluetooth")
+        async def api_bluetooth_status(req: Request) -> Response:
+            devices = await bluetooth.get_paired_devices()
+            return Response.json({"available": True, "devices": devices})
+
+        @server.route("POST", "/api/bluetooth/scan")
+        async def api_bluetooth_scan(req: Request) -> Response:
+            devices = await bluetooth.scan(timeout=10)
+            return Response.json(devices)
+
+        from .device_id import invalidate_bluealsa_macs_cache
+
+        @server.route("POST", "/api/bluetooth/pair")
+        async def api_bluetooth_pair(req: Request) -> Response:
+            address = req.json.get("address", "")
+            if not address:
+                return Response.error("address required")
+            ok = await bluetooth.pair(address)
+            invalidate_bluealsa_macs_cache()
+            if ok:
+                # Brief settle + kick a device-connected SSE so the
+                # matrix re-fetches /api/devices and picks up the
+                # new BLE-MIDI port.
+                await asyncio.sleep(2)
+                await server.send_sse("device-connected", {})
+                return Response.json({"status": "paired"})
+            return Response.error("Pairing failed", 502)
+
+        @server.route("POST", "/api/bluetooth/connect")
+        async def api_bluetooth_connect(req: Request) -> Response:
+            address = req.json.get("address", "")
+            if not address:
+                return Response.error("address required")
+            ok = await bluetooth.connect(address)
+            invalidate_bluealsa_macs_cache()
+            if ok:
+                # Hotplug detection on the ALSA seq fd already fires
+                # device-connected when bluetoothd publishes its seq
+                # client, so we don't need to sit on a sleep here.
+                # Send one anyway as a belt-and-braces nudge.
+                await server.send_sse("device-connected", {})
+                return Response.json({"status": "connected"})
+            return Response.error("Connection failed", 502)
+
+        @server.route("POST", "/api/bluetooth/disconnect")
+        async def api_bluetooth_disconnect(req: Request) -> Response:
+            address = req.json.get("address", "")
+            if not address:
+                return Response.error("address required")
+            await bluetooth.disconnect(address)
+            invalidate_bluealsa_macs_cache()
+            await server.send_sse("device-disconnected", {})
+            return Response.json({"status": "disconnected"})
+
+        @server.route("DELETE", "/api/bluetooth/", exact=False)
+        async def api_bluetooth_forget(req: Request) -> Response:
+            address = req.path_param("/api/bluetooth/")
+            if not address:
+                return Response.error("address required")
+            await bluetooth.forget(address)
+            invalidate_bluealsa_macs_cache()
+            await server.send_sse("device-disconnected", {})
+            return Response.json({"status": "removed"})
+    else:
+        @server.route("GET", "/api/bluetooth")
+        async def api_bluetooth_unavailable(req: Request) -> Response:
+            return Response.json({
+                "available": False,
+                "reason": bt_avail.get("reason"),
+                "devices": [],
+            })
 
     # ================================================================
     # WiFi API

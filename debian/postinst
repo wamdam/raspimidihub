@@ -36,6 +36,54 @@ case "$1" in
         # the build host.
         mkdir -p /var/lib/raspimidihub/updates 2>/dev/null || true
 
+        # BlueZ's built-in `midi` plugin is disabled via a systemd
+        # drop-in (etc/systemd/system/bluetooth.service.d/no-midi.conf
+        # passes -P midi to bluetoothd). It creates a stub ALSA seq
+        # client per BLE-MIDI device but doesn't forward GATT
+        # notifications — verified with btmon + aseqdump on WIDI
+        # Master. We bridge BLE-MIDI ourselves in
+        # raspimidihub.ble_midi_bridge instead. (An earlier attempt
+        # to disable via main.conf `DisablePlugins = midi` was a
+        # no-op: BlueZ 5.82 prints "Unknown key DisablePlugins".)
+        if [ -f /etc/bluetooth/main.conf ]; then
+            sed -i '/^DisablePlugins.*midi/d' /etc/bluetooth/main.conf
+        fi
+
+        # BlueZ persistent state on read-only root: tmpfs at
+        # /var/lib/bluetooth restored from a snapshot tarball on
+        # /boot/firmware. Activated by the raspimidihub-bt-state
+        # oneshot service ordered Before=bluetooth.service.
+        systemctl --no-reload enable raspimidihub-bt-state.service \
+            2>/dev/null || true
+
+        # Restart bluetooth so the new drop-ins (no-midi + tmpfs
+        # state mount) take effect right away rather than waiting
+        # for the next reboot.
+        systemctl restart raspimidihub-bt-state.service 2>/dev/null || true
+        systemctl restart bluetooth.service 2>/dev/null || true
+
+        # Enable BLE-MIDI profile in bluealsa (if installed). bluealsa
+        # ships a2dp / hfp profiles by default; the `midi` profile is
+        # what makes a connected BLE-MIDI device expose itself via ALSA
+        # seq, which the engine then picks up via its normal scan.
+        # Drop-in (not a file edit) so the package's stock unit stays
+        # untouched and an apt purge cleanly reverts. Also unmask +
+        # enable + start bluetooth.service and bluealsa.service —
+        # an earlier system-prepare run may have disabled them as
+        # part of the "MIDI-only appliance" trim.
+        if [ -x /usr/bin/bluealsa ]; then
+            mkdir -p /etc/systemd/system/bluealsa.service.d
+            cat > /etc/systemd/system/bluealsa.service.d/midi.conf << 'CONF'
+[Service]
+ExecStart=
+ExecStart=/usr/bin/bluealsa -S -p a2dp-source -p a2dp-sink -p midi
+CONF
+            systemctl --no-reload unmask bluetooth bluealsa 2>/dev/null || true
+            systemctl daemon-reload
+            systemctl enable --now bluetooth 2>/dev/null || true
+            systemctl restart bluealsa 2>/dev/null || true
+        fi
+
         # Trim system services + reserve a CPU core. Idempotent: safe
         # to run on every install / upgrade. Service / timer disable
         # takes effect immediately; CPU pin (AllowedCPUs=3) takes

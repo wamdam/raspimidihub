@@ -82,6 +82,15 @@ class MidiEngine:
         self._debounce_task: asyncio.Task | None = None
         self._running = False
         self._config = None  # set externally for config-aware rescan
+        # Stable-IDs known at the END of the last _scan_and_connect.
+        # Used to compute "newly appeared" devices for the saved-config
+        # restore on hotplug. We don't read self._devices for this
+        # because external read-only callers (e.g. GET /api/devices)
+        # can call scan_devices() between the bridge appearing and the
+        # debounced rescan running, polluting self._devices with the
+        # new device — which would make `appeared` empty and skip the
+        # saved connections for that device.
+        self._stable_ids_at_last_scan_and_connect: set[str] = set()
         self._on_change_callbacks: list = []
         self._on_midi_event_callbacks: list = []
         self._on_transport_start_callbacks: list = []
@@ -122,6 +131,14 @@ class MidiEngine:
     @property
     def connections(self) -> set[Connection]:
         return self._connections
+
+    @property
+    def monitor_port(self) -> int:
+        """ALSA seq port id our engine uses to subscribe-from every
+        device for activity / clock / latency accounting. External
+        listeners (LED blinker, clock-quarter SSE) gate on this so
+        they count each source event once, not once-per-filter-port."""
+        return self._monitor_port
 
     def mark_dirty(self) -> None:
         """Mark the in-memory config as diverged from disk.
@@ -206,20 +223,57 @@ class MidiEngine:
         """Scan for MIDI devices and return them."""
         if not self._seq:
             return []
-        # Include plugin ALSA client IDs so they're discovered as devices
-        plugin_clients = set()
+        # Include plugin and BLE-bridge ALSA client IDs so they're
+        # discovered as devices alongside hardware. Both are user-
+        # type ALSA clients (not kernel cards) and would otherwise be
+        # filtered out by scan_devices' default hardware-only mode.
+        user_clients: set[int] = set()
         if self._plugin_host:
-            plugin_clients = self._plugin_host.get_plugin_client_ids()
-        self._devices = self._seq.scan_devices(include_user_clients=plugin_clients)
-        # Update device registry with stable IDs (hardware devices via sysfs)
-        hw_client_ids = [d.client_id for d in self._devices if d.client_id not in plugin_clients]
-        self._device_registry.scan(hw_client_ids)
+            user_clients |= self._plugin_host.get_plugin_client_ids()
+        ble_bridge = getattr(self, "_ble_bridge", None)
+        ble_client_ids: set[int] = set()
+        if ble_bridge is not None:
+            ble_client_ids = set(ble_bridge.get_alsa_client_ids())
+            user_clients |= ble_client_ids
+        # BlueZ (modern kernels) also creates an ALSA seq user client
+        # per connected BLE-MIDI peripheral, named after the device.
+        # Whitelist any user client whose name matches a known BT
+        # device alias — otherwise scan_devices() would skip them and
+        # the matrix would silently miss the device.
+        from .device_id import _get_bluealsa_macs
+        bt_macs = _get_bluealsa_macs()
+        if bt_macs:
+            for cid, name in self._seq.list_user_client_names().items():
+                if name in bt_macs:
+                    user_clients.add(cid)
+                    ble_client_ids.add(cid)
+        self._devices = self._seq.scan_devices(include_user_clients=user_clients)
+        # Update device registry with stable IDs (hardware devices via
+        # sysfs + BLE-MIDI by name → MAC). Exclude plugin clients only;
+        # BLE clients are treated as hardware-ish so DeviceRegistry.scan
+        # routes them through the `name in bt_macs` branch and gives
+        # them `bt-<MAC>` stable ids.
+        plugin_only_clients = user_clients - ble_client_ids
+        hw_client_ids = [d.client_id for d in self._devices
+                         if d.client_id not in plugin_only_clients]
+        # Pass {client_id: name} so DeviceRegistry can identify
+        # BlueALSA-managed BLE-MIDI clients by name and key them on
+        # `bt-<MAC>` instead of trying to read sysfs (they don't have
+        # a card). Names come from the scan we just did.
+        client_names = {d.client_id: d.name for d in self._devices}
+        self._device_registry.scan(hw_client_ids, client_names=client_names)
         # Register plugin devices in the registry
         if self._plugin_host:
             for inst in self._plugin_host.get_instances():
                 if inst.alsa_client:
                     self._device_registry.register_plugin(
                         inst.alsa_client.client_id, inst.id, inst.name)
+        # BLE-MIDI bridge devices are registered by the regular
+        # device_registry.scan() above — the bridge names its ALSA
+        # client after the BT alias, so the `name in bt_macs` branch
+        # in DeviceRegistry.scan() picks it up and assigns a
+        # `bt-<MAC>` stable_id. Earlier code overwrote that with
+        # `plugin-ble-...`, which broke offline-stable routing.
         return self._devices
 
     def connect_all(self) -> set[Connection]:
@@ -637,13 +691,15 @@ class MidiEngine:
         snapshot_conns, snapshot_disconn = self._snapshot_live_state()
         has_live_state = bool(snapshot_conns) or bool(snapshot_disconn)
 
-        # Remember which stable IDs were present before the rescan so we
-        # can identify newly-appeared devices afterwards.
-        prev_stable_ids: set[str] = set()
-        for d in self._devices:
-            info = self._device_registry.get_by_client(d.client_id)
-            if info:
-                prev_stable_ids.add(info.stable_id)
+        # `prev_stable_ids` comes from the snapshot we took at the END
+        # of the previous _scan_and_connect — NOT from live
+        # self._devices. Read-only API endpoints (GET /api/devices)
+        # call scan_devices() and update self._devices, so by the time
+        # the debounced post-hotplug rescan runs, a hot-plugged device
+        # may already be in self._devices and look like it was always
+        # present. Tracking the snapshot field separately keeps that
+        # signal intact.
+        prev_stable_ids = set(self._stable_ids_at_last_scan_and_connect)
 
         self.disconnect_all()
         self.scan_devices()
@@ -654,6 +710,7 @@ class MidiEngine:
             if info:
                 new_stable_ids.add(info.stable_id)
         appeared = new_stable_ids - prev_stable_ids
+        self._stable_ids_at_last_scan_and_connect = new_stable_ids
 
         if has_live_state:
             self.apply_saved_config(snapshot=snapshot_conns,

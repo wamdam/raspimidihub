@@ -4,10 +4,75 @@ User-visible changes. Short tagged one-liners, no code or commit
 hashes. Tags: Added, Improved, Fix, Changed, Removed.
 
 
-2026-05-01 — Version 3.0.0a1 (alpha)
+2026-05-03 — Version 3.0.0a2 (alpha)
 
-Second alpha. Carries every change from 3.0.0a (the section below)
-plus the items in this section.
+Third alpha. Bluetooth MIDI is now functional end-to-end — pairing,
+auto-reconnect, full message-type coverage, persistence, UI for
+pair / connect / disconnect / reconnect / forget. Plus a bundle of
+matrix-UI responsiveness and update-flow fixes.
+
+Bluetooth MIDI
+- Added: BLE-MIDI bridge — paired devices appear in the matrix with
+  a Bluetooth icon (separate row + column for IN / OUT). End-to-end
+  message coverage: notes, CC, program change, pitch bend, channel /
+  poly aftertouch, plus MIDI Clock, Start, Stop, Continue and Song
+  Position. SysEx is the one remaining gap.
+- Added: Add Device → Bluetooth section — Scan, Connect, Disconnect,
+  Forget. MIDI-only filter on by default; "Show all (N other)"
+  reveals every BLE peripheral in range.
+- Added: Just-Works pairing agent registered automatically. WIDI
+  Master and similar peripherals that demand encrypted GATT subscribe
+  pair without user interaction.
+- Added: Auto-reconnect on raspimidihub service restart for paired
+  BLE-MIDI devices, including peripherals that powered up after the
+  Pi booted.
+- Added: Reconnect entry in the matrix context menu for paired-but-
+  offline BLE-MIDI devices, alongside Forget.
+- Added: BlueZ disconnect detection — when a peripheral goes out of
+  range or is powered off, the matrix flips its row/column to offline
+  within ~1-2 seconds.
+- Changed: BlueZ's built-in `midi` plugin is disabled (systemd drop-
+  in, `bluetoothd -P midi`) because it creates an ALSA seq client but
+  doesn't actually forward GATT notifications. We bridge BLE-MIDI in
+  Python instead.
+- Added: /var/lib/bluetooth persistence under read-only root —
+  tmpfs at boot restored from a tarball on /boot/firmware, snapshot
+  taken on every change via inotify so bonds survive immediate
+  power-off, no graceful shutdown required.
+- Fix: Filter-panel rapid-fire toggling no longer reverts on stale
+  SSE echoes — the panel now ignores server state until the server
+  catches up to its most recent local edit. Click as fast as you
+  like; the UI stays correct.
+- Fix: Saved BLE-targeting connections silently dropped on the
+  post-hotplug rescan when /api/devices was polled in the same
+  window; now stable.
+- Fix: bluetoothctl-pair-list cache (10 s TTL, invalidated on BT
+  operations) — /api/devices went from ~400 ms to ~80 ms.
+- Fix: Clock symbol blinked at 8th-note rate (and ClockBus-driven
+  plugins ran double-time) when any source had a userspace
+  MidiFilter on one of its routes. The engine was firing the per-
+  source MIDI-activity callback for each delivery to its own ALSA
+  seq client — both monitor port AND filter read-port — so each
+  real Clock counted twice. Now restricted to monitor-port arrivals.
+
+Update flow
+- Changed: Install now uses `apt install` instead of `dpkg -i`, so
+  upgrades that introduce new optional packages (Recommends) pull them
+  automatically when the Pi is online. The orchestrator inspects the
+  deb's hard Depends and, if any are missing, routes the install
+  through the same transient WiFi-switch dance used by
+  Check-for-updates so it can never fail with a half-configured
+  package. Offline downgrades to a stored version with already-
+  satisfied deps still skip the dance and install fully offline.
+
+Bluetooth MIDI dependency
+- Changed: python3-dbus-next moved from Depends to Recommends. Pis
+  upgrading from 2.x via the old dpkg path will install cleanly even
+  when they can't reach apt, but BLE-MIDI silently disables until
+  python3-dbus-next is installed (UI surfaces the apt command needed).
+  3.x → 3.x+1 via the new apt-based install pulls Recommends by
+  default, so the bridge works without intervention as long as the
+  Pi is online during the install.
 
 Arpeggiator
 - Added: Trigger Note — toggle in the Pattern group with a Base

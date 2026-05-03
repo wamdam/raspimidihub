@@ -3,19 +3,39 @@
 ALSA client IDs change on every reconnect. We need stable identifiers
 to persist routing configurations across reboots and reconnects.
 
-Stable ID format: "usb-<bus>-<port_path>-<vid>:<pid>"
-Example: "usb-1-1.2-0763:1044" (M-Audio Keystation on bus 1, port 1.2)
-
-For non-USB ALSA devices (built-in audio, HDMI), we use:
-"builtin-<card_id>"
+Stable ID format:
+  USB:       "usb-<bus>-<port_path>-<vid>:<pid>"
+  Bluetooth: "bt-<mac_address>"
+  Built-in:  "builtin-<card_id>"
+  Plugin:    "plugin-<instance_id>"
 """
 
 import logging
 import re
+import subprocess
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
 log = logging.getLogger(__name__)
+
+# Cache for `_get_bluealsa_macs()`. Two `bluetoothctl devices ...`
+# subprocesses run per call (~100 ms each), and scan_devices() calls
+# this twice (engine + registry), so every refresh of /api/devices was
+# spending ~400 ms on what's almost always the same data. Pair/connect
+# state changes rarely; cache for a few seconds and invalidate
+# explicitly from the BT API endpoints when needed.
+_BT_MACS_TTL_S = 10.0
+_bt_macs_cache: dict = {"value": None, "ts": 0.0}
+
+
+def invalidate_bluealsa_macs_cache() -> None:
+    """Force the next `_get_bluealsa_macs()` call to re-query bluetoothctl.
+
+    Call after any operation that changes BT pair / connect state so
+    a follow-up device scan sees the new device or its absence."""
+    _bt_macs_cache["value"] = None
+    _bt_macs_cache["ts"] = 0.0
 
 
 @dataclass
@@ -28,6 +48,7 @@ class StableDeviceInfo:
     display_name: str  # User-facing name (custom or default)
     custom_name: str = ""  # User-assigned name (empty = use default)
     is_plugin: bool = False  # True for virtual instrument plugins
+    is_bluetooth: bool = False  # True for BLE-MIDI devices via BlueALSA
 
     @property
     def name(self) -> str:
@@ -187,6 +208,43 @@ def alsa_client_to_card(client_id: int) -> int | None:
     return None
 
 
+def _get_bluealsa_macs() -> dict[str, str]:
+    """Map BT device names → MAC addresses via bluetoothctl.
+
+    Covers BOTH Paired and Connected devices because BLE-MIDI peripherals
+    (e.g. WIDI Master) often show up Connected without being Paired —
+    BlueZ creates an ALSA seq client for them either way. The legacy
+    `paired-devices` subcommand was removed from bluetoothctl years ago;
+    `devices Paired` / `devices Connected` are the current syntax.
+
+    Cached for `_BT_MACS_TTL_S` seconds; the BT API endpoints call
+    `invalidate_bluealsa_macs_cache()` after any operation that mutates
+    pair / connect state.
+
+    Returns {} silently on any error so callers can blindly use the dict
+    as a "is this name a BT device?" lookup without try/except blocks."""
+    now = time.monotonic()
+    cached = _bt_macs_cache["value"]
+    if cached is not None and (now - _bt_macs_cache["ts"]) < _BT_MACS_TTL_S:
+        return cached
+    macs: dict[str, str] = {}
+    for sub in ("Paired", "Connected"):
+        try:
+            result = subprocess.run(
+                ["bluetoothctl", "devices", sub],
+                capture_output=True, text=True, timeout=5,
+            )
+            for line in result.stdout.splitlines():
+                m = re.match(r"^Device\s+([0-9A-Fa-f:]{17})\s+(.+)$", line)
+                if m:
+                    macs[m.group(2)] = m.group(1)  # name → MAC
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            pass
+    _bt_macs_cache["value"] = macs
+    _bt_macs_cache["ts"] = now
+    return macs
+
+
 class DeviceRegistry:
     """Maps between ALSA client IDs and stable device identifiers."""
 
@@ -234,15 +292,53 @@ class DeviceRegistry:
         """Sorted list for stable JSON serialization in config."""
         return sorted(self._clock_blocked)
 
-    def scan(self, alsa_client_ids: list[int]) -> dict[int, StableDeviceInfo]:
-        """Scan and register devices for the given ALSA client IDs."""
+    def scan(self, alsa_client_ids: list[int],
+             client_names: dict[int, str] | None = None,
+             ) -> dict[int, StableDeviceInfo]:
+        """Scan and register devices for the given ALSA client IDs.
+
+        `client_names` is an optional `{client_id: ALSA-client-name}`
+        mapping. When provided, BlueALSA-managed BLE-MIDI clients are
+        detected by name and registered with `bt-<MAC>` stable ids.
+        Caller passes None for non-BT setups to skip the bluetoothctl
+        subprocess entirely."""
         self._by_client.clear()
         self._by_stable_id.clear()
 
         # Track how many times each base stable_id appears to disambiguate
         seen_ids: dict[str, int] = {}
 
+        # Detect Bluetooth MIDI devices (BlueALSA clients). Only
+        # populate the MAC map if we have client_names — without it
+        # there's nothing to match against.
+        bt_macs = _get_bluealsa_macs() if client_names else {}
+
         for client_id in sorted(alsa_client_ids):
+            name = client_names.get(client_id, "") if client_names else ""
+
+            # BLE-MIDI: BlueZ (or bluealsa with `-p midi`) creates an
+            # ALSA seq client whose name == the BT device alias when a
+            # BLE-MIDI peripheral is connected. Match against the
+            # name→MAC table from bluetoothctl. Use the MAC as the
+            # stable id so routing survives reconnects (the ALSA
+            # client id changes every session).
+            if name and name in bt_macs:
+                mac = bt_macs.get(name)
+                if mac:
+                    stable_id = f"bt-{mac}"
+                    info = StableDeviceInfo(
+                        stable_id=stable_id,
+                        vid="", pid="", usb_path="",
+                        card_num=-1,
+                        display_name=name,
+                        is_bluetooth=True,
+                    )
+                    if stable_id in self._custom_names:
+                        info.custom_name = self._custom_names[stable_id]
+                    self._by_client[client_id] = info
+                    self._by_stable_id[stable_id] = info
+                    continue
+
             card_num = alsa_client_to_card(client_id)
             if card_num is None:
                 continue

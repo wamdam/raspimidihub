@@ -61,10 +61,10 @@ backup_once() {
 # disable + stop; missing units (different Pi OS variants) are
 # silently skipped.
 SERVICES_TO_DISABLE=(
-    # Bluetooth audio + stack — no BT-MIDI on this device
+    # Bluetooth audio playback — never used on a MIDI hub. The
+    # `bluetooth.service` (BlueZ daemon) and `bluealsa.service`
+    # itself stay ENABLED — both are required for BLE-MIDI.
     bluealsa-aplay.service
-    bluealsa.service
-    bluetooth.service
     # Cellular modems
     ModemManager.service
     # First-boot cloud-init — useless after the appliance is configured
