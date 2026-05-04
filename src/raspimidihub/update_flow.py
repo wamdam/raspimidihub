@@ -75,6 +75,67 @@ def read_status() -> dict[str, Any]:
 
 # --- Internet reachability ------------------------------------------------
 
+# A plain-HTTP host that reliably returns a Date header. Used for
+# bootstrapping the system clock from cold boot — the Pi has no RTC,
+# our system-prepare disables NTP, so until the first manual sync the
+# clock is stuck at last-shutdown. TLS to api.github.com then fails
+# with "certificate not yet valid". Plain HTTP avoids that catch-22.
+HTTP_TIME_BOOTSTRAP_URL = "http://www.google.com"
+HTTP_TIME_BOOTSTRAP_TIMEOUT_SEC = 5.0
+
+
+def sync_clock_from_http(url: str = HTTP_TIME_BOOTSTRAP_URL,
+                          timeout: float = HTTP_TIME_BOOTSTRAP_TIMEOUT_SEC,
+                          drift_threshold_s: float = 60.0) -> bool:
+    """Bootstrap the system clock from an HTTP Date header.
+
+    Idempotent: only steps the clock if the local clock is more than
+    `drift_threshold_s` seconds off the server-reported time (default
+    60 s — tight enough to preempt any TLS / signed-API drift issues
+    that show up before the seconds add up). Returns True iff the
+    clock was actually adjusted.
+
+    Plain HTTP (not HTTPS) so a wildly-wrong local clock doesn't bork
+    the TLS handshake we'd otherwise need to fetch the same Date.
+    Setting CLOCK_REALTIME requires CAP_SYS_TIME — raspimidihub.service
+    runs as root, so this is fine in production; logs a warning and
+    no-ops if it ever isn't.
+    """
+    from datetime import datetime, timezone
+    from email.utils import parsedate_to_datetime
+    try:
+        req = urllib.request.Request(
+            url,
+            method="HEAD",
+            headers={"User-Agent": "raspimidihub-clock-sync"},
+        )
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            date_str = resp.headers.get("Date")
+        if not date_str:
+            return False
+        remote = parsedate_to_datetime(date_str)
+    except Exception as e:
+        log.info("HTTP time bootstrap failed (no Date or unreachable): %s", e)
+        return False
+
+    local = datetime.now(timezone.utc)
+    drift = abs((remote - local).total_seconds())
+    if drift < drift_threshold_s:
+        log.debug("Clock drift %.1fs < %.0fs threshold — leaving clock alone",
+                  drift, drift_threshold_s)
+        return False
+
+    try:
+        time.clock_settime(time.CLOCK_REALTIME, remote.timestamp())
+        log.info("System clock synced from %s Date header — drift was %.0fs "
+                 "(local %s → remote %s)",
+                 url, drift, local.isoformat(), remote.isoformat())
+        return True
+    except (PermissionError, OSError) as e:
+        log.warning("Couldn't step CLOCK_REALTIME (need CAP_SYS_TIME): %s", e)
+        return False
+
+
 def probe_internet(timeout: float = INTERNET_PROBE_TIMEOUT_SEC) -> bool:
     """Sync probe of GitHub's `/zen` endpoint. Returns True if reachable
     (any 2xx/3xx). Called from an executor by async callers."""
@@ -409,6 +470,15 @@ class UpdateFetcher:
                  self.config.wifi.get("wifi_mode_pref", "ap_only"))
         write_status({"step": "probing", "version": version_label})
 
+        # Bootstrap the system clock before TLS. The Pi has no RTC and
+        # we disable NTP for offline use, so on a cold boot the clock
+        # is stuck at last-shutdown. TLS to api.github.com would then
+        # fail with "certificate not yet valid". HTTP HEAD (no TLS)
+        # to a known time-emitting host fixes that. No-op if drift is
+        # < 60 s. Cheap (~50 ms) so it runs every probe — same path
+        # serves cabled and tethered scenarios.
+        await loop.run_in_executor(None, sync_clock_from_http)
+
         if await loop.run_in_executor(None, probe_internet):
             log.info("Path: current network has internet — no WiFi switch")
             return await self._run_work(work, switched=False,
@@ -492,6 +562,11 @@ class UpdateFetcher:
                  ssid, self.wifi.ip)
         write_status({"step": "verifying-internet", "version": version_label,
                       "ssid": ssid})
+        # Sync the clock before the HTTPS probe — see UpdateFetcher.run
+        # for why. Especially relevant on this path: the Pi has just
+        # come up from AP-mode (no internet), so this might be the
+        # first time it can reach a Date-emitting host.
+        await loop.run_in_executor(None, sync_clock_from_http)
         # start_client_with_fallback already waits for an IP. Re-probe to
         # confirm internet is actually reachable via the new connection
         # (joining a captive portal or a router with no WAN would otherwise

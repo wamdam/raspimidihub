@@ -4,6 +4,17 @@ User-visible changes. Short tagged one-liners, no code or commit
 hashes. Tags: Added, Improved, Fix, Changed, Removed.
 
 
+2026-05-04 — Version 3.0.3
+
+- Fix: Update flow steps the system clock from an HTTP Date header
+  before any HTTPS request. The Pi has no RTC and our system-prepare
+  disables NTP, so on a cold boot the clock is stuck at last-shutdown
+  — TLS to api.github.com then failed with "certificate not yet
+  valid". HEAD against a plain-HTTP host (no TLS) reads the Date
+  header and steps CLOCK_REALTIME if drift > 60 s. Both the cabled
+  and transient-WiFi paths sync before probing.
+
+
 2026-05-04 — Version 3.0.2
 
 - Fix: MIDI Learn on the Add Mapping panel — was waiting silently
