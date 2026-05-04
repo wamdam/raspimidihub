@@ -808,7 +808,13 @@ class ControllerBase(PluginBase):
 
     def _step_fade(self, sid: str, progress: float) -> None:
         """Interpolate continuous cells toward the snapshot. Called from
-        on_tick when sched.fade is set."""
+        on_tick when sched.fade is set.
+
+        Knob / Fader / Wheel: lerp the int value, emit a CC each time
+        it crosses an integer boundary (per-cell dedup keeps traffic
+        bounded). Button: skipped — half-fired makes no musical sense.
+        XY Pad: lerp X and Y independently, same per-axis integer-step
+        dedup."""
         snap = (self._param_values.get("drop_snapshots") or {}).get(sid)
         if not snap:
             return
@@ -818,21 +824,57 @@ class ControllerBase(PluginBase):
         last_emit = self._drop_fade_last_emit.setdefault(sid, {})
         for cell, target in snap.items():
             cell_type = self._cell_types.get(cell, "")
-            if cell_type in ("button", "xypad"):
-                # Discrete — snap at fire_at via _apply_snapshot, no fade.
-                continue
+            if cell_type == "button":
+                continue  # buttons land discrete at fire_at
             start = starts.get(cell)
             if start is None or start == target:
                 continue
-            # Linear interpolation, clamped to int. The cell's stored
-            # value is an int for knobs/faders/wheels.
-            cur = int(round(start + (target - start) * progress))
-            # Skip if we'd be emitting either the start value (already
-            # the live state, redundant) or the same int we just sent.
-            if last_emit.get(cell, start) == cur:
-                continue
             binding = self._effective_binding(cell)
             if binding is None:
+                continue
+
+            if cell_type == "xypad":
+                if not (isinstance(start, dict) and isinstance(target, dict)):
+                    continue
+                last = last_emit.get(cell, {"x": start.get("x"),
+                                            "y": start.get("y")})
+                if not isinstance(last, dict):
+                    last = {"x": start.get("x"), "y": start.get("y")}
+                cur = dict(start)
+                emitted = False
+                # X axis
+                sx, tx = start.get("x"), target.get("x")
+                if isinstance(sx, int) and isinstance(tx, int) and sx != tx:
+                    cx = int(round(sx + (tx - sx) * progress))
+                    if last.get("x") != cx:
+                        self.send_cc(binding["channel"], binding["cc"],
+                                     max(0, min(127, cx)))
+                        cur["x"] = cx
+                        emitted = True
+                # Y axis
+                cc_y = binding.get("cc_y")
+                sy, ty = start.get("y"), target.get("y")
+                if (cc_y is not None and isinstance(sy, int)
+                        and isinstance(ty, int) and sy != ty):
+                    cy = int(round(sy + (ty - sy) * progress))
+                    if last.get("y") != cy:
+                        ch_y = binding.get("channel_y", binding["channel"])
+                        self.send_cc(ch_y, cc_y, max(0, min(127, cy)))
+                        cur["y"] = cy
+                        emitted = True
+                if emitted:
+                    last_emit[cell] = {"x": cur["x"], "y": cur["y"]}
+                    self._param_values[cell] = cur
+                    if self._notify_param_change:
+                        try:
+                            self._notify_param_change(cell, cur)
+                        except Exception:
+                            pass
+                continue
+
+            # Knob / Fader / Wheel: linear interpolation on int value.
+            cur = int(round(start + (target - start) * progress))
+            if last_emit.get(cell, start) == cur:
                 continue
             cc_val = self._cell_value_to_cc(cell, cur, binding)
             if cc_val is not None:
