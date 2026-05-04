@@ -37,10 +37,30 @@ export function MappingFormOverlay({ onSubmit, onClose, editing, srcClientId }) 
     const [passThrough, setPassThrough] = useState(editing ? !!editing.pass_through : false);
     const [learning, setLearning] = useState(false);
 
-    // MIDI Learn
+    // MIDI Learn — open a fresh SSE, then explicitly subscribe to
+    // midi-activity once the connection event lands. The per-view
+    // SSE subscription model means an unsubscribed EventSource never
+    // delivers midi-activity events; without the subscribe POST
+    // below, "Listening…" sits there forever and the field never
+    // captures anything (regressed when per-view subscriptions were
+    // introduced; the same fix is in components/noteselect.js).
     useEffect(() => {
         if (!learning) return;
         const es = new EventSource('/api/events');
+        const onConn = (e) => {
+            try {
+                const connId = JSON.parse(e.data).conn_id;
+                fetch('/api/sse/subscribe', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        conn_id: connId,
+                        events: ['midi-activity'],
+                        instances: [],
+                    }),
+                }).catch(() => {});
+            } catch {}
+        };
         const handler = (e) => {
             try {
                 const data = JSON.parse(e.data);
@@ -56,6 +76,7 @@ export function MappingFormOverlay({ onSubmit, onClose, editing, srcClientId }) 
                 }
             } catch {}
         };
+        es.addEventListener('connection', onConn);
         es.addEventListener('midi-activity', handler);
         const timeout = setTimeout(() => setLearning(false), 10000);
         return () => { es.close(); clearTimeout(timeout); };

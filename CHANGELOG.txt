@@ -4,6 +4,15 @@ User-visible changes. Short tagged one-liners, no code or commit
 hashes. Tags: Added, Improved, Fix, Changed, Removed.
 
 
+2026-05-04 — Version 3.0.2
+
+- Fix: MIDI Learn on the Add Mapping panel — was waiting silently
+  forever because its EventSource never subscribed to `midi-activity`
+  under the per-view SSE subscription model. Now subscribes once the
+  connection event arrives, same shape as the NoteSelect Learn
+  button. Note / CC capture works again.
+
+
 2026-05-03 — Version 3.0.1
 
 Major release. Bluetooth MIDI, Controllers (Mixer 8 / FX 6 /
