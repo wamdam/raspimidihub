@@ -69,7 +69,8 @@ export function renderParam(param, values, onChange, allValues, displayCtx) {
             return html`<${PluginStepEditor} name=${param.name} label=${param.label}
                 value=${val || []} onChange=${onChange}
                 lengthParam=${param.length_param} allValues=${allValues}
-                defaultOn=${param.default_on} />`;
+                defaultOn=${param.default_on}
+                slotNotesParam=${param.slot_notes_param} />`;
         case 'curveeditor':
             return html`<${PluginCurveEditor} name=${param.name} label=${param.label}
                 value=${val} onChange=${onChange} />`;

@@ -4,15 +4,22 @@
 
 import { html, tickFeedback, thudFeedback } from './common.js';
 import { useEffect, useRef } from '../lib/hooks.module.js';
+import { noteName } from '../state/constants.js';
 
 // =======================================================================
 // STEP EDITOR — grid with on/off dots and mini-wheel offsets
 // =======================================================================
-export function PluginStepEditor({ name, label, value, onChange, lengthParam, allValues, defaultOn }) {
+export function PluginStepEditor({ name, label, value, onChange, lengthParam, allValues, defaultOn, slotNotesParam }) {
     // value is array of {on, offset}
     const steps = value || [];
     const length = (lengthParam && allValues && allValues[lengthParam])
         ? parseInt(allValues[lengthParam]) || 16 : steps.length || 16;
+    // Optional per-slot note assignments (Arpeggiator's `programmed`
+    // pattern). When the sibling param is populated, render the note
+    // name (C4, F#3, …) in the cell so the user can see what's loaded.
+    const slotNotes = (slotNotesParam && allValues
+                       && Array.isArray(allValues[slotNotesParam]))
+        ? allValues[slotNotesParam] : null;
     // Extend array if step count increased
     const displaySteps = [];
     for (let i = 0; i < length; i++) {
@@ -45,13 +52,16 @@ export function PluginStepEditor({ name, label, value, onChange, lengthParam, al
     return html`<div class="step-editor">
         <div style="font-size:13px;color:var(--text-dim);margin-bottom:8px">${label}</div>
         <div class="step-grid">
-            ${displaySteps.map((step, i) => html`
+            ${displaySteps.map((step, i) => {
+                const slotNote = slotNotes ? slotNotes[i] : null;
+                return html`
                 <div class="step-cell ${step.on ? (step.accent ? 'on accent' : 'on') : ''} ${i % 4 === 0 ? 'beat' : ''}" key=${i}>
                     <div class="step-head" onclick=${() => toggleStep(i)}></div>
                     <${MiniWheel} value=${step.offset || 0}
                         onChange=${(v) => { tickFeedback(); setOffset(i, v); }} />
+                    ${slotNotes ? html`<div class="step-slot-note">${slotNote != null ? noteName(slotNote) : ''}</div>` : ''}
                 </div>
-            `)}
+            `;})}
         </div>
     </div>`;
 }

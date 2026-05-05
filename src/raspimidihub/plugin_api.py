@@ -147,11 +147,18 @@ class StepEditor(Param):
     length_param: str = ""  # Wheel/Radio param name that controls step count
     default_length: int = 16
     default_on: bool = False  # default on/off state for new steps
+    # Optional sibling-param name holding per-slot MIDI note numbers
+    # (or None per slot). When set, the StepEditor renders the note
+    # name (e.g. C4) under each step — used by the Arpeggiator's
+    # `programmed` pattern mode to show what's loaded into each slot.
+    slot_notes_param: str | None = None
 
     def to_dict(self) -> dict:
         d = super().to_dict()
         d.update({"length_param": self.length_param, "default_length": self.default_length,
                   "default_on": self.default_on})
+        if self.slot_notes_param:
+            d["slot_notes_param"] = self.slot_notes_param
         return d
 
 

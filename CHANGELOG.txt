@@ -4,6 +4,42 @@ User-visible changes. Short tagged one-liners, no code or commit
 hashes. Tags: Added, Improved, Fix, Changed, Removed.
 
 
+2026-05-04 — Version 3.0.5
+
+The arpeggiator just grew up. Three changes that turn a static
+note-cycler into a live-programmable performance instrument:
+
+Arpeggiator
+- Added: Sustain pedal (CC 64) is now a temporary Hold. Press the
+  pedal and the keys you release stay arping; lift it and only the
+  notes you're physically holding right now survive. Stack a chord,
+  pedal down, release the keys, jam new notes on top — when you
+  lift the pedal, only what's currently under your fingers keeps
+  playing. CC 64 respects the existing Arp Ch filter and is
+  consumed (not passed through). Same effect for every pattern
+  mode.
+- Added: New notes play on the very next step. Hold C E G in `up`
+  pattern, mid-cycle press D — D fires on the next tick and the
+  arp continues from there, instead of starting over from the
+  bottom. Pattern-aware seek so up / down / up-down / as-played all
+  behave naturally.
+- Added: New `programmed` pattern — live step-sequencer mode. Each
+  keypress writes the next-to-fire step slot; multiple presses
+  between ticks fan into consecutive slots (chord-spread); slots
+  persist while any key is held or sustain is down, and clear when
+  everything's released. The StepEditor renders the loaded note
+  name (C4, F#3, …) under each step square. Disabled steps are
+  skipped on write so a muted step never silently swallows an
+  assignment. Multi-octave plays the slot sequence at +12 / +24 /
+  …  on successive cycles.
+
+Together: hold a chord and the sustain pedal, release the chord,
+keep playing — sustained notes loop. Punch new notes in `programmed`
+mode and watch them overwrite slots in real time as the cycle
+catches up. Lift everything, the phrase ends. Press a single key,
+a new one starts. Live performance, no preset switching.
+
+
 2026-05-04 — Version 3.0.4
 
 - Improved: Drop button fade now interpolates XY pad cells too —
