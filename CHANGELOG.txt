@@ -4,6 +4,24 @@ User-visible changes. Short tagged one-liners, no code or commit
 hashes. Tags: Added, Improved, Fix, Changed, Removed.
 
 
+2026-05-07 — Version 3.0.6
+
+Two browser-only UI fixes — touch was already fine.
+
+- Fix: MIDI Test Sender keyboard now drag-scrolls between octaves
+  in desktop browsers. The mouse path early-returned on any key
+  hit, so the only place a horizontal drag scrolled was the empty
+  strip below the keys; mouse now follows the same threshold-based
+  state machine as touch (press plays, drag past threshold scrolls
+  and releases the note).
+- Fix: Arpeggiator step semitone offsets no longer reset sibling
+  slots when you adjust them in the browser. MiniWheel's native
+  drag listener was bound once with a stale `onChange`, so each
+  drag rebuilt the step array from the original empty value and
+  wiped every other slot. Now uses an `onChange` ref like the
+  other plugin controls.
+
+
 2026-05-04 — Version 3.0.5
 
 The arpeggiator just grew up. Three changes that turn a static

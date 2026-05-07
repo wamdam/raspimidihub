@@ -124,27 +124,47 @@ export function ScrollablePiano({ heldNotes, onNoteDown, onNoteUp, pianoKeys }) 
         };
     }, []);
 
+    // Mouse path mirrors the touch state machine: press plays the note
+    // under the cursor; once horizontal motion exceeds SCROLL_THRESH we
+    // switch to scroll mode and release the note.
     const onMouseDown = (e) => {
-        if (e.target.closest('.piano-key')) return;
         const el = scrollRef.current;
+        if (!el) return;
         const startX = e.clientX, startScroll = el.scrollLeft;
-        const onMove = (ev) => { el.scrollLeft = startScroll - (ev.clientX - startX); };
-        const onUp = () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
-        window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp);
+        const note = noteFromPoint(e.clientX, e.clientY);
+        if (note != null) noteDownRef.current(note);
+        let scrolling = false;
+        let released = false;
+        const releaseNote = () => {
+            if (note != null && !released) { noteUpRef.current(note); released = true; }
+        };
+        const onMove = (ev) => {
+            const dx = ev.clientX - startX;
+            if (!scrolling && Math.abs(dx) > SCROLL_THRESH) {
+                scrolling = true;
+                releaseNote();
+            }
+            if (scrolling) el.scrollLeft = startScroll - dx;
+        };
+        const onUp = () => {
+            releaseNote();
+            window.removeEventListener('mousemove', onMove);
+            window.removeEventListener('mouseup', onUp);
+        };
+        window.addEventListener('mousemove', onMove);
+        window.addEventListener('mouseup', onUp);
     };
 
     const isHeld = (midi) => heldNotes && heldNotes.has(midi);
 
     return html`<div ref=${scrollRef} style="margin-bottom:16px;overflow-x:hidden;touch-action:none"
         onMouseDown=${onMouseDown}>
-        <div class="piano" ref=${pianoRef} style="width:${7 * 8 * 34}px"
-            onMouseLeave=${() => onNoteUp()}>
+        <div class="piano" ref=${pianoRef} style="width:${7 * 8 * 34}px">
             ${Array.from({length: 8}, (_, oct) =>
                 pianoKeys.filter(k => !k.black).map(k => {
                     const midi = (oct + 1) * 12 + k.n;
                     if (midi > 127) return null;
-                    return html`<div class="piano-key white ${isHeld(midi) ? 'active' : ''}" data-midi=${midi}
-                        onMouseDown=${() => onNoteDown(midi)} onMouseUp=${() => onNoteUp(midi)}>
+                    return html`<div class="piano-key white ${isHeld(midi) ? 'active' : ''}" data-midi=${midi}>
                         ${k.n === 0 ? html`<span class="piano-label">C${oct}</span>` : ''}
                     </div>`;
                 })
@@ -156,8 +176,7 @@ export function ScrollablePiano({ heldNotes, onNoteDown, onNoteUp, pianoKeys }) 
                     const whitesBefore = oct * 7 + pianoKeys.filter(x => !x.black && x.n < k.n).length;
                     const leftPx = whitesBefore * 34;
                     return html`<div class="piano-key black ${isHeld(midi) ? 'active' : ''}" data-midi=${midi}
-                        style="left:${leftPx}px"
-                        onMouseDown=${(e) => { e.stopPropagation(); onNoteDown(midi); }} onMouseUp=${() => onNoteUp(midi)}>
+                        style="left:${leftPx}px">
                     </div>`;
                 })
             ).flat()}

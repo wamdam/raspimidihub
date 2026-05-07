@@ -69,6 +69,11 @@ export function PluginStepEditor({ name, label, value, onChange, lengthParam, al
 export function MiniWheel({ value, onChange }) {
     const containerRef = useRef(null);
     const s = useRef({ value, dragging: false, startY: 0, startVal: 0 });
+    // Listeners are bound once in a `[]` effect, so capturing onChange
+    // directly would freeze a stale parent closure (parent rebuilds the
+    // step array each render — using stale onChange wipes sibling slots).
+    const onChangeRef = useRef(onChange);
+    onChangeRef.current = onChange;
 
     useEffect(() => { s.current.value = value; }, [value]);
 
@@ -96,7 +101,7 @@ export function MiniWheel({ value, onChange }) {
             const pt = e.touches ? e.touches[0] : e;
             const dy = s.current.startY - pt.clientY;
             const nv = Math.max(-24, Math.min(24, Math.round(s.current.startVal + dy / 8)));
-            if (nv !== s.current.value) { s.current.value = nv; onChange(nv); }
+            if (nv !== s.current.value) { s.current.value = nv; onChangeRef.current(nv); }
         }
         function onEnd() {
             s.current.dragging = false;
@@ -109,7 +114,7 @@ export function MiniWheel({ value, onChange }) {
             e.preventDefault(); e.stopPropagation();
             const delta = e.deltaY > 0 ? -1 : 1;
             const nv = Math.max(-24, Math.min(24, s.current.value + delta));
-            if (nv !== s.current.value) { s.current.value = nv; onChange(nv); tickFeedback(); }
+            if (nv !== s.current.value) { s.current.value = nv; onChangeRef.current(nv); tickFeedback(); }
         }
         el.addEventListener('touchstart', onStart, { passive: false });
         el.addEventListener('mousedown', onStart);
