@@ -16,6 +16,11 @@ hashes. Tags: Added, Improved, Fix, Changed, Removed.
   fell back into the same hold. Now gates on whether a live slot
   still maps to a held key, so a stale tally entry can't keep the
   pattern ringing.
+- Improved: Arpeggiator config tightens to a single CONTROLS
+  group — Steps · Accent Vel. · Gate % · Octaves sit in one row
+  above the step grid, with Sync (and BPM when Free) below. Was
+  split across two groups; the row above the steps was the
+  natural place to read the four shapers at a glance.
 
 
 2026-05-07 — Version 3.0.6

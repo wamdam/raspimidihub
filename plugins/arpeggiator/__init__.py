@@ -110,16 +110,18 @@ flips Rate, never plays."""
                        visible_when=("rate_trigger", True)),  # most playing ranges
             Radio("rate", "Rate", _RATE_OPTIONS, default="1/8"),
         ]),
-        Group("Steps", [
+        Group("Controls", [
+            # Inline run: step_count + accent_vel + gate + octaves
+            # auto-pack into a single 4-col row (renderParamGroup
+            # groups consecutive inline params), and the StepEditor
+            # below breaks the row because it's not inline.
             Wheel("step_count", "Steps", min=1, max=32, default=8),
             Knob("accent_vel", "Accent Vel.", min=0, max=127, default=30),
+            Wheel("gate", "Gate %", min=10, max=100, default=80),
+            Wheel("octaves", "Octaves", min=1, max=4, default=1),
             StepEditor("steps", "Pattern", length_param="step_count",
                        default_length=8, default_on=True, span=4,
                        slot_notes_param="step_slot_notes"),
-        ]),
-        Group("Controls", [
-            Wheel("gate", "Gate %", min=10, max=100, default=80),
-            Wheel("octaves", "Octaves", min=1, max=4, default=1),
             Radio("sync_mode", "Sync", ["free", "tempo", "transport"], default="transport"),
             Wheel("bpm", "BPM", min=40, max=300, default=120, visible_when=("sync_mode", "free")),
         ]),
