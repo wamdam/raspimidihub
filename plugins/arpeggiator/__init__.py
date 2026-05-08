@@ -383,8 +383,21 @@ flips Rate, never plays."""
                 # ends and the slots clear (otherwise the arp would
                 # loop forever after first programming, which is
                 # surprising). Re-press a key to start a new phrase.
-                if (not self._physically_pressed
-                        and not self._sustain_active):
+                #
+                # The gate is "no surviving slot still references a
+                # pressed key", not "_physically_pressed is empty":
+                # any path that adds (channel, note) without a paired
+                # note-off (rate-trigger toggled mid-press, channel
+                # filter changed mid-press, bridge dropping an event)
+                # leaks an entry into _physically_pressed that the
+                # user can't see. Trusting raw emptiness pins the
+                # gate forever; checking against slot keys keeps the
+                # arp silenceable even after a leak.
+                slots_have_held_key = any(
+                    s is not None and (s[2], s[0]) in self._physically_pressed
+                    for s in self._step_slots
+                )
+                if not slots_have_held_key and not self._sustain_active:
                     self._step_slots = [None] * len(self._step_slots)
                     self._free_running = False
                     self._silence_all()

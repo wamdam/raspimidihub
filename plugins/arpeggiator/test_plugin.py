@@ -278,6 +278,25 @@ class TestProgrammedMode:
         p.on_note_off(0, 64)
         assert all(s is None for s in p._step_slots)
 
+    def test_release_clears_despite_stale_physically_pressed(self):
+        # Regression: in real chains the (channel, note) pair we record
+        # in _physically_pressed can drift out of sync with the keyboard
+        # — a note-on may arrive whose paired note-off never reaches
+        # the plugin (channel filter / rate-trigger toggled mid-press,
+        # bridge dropping an event, channel_map changing mid-press, …).
+        # The leaked entry is invisible to the user but pins the
+        # "all released" gate forever, so every subsequent fresh
+        # press-then-release leaves the slot ringing. Verify that the
+        # gate doesn't trust a stale entry that no surviving slot
+        # actually references.
+        p = self._setup_programmed()
+        # Inject a stale entry: (0, 99) is pressed-but-no-slot.
+        p._physically_pressed[(0, 99)] = 100
+        p.on_note_on(0, 60, 100)
+        p.on_note_off(0, 60)
+        assert all(s is None for s in p._step_slots), \
+            "stale _physically_pressed entry must not pin the slots"
+
     def test_pedal_release_clears_unheld_slots(self):
         p = self._setup_programmed()
         p.on_note_on(0, 60, 100)

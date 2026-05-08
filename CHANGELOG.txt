@@ -4,6 +4,20 @@ User-visible changes. Short tagged one-liners, no code or commit
 hashes. Tags: Added, Improved, Fix, Changed, Removed.
 
 
+2026-05-08 — Version 3.0.7
+
+- Fix: Arpeggiator programmed-mode slots now clear reliably when
+  every key is released. The "all released" gate trusted an
+  internal pressed-key tally that could drift out of sync (any
+  note-on whose paired note-off didn't reach the plugin pinned
+  the gate forever — repro path: rate-trigger or channel filter
+  toggled mid-press, or any bridge that dropped an event); a
+  pedal press+release cleared the slots but the next fresh press
+  fell back into the same hold. Now gates on whether a live slot
+  still maps to a held key, so a stale tally entry can't keep the
+  pattern ringing.
+
+
 2026-05-07 — Version 3.0.6
 
 Two browser-only UI fixes — touch was already fine.
