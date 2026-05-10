@@ -14,7 +14,7 @@
  */
 
 import { html } from '../ui/common.js';
-import { useCallback, useMemo } from '../lib/hooks.module.js';
+import { useCallback, useEffect, useRef } from '../lib/hooks.module.js';
 
 const HEX = '0123456789ABCDEF';
 const HOLD = '---';
@@ -76,6 +76,14 @@ function clonePage(p) {
 
 const HELP_STATIC = 'Help:  Note  |  Velocity  |  CC#  |  CC Val';
 
+// Same rate set as the Arpeggiator — kept in sync with
+// raspimidihub/tracker_base.py:RATE_OPTIONS.
+const RATE_OPTIONS = [
+    '4/1', '4/1T', '2/1', '2/1T', '1/1', '1/1T',
+    '1/2', '1/2T', '1/4', '1/4T', '1/8', '1/8T',
+    '1/16', '1/16T', '1/32',
+];
+
 // ------------------------------------------------------------------
 // Main component
 // ------------------------------------------------------------------
@@ -89,17 +97,23 @@ export function PluginTrackerGrid({ param, values, onChange }) {
     const currentPage = clamp(values[param.current_page_param] ?? 0, 0, Math.max(0, pages.length - 1));
     const cursorRow = clamp(values[param.cursor_row_param] ?? 0, 0, maxRows - 1);
     const cursorTrack = clamp(values[param.cursor_track_param] ?? 0, 0, trackCount - 1);
-    const showTracks = parseInt(values.show_tracks || '4', 10);
-
-    // Viewport — keep the cursor track in view.
-    const viewport = useMemo(() => {
-        const start = Math.max(0, Math.min(trackCount - showTracks,
-            cursorTrack - Math.floor(showTracks / 2)));
-        return { start, end: Math.min(trackCount, start + showTracks) };
-    }, [trackCount, showTracks, cursorTrack]);
 
     const page = pages[currentPage] || emptyPage(trackCount, maxRows);
     const rows = page.rows || [];
+
+    // Scroll the focused cell into view when the cursor moves so a
+    // narrow viewport (phone, or many voices) always shows where the
+    // user is editing. {block:'nearest', inline:'nearest'} avoids
+    // re-centering when the target is already visible.
+    const gridRef = useRef(null);
+    useEffect(() => {
+        const grid = gridRef.current;
+        if (!grid) return;
+        const focused = grid.querySelector('.tracker-cell.focused');
+        if (focused && focused.scrollIntoView) {
+            focused.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+        }
+    }, [cursorRow, cursorTrack, currentPage]);
 
     // ---- Cursor moves (Mapping X: ↑/↓ rows, ←/→ voices). ----
     const moveCursor = useCallback((dRow, dTrack) => {
@@ -156,9 +170,13 @@ export function PluginTrackerGrid({ param, values, onChange }) {
     const header = html`<div class="tracker-header">
         <div class="tracker-header-row">
             <span class="tracker-header-label">Rate</span>
-            <span class="tracker-header-value">${values.rate || '1/16'}</span>
+            <select class="tracker-rate-select"
+                value=${values.rate || '1/16'}
+                onchange=${(e) => onChange('rate', e.target.value)}>
+                ${RATE_OPTIONS.map((r) => html`<option value=${r}>${r}</option>`)}
+            </select>
 
-            <span class="tracker-header-label" style="margin-left:18px">Page</span>
+            <span class="tracker-header-label" style="margin-left:14px">Page</span>
             <button class="tracker-page-btn"
                 disabled=${currentPage <= 0}
                 onclick=${() => setCurrentPage(currentPage - 1)}>‹</button>
@@ -176,29 +194,27 @@ export function PluginTrackerGrid({ param, values, onChange }) {
                 onclick=${delPage}>− Del</button>
             <button class="tracker-page-btn" onclick=${copyPage}>Copy</button>
             <button class="tracker-page-btn" onclick=${pastePage}>Paste</button>
-
-            <span class="tracker-header-label" style="margin-left:18px">Show</span>
-            ${[2, 4, 8].map((n) => html`<button
-                class="tracker-page-btn ${showTracks === n ? 'active' : ''}"
-                onclick=${() => onChange('show_tracks', String(n))}>${n}</button>`)}
         </div>
     </div>`;
 
     // ---- Track-header row (above the steps) ----
     const trackHeader = html`<div class="tracker-track-header">
         <span class="tracker-track-step-col"></span>
-        ${range(viewport.start, viewport.end).map((t) => html`<span
+        ${range(0, trackCount).map((t) => html`<span
             class="tracker-track-label ${t === cursorTrack ? 'cursor' : ''}">T${t + 1}</span>`)}
     </div>`;
 
     // ---- Step rows ----
+    // All TRACK_COUNT voices render every row; the grid scrolls
+    // horizontally on narrow viewports and the cursor scrolls itself
+    // into view when it moves.
     const stepRows = html`<div class="tracker-rows">
         ${range(0, maxRows).map((rowIdx) => {
             const row = rows[rowIdx] || emptyRow(trackCount);
             const isCursorRow = rowIdx === cursorRow;
             return html`<div class="tracker-row ${isCursorRow ? 'cursor' : ''}">
                 <span class="tracker-row-num">${HEX[rowIdx]}</span>
-                ${range(viewport.start, viewport.end).map((t) => {
+                ${range(0, trackCount).map((t) => {
                     const v = row.voices[t];
                     const focused = isCursorRow && t === cursorTrack;
                     return html`<span
@@ -224,7 +240,7 @@ export function PluginTrackerGrid({ param, values, onChange }) {
 
     return html`<div class="trackergrid">
         ${header}
-        <div class="tracker-grid-area">
+        <div class="tracker-grid-area" ref=${gridRef}>
             ${trackHeader}
             ${stepRows}
         </div>

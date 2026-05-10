@@ -1042,9 +1042,22 @@ body {
     border-color: var(--accent, #5cf);
     color: #fff;
 }
+/* Compact rate dropdown sitting next to the page controls. Native
+ * <select> reskinned to fit the surrounding pill-button row instead
+ * of the wide horizontal radio that the standard PluginRadio renders. */
+.tracker-rate-select {
+    background: var(--surface2, #2a2a2a);
+    color: var(--text);
+    border: 1px solid var(--surface2);
+    border-radius: 4px;
+    padding: 3px 6px;
+    font-size: 11px;
+    font-family: inherit;
+    cursor: pointer;
+}
 .tracker-grid-area {
     flex: 1;
-    overflow: auto;
+    overflow: auto;          /* horizontal scroll for many voices, vertical for tall pages */
     background: var(--bg);
     border-radius: 4px;
     padding: 4px 0;
@@ -1061,7 +1074,8 @@ body {
 }
 .tracker-track-step-col { display: inline-block; min-width: 1.5ch; }
 .tracker-track-label {
-    flex: 1 1 0;
+    flex: 0 0 auto;
+    min-width: 13ch;          /* "C-3 5A 017F" + a little breathing room */
     text-align: left;
     padding: 0 4px;
 }
@@ -1089,12 +1103,14 @@ body {
     font-size: 11px;
 }
 .tracker-cell {
-    flex: 1 1 0;
+    flex: 0 0 auto;
+    min-width: 13ch;          /* matches .tracker-track-label so columns align */
     padding: 1px 4px;
     border-radius: 2px;
     cursor: pointer;
     user-select: none;
     white-space: pre;
+    scroll-margin: 60px;      /* gives scrollIntoView room past the row-num gutter */
 }
 .tracker-cell.focused {
     background: var(--accent, #4af);

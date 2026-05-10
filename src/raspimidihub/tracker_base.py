@@ -11,22 +11,19 @@ Persistent state lives in `_param_values`:
   - cursor_row     : int                   — edit cursor row
   - cursor_track   : int                   — edit cursor voice
   - octave         : int                   — sticky keypad octave
-  - channel        : int (1..16)           — single output channel
-  - rate           : str                   — Arp-style rate
-  - sync_mode      : str                   — free / tempo / transport
-  - bpm            : int                   — used in free mode
-  - show_tracks    : int (2 / 4 / 8)       — keypad-side viewport size
+  - rate           : str                   — Arp-style rate (config-only)
+
+Output is always MIDI channel 1; remap downstream via the matrix.
+Transport is always external (clock + Start/Stop), so there's no
+free-running BPM and no sync-mode picker.
 """
 
 from typing import Any
 
 from raspimidihub.plugin_api import (
-    ChannelSelect,
-    Group,
     PluginBase,
     Radio,
     TrackerGrid,
-    Wheel,
 )
 
 # Same rate set as the Arpeggiator — keeps the project's clock idiom
@@ -93,18 +90,17 @@ class TrackerBase(PluginBase):
 
     @classmethod
     def _build_params(cls) -> list:
-        """Assemble the standard sequencer config + tracker UI."""
+        """Assemble the sequencer params — `rate` lives behind the
+        device-detail panel (config_only) and is also rendered as a
+        compact dropdown inside the TrackerGrid header. Output channel
+        is fixed (always ch 1) — remap via the matrix if you need it
+        on a different channel."""
         return [
-            Group("Transport", [
-                ChannelSelect("channel", "Out Ch", default=1),
-                Radio("rate", "Rate", RATE_OPTIONS, default="1/16"),
-                Radio("sync_mode", "Sync",
-                      ["free", "tempo", "transport"], default="transport"),
-                Wheel("bpm", "BPM", min=40, max=300, default=120,
-                      visible_when=("sync_mode", "free")),
-                Radio("show_tracks", "Show",
-                      ["2", "4", "8"], default="4"),
-            ]),
+            # `config_only=True` hides this from the /play surface,
+            # but the TrackerGrid frontend reads `values.rate` and shows
+            # it as an inline pulldown next to the page controls.
+            Radio("rate", "Rate", RATE_OPTIONS, default="1/16",
+                  config_only=True),
             TrackerGrid(
                 "tracker", "",
                 track_count=cls.TRACK_COUNT,
@@ -133,11 +129,14 @@ class TrackerBase(PluginBase):
         # mark the routing config dirty.
         self.transient_params = {"cursor_row", "cursor_track", "octave"}
 
+    # Output is always MIDI channel 1 (0-based: 0). Remap downstream
+    # via the matrix if a different channel is needed.
+    OUT_CHANNEL = 0
+
     def panic(self) -> None:
         """All notes off on the configured output channel."""
-        ch = max(0, (self._param_values.get("channel", 1) or 1) - 1)
         for note in range(128):
             try:
-                self.send_note_off(ch, note)
+                self.send_note_off(self.OUT_CHANNEL, note)
             except Exception:
                 pass

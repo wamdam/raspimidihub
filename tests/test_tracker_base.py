@@ -74,9 +74,13 @@ def test_schema_param_keys_collects_tracker_aux():
     # Sibling auxiliary params declared on the TrackerGrid …
     for name in ("pages", "current_page", "cursor_row", "cursor_track", "octave"):
         assert name in keys, f"missing aux key {name!r}"
-    # … plus the regular Group/Param children.
-    for name in ("channel", "rate", "sync_mode", "bpm", "show_tracks"):
-        assert name in keys, f"missing config key {name!r}"
+    # … plus the rate config (the only top-level Param left).
+    assert "rate" in keys
+    # Channel / sync / show-tracks were trimmed: output is always ch 1
+    # and transport is always external. Make sure the schema doesn't
+    # carry stale keys that would re-appear in saved configs.
+    for removed in ("channel", "sync_mode", "bpm", "show_tracks"):
+        assert removed not in keys, f"stale key {removed!r} still present"
 
 
 def test_on_start_seeds_one_blank_page():
@@ -106,13 +110,12 @@ def test_on_start_preserves_existing_state():
 def test_panic_calls_send_note_off_for_every_pitch():
     t = _DemoTracker()
     t.on_start()
-    t._param_values["channel"] = 7
     sent: list[tuple[int, int]] = []
     t._send_note_off = lambda ch, note: sent.append((ch, note))
     t.panic()
     assert len(sent) == 128
-    # Channel is stored 1-based; ALSA call expects 0-based.
-    assert all(ch == 6 for ch, _ in sent)
+    # Output is always channel 1 (0-based 0).
+    assert all(ch == 0 for ch, _ in sent)
     assert sorted(n for _, n in sent) == list(range(128))
 
 
