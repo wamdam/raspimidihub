@@ -49,9 +49,18 @@ function fmtCcNum(num) {
     return CC_HOLD;
 }
 
-function fmtVoice(v) {
-    if (!v) return `${HOLD} ${CC_HOLD} ${CC_HOLD}${CC_HOLD}`;
-    return `${fmtNote(v.note)} ${typeof v.vel === 'number' ? fmt2hex(v.vel) : CC_HOLD} ${fmtCcNum(v.cc_num)}${typeof v.cc_val === 'number' ? fmt2hex(v.cc_val) : CC_HOLD}`;
+// The voice cell renders as two halves so the cursor highlight can
+// fall on just the note slice (note + vel) or just the cc slice
+// (cc-num + cc-val). The two strings live in adjacent inline spans.
+function fmtVoiceNote(v) {
+    if (!v) return `${HOLD} ${CC_HOLD}`;
+    const vel = typeof v.vel === 'number' ? fmt2hex(v.vel) : CC_HOLD;
+    return `${fmtNote(v.note)} ${vel}`;
+}
+function fmtVoiceCc(v) {
+    if (!v) return `${CC_HOLD}${CC_HOLD}`;
+    const ccVal = typeof v.cc_val === 'number' ? fmt2hex(v.cc_val) : CC_HOLD;
+    return `${fmtCcNum(v.cc_num)}${ccVal}`;
 }
 
 // ------------------------------------------------------------------
@@ -88,13 +97,15 @@ const RATE_OPTIONS = [
     '1/16', '1/16T', '1/32',
 ];
 
-// Note wheel — 15 positions. Sentinels at the start so they're a
-// thumb-flick away from "no entry"; the 12 chromatic pitches follow
-// at indices 3..14. The actual cell.note string is composed with the
-// sticky octave knob (composeNote).
-const NOTE_WHEEL_LABELS = ['---', 'End', 'Off',
-    'C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-const NOTE_WHEEL_PITCHES = NOTE_WHEEL_LABELS.slice(3);
+// Note wheel — one continuous wheel holding every note the cell can
+// take, plus the three sentinels. Index 0..2 = ---/End/Off, then
+// 12 pitches × 10 octaves (C-0..B-9) at indices 3..122. Replaces the
+// earlier two-wheel design (pitch + octave) — Note + Octave together
+// took too much horizontal space on phone.
+const NOTE_PITCHES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+const NOTE_OCTAVES = 10;                      // 0..9, single hex digit
+const NOTE_WHEEL_PITCH_BASE = 3;              // index of first real pitch
+const NOTE_WHEEL_MAX = NOTE_WHEEL_PITCH_BASE + NOTE_PITCHES.length * NOTE_OCTAVES - 1;
 const NOTE_SENTINELS = new Set([HOLD, 'End', 'Off']);
 
 function isRealPitch(note) {
@@ -119,14 +130,25 @@ function composeNote(pitch, octave) {
     return pitch.length === 1 ? `${pitch}-${octave}` : `${pitch}${octave}`;
 }
 
+function noteWheelLabel(idx) {
+    if (idx === 0) return HOLD;
+    if (idx === 1) return 'End';
+    if (idx === 2) return 'Off';
+    const n = idx - NOTE_WHEEL_PITCH_BASE;
+    const oct = Math.floor(n / NOTE_PITCHES.length);
+    return composeNote(NOTE_PITCHES[n % NOTE_PITCHES.length], oct);
+}
+
 function noteToWheelIdx(note) {
     if (note === HOLD) return 0;
     if (note === 'End') return 1;
     if (note === 'Off') return 2;
     const pitch = getPitchPart(note);
-    if (!pitch) return 0;
-    const idx = NOTE_WHEEL_PITCHES.indexOf(pitch);
-    return idx >= 0 ? idx + 3 : 0;
+    const oct = getOctavePart(note);
+    if (pitch == null || oct == null) return 0;
+    const pitchIdx = NOTE_PITCHES.indexOf(pitch);
+    if (pitchIdx < 0) return 0;
+    return NOTE_WHEEL_PITCH_BASE + oct * NOTE_PITCHES.length + pitchIdx;
 }
 
 // 2-char hex labels 00..7F so the VEL / CC-VAL knobs match what
@@ -148,6 +170,11 @@ export function PluginTrackerGrid({ param, values, onChange }) {
     const currentPage = clamp(values[param.current_page_param] ?? 0, 0, pageCount - 1);
     const cursorRow = clamp(values[param.cursor_row_param] ?? 0, 0, maxRows - 1);
     const cursorTrack = clamp(values[param.cursor_track_param] ?? 0, 0, trackCount - 1);
+    // cursor_half: which slice of the focused voice the keypad is
+    // editing — "note" (Note + Octave + Vel) or "cc" (CC# + CC Val).
+    // The two halves swap in place; the cursor cluster stays pinned
+    // right so the layout never jumps.
+    const cursorHalf = values[param.cursor_half_param] === 'cc' ? 'cc' : 'note';
     const rate = values[param.rate_param] || '1/16';
 
     const page = pages[currentPage] || emptyPage(trackCount, maxRows);
@@ -160,9 +187,11 @@ export function PluginTrackerGrid({ param, values, onChange }) {
     // first press, so holding ↓ would only advance one row.
     const cursorRowRef = useRef(cursorRow);
     const cursorTrackRef = useRef(cursorTrack);
+    const cursorHalfRef = useRef(cursorHalf);
     const currentPageRef = useRef(currentPage);
     cursorRowRef.current = cursorRow;
     cursorTrackRef.current = cursorTrack;
+    cursorHalfRef.current = cursorHalf;
     currentPageRef.current = currentPage;
 
     // ---- Cursor moves with page-boundary wrap on row ↑/↓. ----
@@ -186,10 +215,31 @@ export function PluginTrackerGrid({ param, values, onChange }) {
         if (nextPage !== cp) onChange(param.current_page_param, nextPage);
     }, [maxRows, pageCount, onChange, param]);
 
-    const moveTrack = useCallback((d) => {
-        const cur = cursorTrackRef.current;
-        const next = ((cur + d) % trackCount + trackCount) % trackCount;
-        if (next !== cur) onChange(param.cursor_track_param, next);
+    // ←/→ now navigates *columns* — each voice is two sub-cells
+    // (note half, cc half). Right from note → cc on the same voice;
+    // right from cc → note on the next voice (wrapping T8 → T1).
+    // Left mirrors. Lets the keypad halves rotate in / out without
+    // doubling the cursor's job.
+    const moveColumn = useCallback((d) => {
+        const v = cursorTrackRef.current;
+        const h = cursorHalfRef.current;
+        if (d > 0) {
+            if (h === 'note') {
+                onChange(param.cursor_half_param, 'cc');
+            } else {
+                const nextV = (v + 1) % trackCount;
+                onChange(param.cursor_track_param, nextV);
+                onChange(param.cursor_half_param, 'note');
+            }
+        } else if (d < 0) {
+            if (h === 'cc') {
+                onChange(param.cursor_half_param, 'note');
+            } else {
+                const nextV = (v - 1 + trackCount) % trackCount;
+                onChange(param.cursor_track_param, nextV);
+                onChange(param.cursor_half_param, 'cc');
+            }
+        }
     }, [trackCount, onChange, param]);
 
     // PgUp / PgDn — keep the row, change page (looped).
@@ -218,10 +268,15 @@ export function PluginTrackerGrid({ param, values, onChange }) {
     }, [stopRepeat]);
     useEffect(() => () => stopRepeat(), [stopRepeat]);
 
-    const focusCell = useCallback((row, track) => {
+    // Tap a half directly to focus that half; default 'note' if the
+    // caller doesn't say. Lets the user jump straight to the CC slice
+    // of any voice without first focusing the note slice and stepping
+    // right.
+    const focusCell = useCallback((row, track, half = 'note') => {
         if (row !== cursorRow) onChange(param.cursor_row_param, row);
         if (track !== cursorTrack) onChange(param.cursor_track_param, track);
-    }, [cursorRow, cursorTrack, onChange, param]);
+        if (cursorHalf !== half) onChange(param.cursor_half_param, half);
+    }, [cursorRow, cursorTrack, cursorHalf, onChange, param]);
 
     // ---- Page management. ----
     const addPage = useCallback(() => {
@@ -266,15 +321,15 @@ export function PluginTrackerGrid({ param, values, onChange }) {
             switch (e.key) {
                 case 'ArrowUp':    moveRow(-1); e.preventDefault(); break;
                 case 'ArrowDown':  moveRow(+1); e.preventDefault(); break;
-                case 'ArrowLeft':  moveTrack(-1); e.preventDefault(); break;
-                case 'ArrowRight': moveTrack(+1); e.preventDefault(); break;
+                case 'ArrowLeft':  moveColumn(-1); e.preventDefault(); break;
+                case 'ArrowRight': moveColumn(+1); e.preventDefault(); break;
                 case 'PageUp':     movePage(-1); e.preventDefault(); break;
                 case 'PageDown':   movePage(+1); e.preventDefault(); break;
             }
         };
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
-    }, [moveRow, moveTrack, movePage]);
+    }, [moveRow, moveColumn, movePage]);
 
     // ---- Help row (live-value while a control is touched). ----
     // Reverts to the static four-column key after 2 s of inactivity.
@@ -290,7 +345,7 @@ export function PluginTrackerGrid({ param, values, onChange }) {
     }, []);
 
     // ---- Keypad: derived state + sticky-default refs. ----
-    // Always-recording semantics: every wheel/fader change writes
+    // Always-recording semantics: every wheel/knob change writes
     // straight to the focused voice cell. When the cell shows a hold
     // sentinel ('--' or '.'), the keypad still needs a numeric to
     // display, so we keep last-touched values in refs that stick
@@ -298,7 +353,6 @@ export function PluginTrackerGrid({ param, values, onChange }) {
     // gets the new value.
     const focusedRow = rows[cursorRow] || emptyRow(trackCount);
     const focusedCell = focusedRow.voices[cursorTrack] || emptyVoice();
-    const octave = clamp(values[param.octave_param] ?? 3, 0, 9);
 
     const stickyVelRef = useRef(80);
     const stickyCcNumRef = useRef(1);
@@ -331,32 +385,10 @@ export function PluginTrackerGrid({ param, values, onChange }) {
 
     // ---- Keypad handlers ----
     const onNoteWheel = useCallback((_, idx) => {
-        if (idx === 0) {
-            setVoiceFields({ note: HOLD });
-            showHelp(`Note  ${HOLD}`);
-        } else if (idx === 1) {
-            setVoiceFields({ note: 'End' });
-            showHelp('Note  End');
-        } else if (idx === 2) {
-            setVoiceFields({ note: 'Off' });
-            showHelp('Note  Off');
-        } else {
-            const note = composeNote(NOTE_WHEEL_PITCHES[idx - 3], octave);
-            setVoiceFields({ note });
-            showHelp(`Note  ${note}`);
-        }
-    }, [octave, setVoiceFields, showHelp]);
-
-    const onOctave = useCallback((_, oct) => {
-        onChange(param.octave_param, oct);
-        showHelp(`Octave  ${oct}`);
-        // If the focused cell currently holds a real pitch, rewrite
-        // its octave digit so what you see in the cell matches the
-        // knob. Sentinels (---/End/Off) stay as-is — the knob just
-        // sticks for next entry.
-        const pitch = getPitchPart(focusedCell.note);
-        if (pitch) setVoiceFields({ note: composeNote(pitch, oct) });
-    }, [focusedCell.note, onChange, param, setVoiceFields, showHelp]);
+        const note = noteWheelLabel(idx);
+        setVoiceFields({ note });
+        showHelp(`Note  ${note}`);
+    }, [setVoiceFields, showHelp]);
 
     const onVel = useCallback((_, v) => {
         setVoiceFields({ vel: v });
@@ -388,12 +420,9 @@ export function PluginTrackerGrid({ param, values, onChange }) {
         showHelp('Cleared CC# + CC Val');
     }, [setVoiceFields, showHelp]);
 
-    // Tick label for the Note wheel — pitches show with the current
-    // sticky octave so you can read what each detent will commit.
-    const noteTickLabel = useCallback((idx) => {
-        if (idx <= 2) return NOTE_WHEEL_LABELS[idx];
-        return composeNote(NOTE_WHEEL_PITCHES[idx - 3], octave);
-    }, [octave]);
+    // Tick label for the Note wheel — single wheel iterating
+    // ---/End/Off then C-0..B-9.
+    const noteTickLabel = useCallback((idx) => noteWheelLabel(idx), []);
 
     // Tick label for the CC# wheel — `.` at -1, hex elsewhere.
     const ccNumTickLabel = useCallback((v) => v === -1 ? '.' : fmt2hex(v), []);
@@ -403,11 +432,11 @@ export function PluginTrackerGrid({ param, values, onChange }) {
     useEffect(() => {
         const grid = gridRef.current;
         if (!grid) return;
-        const focused = grid.querySelector('.tracker-cell.focused');
+        const focused = grid.querySelector('.tracker-cell.focus-note, .tracker-cell.focus-cc');
         if (focused && focused.scrollIntoView) {
             focused.scrollIntoView({ block: 'nearest', inline: 'nearest' });
         }
-    }, [cursorRow, cursorTrack, currentPage]);
+    }, [cursorRow, cursorTrack, cursorHalf, currentPage]);
 
     // ---- Header (Rate dropdown + page actions only) ----
     const header = html`<div class="tracker-header">
@@ -455,9 +484,15 @@ export function PluginTrackerGrid({ param, values, onChange }) {
                 ${range(0, trackCount).map((t) => {
                     const v = row.voices[t];
                     const focused = isCursorRow && t === cursorTrack;
-                    return html`<span
-                        class="tracker-cell ${focused ? 'focused' : ''}"
-                        onclick=${() => focusCell(rowIdx, t)}>${fmtVoice(v)}</span>`;
+                    const cls = focused
+                        ? (cursorHalf === 'cc' ? 'focus-cc' : 'focus-note')
+                        : '';
+                    return html`<span class="tracker-cell ${cls}">
+                        <span class="tracker-cell-note"
+                            onclick=${() => focusCell(rowIdx, t, 'note')}>${fmtVoiceNote(v)}</span>
+                        <span class="tracker-cell-cc"
+                            onclick=${() => focusCell(rowIdx, t, 'cc')}>${fmtVoiceCc(v)}</span>
+                    </span>`;
                 })}
             </div>`;
         })}
@@ -473,6 +508,7 @@ export function PluginTrackerGrid({ param, values, onChange }) {
     const arrow = (action, label, title, extraClass = '') => html`<button
         class="tracker-arrow ${extraClass}"
         title=${title}
+        oncontextmenu=${(e) => e.preventDefault()}
         onpointerdown=${(e) => { e.preventDefault(); startRepeat(action); }}
         onpointerup=${stopRepeat}
         onpointerleave=${stopRepeat}
@@ -484,26 +520,27 @@ export function PluginTrackerGrid({ param, values, onChange }) {
             ${arrow(() => movePage(+1), '⇟', 'Page down (PgDn)', 'tracker-arrow-page')}
         </div>
         <div class="tracker-arrow-row">
-            ${arrow(() => moveTrack(-1), '←', 'Left (←)')}
+            ${arrow(() => moveColumn(-1), '←', 'Left (←)')}
             ${arrow(() => moveRow(+1), '↓', 'Down (↓)')}
-            ${arrow(() => moveTrack(+1), '→', 'Right (→)')}
+            ${arrow(() => moveColumn(+1), '→', 'Right (→)')}
         </div>
     </div>`;
 
-    // ---- Keypad: Note + Octave + Vel + CC# + CC Val + cursor ----
-    const keypad = html`<div class="tracker-keypad">
+    // ---- Keypad: split between two halves of the focused voice. ----
+    // Note half (cursor_half === 'note') shows NOTE + OCT + VEL +
+    // a Del that clears the pair. CC half shows CC# + CC VAL + Del.
+    // The cursor cluster is pinned right via .tracker-keypad-cursor-col
+    // + margin-left:auto so it stays put regardless of which half
+    // is on screen.
+    const noteHalf = html`<div class="tracker-keypad-half">
         <div class="tracker-keypad-col">
             <div class="tracker-keypad-label">NOTE</div>
-            <${PluginWheel} name="note_wheel" label="" min=${0} max=${14}
+            <${PluginWheel} name="note_wheel" label=""
+                min=${0} max=${NOTE_WHEEL_MAX}
                 value=${noteWheelIdx}
                 onChange=${onNoteWheel} tickLabel=${noteTickLabel} />
             <button class="tracker-keypad-del" onclick=${onDelNote}
                 title="Clear Note + Velocity">Del</button>
-        </div>
-        <div class="tracker-keypad-col">
-            <div class="tracker-keypad-label">OCT</div>
-            <${PluginWheel} name="octave_wheel" label="" min=${0} max=${9}
-                value=${octave} onChange=${onOctave} />
         </div>
         <div class="tracker-keypad-col">
             <div class="tracker-keypad-label">VEL</div>
@@ -511,6 +548,9 @@ export function PluginTrackerGrid({ param, values, onChange }) {
                 value=${velValue} labels=${HEX_LABELS_128}
                 onChange=${onVel} />
         </div>
+    </div>`;
+
+    const ccHalf = html`<div class="tracker-keypad-half">
         <div class="tracker-keypad-col">
             <div class="tracker-keypad-label">CC#</div>
             <${PluginWheel} name="cc_num_wheel" label="" min=${-1} max=${127}
@@ -525,8 +565,12 @@ export function PluginTrackerGrid({ param, values, onChange }) {
                 value=${ccValValue} labels=${HEX_LABELS_128}
                 onChange=${onCcVal} />
         </div>
+    </div>`;
+
+    const keypad = html`<div class="tracker-keypad">
+        ${cursorHalf === 'note' ? noteHalf : ccHalf}
         <div class="tracker-keypad-col tracker-keypad-cursor-col">
-            <div class="tracker-keypad-label">CURSOR</div>
+            <div class="tracker-keypad-label">${cursorHalf === 'note' ? 'CURSOR · NOTE' : 'CURSOR · CC'}</div>
             ${cursor}
         </div>
     </div>`;

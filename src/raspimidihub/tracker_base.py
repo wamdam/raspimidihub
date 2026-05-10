@@ -10,7 +10,7 @@ Persistent state lives in `_param_values`:
   - current_page   : int                   — visible/edit page
   - cursor_row     : int                   — edit cursor row
   - cursor_track   : int                   — edit cursor voice
-  - octave         : int                   — sticky keypad octave
+  - cursor_half    : str                   — "note" | "cc" keypad slice
   - rate           : str                   — Arp-style rate (config-only)
 
 Output is always MIDI channel 1; remap downstream via the matrix.
@@ -104,7 +104,7 @@ class TrackerBase(PluginBase):
                 current_page_param="current_page",
                 cursor_row_param="cursor_row",
                 cursor_track_param="cursor_track",
-                octave_param="octave",
+                cursor_half_param="cursor_half",
                 rate_param="rate",
             ),
         ]
@@ -118,12 +118,17 @@ class TrackerBase(PluginBase):
         self._param_values.setdefault("current_page", 0)
         self._param_values.setdefault("cursor_row", 0)
         self._param_values.setdefault("cursor_track", 0)
-        self._param_values.setdefault("octave", 3)
+        # cursor_half: which keypad mode the user sees on the focused
+        # voice — "note" (Note + Vel) or "cc" (CC# + CC Val). Lets us
+        # split the keypad in two so it fits phone width.
+        self._param_values.setdefault("cursor_half", "note")
         self._param_values.setdefault("rate", "1/16")
 
-        # Cursor + octave are live-play state — moving them shouldn't
+        # Cursor state is live-play — moving the cursor shouldn't
         # mark the routing config dirty.
-        self.transient_params = {"cursor_row", "cursor_track", "octave"}
+        self.transient_params = {
+            "cursor_row", "cursor_track", "cursor_half",
+        }
 
     # Output is always MIDI channel 1 (0-based: 0). Remap downstream
     # via the matrix if a different channel is needed.

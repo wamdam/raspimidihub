@@ -1118,14 +1118,28 @@ body {
     font-weight: 600;
 }
 .tracker-rows { display: flex; flex-direction: column; }
+/* Each voice cell renders as two halves — note slice ("C-3 5A") and
+ * cc slice ("017F") — so the cursor highlight can fall on just the
+ * half the keypad is editing. Outer .tracker-cell is the alignment
+ * container (matches T1..Tn header column width); inner halves are
+ * the actual click targets and highlighted areas. */
 .tracker-cell {
-    border-radius: 2px;
-    cursor: pointer;
     user-select: none;
     white-space: pre;
-    scroll-margin: 60px;      /* gives scrollIntoView room past the row-num gutter */
+    scroll-margin: 60px;
+    padding: 0;          /* halves carry their own padding */
 }
-.tracker-cell.focused {
+.tracker-cell-note,
+.tracker-cell-cc {
+    display: inline-block;
+    cursor: pointer;
+    border-radius: 2px;
+    padding: 1px 3px;
+}
+.tracker-cell-note { min-width: 7ch; }   /* "C-3 5A" + breathing room */
+.tracker-cell-cc   { min-width: 5ch; }   /* "017F"  + breathing room */
+.tracker-cell.focus-note .tracker-cell-note,
+.tracker-cell.focus-cc   .tracker-cell-cc {
     background: var(--accent, #4af);
     color: #000;
     font-weight: 500;
@@ -1144,19 +1158,26 @@ body {
     overflow: hidden;
     text-overflow: ellipsis;
 }
-/* Always-visible data-entry keypad: Note wheel + Octave knob + Vel
- * fader + CC# wheel + CC Val fader + cursor cluster, in that order.
- * Layout never shifts — even when the help row above swaps between
- * idle and live-value text (the help row has its own min-height). */
+/* Always-visible data-entry keypad. Splits in half so it fits a
+ * phone width: the left side carries either the Note slice
+ * (NOTE + OCT + VEL) or the CC slice (CC# + CC VAL) of the focused
+ * voice cell — see cursorHalf in trackergrid.js. The cursor cluster
+ * is pinned right via margin-left:auto so it never moves when the
+ * left side swaps content. */
 .tracker-keypad {
     display: flex;
     align-items: stretch;
-    justify-content: space-around;
     gap: 8px;
     padding: 8px;
     background: var(--surface);
     border-radius: 6px;
     flex: 0 0 auto;
+}
+.tracker-keypad-half {
+    display: flex;
+    align-items: stretch;
+    gap: 12px;
+    flex: 0 1 auto;
 }
 .tracker-keypad-col {
     display: flex;
@@ -1166,7 +1187,12 @@ body {
     flex: 0 1 auto;
     min-width: 60px;
 }
-.tracker-keypad-cursor-col { min-width: 130px; }
+/* Cursor stays pinned right regardless of which half is shown on
+ * the left, so the inverted-T never jumps under the user's thumb. */
+.tracker-keypad-cursor-col {
+    min-width: 130px;
+    margin-left: auto;
+}
 .tracker-keypad-label {
     font-size: 10px;
     color: var(--text-dim);
@@ -1207,6 +1233,16 @@ body {
     cursor: pointer;
     font-family: inherit;
     line-height: 1;
+    /* Long-press triggers our key-repeat at 350 ms; that's earlier
+     * than the OS context-menu / "Copy" callout, but we still need
+     * to suppress the selection + callout + Android long-press menu
+     * so the user gets the repeat instead of the system UI taking
+     * over the touch. */
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
 }
 .tracker-arrow-page { font-size: 18px; }
 
