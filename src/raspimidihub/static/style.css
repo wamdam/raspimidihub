@@ -1066,15 +1066,17 @@ body {
  * exactly above the C-3 5A 017F cells. Any divergence in font-size,
  * gap, padding, or column min-width misaligns the columns — `ch`
  * units measure off the active font-size, so headers MUST inherit
- * the same size as the cells. */
+ * the same size as the cells. Line-height kept tight so 16 rows
+ * plus header + help + keypad fit a phone screen. */
 .tracker-track-header,
 .tracker-row {
     display: flex;
     align-items: center;
     gap: 6px;
-    padding: 1px 4px;
+    padding: 0 4px;
     font-size: 12px;
     font-family: inherit;
+    line-height: 1.2;
 }
 .tracker-track-header {
     border-bottom: 1px solid var(--surface2);
@@ -1082,7 +1084,7 @@ body {
     color: var(--text-dim);
     letter-spacing: 0.5px;
 }
-.tracker-row { line-height: 1.5; border-radius: 2px; }
+.tracker-row { border-radius: 2px; }
 .tracker-row.cursor { background: rgba(80, 200, 255, 0.06); }
 
 /* Gutter — same width on header and data rows so the first cell
@@ -1161,9 +1163,15 @@ body {
 /* Always-visible data-entry keypad. Splits in half so it fits a
  * phone width: the left side carries either the Note slice
  * (NOTE + OCT + VEL) or the CC slice (CC# + CC VAL) of the focused
- * voice cell — see cursorHalf in trackergrid.js. The cursor cluster
- * is pinned right via margin-left:auto so it never moves when the
- * left side swaps content. */
+ * voice cell — see cursorHalf in trackergrid.js.
+ *
+ * Sizing strategy mirrors the Controller LayoutGrid: each
+ * .tracker-keypad-col is `flex: 1 1 0` and the wheel / knob
+ * containers inside scale to the cell width (with a sensible max
+ * so they don't bloat on desktop). When the left side swaps from
+ * 3 cols (note half) to 2 cols (cc half), the half-container width
+ * stays the same and the controls just expand or shrink to fit —
+ * the cursor cluster on the right doesn't budge. */
 .tracker-keypad {
     display: flex;
     align-items: stretch;
@@ -1177,30 +1185,43 @@ body {
     display: flex;
     align-items: stretch;
     gap: 12px;
-    flex: 0 1 auto;
+    flex: 1 1 0;
+    min-width: 0;
 }
 .tracker-keypad-col {
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 4px;
-    flex: 0 1 auto;
-    min-width: 60px;
+    flex: 1 1 0;
+    min-width: 0;
 }
-/* Narrow column for the Octave wheel: single hex digit, no need for
- * the standard 80-px container. */
-.tracker-keypad-col-narrow { min-width: 44px; }
-.tracker-keypad-col-narrow .wheel-container { width: 44px; }
-/* Small column for the Vel / CC-Val knobs — the default 72-px knob
- * + 2-char hex value is overkill next to a tight Octave wheel. */
-.tracker-keypad-col-small { min-width: 56px; }
-.tracker-keypad-col-small .knob-container { max-width: 50px; width: 50px; }
-.tracker-keypad-col-small .knob-value { font-size: 12px; }
-/* Cursor stays pinned right regardless of which half is shown on
- * the left, so the inverted-T never jumps under the user's thumb. */
+/* Wheel / knob containers fill their cell with a cap so they don't
+ * grow unreadably wide on desktop. Same idiom Controller LayoutGrid
+ * uses (.layout-cell .wheel-container { width: 100% }). The inner
+ * .wheel-group / .knob-group also has to stretch — its default
+ * align-items:flex-start would collapse the 100%-wide container
+ * back to its intrinsic 0 width. */
+.tracker-keypad-col .wheel-group,
+.tracker-keypad-col .knob-group {
+    width: 100%;
+    align-items: center;
+    margin: 0;
+}
+.tracker-keypad-col .wheel-container {
+    width: 100%;
+    max-width: 80px;
+}
+.tracker-keypad-col .knob-container {
+    width: 100%;
+    max-width: 64px;
+}
+.tracker-keypad-col .knob-value { font-size: 12px; }
+/* Cursor pinned right at a fixed width so the inverted-T never
+ * jumps under the user's thumb when the left half swaps content. */
 .tracker-keypad-cursor-col {
+    flex: 0 0 auto;
     min-width: 130px;
-    margin-left: auto;
 }
 .tracker-keypad-label {
     font-size: 10px;

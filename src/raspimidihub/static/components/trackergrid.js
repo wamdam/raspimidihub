@@ -555,12 +555,12 @@ export function PluginTrackerGrid({ param, values, onChange }) {
             <button class="tracker-keypad-del" onclick=${onDelNote}
                 title="Clear Note + Velocity">Del</button>
         </div>
-        <div class="tracker-keypad-col tracker-keypad-col-narrow">
+        <div class="tracker-keypad-col">
             <div class="tracker-keypad-label">OCT</div>
             <${PluginWheel} name="octave_wheel" label="" min=${0} max=${9}
                 value=${octave} onChange=${onOctave} />
         </div>
-        <div class="tracker-keypad-col tracker-keypad-col-small">
+        <div class="tracker-keypad-col">
             <div class="tracker-keypad-label">VEL</div>
             <${PluginKnob} name="vel" label="" min=${0} max=${127}
                 value=${velValue} labels=${HEX_LABELS_128}
@@ -577,7 +577,7 @@ export function PluginTrackerGrid({ param, values, onChange }) {
             <button class="tracker-keypad-del" onclick=${onDelCc}
                 title="Clear CC# + CC Val">Del</button>
         </div>
-        <div class="tracker-keypad-col tracker-keypad-col-small">
+        <div class="tracker-keypad-col">
             <div class="tracker-keypad-label">CC VAL</div>
             <${PluginKnob} name="cc_val" label="" min=${0} max=${127}
                 value=${ccValValue} labels=${HEX_LABELS_128}
