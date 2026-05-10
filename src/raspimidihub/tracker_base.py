@@ -13,10 +13,20 @@ Persistent state lives in `_param_values`:
   - cursor_half    : str                   — "note" | "cc" keypad slice
   - octave         : int                   — sticky keypad octave
   - rate           : str                   — Arp-style rate (config-only)
+  - track_ch_0..N  : int                   — per-track output channel (1..16)
+  - send_clock     : bool                  — forward CLOCK + transport to OUT
+  - cmd_play / cmd_stop : bool             — manual transport signals from
+                                              the play-page header buttons
 
-Output is always MIDI channel 1; remap downstream via the matrix.
-Transport is always external (clock + Start/Stop), so there's no
-free-running BPM and no sync-mode picker.
+Each voice fires on its own configured channel — defaults all 1, the
+config card on the device-detail panel lets the user remap any track
+to a different channel. Multi-channel chords + per-track CC routing
+work just by setting different channels per track.
+
+Transport is always external (clock + Start/Stop) OR via the on-screen
+Play / Stop buttons. The send_clock toggle, when on, makes this plugin
+forward incoming CLOCK / START / STOP / CONTINUE through to its OUT
+port so downstream gear can slave off this tracker instance.
 
 Playback fires note-on / note-off / CC for each voice on every tick
 of the configured rate. Auto-learn writes incoming notes / CCs into
@@ -28,6 +38,9 @@ import time
 from typing import Any
 
 from raspimidihub.plugin_api import (
+    Button,
+    ChannelSelect,
+    Group,
     PluginBase,
     TrackerGrid,
 )
@@ -135,12 +148,24 @@ class TrackerBase(PluginBase):
 
     @classmethod
     def _build_params(cls) -> list:
-        """Assemble the sequencer UI. Rate lives behind the
-        TrackerGrid's `rate_param` pointer — only the inline pulldown
-        in the grid header touches it, so there's no separate Radio
-        rendered anywhere. Output channel is fixed at MIDI ch 1
-        (remap via the matrix if you need it elsewhere)."""
-        return [
+        """Assemble the sequencer UI:
+
+          - TrackerGrid: the play-surface UI. Has `play_only=True` so
+            the device-detail config panel doesn't render the grid +
+            keypad (the user can't usefully play sequences from a
+            modal config card anyway).
+          - "Track Channels" group: 8 ChannelSelect entries (one per
+            voice), config_only so they only appear in the device-
+            detail panel — not on the play surface.
+          - "Send Clock + Transport" toggle: when on, forwards
+            incoming CLOCK / START / STOP / CONTINUE to OUT.
+
+        `cmd_play` / `cmd_stop` are sibling state params declared on
+        the TrackerGrid (so schema_param_keys tracks them) but never
+        rendered as a Param — they're trigger-style booleans the
+        play-page header writes to via onChange. on_param_change
+        catches them and fires the local transport handlers."""
+        params: list = [
             TrackerGrid(
                 "tracker", "",
                 track_count=cls.TRACK_COUNT,
@@ -154,8 +179,20 @@ class TrackerBase(PluginBase):
                 octave_param="octave",
                 rate_param="rate",
                 playhead_param="playhead",
+                track_channels_param="track_channels",
+                cmd_play_param="cmd_play",
+                cmd_stop_param="cmd_stop",
+                send_clock_param="send_clock",
             ),
+            Group("Track Channels", [
+                ChannelSelect(f"track_ch_{i}", f"T{i + 1}",
+                              default=1, config_only=True)
+                for i in range(cls.TRACK_COUNT)
+            ]),
+            Button("send_clock", "Send Clock + Transport",
+                   default=False, color="green", config_only=True),
         ]
+        return params
 
     def on_start(self) -> None:
         """Initialise the persistent state with one blank page, plus
@@ -180,12 +217,20 @@ class TrackerBase(PluginBase):
         self._param_values.setdefault(
             "playhead", {"page": 0, "row": 0, "playing": False},
         )
+        # Manual transport signals from the play-page header buttons.
+        # Frontend sets to True; on_param_change resets to False.
+        self._param_values.setdefault("cmd_play", False)
+        self._param_values.setdefault("cmd_stop", False)
+        self._param_values.setdefault("send_clock", False)
+        # Per-track channels default to 1.
+        for i in range(self.TRACK_COUNT):
+            self._param_values.setdefault(f"track_ch_{i}", 1)
 
-        # Cursor + octave + playhead are live-play state — moving
-        # them shouldn't mark the routing config dirty.
+        # Cursor + octave + playhead + cmd signals are live-play
+        # state — moving them shouldn't mark the routing config dirty.
         self.transient_params = {
             "cursor_row", "cursor_track", "cursor_half", "octave",
-            "playhead",
+            "playhead", "cmd_play", "cmd_stop",
         }
 
         # Playback bookkeeping. Playhead position is intentionally
@@ -209,34 +254,47 @@ class TrackerBase(PluginBase):
         self._chord_page = 0
         self._chord_row = 0
 
-    # Output is always MIDI channel 1 (0-based: 0). Remap downstream
-    # via the matrix if a different channel is needed.
-    OUT_CHANNEL = 0
-
     def on_stop(self) -> None:
         self._silence_all()
 
     def panic(self) -> None:
-        """All notes off on the configured output channel + stop the
-        playhead."""
+        """All notes off across every per-track channel + stop the
+        playhead. Belt-and-braces: also blanket-clears every channel
+        a track is currently configured on, in case the synth held a
+        note we never tracked."""
         with self._lock:
             self._playing = False
             self._silence_all()
-            # Belt-and-braces: also blanket-clear in case the synth
-            # held a note we never tracked (unlikely but cheap).
-            for note in range(128):
-                try:
-                    self.send_note_off(self.OUT_CHANNEL, note)
-                except Exception:
-                    pass
+            channels = {self._track_channel(i) for i in range(self.TRACK_COUNT)}
+            for ch in channels:
+                for note in range(128):
+                    try:
+                        self.send_note_off(ch, note)
+                    except Exception:
+                        pass
         self._publish_playhead()
 
+    # ---- Per-track output channel ----
+    # 0-based MIDI channel for the given voice index. Reads from the
+    # `track_ch_<i>` ChannelSelect param; defaults to 0 (channel 1)
+    # if the param is missing or out of range.
+    def _track_channel(self, v_idx: int) -> int:
+        raw = self._param_values.get(f"track_ch_{v_idx}", 1)
+        try:
+            return max(0, min(15, int(raw) - 1))
+        except (TypeError, ValueError):
+            return 0
+
     # ---- Internal: kill every voice's currently-sounding note. ----
+    # `_sounding[i]` carries `(midi_note, channel)` so we can send the
+    # note-off on whichever channel the note was actually started on,
+    # even if the user has since reassigned that voice's channel.
     def _silence_all(self) -> None:
-        for v_idx, note in enumerate(self._sounding):
-            if note is not None:
+        for v_idx, sounding in enumerate(self._sounding):
+            if sounding is not None:
+                note, ch = sounding
                 try:
-                    self.send_note_off(self.OUT_CHANNEL, note)
+                    self.send_note_off(ch, note)
                 except Exception:
                     pass
                 self._sounding[v_idx] = None
@@ -314,12 +372,15 @@ class TrackerBase(PluginBase):
         ▶ sits on the row whose notes are now sounding, not the row
         about to fire on the next tick.
 
-        ## CC collision algorithm (rightmost voice wins)
+        ## CC collision algorithm (rightmost voice wins, per channel)
 
         A row can carry up to TRACK_COUNT CC events — one per voice
-        cell. When multiple voices on the same row set the *same*
-        CC number, the cell on the highest-indexed (rightmost) voice
-        wins; earlier duplicates are dropped before any MIDI is sent.
+        cell. With per-track channels, a CC# is only a "duplicate"
+        when both the channel AND the CC number match. Two voices on
+        different channels setting CC 7 are independent events; both
+        fire. Two voices on the same channel setting CC 7 collapse —
+        the rightmost (highest-indexed) voice wins; the earlier
+        duplicate is dropped before any MIDI is sent.
 
         Why rightmost: the voice columns flow left-to-right in the
         cell view; the user reads them as a stack where later columns
@@ -332,14 +393,11 @@ class TrackerBase(PluginBase):
           1. Fire every voice's *note* events first (notes are
              per-voice and don't collide).
           2. Walk the row's voices left-to-right and collect each
-             (cc_num, cc_val) pair into a dict keyed by cc_num. Dict
-             assignment overwrites, so by the end of the loop the
-             dict holds *exactly one* value per CC# — the rightmost
-             one set on the row.
-          3. Fire one `send_cc` per surviving (cc_num, cc_val) pair.
-
-        Different CC numbers always coexist (e.g. T1 sets CC 7, T2
-        sets CC 11 — both fire); only same-CC duplicates collapse."""
+             (channel, cc_num) → cc_val into a dict. Dict assignment
+             overwrites, so by the end of the loop each (channel,
+             cc_num) pair holds the rightmost value set on that
+             (channel, cc_num) for the row.
+          3. Fire one `send_cc` per surviving entry."""
         published = None
         with self._lock:
             pages = self._param_values.get("pages") or []
@@ -377,10 +435,11 @@ class TrackerBase(PluginBase):
                     for v_idx in range(self.TRACK_COUNT):
                         if v_idx < len(voices) and isinstance(voices[v_idx], dict):
                             self._fire_voice_note(v_idx, voices[v_idx])
-                    # Pass 2: collect CCs left-to-right, then fire
-                    # the deduplicated set. See the docstring above
-                    # for the rightmost-wins algorithm.
-                    pending_cc: dict[int, int] = {}
+                    # Pass 2: collect CCs left-to-right keyed by
+                    # (channel, cc_num) so different-channel voices
+                    # with the same CC# both fire; only same-channel
+                    # duplicates collapse. See docstring.
+                    pending_cc: dict[tuple[int, int], int] = {}
                     for v_idx in range(self.TRACK_COUNT):
                         if v_idx >= len(voices):
                             break
@@ -390,11 +449,12 @@ class TrackerBase(PluginBase):
                         cn = voice.get("cc_num")
                         cv = voice.get("cc_val")
                         if isinstance(cn, int) and isinstance(cv, int):
-                            pending_cc[cn] = cv
-                    for cc_num, cc_val in pending_cc.items():
+                            ch = self._track_channel(v_idx)
+                            pending_cc[(ch, cn)] = cv
+                    for (ch, cc_num), cc_val in pending_cc.items():
                         try:
                             self.send_cc(
-                                self.OUT_CHANNEL,
+                                ch,
                                 max(0, min(127, cc_num)),
                                 max(0, min(127, cc_val)),
                             )
@@ -423,8 +483,15 @@ class TrackerBase(PluginBase):
 
     def _fire_voice_note(self, v_idx: int, voice: dict) -> None:
         """Note-only firing for one voice on the current row. CCs are
-        handled separately in `_advance_step` so same-CC duplicates
-        across voices collapse to one event (rightmost wins)."""
+        handled separately in `_advance_step` so same-(channel, CC#)
+        duplicates across voices collapse to one event (rightmost
+        wins).
+
+        Note-off uses the channel the previous note was *started* on,
+        not the voice's currently-configured channel — if the user
+        retargeted the voice between note-on and note-off, sending
+        the off to the new channel would leave the original synth
+        ringing forever."""
         note = voice.get("note", "---")
         vel = voice.get("vel")
 
@@ -434,8 +501,9 @@ class TrackerBase(PluginBase):
             return
         prev = self._sounding[v_idx]
         if prev is not None:
+            prev_note, prev_ch = prev
             try:
-                self.send_note_off(self.OUT_CHANNEL, prev)
+                self.send_note_off(prev_ch, prev_note)
             except Exception:
                 pass
             self._sounding[v_idx] = None
@@ -445,24 +513,27 @@ class TrackerBase(PluginBase):
             return
         v = vel if isinstance(vel, int) else 90
         v = max(1, min(127, int(v)))
+        ch = self._track_channel(v_idx)
         try:
-            self.send_note_on(self.OUT_CHANNEL, midi, v)
+            self.send_note_on(ch, midi, v)
         except Exception:
             pass
-        self._sounding[v_idx] = midi
+        self._sounding[v_idx] = (midi, ch)
 
     # ================================================================
     # Recording (auto-learn) + pass-through
     # ================================================================
 
     def on_note_on(self, channel: int, note: int, velocity: int) -> None:
-        # Pass through to OUT first so the user always hears their
-        # playing once. Velocity 0 = note-off in the MIDI spec; just
-        # forward and let on_note_off handle the symmetric cleanup.
+        # Pass through to OUT on the FOCUSED track's channel — i.e.
+        # the channel the recording will play back on. Lets the user
+        # monitor on the right voice's destination synth as they
+        # record. Velocity 0 = note-off; just forward and let
+        # on_note_off handle the symmetric cleanup.
+        cur_track = int(self._param_values.get("cursor_track") or 0)
+        out_ch = self._track_channel(cur_track)
         try:
-            self.send_note_on(
-                self.OUT_CHANNEL, note, max(1, min(127, int(velocity))),
-            )
+            self.send_note_on(out_ch, note, max(1, min(127, int(velocity))))
         except Exception:
             pass
         if velocity <= 0:
@@ -516,31 +587,81 @@ class TrackerBase(PluginBase):
             self.set_param("current_page", next_page)
 
     def on_note_off(self, channel: int, note: int) -> None:
-        # Pass-through only. Playback emits its own note-offs from
+        # Pass-through on the focused track's channel (matches what
+        # on_note_on emits). Playback emits its own note-offs from
         # the next non-`---` cell or `Off` cell — recording the
         # release would just clutter the row with `Off` entries the
         # user didn't ask for.
+        cur_track = int(self._param_values.get("cursor_track") or 0)
         try:
-            self.send_note_off(self.OUT_CHANNEL, note)
+            self.send_note_off(self._track_channel(cur_track), note)
         except Exception:
             pass
 
     def on_cc(self, channel: int, cc: int, value: int) -> None:
+        cur_track = int(self._param_values.get("cursor_track") or 0)
+        out_ch = self._track_channel(cur_track)
         try:
-            self.send_cc(
-                self.OUT_CHANNEL,
-                max(0, min(127, int(cc))),
-                max(0, min(127, int(value))),
-            )
+            self.send_cc(out_ch, max(0, min(127, int(cc))),
+                         max(0, min(127, int(value))))
         except Exception:
             pass
-        cur_track = int(self._param_values.get("cursor_track") or 0)
         if cur_track >= self.TRACK_COUNT:
             return
         self._record_voice_field(cur_track, {
             "cc_num": max(0, min(127, int(cc))),
             "cc_val": max(0, min(127, int(value))),
         })
+
+    # ================================================================
+    # Clock + transport forwarding (when send_clock is on)
+    # ================================================================
+
+    def _forward_clock_enabled(self) -> bool:
+        return bool(self._param_values.get("send_clock"))
+
+    def on_clock(self) -> None:
+        if self._forward_clock_enabled():
+            try:
+                self.send_clock()
+            except Exception:
+                pass
+
+    def on_clock_start(self) -> None:
+        if self._forward_clock_enabled():
+            try:
+                self.send_start()
+            except Exception:
+                pass
+
+    def on_clock_stop(self) -> None:
+        if self._forward_clock_enabled():
+            try:
+                self.send_stop()
+            except Exception:
+                pass
+
+    def on_clock_continue(self) -> None:
+        if self._forward_clock_enabled():
+            try:
+                self.send_continue()
+            except Exception:
+                pass
+
+    # ================================================================
+    # Manual transport — Play / Stop buttons in the play-page header
+    # ================================================================
+
+    def on_param_change(self, name: str, value: Any) -> None:
+        # Trigger-style booleans the play-page header writes via
+        # onChange. We fire the local transport handler then reset
+        # the bool to False (broadcasts back to all clients).
+        if name == "cmd_play" and value:
+            self.on_transport_start()
+            self.set_param("cmd_play", False)
+        elif name == "cmd_stop" and value:
+            self.on_transport_stop()
+            self.set_param("cmd_stop", False)
 
     def _record_voice_field(self, track_idx: int, updates: dict[str, Any]) -> None:
         """Convenience wrapper for `_record_voice_field_at` at the

@@ -109,6 +109,11 @@ export function renderParam(param, values, onChange, allValues, displayCtx) {
                 onChange=${onChange} displayCtx=${displayCtx}
                 renderParam=${renderParam} />`;
         case 'trackergrid':
+            // play_only — never render in the device-detail (config)
+            // panel; only on the /play surface where playOnly is true.
+            // The config card carries the per-track channel selectors
+            // + send-clock toggle; the grid itself isn't useful there.
+            if (param.play_only && !(displayCtx && displayCtx.playOnly)) return null;
             return html`<${PluginTrackerGrid} param=${param} values=${values}
                 onChange=${onChange} displayCtx=${displayCtx} />`;
         default:

@@ -353,10 +353,19 @@ class TrackerGrid:
     octave_param: str | None = None
     rate_param: str | None = None
     playhead_param: str | None = None  # {page, row, playing} broadcast per step
+    track_channels_param: str | None = None  # base name; per-track lookup as <name>_<idx>
+    cmd_play_param: str | None = None  # bool, frontend → backend trigger
+    cmd_stop_param: str | None = None  # bool, frontend → backend trigger
+    send_clock_param: str | None = None  # bool, latching toggle
 
     def to_dict(self) -> dict:
         d = {
             "type": "trackergrid",
+            # `play_only` is a hint to the renderparam dispatcher: the
+            # tracker grid + keypad only make sense on the play
+            # surface (not the device-detail config card), so the
+            # frontend skips it when displayCtx.playOnly is false.
+            "play_only": True,
             "name": self.name,
             "label": self.label,
             "track_count": self.track_count,
@@ -365,7 +374,9 @@ class TrackerGrid:
         }
         for attr in ("pages_param", "current_page_param", "cursor_row_param",
                      "cursor_track_param", "cursor_half_param",
-                     "octave_param", "rate_param", "playhead_param"):
+                     "octave_param", "rate_param", "playhead_param",
+                     "track_channels_param", "cmd_play_param",
+                     "cmd_stop_param", "send_clock_param"):
             v = getattr(self, attr)
             if v:
                 d[attr] = v

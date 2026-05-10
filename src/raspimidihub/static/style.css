@@ -1042,6 +1042,14 @@ body {
     border-color: var(--accent, #5cf);
     color: #fff;
 }
+/* Transport buttons — slightly larger + a green tint when actively
+ * playing so the user can spot them at a glance from across a stage. */
+.tracker-transport-btn { padding: 4px 10px; font-weight: 600; }
+.tracker-transport-btn.active {
+    background: rgba(76, 175, 80, 0.35);
+    border-color: rgba(76, 175, 80, 0.7);
+    color: #fff;
+}
 /* Compact rate dropdown sitting next to the page controls. Native
  * <select> reskinned to fit the surrounding pill-button row instead
  * of the wide horizontal radio that the standard PluginRadio renders. */
@@ -1145,6 +1153,14 @@ body {
 .tracker-track-label.cursor {
     color: var(--accent, #5cf);
     font-weight: 600;
+}
+/* Channel suffix on each track label — dimmer than the track name
+ * itself so T1 / T2 still read as the primary identifier and the
+ * [Ch N] hangs back as metadata. */
+.tracker-track-ch {
+    color: var(--text-dim);
+    font-weight: 400;
+    margin-left: 4px;
 }
 .tracker-rows { display: flex; flex-direction: column; }
 /* Each voice cell renders as two halves — note slice ("C-3 5A") and

@@ -478,7 +478,14 @@ export function PluginTrackerGrid({ param, values, onChange }) {
         }
     }, [cursorRow, cursorTrack, cursorHalf, currentPage]);
 
-    // ---- Header (Rate dropdown + page actions only) ----
+    // ---- Header (Rate + Play/Stop + page actions) ----
+    // Play / Stop write trigger-style booleans to cmd_play / cmd_stop;
+    // the plugin's on_param_change fires the local transport handler
+    // and resets the flag back to False. Lets the user start the
+    // tracker without an external clock+Start signal.
+    const isPlaying = !!(playhead && playhead.playing);
+    const onPlay = () => onChange(param.cmd_play_param, true);
+    const onStop = () => onChange(param.cmd_stop_param, true);
     const header = html`<div class="tracker-header">
         <div class="tracker-header-row">
             <span class="tracker-header-label">Rate</span>
@@ -487,6 +494,11 @@ export function PluginTrackerGrid({ param, values, onChange }) {
                 onchange=${(e) => onChange(param.rate_param, e.target.value)}>
                 ${RATE_OPTIONS.map((r) => html`<option value=${r}>${r}</option>`)}
             </select>
+
+            <button class="tracker-page-btn tracker-transport-btn ${isPlaying ? 'active' : ''}"
+                title="Play (transport start)" onclick=${onPlay}>▶ Play</button>
+            <button class="tracker-page-btn tracker-transport-btn"
+                title="Stop (transport stop)" onclick=${onStop}>■ Stop</button>
 
             <button class="tracker-page-btn"
                 disabled=${pages.length >= maxPages}
@@ -501,12 +513,17 @@ export function PluginTrackerGrid({ param, values, onChange }) {
 
     // ---- Track-header row (above the steps) ----
     // The empty step-col reserves the row-num + playhead gutter so
-    // T1..Tn align with the data columns below.
+    // T1..Tn align with the data columns below. Each track's label
+    // also shows its configured output channel — defaults to 1, set
+    // per-track in the device-detail config panel.
     const trackHeader = html`<div class="tracker-track-header">
         <span class="tracker-row-playhead"></span>
         <span class="tracker-track-step-col"></span>
-        ${range(0, trackCount).map((t) => html`<span
-            class="tracker-track-label ${t === cursorTrack ? 'cursor' : ''}">T${t + 1}</span>`)}
+        ${range(0, trackCount).map((t) => {
+            const ch = clamp(values[`track_ch_${t}`] ?? 1, 1, 16);
+            return html`<span
+                class="tracker-track-label ${t === cursorTrack ? 'cursor' : ''}">T${t + 1}<span class="tracker-track-ch">[Ch ${ch}]</span></span>`;
+        })}
     </div>`;
 
     // ---- Step rows ----

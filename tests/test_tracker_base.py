@@ -74,25 +74,31 @@ def test_subclass_params_carry_tracker_grid():
     assert g.playhead_param == "playhead"
 
 
-def test_only_tracker_grid_in_params():
-    # No standalone Radio / Group / etc — the TrackerGrid is the
-    # sole top-level entry; rate is reached through `rate_param`
-    # so there's no separate buttons-style render anywhere.
-    assert all(isinstance(p, TrackerGrid) for p in _DemoTracker.params)
-    assert len(_DemoTracker.params) == 1
+def test_top_level_param_shape():
+    # The TrackerGrid is the play-surface entry (play_only). The
+    # config-only entries below it are the per-track channel group +
+    # the send-clock toggle. Rate is reached through TrackerGrid's
+    # rate_param pointer, not as a standalone Radio.
+    from raspimidihub.plugin_api import Group as _Group
+    params = _DemoTracker.params
+    assert isinstance(params[0], TrackerGrid)
+    titles = [p.title for p in params if isinstance(p, _Group)]
+    assert "Track Channels" in titles
+    # No standalone Radio for `rate` (still reached via rate_param).
+    from raspimidihub.plugin_api import Radio as _Radio
+    assert not any(isinstance(p, _Radio) for p in params)
 
 
 def test_schema_param_keys_collects_tracker_aux():
     keys = schema_param_keys(_DemoTracker.params)
-    # Sibling auxiliary params declared on the TrackerGrid — including
-    # `rate` which is now reached through `rate_param` instead of a
-    # standalone Radio, and `cursor_half` which controls keypad split.
     for name in ("pages", "current_page", "cursor_row", "cursor_track",
-                 "cursor_half", "octave", "rate"):
+                 "cursor_half", "octave", "rate", "playhead",
+                 "cmd_play", "cmd_stop", "send_clock"):
         assert name in keys, f"missing aux key {name!r}"
-    # Channel / sync / show-tracks were trimmed: output is always ch 1
-    # and transport is always external. Make sure the schema doesn't
-    # carry stale keys that would re-appear in saved configs.
+    # Per-track channels (one per voice). _DemoTracker has TRACK_COUNT=4.
+    for i in range(4):
+        assert f"track_ch_{i}" in keys
+    # Single global `channel` etc were removed once tracks went per-channel.
     for removed in ("channel", "sync_mode", "bpm", "show_tracks"):
         assert removed not in keys, f"stale key {removed!r} still present"
 
@@ -110,8 +116,15 @@ def test_on_start_seeds_one_blank_page():
     assert t._param_values["rate"] == "1/16"
     assert t._param_values["cursor_half"] == "note"
     assert t._param_values["playhead"] == {"page": 0, "row": 0, "playing": False}
+    assert t._param_values["cmd_play"] is False
+    assert t._param_values["cmd_stop"] is False
+    assert t._param_values["send_clock"] is False
+    # All eight track channels default to MIDI ch 1.
+    for i in range(4):
+        assert t._param_values[f"track_ch_{i}"] == 1
     assert t.transient_params == {
-        "cursor_row", "cursor_track", "cursor_half", "octave", "playhead",
+        "cursor_row", "cursor_track", "cursor_half", "octave",
+        "playhead", "cmd_play", "cmd_stop",
     }
 
 
@@ -253,7 +266,7 @@ def test_advance_step_fires_note_on_and_tracks_sounding():
     assert ("off", 0, 60) in s.events
     assert ("on", 0, 62, 100) in s.events
     assert s.events.index(("off", 0, 60)) < s.events.index(("on", 0, 62, 100))
-    assert t._sounding[0] == 62
+    assert t._sounding[0] == (62, 0)    # (midi, channel) — default ch 1 = 0-based 0
 
 
 def test_off_cell_silences_voice():
@@ -288,7 +301,7 @@ def test_hold_sentinel_does_not_retrigger():
     s.events.clear()        # discard the row-0 events
     t.on_tick("1/16")       # row 1 is `---` → no MIDI
     assert s.events == []
-    assert t._sounding[0] == 60
+    assert t._sounding[0] == (60, 0)
 
 
 def test_cc_fires_independent_of_note():
@@ -304,10 +317,9 @@ def test_cc_fires_independent_of_note():
     assert ("cc", 0, 1, 64) in s.events
 
 
-def test_cc_collision_rightmost_voice_wins():
-    # Same CC# on multiple voices of the same row → only the
-    # rightmost (highest track index) value is sent. Earlier
-    # duplicates collapse before MIDI ever leaves the plugin.
+def test_cc_collision_rightmost_voice_wins_same_channel():
+    # Same CC# AND same channel on multiple voices → only the
+    # rightmost (highest track index) value is sent.
     t = _started()
     s = _Sender()
     s.attach(t)
@@ -315,7 +327,6 @@ def test_cc_collision_rightmost_voice_wins():
         {"voices": [
             {"note": "---", "vel": "--", "cc_num": 7, "cc_val": 50},
             {"note": "---", "vel": "--", "cc_num": 7, "cc_val": 80},
-            # Different CC# coexists — must still fire.
             {"note": "---", "vel": "--", "cc_num": 11, "cc_val": 99},
             {"note": "---", "vel": "--", "cc_num": 7, "cc_val": 100},
         ]},
@@ -323,14 +334,36 @@ def test_cc_collision_rightmost_voice_wins():
     t._param_values["rate"] = "1/16"
     t.on_transport_start()
     cc_events = [e for e in s.events if e[0] == "cc"]
-    # CC 7 at value 100 (rightmost), CC 11 at 99. No CC 7 at 50 / 80.
     assert ("cc", 0, 7, 100) in cc_events
     assert ("cc", 0, 11, 99) in cc_events
     assert not any(e == ("cc", 0, 7, 50) or e == ("cc", 0, 7, 80)
                    for e in cc_events)
-    # Exactly one CC 7 sent (no flood of intermediates).
     cc7 = [e for e in cc_events if e[2] == 7]
     assert len(cc7) == 1
+
+
+def test_cc_same_number_different_channels_both_fire():
+    # T1 sets CC 7 = 50 on channel 1, T3 sets CC 7 = 80 on channel 5.
+    # Different channels → independent events; both fire.
+    t = _started()
+    s = _Sender()
+    s.attach(t)
+    t._param_values["track_ch_0"] = 1     # T1 = ch 1 (0-based 0)
+    t._param_values["track_ch_2"] = 5     # T3 = ch 5 (0-based 4)
+    t._param_values["pages"] = [{"rows": [
+        {"voices": [
+            {"note": "---", "vel": "--", "cc_num": 7, "cc_val": 50},
+            empty_voice(),
+            {"note": "---", "vel": "--", "cc_num": 7, "cc_val": 80},
+            empty_voice(),
+        ]},
+    ]}]
+    t._param_values["rate"] = "1/16"
+    t.on_transport_start()
+    cc_events = [e for e in s.events if e[0] == "cc"]
+    # Both fire on their respective channels.
+    assert ("cc", 0, 7, 50) in cc_events
+    assert ("cc", 4, 7, 80) in cc_events
 
 
 def test_different_cc_numbers_coexist_on_same_step():
@@ -465,11 +498,14 @@ def test_transport_stop_silences_sounding():
     t = _started()
     s = _Sender()
     s.attach(t)
-    t._sounding[0] = 60
-    t._sounding[2] = 64
+    # _sounding now carries (midi_note, channel) tuples — different
+    # tracks may be on different channels, and the note-off must go
+    # back to the channel the note was started on.
+    t._sounding[0] = (60, 0)
+    t._sounding[2] = (64, 5)
     t.on_transport_stop()
     assert ("off", 0, 60) in s.events
-    assert ("off", 0, 64) in s.events
+    assert ("off", 5, 64) in s.events
     assert all(n is None for n in t._sounding)
     assert t._playing is False
 
@@ -589,9 +625,131 @@ def test_panic_silences_all_voices_and_stops_playback():
     t = _started()
     s = _Sender()
     s.attach(t)
-    t._sounding[0] = 60
+    t._sounding[0] = (60, 0)
     t._playing = True
     t.panic()
     assert ("off", 0, 60) in s.events
     assert t._playing is False
     assert all(n is None for n in t._sounding)
+
+
+# ---------------------------------------------------------------------------
+# Per-track channel routing
+# ---------------------------------------------------------------------------
+
+def test_each_voice_fires_on_its_own_channel():
+    t = _started()
+    s = _Sender()
+    s.attach(t)
+    t._param_values["track_ch_0"] = 3      # T1 → ch 3 (0-based 2)
+    t._param_values["track_ch_1"] = 7      # T2 → ch 7 (0-based 6)
+    t._param_values["pages"] = [{"rows": [
+        {"voices": [
+            {"note": "C-4", "vel": 90, "cc_num": ".", "cc_val": "--"},
+            {"note": "E-4", "vel": 90, "cc_num": ".", "cc_val": "--"},
+            empty_voice(), empty_voice(),
+        ]},
+    ]}]
+    t.on_transport_start()
+    note_ons = [e for e in s.events if e[0] == "on"]
+    assert ("on", 2, 60, 90) in note_ons   # C-4 on ch 3
+    assert ("on", 6, 64, 90) in note_ons   # E-4 on ch 7
+    assert t._sounding[0] == (60, 2)
+    assert t._sounding[1] == (64, 6)
+
+
+def test_note_off_uses_original_channel_after_track_remap():
+    # User starts a note on ch 3, then changes the track's channel
+    # to ch 5 mid-pattern, then the next non-`---` cell fires.
+    # The note-off must go to ch 3 (where the note was started),
+    # otherwise the synth on ch 3 keeps ringing.
+    t = _started()
+    s = _Sender()
+    s.attach(t)
+    t._param_values["track_ch_0"] = 3
+    t._param_values["pages"] = [{"rows": [
+        {"voices": [{"note": "C-4", "vel": 90, "cc_num": ".", "cc_val": "--"},
+                    empty_voice(), empty_voice(), empty_voice()]},
+        {"voices": [{"note": "D-4", "vel": 90, "cc_num": ".", "cc_val": "--"},
+                    empty_voice(), empty_voice(), empty_voice()]},
+    ]}]
+    t.on_transport_start()              # fires C-4 on ch 3
+    t._param_values["track_ch_0"] = 5   # user retargets the track
+    t.on_tick("1/16")                   # fires D-4: off C-4 on ch 3, on D-4 on ch 5
+    assert ("on", 2, 60, 90) in s.events
+    assert ("off", 2, 60) in s.events    # off on ch 3 (0-based 2)
+    assert ("on", 4, 62, 90) in s.events  # on on ch 5 (0-based 4)
+
+
+# ---------------------------------------------------------------------------
+# Manual transport — cmd_play / cmd_stop signals
+# ---------------------------------------------------------------------------
+
+def test_cmd_play_starts_transport_and_resets_signal():
+    t = _started()
+    s = _Sender()
+    s.attach(t)
+    t._param_values["pages"] = [{"rows": [
+        {"voices": [{"note": "C-4", "vel": 90, "cc_num": ".", "cc_val": "--"},
+                    empty_voice(), empty_voice(), empty_voice()]},
+    ] + [empty_row(4) for _ in range(15)]}]
+    # Frontend writes cmd_play=True; on_param_change fires
+    # on_transport_start (which fires row 0 immediately) and resets
+    # the signal back to False.
+    t.on_param_change("cmd_play", True)
+    assert t._playing is True
+    assert ("on", 0, 60, 90) in s.events
+    assert t._param_values["cmd_play"] is False
+
+
+def test_cmd_stop_halts_transport_and_resets_signal():
+    t = _started()
+    s = _Sender()
+    s.attach(t)
+    t._sounding[0] = (60, 0)
+    t._playing = True
+    t.on_param_change("cmd_stop", True)
+    assert t._playing is False
+    assert ("off", 0, 60) in s.events
+    assert t._param_values["cmd_stop"] is False
+
+
+# ---------------------------------------------------------------------------
+# Clock + transport forwarding (send_clock toggle)
+# ---------------------------------------------------------------------------
+
+class _ForwardSender(_Sender):
+    """Adds the clock + transport sends that _Sender doesn't capture."""
+
+    def attach(self, plugin):
+        super().attach(plugin)
+        plugin._send_clock = lambda: self.events.append(("clk",))
+        plugin._send_start = lambda: self.events.append(("start",))
+        plugin._send_stop = lambda: self.events.append(("stop",))
+        plugin._send_continue = lambda: self.events.append(("cont",))
+
+
+def test_send_clock_off_swallows_clock_messages():
+    t = _started()
+    s = _ForwardSender()
+    s.attach(t)
+    t._param_values["send_clock"] = False
+    t.on_clock()
+    t.on_clock_start()
+    t.on_clock_stop()
+    t.on_clock_continue()
+    # No clock-family events forwarded — send_clock is off.
+    assert not any(e[0] in ("clk", "start", "stop", "cont") for e in s.events)
+
+
+def test_send_clock_on_forwards_clock_and_transport():
+    t = _started()
+    s = _ForwardSender()
+    s.attach(t)
+    t._param_values["send_clock"] = True
+    t.on_clock()
+    t.on_clock_start()
+    t.on_clock_continue()
+    t.on_clock_stop()
+    forwarded = [e[0] for e in s.events if e[0] in ("clk", "start", "stop", "cont")]
+    assert forwarded == ["clk", "start", "cont", "stop"]
