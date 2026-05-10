@@ -304,6 +304,56 @@ def test_cc_fires_independent_of_note():
     assert ("cc", 0, 1, 64) in s.events
 
 
+def test_cc_collision_rightmost_voice_wins():
+    # Same CC# on multiple voices of the same row → only the
+    # rightmost (highest track index) value is sent. Earlier
+    # duplicates collapse before MIDI ever leaves the plugin.
+    t = _started()
+    s = _Sender()
+    s.attach(t)
+    t._param_values["pages"] = [{"rows": [
+        {"voices": [
+            {"note": "---", "vel": "--", "cc_num": 7, "cc_val": 50},
+            {"note": "---", "vel": "--", "cc_num": 7, "cc_val": 80},
+            # Different CC# coexists — must still fire.
+            {"note": "---", "vel": "--", "cc_num": 11, "cc_val": 99},
+            {"note": "---", "vel": "--", "cc_num": 7, "cc_val": 100},
+        ]},
+    ]}]
+    t._param_values["rate"] = "1/16"
+    t.on_transport_start()
+    cc_events = [e for e in s.events if e[0] == "cc"]
+    # CC 7 at value 100 (rightmost), CC 11 at 99. No CC 7 at 50 / 80.
+    assert ("cc", 0, 7, 100) in cc_events
+    assert ("cc", 0, 11, 99) in cc_events
+    assert not any(e == ("cc", 0, 7, 50) or e == ("cc", 0, 7, 80)
+                   for e in cc_events)
+    # Exactly one CC 7 sent (no flood of intermediates).
+    cc7 = [e for e in cc_events if e[2] == 7]
+    assert len(cc7) == 1
+
+
+def test_different_cc_numbers_coexist_on_same_step():
+    t = _started()
+    s = _Sender()
+    s.attach(t)
+    t._param_values["pages"] = [{"rows": [
+        {"voices": [
+            {"note": "---", "vel": "--", "cc_num": 1,  "cc_val": 10},
+            {"note": "---", "vel": "--", "cc_num": 7,  "cc_val": 20},
+            {"note": "---", "vel": "--", "cc_num": 11, "cc_val": 30},
+            {"note": "---", "vel": "--", "cc_num": 74, "cc_val": 40},
+        ]},
+    ]}]
+    t._param_values["rate"] = "1/16"
+    t.on_transport_start()
+    cc_events = [e for e in s.events if e[0] == "cc"]
+    assert ("cc", 0, 1, 10) in cc_events
+    assert ("cc", 0, 7, 20) in cc_events
+    assert ("cc", 0, 11, 30) in cc_events
+    assert ("cc", 0, 74, 40) in cc_events
+
+
 def test_end_marker_jumps_to_next_page_same_tick():
     # End on page 0 row 0 means: skip this row entirely and play
     # page 1 row 0 NOW (same tick). The End row never plays.

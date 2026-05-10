@@ -312,7 +312,34 @@ class TrackerBase(PluginBase):
 
         Publishes the *just-fired* position to the UI so the visual
         ▶ sits on the row whose notes are now sounding, not the row
-        about to fire on the next tick."""
+        about to fire on the next tick.
+
+        ## CC collision algorithm (rightmost voice wins)
+
+        A row can carry up to TRACK_COUNT CC events — one per voice
+        cell. When multiple voices on the same row set the *same*
+        CC number, the cell on the highest-indexed (rightmost) voice
+        wins; earlier duplicates are dropped before any MIDI is sent.
+
+        Why rightmost: the voice columns flow left-to-right in the
+        cell view; the user reads them as a stack where later columns
+        override earlier ones. It also matches the synth's natural
+        last-write-wins behaviour without flooding the wire with the
+        intermediate values.
+
+        Implementation:
+
+          1. Fire every voice's *note* events first (notes are
+             per-voice and don't collide).
+          2. Walk the row's voices left-to-right and collect each
+             (cc_num, cc_val) pair into a dict keyed by cc_num. Dict
+             assignment overwrites, so by the end of the loop the
+             dict holds *exactly one* value per CC# — the rightmost
+             one set on the row.
+          3. Fire one `send_cc` per surviving (cc_num, cc_val) pair.
+
+        Different CC numbers always coexist (e.g. T1 sets CC 7, T2
+        sets CC 11 — both fire); only same-CC duplicates collapse."""
         published = None
         with self._lock:
             pages = self._param_values.get("pages") or []
@@ -346,9 +373,33 @@ class TrackerBase(PluginBase):
 
                 if isinstance(row, dict):
                     voices = row.get("voices") or []
+                    # Pass 1: per-voice notes (no collisions).
                     for v_idx in range(self.TRACK_COUNT):
                         if v_idx < len(voices) and isinstance(voices[v_idx], dict):
-                            self._fire_voice(v_idx, voices[v_idx])
+                            self._fire_voice_note(v_idx, voices[v_idx])
+                    # Pass 2: collect CCs left-to-right, then fire
+                    # the deduplicated set. See the docstring above
+                    # for the rightmost-wins algorithm.
+                    pending_cc: dict[int, int] = {}
+                    for v_idx in range(self.TRACK_COUNT):
+                        if v_idx >= len(voices):
+                            break
+                        voice = voices[v_idx]
+                        if not isinstance(voice, dict):
+                            continue
+                        cn = voice.get("cc_num")
+                        cv = voice.get("cc_val")
+                        if isinstance(cn, int) and isinstance(cv, int):
+                            pending_cc[cn] = cv
+                    for cc_num, cc_val in pending_cc.items():
+                        try:
+                            self.send_cc(
+                                self.OUT_CHANNEL,
+                                max(0, min(127, cc_num)),
+                                max(0, min(127, cc_val)),
+                            )
+                        except Exception:
+                            pass
 
                 # Advance for next call.
                 if self._play_row + 1 >= self.MAX_ROWS_PER_PAGE:
@@ -370,44 +421,35 @@ class TrackerBase(PluginBase):
             "page": published[0], "row": published[1], "playing": published[2],
         })
 
-    def _fire_voice(self, v_idx: int, voice: dict) -> None:
+    def _fire_voice_note(self, v_idx: int, voice: dict) -> None:
+        """Note-only firing for one voice on the current row. CCs are
+        handled separately in `_advance_step` so same-CC duplicates
+        across voices collapse to one event (rightmost wins)."""
         note = voice.get("note", "---")
         vel = voice.get("vel")
-        cc_num = voice.get("cc_num")
-        cc_val = voice.get("cc_val")
 
         # `---` = leave previous note ringing; any other value (Off /
         # End / real pitch) implicitly note-offs the previous one.
-        if note != "---":
-            prev = self._sounding[v_idx]
-            if prev is not None:
-                try:
-                    self.send_note_off(self.OUT_CHANNEL, prev)
-                except Exception:
-                    pass
-                self._sounding[v_idx] = None
-
-            midi = note_str_to_midi(note)
-            if midi is not None:
-                v = vel if isinstance(vel, int) else 90
-                v = max(1, min(127, int(v)))
-                try:
-                    self.send_note_on(self.OUT_CHANNEL, midi, v)
-                except Exception:
-                    pass
-                self._sounding[v_idx] = midi
-
-        # CC fires independently — `.` / "--" sentinels mean "no event
-        # this step", anything numeric on both columns sends.
-        if isinstance(cc_num, int) and isinstance(cc_val, int):
+        if note == "---":
+            return
+        prev = self._sounding[v_idx]
+        if prev is not None:
             try:
-                self.send_cc(
-                    self.OUT_CHANNEL,
-                    max(0, min(127, int(cc_num))),
-                    max(0, min(127, int(cc_val))),
-                )
+                self.send_note_off(self.OUT_CHANNEL, prev)
             except Exception:
                 pass
+            self._sounding[v_idx] = None
+
+        midi = note_str_to_midi(note)
+        if midi is None:
+            return
+        v = vel if isinstance(vel, int) else 90
+        v = max(1, min(127, int(v)))
+        try:
+            self.send_note_on(self.OUT_CHANNEL, midi, v)
+        except Exception:
+            pass
+        self._sounding[v_idx] = midi
 
     # ================================================================
     # Recording (auto-learn) + pass-through
