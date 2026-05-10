@@ -1755,6 +1755,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         # persisted; renames go through device_names (keyed by stable_id)
         # so that's the source of truth for "what the user calls this".
         registry = engine.device_registry
+        types = engine._plugin_host._plugin_types
         rows = []
         for inst in engine._plugin_host.get_instances():
             display_name = inst.name
@@ -1763,11 +1764,16 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
                 info = registry.get_by_client(client_id)
                 if info is not None and info.custom_name:
                     display_name = info.custom_name
+            cls = types.get(inst.plugin_type)
             rows.append({
                 "id": inst.id,
                 "type": inst.plugin_type,
                 "name": display_name,
                 "status": "crashed" if inst.crashed else ("running" if inst.running else "stopped"),
+                # Surface kind drives which top-level UI panel hosts the
+                # instance (Controller / Play / matrix-only). None
+                # serialises to JSON null. See PluginBase.SURFACE_KIND.
+                "kind": getattr(cls, "SURFACE_KIND", None) if cls else None,
             })
         body = json.dumps(rows).encode()
         _instances_cache["body"] = body

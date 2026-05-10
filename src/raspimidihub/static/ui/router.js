@@ -1,8 +1,9 @@
 /**
- * Tiny router for the app's three pieces of bookmarkable state:
+ * Tiny router for the app's bookmarkable state:
  *
- *   - `tab`           — 'routing' | 'controller' | 'settings'
+ *   - `tab`           — 'routing' | 'controller' | 'play' | 'settings'
  *   - `controllerId`  — selected instance on the Controller page
+ *   - `playId`        — selected instance on the Play page
  *   - `deviceId`      — open device-detail panel on the Routing page
  *
  * URL forms:
@@ -12,6 +13,8 @@
  *   /routing/d/<device_id>         → routing + device panel open
  *   /controller                    → controller (last-viewed via localStorage)
  *   /controller/<instance_id>      → controller, that instance selected
+ *   /play                          → play surface carousel
+ *   /play/<instance_id>            → play, that surface selected
  *   /settings
  *
  * `navigate({...})` pushes a new history entry; the browser back/forward
@@ -23,13 +26,13 @@
 
 import { useEffect, useState, useCallback } from '../lib/hooks.module.js';
 
-const TABS = new Set(['routing', 'controller', 'settings']);
+const TABS = new Set(['routing', 'controller', 'play', 'settings']);
 
 export function parseURL() {
     let path = '/';
     try { path = window.location.pathname || '/'; } catch {}
     const parts = path.replace(/^\/+/, '').split('/').filter(Boolean);
-    const route = { tab: 'routing', controllerId: null, deviceId: null };
+    const route = { tab: 'routing', controllerId: null, playId: null, deviceId: null };
     if (parts.length === 0) return route;
     if (!TABS.has(parts[0])) return route;
     route.tab = parts[0];
@@ -37,17 +40,22 @@ export function parseURL() {
         route.deviceId = decodeURIComponent(parts[2]);
     } else if (route.tab === 'controller' && parts[1]) {
         route.controllerId = decodeURIComponent(parts[1]);
+    } else if (route.tab === 'play' && parts[1]) {
+        route.playId = decodeURIComponent(parts[1]);
     }
     return route;
 }
 
-export function buildURL({ tab, controllerId, deviceId }) {
+export function buildURL({ tab, controllerId, playId, deviceId }) {
     const t = TABS.has(tab) ? tab : 'routing';
     if (t === 'routing') {
         return deviceId != null ? `/routing/d/${encodeURIComponent(deviceId)}` : '/routing';
     }
     if (t === 'controller') {
         return controllerId ? `/controller/${encodeURIComponent(controllerId)}` : '/controller';
+    }
+    if (t === 'play') {
+        return playId ? `/play/${encodeURIComponent(playId)}` : '/play';
     }
     return `/${t}`;
 }
@@ -77,6 +85,7 @@ export function useRouter() {
         const merged = {
             tab: next.tab !== undefined ? next.tab : 'routing',
             controllerId: next.controllerId !== undefined ? next.controllerId : null,
+            playId: next.playId !== undefined ? next.playId : null,
             deviceId: next.deviceId !== undefined ? next.deviceId : null,
         };
         const url = buildURL(merged);

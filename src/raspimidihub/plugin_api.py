@@ -534,6 +534,15 @@ class PluginBase:
     # system's tempo perception with their own divided output.
     feeds_clock_bus: bool = False
 
+    # --- Surface kind ---
+    # Which top-level UI panel this plugin's instances appear in:
+    #   None         — matrix-only plugin (default)
+    #   "controller" — fullscreen play surface in /controller
+    #   "play"       — fullscreen play surface in /play (sequencers)
+    # The /plugins/instances API echoes this back to the frontend as
+    # `kind`, replacing the old startswith("controller_") prefix filter.
+    SURFACE_KIND: str | None = None
+
     # --- Display outputs (declared in subclass, framework renders read-only) ---
     # Each entry: {"name": str, "type": "meter"|"text", "label": str, "min": 0, "max": 127}
     display_outputs: list[dict] = []
