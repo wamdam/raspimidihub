@@ -1,16 +1,21 @@
 /**
  * TrackerGrid — Tracker step-sequencer surface.
  *
- * 16 hex-numbered step rows × 1..N voice columns, paged up to 16
- * pages, with an always-visible data-entry keypad below (separate
- * commit). This file ships the grid + header + cursor navigation +
- * page management + help row; the full keypad lands next.
+ * 16 step rows × 1..N voice columns, paged up to 16 pages. Rows are
+ * labelled `<page-hex><row-hex>` (00..0F on page 0, 10..1F on page 1,
+ * …, F0..FF on page F) so the user sees one continuous address space
+ * even though only the current page renders at a time.
+ *
+ * Cursor wraps across page boundaries: ↓ on row F advances to row 0
+ * of the next page, ↑ on row 0 retreats to row F of the previous
+ * page, both looping at page 0 / last page. PgUp / PgDn keep the
+ * row index and just move the page (also looped). Arrow keys on the
+ * keyboard mirror the on-screen cursor cluster.
  *
  * State is read from / written to sibling auxiliary params named on
- * the TrackerGrid Param (pages_param, current_page_param,
- * cursor_row_param, cursor_track_param, octave_param). All edits
- * flow through the standard `onChange(name, value)` callback so SSE
- * keeps multi-browser views in sync.
+ * the TrackerGrid Param. All edits flow through the standard
+ * `onChange(name, value)` callback so SSE keeps multi-browser views
+ * in sync.
  */
 
 import { html } from '../ui/common.js';
@@ -18,8 +23,6 @@ import { useCallback, useEffect, useRef } from '../lib/hooks.module.js';
 
 const HEX = '0123456789ABCDEF';
 const HOLD = '---';
-const END = 'End';
-const OFF = 'Off';
 const CC_HOLD = '--';
 const CC_NONE = '.';
 
@@ -65,7 +68,6 @@ function emptyPage(trackCount, maxRows) {
     return { rows: Array.from({ length: maxRows }, () => emptyRow(trackCount)) };
 }
 
-// Deep-clone a page so paste / mutation paths don't share references.
 function clonePage(p) {
     return JSON.parse(JSON.stringify(p));
 }
@@ -94,34 +96,44 @@ export function PluginTrackerGrid({ param, values, onChange }) {
     const maxRows = param.max_rows || 16;
 
     const pages = values[param.pages_param] || [];
-    const currentPage = clamp(values[param.current_page_param] ?? 0, 0, Math.max(0, pages.length - 1));
+    const pageCount = Math.max(1, pages.length);
+    const currentPage = clamp(values[param.current_page_param] ?? 0, 0, pageCount - 1);
     const cursorRow = clamp(values[param.cursor_row_param] ?? 0, 0, maxRows - 1);
     const cursorTrack = clamp(values[param.cursor_track_param] ?? 0, 0, trackCount - 1);
+    const rate = values[param.rate_param] || '1/16';
 
     const page = pages[currentPage] || emptyPage(trackCount, maxRows);
     const rows = page.rows || [];
 
-    // Scroll the focused cell into view when the cursor moves so a
-    // narrow viewport (phone, or many voices) always shows where the
-    // user is editing. {block:'nearest', inline:'nearest'} avoids
-    // re-centering when the target is already visible.
-    const gridRef = useRef(null);
-    useEffect(() => {
-        const grid = gridRef.current;
-        if (!grid) return;
-        const focused = grid.querySelector('.tracker-cell.focused');
-        if (focused && focused.scrollIntoView) {
-            focused.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    // ---- Cursor moves with page-boundary wrap on row ↑/↓. ----
+    // Wrapping rules:
+    //   ↓ on row F  → next page, row 0 (wraps to page 0 from last page)
+    //   ↑ on row 0  → previous page, row F (wraps to last page from page 0)
+    // ←/→ are voice-only and don't cross pages.
+    const moveRow = useCallback((d) => {
+        let nextRow = cursorRow + d;
+        let nextPage = currentPage;
+        if (nextRow >= maxRows) {
+            nextRow = 0;
+            nextPage = (currentPage + 1) % pageCount;
+        } else if (nextRow < 0) {
+            nextRow = maxRows - 1;
+            nextPage = (currentPage - 1 + pageCount) % pageCount;
         }
-    }, [cursorRow, cursorTrack, currentPage]);
-
-    // ---- Cursor moves (Mapping X: ↑/↓ rows, ←/→ voices). ----
-    const moveCursor = useCallback((dRow, dTrack) => {
-        const nextRow = clamp(cursorRow + dRow, 0, maxRows - 1);
-        const nextTrack = clamp(cursorTrack + dTrack, 0, trackCount - 1);
         if (nextRow !== cursorRow) onChange(param.cursor_row_param, nextRow);
+        if (nextPage !== currentPage) onChange(param.current_page_param, nextPage);
+    }, [cursorRow, currentPage, maxRows, pageCount, onChange, param]);
+
+    const moveTrack = useCallback((d) => {
+        const nextTrack = clamp(cursorTrack + d, 0, trackCount - 1);
         if (nextTrack !== cursorTrack) onChange(param.cursor_track_param, nextTrack);
-    }, [cursorRow, cursorTrack, maxRows, trackCount, onChange, param]);
+    }, [cursorTrack, trackCount, onChange, param]);
+
+    // PgUp / PgDn — keep the row, change page (looped).
+    const movePage = useCallback((d) => {
+        const nextPage = (currentPage + d + pageCount) % pageCount;
+        if (nextPage !== currentPage) onChange(param.current_page_param, nextPage);
+    }, [currentPage, pageCount, onChange, param]);
 
     const focusCell = useCallback((row, track) => {
         if (row !== cursorRow) onChange(param.cursor_row_param, row);
@@ -129,11 +141,6 @@ export function PluginTrackerGrid({ param, values, onChange }) {
     }, [cursorRow, cursorTrack, onChange, param]);
 
     // ---- Page management. ----
-    const setCurrentPage = useCallback((idx) => {
-        const clamped = clamp(idx, 0, Math.max(0, pages.length - 1));
-        onChange(param.current_page_param, clamped);
-    }, [pages.length, onChange, param]);
-
     const addPage = useCallback(() => {
         if (pages.length >= maxPages) return;
         const next = pages.slice();
@@ -147,14 +154,13 @@ export function PluginTrackerGrid({ param, values, onChange }) {
         const next = pages.slice();
         next.splice(currentPage, 1);
         onChange(param.pages_param, next);
-        // Stay on same index if possible; otherwise the new tail.
         const nextIdx = Math.min(currentPage, next.length - 1);
         onChange(param.current_page_param, nextIdx);
     }, [pages, currentPage, onChange, param]);
 
     const copyPage = useCallback(() => {
-        // Session-local clipboard lives on window so /play unmount
-        // doesn't lose it. Single typed slot.
+        // Session-local clipboard on window so /play unmount doesn't
+        // lose it. Single typed slot.
         window.__trackerPageClipboard = clonePage(pages[currentPage] || emptyPage(trackCount, maxRows));
     }, [pages, currentPage, trackCount, maxRows]);
 
@@ -166,25 +172,47 @@ export function PluginTrackerGrid({ param, values, onChange }) {
         onChange(param.pages_param, next);
     }, [pages, currentPage, onChange, param]);
 
-    // ---- Header ----
+    // ---- Keyboard support (window-level). ----
+    // Active only while this component is mounted. Skips when an
+    // input/select/textarea has focus so the rate dropdown still
+    // works as expected.
+    useEffect(() => {
+        const onKey = (e) => {
+            const tag = (e.target && e.target.tagName) || '';
+            if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+            switch (e.key) {
+                case 'ArrowUp':    moveRow(-1); e.preventDefault(); break;
+                case 'ArrowDown':  moveRow(+1); e.preventDefault(); break;
+                case 'ArrowLeft':  moveTrack(-1); e.preventDefault(); break;
+                case 'ArrowRight': moveTrack(+1); e.preventDefault(); break;
+                case 'PageUp':     movePage(-1); e.preventDefault(); break;
+                case 'PageDown':   movePage(+1); e.preventDefault(); break;
+            }
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [moveRow, moveTrack, movePage]);
+
+    // Scroll the focused cell into view on cursor / page changes.
+    const gridRef = useRef(null);
+    useEffect(() => {
+        const grid = gridRef.current;
+        if (!grid) return;
+        const focused = grid.querySelector('.tracker-cell.focused');
+        if (focused && focused.scrollIntoView) {
+            focused.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+        }
+    }, [cursorRow, cursorTrack, currentPage]);
+
+    // ---- Header (Rate dropdown + page actions only) ----
     const header = html`<div class="tracker-header">
         <div class="tracker-header-row">
             <span class="tracker-header-label">Rate</span>
             <select class="tracker-rate-select"
-                value=${values.rate || '1/16'}
-                onchange=${(e) => onChange('rate', e.target.value)}>
+                value=${rate}
+                onchange=${(e) => onChange(param.rate_param, e.target.value)}>
                 ${RATE_OPTIONS.map((r) => html`<option value=${r}>${r}</option>`)}
             </select>
-
-            <span class="tracker-header-label" style="margin-left:14px">Page</span>
-            <button class="tracker-page-btn"
-                disabled=${currentPage <= 0}
-                onclick=${() => setCurrentPage(currentPage - 1)}>‹</button>
-            <span class="tracker-page-idx">${HEX[currentPage]}</span>
-            <span class="tracker-page-total">${currentPage + 1}/${pages.length}</span>
-            <button class="tracker-page-btn"
-                disabled=${currentPage >= pages.length - 1}
-                onclick=${() => setCurrentPage(currentPage + 1)}>›</button>
 
             <button class="tracker-page-btn"
                 disabled=${pages.length >= maxPages}
@@ -205,15 +233,16 @@ export function PluginTrackerGrid({ param, values, onChange }) {
     </div>`;
 
     // ---- Step rows ----
-    // All TRACK_COUNT voices render every row; the grid scrolls
-    // horizontally on narrow viewports and the cursor scrolls itself
-    // into view when it moves.
+    // Row label = page-hex + row-hex (00..0F on page 0, 10..1F on
+    // page 1, ...). The grid only renders the current page's data,
+    // but the prefix tells the user where they are in the song.
+    const pagePrefix = HEX[currentPage];
     const stepRows = html`<div class="tracker-rows">
         ${range(0, maxRows).map((rowIdx) => {
             const row = rows[rowIdx] || emptyRow(trackCount);
             const isCursorRow = rowIdx === cursorRow;
             return html`<div class="tracker-row ${isCursorRow ? 'cursor' : ''}">
-                <span class="tracker-row-num">${HEX[rowIdx]}</span>
+                <span class="tracker-row-num">${pagePrefix}${HEX[rowIdx]}</span>
                 ${range(0, trackCount).map((t) => {
                     const v = row.voices[t];
                     const focused = isCursorRow && t === cursorTrack;
@@ -225,16 +254,20 @@ export function PluginTrackerGrid({ param, values, onChange }) {
         })}
     </div>`;
 
-    // ---- Help row (static for now; live-value updates in keypad commit) ----
+    // ---- Help row (static for now; live-value in keypad commit) ----
     const helpRow = html`<div class="tracker-help">${HELP_STATIC}</div>`;
 
-    // ---- Cursor arrows (placeholder until full keypad lands) ----
+    // ---- Cursor cluster: PgUp / ↑ / PgDn on top, ← / ↓ / → on bottom ----
     const cursor = html`<div class="tracker-cursor-cluster">
-        <button class="tracker-arrow" onclick=${() => moveCursor(-1, 0)}>↑</button>
-        <div class="tracker-arrow-bottom-row">
-            <button class="tracker-arrow" onclick=${() => moveCursor(0, -1)}>←</button>
-            <button class="tracker-arrow" onclick=${() => moveCursor(1, 0)}>↓</button>
-            <button class="tracker-arrow" onclick=${() => moveCursor(0, 1)}>→</button>
+        <div class="tracker-arrow-row">
+            <button class="tracker-arrow tracker-arrow-page" onclick=${() => movePage(-1)} title="Page up (PgUp)">⇞</button>
+            <button class="tracker-arrow" onclick=${() => moveRow(-1)} title="Up (↑)">↑</button>
+            <button class="tracker-arrow tracker-arrow-page" onclick=${() => movePage(+1)} title="Page down (PgDn)">⇟</button>
+        </div>
+        <div class="tracker-arrow-row">
+            <button class="tracker-arrow" onclick=${() => moveTrack(-1)} title="Left (←)">←</button>
+            <button class="tracker-arrow" onclick=${() => moveRow(+1)} title="Down (↓)">↓</button>
+            <button class="tracker-arrow" onclick=${() => moveTrack(+1)} title="Right (→)">→</button>
         </div>
     </div>`;
 

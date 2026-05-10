@@ -22,7 +22,6 @@ from typing import Any
 
 from raspimidihub.plugin_api import (
     PluginBase,
-    Radio,
     TrackerGrid,
 )
 
@@ -90,17 +89,12 @@ class TrackerBase(PluginBase):
 
     @classmethod
     def _build_params(cls) -> list:
-        """Assemble the sequencer params — `rate` lives behind the
-        device-detail panel (config_only) and is also rendered as a
-        compact dropdown inside the TrackerGrid header. Output channel
-        is fixed (always ch 1) — remap via the matrix if you need it
-        on a different channel."""
+        """Assemble the sequencer UI. Rate lives behind the
+        TrackerGrid's `rate_param` pointer — only the inline pulldown
+        in the grid header touches it, so there's no separate Radio
+        rendered anywhere. Output channel is fixed at MIDI ch 1
+        (remap via the matrix if you need it elsewhere)."""
         return [
-            # `config_only=True` hides this from the /play surface,
-            # but the TrackerGrid frontend reads `values.rate` and shows
-            # it as an inline pulldown next to the page controls.
-            Radio("rate", "Rate", RATE_OPTIONS, default="1/16",
-                  config_only=True),
             TrackerGrid(
                 "tracker", "",
                 track_count=cls.TRACK_COUNT,
@@ -111,6 +105,7 @@ class TrackerBase(PluginBase):
                 cursor_row_param="cursor_row",
                 cursor_track_param="cursor_track",
                 octave_param="octave",
+                rate_param="rate",
             ),
         ]
 
@@ -124,6 +119,7 @@ class TrackerBase(PluginBase):
         self._param_values.setdefault("cursor_row", 0)
         self._param_values.setdefault("cursor_track", 0)
         self._param_values.setdefault("octave", 3)
+        self._param_values.setdefault("rate", "1/16")
 
         # Cursor + octave are live-play state — moving them shouldn't
         # mark the routing config dirty.

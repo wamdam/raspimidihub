@@ -67,15 +67,25 @@ def test_subclass_params_carry_tracker_grid():
     assert g.cursor_row_param == "cursor_row"
     assert g.cursor_track_param == "cursor_track"
     assert g.octave_param == "octave"
+    assert g.rate_param == "rate"
+
+
+def test_only_tracker_grid_in_params():
+    # No standalone Radio / Group / etc — the TrackerGrid is the
+    # sole top-level entry; rate is reached through `rate_param`
+    # so there's no separate buttons-style render anywhere.
+    assert all(isinstance(p, TrackerGrid) for p in _DemoTracker.params)
+    assert len(_DemoTracker.params) == 1
 
 
 def test_schema_param_keys_collects_tracker_aux():
     keys = schema_param_keys(_DemoTracker.params)
-    # Sibling auxiliary params declared on the TrackerGrid …
-    for name in ("pages", "current_page", "cursor_row", "cursor_track", "octave"):
+    # Sibling auxiliary params declared on the TrackerGrid — including
+    # `rate` which is now reached through `rate_param` instead of a
+    # standalone Radio.
+    for name in ("pages", "current_page", "cursor_row", "cursor_track",
+                 "octave", "rate"):
         assert name in keys, f"missing aux key {name!r}"
-    # … plus the rate config (the only top-level Param left).
-    assert "rate" in keys
     # Channel / sync / show-tracks were trimmed: output is always ch 1
     # and transport is always external. Make sure the schema doesn't
     # carry stale keys that would re-appear in saved configs.
@@ -93,6 +103,7 @@ def test_on_start_seeds_one_blank_page():
     assert t._param_values["cursor_row"] == 0
     assert t._param_values["cursor_track"] == 0
     assert t._param_values["octave"] == 3
+    assert t._param_values["rate"] == "1/16"
     assert t.transient_params == {"cursor_row", "cursor_track", "octave"}
 
 

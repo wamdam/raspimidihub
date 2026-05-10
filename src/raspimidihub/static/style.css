@@ -1086,13 +1086,15 @@ body {
 .tracker-row.cursor { background: rgba(80, 200, 255, 0.06); }
 
 /* Gutter — same width on header and data rows so the first cell
- * column lines up. */
+ * column lines up. Two hex digits ("0F", "1A", …) plus a touch of
+ * breathing room. */
 .tracker-track-step-col,
 .tracker-row-num {
     flex: 0 0 auto;
-    min-width: 1.5ch;
+    min-width: 2.5ch;
     text-align: right;
     color: var(--text-dim);
+    font-variant-numeric: tabular-nums;
 }
 
 /* Voice columns — both header label and cell use the same flex
@@ -1146,7 +1148,7 @@ body {
     align-items: center;
     gap: 4px;
 }
-.tracker-arrow-bottom-row {
+.tracker-arrow-row {
     display: flex;
     gap: 4px;
 }
@@ -1159,7 +1161,9 @@ body {
     font-size: 16px;
     cursor: pointer;
     font-family: inherit;
+    line-height: 1;
 }
+.tracker-arrow-page { font-size: 18px; }
 
 /* Drop-button row — 4 quarter-width snapshot buttons above the
  * controller's cell grid. Three visual states:
