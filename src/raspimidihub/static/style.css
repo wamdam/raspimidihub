@@ -1107,14 +1107,17 @@ body {
 }
 /* Playhead gutter — always-present empty slot on every row + on the
  * track-header row so column alignment never shifts when ▶ appears.
- * Same width regardless of whether the row is playing. */
+ * Fixed flex-basis + width + overflow so the glyph (which is wider
+ * than a digit cell in most monospace fonts) can't grow the column
+ * and push the rest of the row right. */
 .tracker-row-playhead {
-    flex: 0 0 auto;
-    min-width: 1.2ch;
+    flex: 0 0 1.5ch;
+    width: 1.5ch;
     text-align: center;
     color: var(--accent, #5cf);
     font-weight: 700;
     font-variant-numeric: tabular-nums;
+    overflow: hidden;
 }
 /* Subtle row tint on the playing row so it pops even without
  * looking at the gutter glyph — useful when the cursor isn't on
