@@ -304,7 +304,9 @@ def test_cc_fires_independent_of_note():
     assert ("cc", 0, 1, 64) in s.events
 
 
-def test_end_marker_jumps_to_next_page():
+def test_end_marker_jumps_to_next_page_same_tick():
+    # End on page 0 row 0 means: skip this row entirely and play
+    # page 1 row 0 NOW (same tick). The End row never plays.
     t = _started()
     s = _Sender()
     s.attach(t)
@@ -319,11 +321,54 @@ def test_end_marker_jumps_to_next_page():
         ] + [empty_row(4) for _ in range(15)]},
     ]
     t._param_values["rate"] = "1/16"
-    t.on_transport_start()  # fires End at page 0 row 0, jumps to page 1
-    t.on_tick("1/16")       # fires page 1 row 0 (C-4)
+    t.on_transport_start()
+    # The very first tick (transport_start fires row 0 immediately)
+    # should already have fired page 1 row 0 — no gap.
     assert ("on", 0, 60, 90) in s.events
     assert t._play_page == 1
     assert t._play_row == 1
+
+
+def test_end_row_does_not_play_other_voices():
+    # The End row is structural — even if voice 2..N have notes set,
+    # they don't play. End-rows are silent.
+    t = _started()
+    s = _Sender()
+    s.attach(t)
+    t._param_values["pages"] = [
+        {"rows": [
+            {"voices": [{"note": "C-4", "vel": 90, "cc_num": ".", "cc_val": "--"},
+                        empty_voice(), empty_voice(), empty_voice()]},
+            {"voices": [{"note": "End", "vel": "--", "cc_num": ".", "cc_val": "--"},
+                        # G-4 on voice 2 of the End row — must NOT play.
+                        {"note": "G-4", "vel": 80, "cc_num": ".", "cc_val": "--"},
+                        empty_voice(), empty_voice()]},
+        ] + [empty_row(4) for _ in range(14)]},
+        {"rows": [
+            {"voices": [{"note": "D-4", "vel": 100, "cc_num": ".", "cc_val": "--"},
+                        empty_voice(), empty_voice(), empty_voice()]},
+        ] + [empty_row(4) for _ in range(15)]},
+    ]
+    t._param_values["rate"] = "1/16"
+    t.on_transport_start()  # fires C-4 at page 0 row 0
+    t.on_tick("1/16")       # row 1 = End → skip + fire D-4 same tick
+    assert ("on", 0, 67, 80) not in s.events    # G-4 was on the End row
+    assert ("on", 0, 62, 100) in s.events       # D-4 fired
+
+
+def test_all_pages_end_stops_playback():
+    t = _started()
+    end_row = [{"note": "End", "vel": "--", "cc_num": ".", "cc_val": "--"},
+               empty_voice(), empty_voice(), empty_voice()]
+    t._param_values["pages"] = [
+        {"rows": [{"voices": end_row}] + [empty_row(4) for _ in range(15)]}
+        for _ in range(3)
+    ]
+    t._param_values["rate"] = "1/16"
+    t.on_transport_start()
+    # Cycled every page without finding a fireable row → stop.
+    assert t._playing is False
+    assert t._param_values["playhead"]["playing"] is False
 
 
 def test_last_page_loops_back_to_zero():

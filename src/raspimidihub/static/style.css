@@ -1067,7 +1067,13 @@ body {
  * gap, padding, or column min-width misaligns the columns — `ch`
  * units measure off the active font-size, so headers MUST inherit
  * the same size as the cells. Line-height kept tight so 16 rows
- * plus header + help + keypad fit a phone screen. */
+ * plus header + help + keypad fit a phone screen.
+ *
+ * `min-width: max-content` so the row's layout box stretches to fit
+ * all eight voice columns even when the parent grid-area scrolls
+ * horizontally on a phone. Without this, the playing-row tint and
+ * cell backgrounds get clipped at the viewport edge — only the
+ * visible cells inherit the row's background. */
 .tracker-track-header,
 .tracker-row {
     display: flex;
@@ -1077,6 +1083,7 @@ body {
     font-size: 12px;
     font-family: inherit;
     line-height: 1.2;
+    min-width: max-content;
 }
 .tracker-track-header {
     border-bottom: 1px solid var(--surface2);

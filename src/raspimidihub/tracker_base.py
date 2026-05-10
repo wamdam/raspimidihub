@@ -299,10 +299,21 @@ class TrackerBase(PluginBase):
 
     def _advance_step(self) -> None:
         """Fire the events at (play_page, play_row) and walk the
-        playhead forward, honouring End markers and looping at the
-        last page. Publishes the *just-fired* position to the UI so
-        the visual ▶ sits on the row whose notes are now sounding,
-        not the row about to fire on the next tick."""
+        playhead forward, looping at the last page.
+
+        End semantics: an `End` on voice 1 means "this row is the
+        end-of-page marker — it doesn't play and the page is over."
+        When we land on an End row, we immediately jump to the next
+        page's row 0 and fire that, all on the same tick — no audible
+        gap.
+
+        Bounded by max_iters so a malformed pattern (every page row
+        0 = End) stops itself instead of looping forever.
+
+        Publishes the *just-fired* position to the UI so the visual
+        ▶ sits on the row whose notes are now sounding, not the row
+        about to fire on the next tick."""
+        published = None
         with self._lock:
             pages = self._param_values.get("pages") or []
             if not pages:
@@ -311,38 +322,52 @@ class TrackerBase(PluginBase):
                 self._play_page = 0
                 self._play_row = 0
 
-            page = pages[self._play_page]
-            rows = (page.get("rows") if isinstance(page, dict) else None) or []
-            row = rows[self._play_row] if self._play_row < len(rows) else None
+            # Skip End rows; bail out if we somehow cycle through
+            # every page without finding a row to play.
+            max_iters = len(pages) + 1
+            for _ in range(max_iters):
+                page = pages[self._play_page]
+                rows = (page.get("rows") if isinstance(page, dict) else None) or []
+                row = rows[self._play_row] if self._play_row < len(rows) else None
 
-            # Capture the position we're firing — this is what the
-            # user is hearing, regardless of where we advance to.
-            played_page = self._play_page
-            played_row = self._play_row
+                if isinstance(row, dict):
+                    voices = row.get("voices") or []
+                    v0 = voices[0] if voices else None
+                    if isinstance(v0, dict) and v0.get("note") == "End":
+                        # End row — skip without firing. Jump to next
+                        # page row 0 and re-evaluate.
+                        self._play_page = (self._play_page + 1) % len(pages)
+                        self._play_row = 0
+                        continue
 
-            page_break = False
-            if isinstance(row, dict):
-                voices = row.get("voices") or []
-                # `End` on voice 1 (index 0) marks the last row of the
-                # page. Fire the row's events first, then jump.
-                v0 = voices[0] if voices else None
-                if isinstance(v0, dict) and v0.get("note") == "End":
-                    page_break = True
-                for v_idx in range(self.TRACK_COUNT):
-                    if v_idx < len(voices) and isinstance(voices[v_idx], dict):
-                        self._fire_voice(v_idx, voices[v_idx])
+                # Found a non-End row — fire it.
+                played_page = self._play_page
+                played_row = self._play_row
 
-            if page_break or self._play_row + 1 >= self.MAX_ROWS_PER_PAGE:
-                self._play_page = (self._play_page + 1) % len(pages)
-                self._play_row = 0
+                if isinstance(row, dict):
+                    voices = row.get("voices") or []
+                    for v_idx in range(self.TRACK_COUNT):
+                        if v_idx < len(voices) and isinstance(voices[v_idx], dict):
+                            self._fire_voice(v_idx, voices[v_idx])
+
+                # Advance for next call.
+                if self._play_row + 1 >= self.MAX_ROWS_PER_PAGE:
+                    self._play_page = (self._play_page + 1) % len(pages)
+                    self._play_row = 0
+                else:
+                    self._play_row += 1
+
+                published = (played_page, played_row, True)
+                break
             else:
-                self._play_row += 1
-        # Outside the lock — set_param hops through the param-change
-        # callback to the SSE writer; the lock is held only for the
-        # state mutation. Note we publish the just-played row, not
-        # the post-advance one.
+                # Cycled every page without fireable content —
+                # stop the playhead instead of burning CPU on it.
+                self._playing = False
+                published = (self._play_page, self._play_row, False)
+
+        # Outside the lock — set_param flows to the SSE writer.
         self.set_param("playhead", {
-            "page": played_page, "row": played_row, "playing": True,
+            "page": published[0], "row": published[1], "playing": published[2],
         })
 
     def _fire_voice(self, v_idx: int, voice: dict) -> None:
