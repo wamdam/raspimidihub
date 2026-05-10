@@ -255,10 +255,16 @@ class TrackerBase(PluginBase):
         # Playback bookkeeping. Playhead position is intentionally
         # separate from current_page / cursor_row so editing during a
         # take doesn't reposition the playback (and vice versa).
+        # _record_page / _record_row track the just-fired row so
+        # incoming MIDI during playback lands on the row whose notes
+        # are currently sounding (live record), instead of wherever
+        # the user's edit cursor happens to sit.
         self._lock = threading.RLock()
         self._playing = False
         self._play_page = 0
         self._play_row = 0
+        self._record_page = 0
+        self._record_row = 0
         # Currently-sounding MIDI note per voice — used to fire the
         # implicit note-off when the next non-`---` cell rolls in.
         self._sounding: list[int | None] = [None] * self.TRACK_COUNT
@@ -447,6 +453,10 @@ class TrackerBase(PluginBase):
                 # Found a non-End row — fire it.
                 played_page = self._play_page
                 played_row = self._play_row
+                # Live recording target — incoming notes / CCs land
+                # on the row whose events are now sounding.
+                self._record_page = played_page
+                self._record_row = played_row
 
                 if isinstance(row, dict):
                     voices = row.get("voices") or []
@@ -558,18 +568,33 @@ class TrackerBase(PluginBase):
         if velocity <= 0:
             return
 
-        # Chord boundary detection. The first note of a chord captures
-        # the current cursor row + page (where chord notes go) and
-        # immediately advances the cursor down one step so the next
-        # chord lands on the next row. Subsequent chord notes within
-        # _CHORD_WINDOW_S keep writing to the captured row.
+        # Chord boundary detection. The first note of a chord
+        # captures the current target row + page and (when not
+        # playing) advances the cursor one step so the next chord
+        # lands on the next row.
+        #
+        # Two recording modes:
+        #   - PLAYING: live record. Target row = the row whose
+        #     events are currently sounding (_record_row). Cursor
+        #     stays put — playback owns the position. Notes the
+        #     user plays in time with the music attach to the row
+        #     they're hearing.
+        #   - STOPPED: step record (original behaviour). Target row
+        #     = cursor row. Cursor auto-advances one step so the
+        #     next chord lands on the next row.
         now = time.monotonic()
         if now - self._chord_window_start > _CHORD_WINDOW_S:
             self._chord_window_start = now
             self._chord_offset = 0
-            self._chord_page = int(self._param_values.get("current_page") or 0)
-            self._chord_row = int(self._param_values.get("cursor_row") or 0)
-            self._auto_advance_cursor()
+            with self._lock:
+                if self._playing:
+                    self._chord_page = self._record_page
+                    self._chord_row = self._record_row
+                else:
+                    self._chord_page = int(self._param_values.get("current_page") or 0)
+                    self._chord_row = int(self._param_values.get("cursor_row") or 0)
+            if not self._playing:
+                self._auto_advance_cursor()
         else:
             self._chord_offset += 1
 
@@ -627,10 +652,21 @@ class TrackerBase(PluginBase):
             pass
         if cur_track >= self.TRACK_COUNT:
             return
-        self._record_voice_field(cur_track, {
-            "cc_num": max(0, min(127, int(cc))),
-            "cc_val": max(0, min(127, int(value))),
-        })
+        # Live record while playing — write to the now-sounding row.
+        # When stopped, fall back to step record at the cursor.
+        if self._playing:
+            with self._lock:
+                page_idx = self._record_page
+                row_idx = self._record_row
+            self._record_voice_field_at(page_idx, row_idx, cur_track, {
+                "cc_num": max(0, min(127, int(cc))),
+                "cc_val": max(0, min(127, int(value))),
+            })
+        else:
+            self._record_voice_field(cur_track, {
+                "cc_num": max(0, min(127, int(cc))),
+                "cc_val": max(0, min(127, int(value))),
+            })
 
     # ================================================================
     # Clock + transport forwarding (when send_clock is on)

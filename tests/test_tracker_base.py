@@ -715,6 +715,58 @@ def test_cmd_stop_halts_transport_and_resets_signal():
     assert t._param_values["cmd_stop"] is False
 
 
+def test_live_record_note_lands_on_playhead_row_when_playing():
+    # While the tracker is playing, a note-on records into the row
+    # whose events just fired (the row currently sounding), NOT
+    # whatever row the edit cursor sits on. The cursor doesn't
+    # auto-advance — playback owns the position.
+    t = _started()
+    s = _Sender()
+    s.attach(t)
+    t._param_values["pages"] = [{"rows": [empty_row(4) for _ in range(16)]}]
+    t._param_values["cursor_row"] = 7         # cursor far from the playhead
+    t._param_values["cursor_track"] = 1
+    t._param_values["rate"] = "1/16"
+    t.on_transport_start()                     # fires row 0; record_row = 0
+    t.on_tick("1/16")                          # fires row 1; record_row = 1
+    t.on_note_on(2, 60, 100)
+    voices = t._param_values["pages"][0]["rows"][1]["voices"]
+    assert voices[1]["note"] == "C-4"          # landed on row 1, T2
+    assert voices[1]["vel"] == 100
+    # Cursor was NOT advanced — playback owns row position.
+    assert t._param_values["cursor_row"] == 7
+    # Row 7 (cursor's row) stays untouched.
+    cursor_row_voices = t._param_values["pages"][0]["rows"][7]["voices"]
+    assert cursor_row_voices[1]["note"] == NOTE_HOLD
+
+
+def test_live_record_cc_lands_on_playhead_row_when_playing():
+    t = _started()
+    s = _Sender()
+    s.attach(t)
+    t._param_values["pages"] = [{"rows": [empty_row(4) for _ in range(16)]}]
+    t._param_values["cursor_row"] = 12
+    t._param_values["cursor_track"] = 0
+    t._param_values["rate"] = "1/16"
+    t.on_transport_start()
+    t.on_tick("1/16")
+    t.on_tick("1/16")                          # record_row = 2
+    t.on_cc(2, 7, 100)
+    cell_at_play = t._param_values["pages"][0]["rows"][2]["voices"][0]
+    assert cell_at_play["cc_num"] == 7
+    assert cell_at_play["cc_val"] == 100
+
+
+def test_step_record_when_stopped_still_uses_cursor_and_advances():
+    # The original behaviour stays for the not-playing case.
+    t = _started()
+    t._param_values["cursor_row"] = 5
+    t._param_values["cursor_track"] = 0
+    t.on_note_on(2, 60, 100)
+    assert t._param_values["pages"][0]["rows"][5]["voices"][0]["note"] == "C-4"
+    assert t._param_values["cursor_row"] == 6
+
+
 def test_note_preview_fires_note_on_and_resets_signal():
     # Frontend writes note_preview=<midi> when a wheel/keyboard tick
     # picks a real pitch. Plugin fires note-on on the focused track's

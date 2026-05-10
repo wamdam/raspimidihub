@@ -333,6 +333,20 @@ export function PluginTrackerGrid({ param, values, onChange }) {
     cursorHalfRef.current = cursorHalf;
     currentPageRef.current = currentPage;
 
+    // Transport state — derived from the broadcast playhead. The
+    // ref shadow lets togglePlay decide play-vs-stop based on the
+    // *current* state regardless of when the callback was created.
+    const isPlaying = !!(playhead && playhead.playing);
+    const isPlayingRef = useRef(false);
+    isPlayingRef.current = isPlaying;
+    const togglePlay = useCallback(() => {
+        if (isPlayingRef.current) {
+            onChange(param.cmd_stop_param, true);
+        } else {
+            onChange(param.cmd_play_param, true);
+        }
+    }, [onChange, param]);
+
     // ---- Selection: anchor + shift-engaged state. ----
     // Anchor = (row, sub, page) where the user first pressed Shift.
     // Selection rectangle is computed every render from anchor +
@@ -833,20 +847,8 @@ export function PluginTrackerGrid({ param, values, onChange }) {
     }, [cursorRow, cursorTrack, cursorHalf, currentPage]);
 
     // ---- Header (Rate + Play toggle + page actions) ----
-    // Single Play button toggles transport — green = currently
-    // playing, click stops; grey = stopped, click starts. Both
-    // paths write trigger-style booleans (cmd_play / cmd_stop) the
-    // plugin's on_param_change reacts to.
-    const isPlaying = !!(playhead && playhead.playing);
-    const isPlayingRef = useRef(false);
-    isPlayingRef.current = isPlaying;
-    const togglePlay = useCallback(() => {
-        if (isPlayingRef.current) {
-            onChange(param.cmd_stop_param, true);
-        } else {
-            onChange(param.cmd_play_param, true);
-        }
-    }, [onChange, param]);
+    // togglePlay is declared earlier (before the keyboard useEffect)
+    // so the deps array doesn't trip into a temporal dead zone.
     const header = html`<div class="tracker-header">
         <div class="tracker-header-row">
             <span class="tracker-header-label">Rate</span>
