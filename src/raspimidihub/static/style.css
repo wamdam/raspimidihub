@@ -1062,50 +1062,54 @@ body {
     border-radius: 4px;
     padding: 4px 0;
 }
-.tracker-track-header {
-    display: flex;
-    gap: 6px;
-    padding: 2px 4px 4px 4px;
-    border-bottom: 1px solid var(--surface2);
-    margin-bottom: 2px;
-    font-size: 10px;
-    color: var(--text-dim);
-    letter-spacing: 0.5px;
-}
-.tracker-track-step-col { display: inline-block; min-width: 1.5ch; }
-.tracker-track-label {
-    flex: 0 0 auto;
-    min-width: 13ch;          /* "C-3 5A 017F" + a little breathing room */
-    text-align: left;
-    padding: 0 4px;
-}
-.tracker-track-label.cursor {
-    color: var(--accent, #5cf);
-    font-weight: 600;
-}
-.tracker-rows { display: flex; flex-direction: column; }
+/* Header + step rows share these metrics so the T1..Tn labels sit
+ * exactly above the C-3 5A 017F cells. Any divergence in font-size,
+ * gap, padding, or column min-width misaligns the columns — `ch`
+ * units measure off the active font-size, so headers MUST inherit
+ * the same size as the cells. */
+.tracker-track-header,
 .tracker-row {
     display: flex;
     align-items: center;
     gap: 6px;
     padding: 1px 4px;
     font-size: 12px;
-    line-height: 1.5;
-    border-radius: 2px;
+    font-family: inherit;
 }
-.tracker-row.cursor {
-    background: rgba(80, 200, 255, 0.06);
-}
-.tracker-row-num {
+.tracker-track-header {
+    border-bottom: 1px solid var(--surface2);
+    margin-bottom: 2px;
     color: var(--text-dim);
+    letter-spacing: 0.5px;
+}
+.tracker-row { line-height: 1.5; border-radius: 2px; }
+.tracker-row.cursor { background: rgba(80, 200, 255, 0.06); }
+
+/* Gutter — same width on header and data rows so the first cell
+ * column lines up. */
+.tracker-track-step-col,
+.tracker-row-num {
+    flex: 0 0 auto;
     min-width: 1.5ch;
     text-align: right;
-    font-size: 11px;
+    color: var(--text-dim);
 }
+
+/* Voice columns — both header label and cell use the same flex
+ * basis so each Tn sits directly above its column. */
+.tracker-track-label,
 .tracker-cell {
     flex: 0 0 auto;
-    min-width: 13ch;          /* matches .tracker-track-label so columns align */
-    padding: 1px 4px;
+    min-width: 13ch;
+    padding: 0 4px;
+    box-sizing: border-box;
+}
+.tracker-track-label.cursor {
+    color: var(--accent, #5cf);
+    font-weight: 600;
+}
+.tracker-rows { display: flex; flex-direction: column; }
+.tracker-cell {
     border-radius: 2px;
     cursor: pointer;
     user-select: none;
