@@ -1012,10 +1012,10 @@ export function PluginTrackerGrid({ param, values, onChange }) {
         onpointerleave=${() => setButtonShift(false)}
         onpointercancel=${() => setButtonShift(false)}>Shift</button>`;
     const actionRow = html`<div class="tracker-keypad-actions">
+        ${shiftBtn}
         ${actionBtn('Cut',
             (e) => onCut(e.shiftKey || shiftEngagedRef.current),
             'Cut focused cell or selection — Shift+Cut = whole page')}
-        ${shiftBtn}
         ${actionBtn('Copy',
             (e) => onCopy(e.shiftKey || shiftEngagedRef.current),
             'Copy focused cell or selection — Shift+Copy = whole page')}
