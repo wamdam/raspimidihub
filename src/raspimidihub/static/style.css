@@ -1096,6 +1096,13 @@ body {
     color: var(--text-dim);
     font-variant-numeric: tabular-nums;
 }
+/* Beat marker on rows 0/4/8/C of every page: brighter colour so the
+ * eye lands on quarter-note boundaries at a glance. Highlights only
+ * the row-num itself; the data cells stay uniform. */
+.tracker-row-num.beat {
+    color: var(--text);
+    font-weight: 600;
+}
 
 /* Voice columns — both header label and cell use the same flex
  * basis so each Tn sits directly above its column. */

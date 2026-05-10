@@ -105,35 +105,70 @@ export function PluginTrackerGrid({ param, values, onChange }) {
     const page = pages[currentPage] || emptyPage(trackCount, maxRows);
     const rows = page.rows || [];
 
+    // Refs that mirror the live cursor/page state so move-* callbacks
+    // can be referenced from a long-running press-and-hold timer
+    // without going stale through closure capture. Without this, the
+    // 60ms repeat would always re-read the cursor position from the
+    // first press, so holding ↓ would only advance one row.
+    const cursorRowRef = useRef(cursorRow);
+    const cursorTrackRef = useRef(cursorTrack);
+    const currentPageRef = useRef(currentPage);
+    cursorRowRef.current = cursorRow;
+    cursorTrackRef.current = cursorTrack;
+    currentPageRef.current = currentPage;
+
     // ---- Cursor moves with page-boundary wrap on row ↑/↓. ----
     // Wrapping rules:
     //   ↓ on row F  → next page, row 0 (wraps to page 0 from last page)
     //   ↑ on row 0  → previous page, row F (wraps to last page from page 0)
-    // ←/→ are voice-only and don't cross pages.
+    //   →/← wrap within trackCount (T8 → T1 on right; T1 → T8 on left).
     const moveRow = useCallback((d) => {
-        let nextRow = cursorRow + d;
-        let nextPage = currentPage;
+        const cr = cursorRowRef.current;
+        const cp = currentPageRef.current;
+        let nextRow = cr + d;
+        let nextPage = cp;
         if (nextRow >= maxRows) {
             nextRow = 0;
-            nextPage = (currentPage + 1) % pageCount;
+            nextPage = (cp + 1) % pageCount;
         } else if (nextRow < 0) {
             nextRow = maxRows - 1;
-            nextPage = (currentPage - 1 + pageCount) % pageCount;
+            nextPage = (cp - 1 + pageCount) % pageCount;
         }
-        if (nextRow !== cursorRow) onChange(param.cursor_row_param, nextRow);
-        if (nextPage !== currentPage) onChange(param.current_page_param, nextPage);
-    }, [cursorRow, currentPage, maxRows, pageCount, onChange, param]);
+        if (nextRow !== cr) onChange(param.cursor_row_param, nextRow);
+        if (nextPage !== cp) onChange(param.current_page_param, nextPage);
+    }, [maxRows, pageCount, onChange, param]);
 
     const moveTrack = useCallback((d) => {
-        const nextTrack = clamp(cursorTrack + d, 0, trackCount - 1);
-        if (nextTrack !== cursorTrack) onChange(param.cursor_track_param, nextTrack);
-    }, [cursorTrack, trackCount, onChange, param]);
+        const cur = cursorTrackRef.current;
+        const next = ((cur + d) % trackCount + trackCount) % trackCount;
+        if (next !== cur) onChange(param.cursor_track_param, next);
+    }, [trackCount, onChange, param]);
 
     // PgUp / PgDn — keep the row, change page (looped).
     const movePage = useCallback((d) => {
-        const nextPage = (currentPage + d + pageCount) % pageCount;
-        if (nextPage !== currentPage) onChange(param.current_page_param, nextPage);
-    }, [currentPage, pageCount, onChange, param]);
+        const cp = currentPageRef.current;
+        const nextPage = (cp + d + pageCount) % pageCount;
+        if (nextPage !== cp) onChange(param.current_page_param, nextPage);
+    }, [pageCount, onChange, param]);
+
+    // Press-and-hold key-repeat for the on-screen cursor cluster.
+    // First fire is immediate; after 350 ms the action starts repeating
+    // every 60 ms until the user releases / leaves the button.
+    // Single timer slot — only one button can be held at a time.
+    const repeatRef = useRef({ to: null, iv: null });
+    const stopRepeat = useCallback(() => {
+        const r = repeatRef.current;
+        if (r.to) { clearTimeout(r.to); r.to = null; }
+        if (r.iv) { clearInterval(r.iv); r.iv = null; }
+    }, []);
+    const startRepeat = useCallback((action) => {
+        stopRepeat();
+        action();
+        repeatRef.current.to = setTimeout(() => {
+            repeatRef.current.iv = setInterval(action, 60);
+        }, 350);
+    }, [stopRepeat]);
+    useEffect(() => () => stopRepeat(), [stopRepeat]);
 
     const focusCell = useCallback((row, track) => {
         if (row !== cursorRow) onChange(param.cursor_row_param, row);
@@ -241,8 +276,12 @@ export function PluginTrackerGrid({ param, values, onChange }) {
         ${range(0, maxRows).map((rowIdx) => {
             const row = rows[rowIdx] || emptyRow(trackCount);
             const isCursorRow = rowIdx === cursorRow;
+            // Beat-marker every 4 rows (00, 04, 08, 0C) — visually
+            // groups steps into beats so the eye lands on quarter
+            // boundaries at a glance.
+            const isBeat = (rowIdx & 3) === 0;
             return html`<div class="tracker-row ${isCursorRow ? 'cursor' : ''}">
-                <span class="tracker-row-num">${pagePrefix}${HEX[rowIdx]}</span>
+                <span class="tracker-row-num ${isBeat ? 'beat' : ''}">${pagePrefix}${HEX[rowIdx]}</span>
                 ${range(0, trackCount).map((t) => {
                     const v = row.voices[t];
                     const focused = isCursorRow && t === cursorTrack;
@@ -258,16 +297,26 @@ export function PluginTrackerGrid({ param, values, onChange }) {
     const helpRow = html`<div class="tracker-help">${HELP_STATIC}</div>`;
 
     // ---- Cursor cluster: PgUp / ↑ / PgDn on top, ← / ↓ / → on bottom ----
+    // Each button uses pointer events so press-and-hold repeats while
+    // the touch is held; click-only (mouse) still works because pointer
+    // events fire for the mouse too.
+    const arrow = (action, label, title, extraClass = '') => html`<button
+        class="tracker-arrow ${extraClass}"
+        title=${title}
+        onpointerdown=${(e) => { e.preventDefault(); startRepeat(action); }}
+        onpointerup=${stopRepeat}
+        onpointerleave=${stopRepeat}
+        onpointercancel=${stopRepeat}>${label}</button>`;
     const cursor = html`<div class="tracker-cursor-cluster">
         <div class="tracker-arrow-row">
-            <button class="tracker-arrow tracker-arrow-page" onclick=${() => movePage(-1)} title="Page up (PgUp)">⇞</button>
-            <button class="tracker-arrow" onclick=${() => moveRow(-1)} title="Up (↑)">↑</button>
-            <button class="tracker-arrow tracker-arrow-page" onclick=${() => movePage(+1)} title="Page down (PgDn)">⇟</button>
+            ${arrow(() => movePage(-1), '⇞', 'Page up (PgUp)', 'tracker-arrow-page')}
+            ${arrow(() => moveRow(-1), '↑', 'Up (↑)')}
+            ${arrow(() => movePage(+1), '⇟', 'Page down (PgDn)', 'tracker-arrow-page')}
         </div>
         <div class="tracker-arrow-row">
-            <button class="tracker-arrow" onclick=${() => moveTrack(-1)} title="Left (←)">←</button>
-            <button class="tracker-arrow" onclick=${() => moveRow(+1)} title="Down (↓)">↓</button>
-            <button class="tracker-arrow" onclick=${() => moveTrack(+1)} title="Right (→)">→</button>
+            ${arrow(() => moveTrack(-1), '←', 'Left (←)')}
+            ${arrow(() => moveRow(+1), '↓', 'Down (↓)')}
+            ${arrow(() => moveTrack(+1), '→', 'Right (→)')}
         </div>
     </div>`;
 
