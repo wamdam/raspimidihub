@@ -737,6 +737,36 @@ export function PluginTrackerGrid({ param, values, onChange }) {
         showHelp(`Pasted selection (${clip.height} × ${clip.width})`);
     }, [pages, currentPage, trackCount, maxRows, onChange, param, showHelp]);
 
+    // Cut = Copy + Del in one shot. Mirrors text-editor convention:
+    // the cut content lands in the paste buffer and is cleared from
+    // the source. Shift+Cut cuts the whole page (matches Shift+Copy).
+    // The trailing showHelp overrides the "Copied …" / "Cleared …"
+    // messages onCopy / onDel set internally so the user sees a
+    // single coherent "Cut …" line.
+    const onCut = useCallback((wholePage = false) => {
+        const rect = makeSelectionRect(anchorRef.current, currentPageRef.current,
+                                       cursorRowRef.current,
+                                       subOf(cursorTrackRef.current, cursorHalfRef.current));
+        onCopy(wholePage);
+        if (wholePage) {
+            // Page-cut needs to clear the whole page too — onDel only
+            // clears the selection or focused cell, not the page. Do
+            // it inline.
+            const blankPage = emptyPage(trackCount, maxRows);
+            const next = pages.slice();
+            next[currentPage] = blankPage;
+            onChange(param.pages_param, next);
+            showHelp('Cut page');
+        } else {
+            onDel();
+            if (rect && !rectIsSingleCell(rect)) {
+                showHelp(`Cut selection (${rect.maxRow - rect.minRow + 1} × ${rect.maxSub - rect.minSub + 1})`);
+            } else {
+                showHelp('Cut cell');
+            }
+        }
+    }, [onCopy, onDel, pages, currentPage, trackCount, maxRows, onChange, param, showHelp]);
+
     // Typed note from the keyboard — same write semantics as turning
     // the Note wheel + the chord auto-advance from MIDI input. One
     // key press = one note + sticky velocity + cursor advances + an
@@ -792,15 +822,17 @@ export function PluginTrackerGrid({ param, values, onChange }) {
                 case 'PageUp':     cursorMove(() => movePage(-1), e.shiftKey); e.preventDefault(); return;
                 case 'PageDown':   cursorMove(() => movePage(+1), e.shiftKey); e.preventDefault(); return;
                 case 'Delete':
-                case 'Backspace':  onDel(); e.preventDefault(); return;
+                case 'Backspace':  onCut(); e.preventDefault(); return;
                 case ' ':          togglePlay(); e.preventDefault(); return;
             }
 
-            // Ctrl/Cmd + C / V — clipboard ops. Ctrl+Shift+C copies
-            // the whole page (matches Shift-Copy on the on-screen
-            // button); plain Ctrl+C copies the cell or selection.
+            // Ctrl/Cmd + C / V / X — clipboard ops. Ctrl+Shift+{C,X}
+            // operates on the whole page (matches Shift-{Copy,Cut}
+            // on the on-screen buttons); plain Ctrl-{C,X,V} on the
+            // focused cell or current selection.
             if (e.ctrlKey || e.metaKey) {
                 if (e.code === 'KeyC') { onCopy(e.shiftKey); e.preventDefault(); return; }
+                if (e.code === 'KeyX') { onCut(e.shiftKey); e.preventDefault(); return; }
                 if (e.code === 'KeyV') { onPaste(); e.preventDefault(); return; }
                 return;
             }
@@ -822,7 +854,7 @@ export function PluginTrackerGrid({ param, values, onChange }) {
             window.removeEventListener('keyup', onKeyUp);
         };
     }, [moveRow, moveColumn, movePage, cursorMove, engageShift,
-        onDel, onCopy, onPaste, writeTypedNote, togglePlay]);
+        onDel, onCopy, onCut, onPaste, writeTypedNote, togglePlay]);
 
     // Tick label for the Note wheel — sentinels then 12 pitches with
     // the current Octave wheel value baked in so each detent shows
@@ -863,10 +895,10 @@ export function PluginTrackerGrid({ param, values, onChange }) {
 
             <button class="tracker-page-btn"
                 disabled=${pages.length >= maxPages}
-                onclick=${addPage}>+ Add pg.</button>
+                onclick=${addPage}>+ page</button>
             <button class="tracker-page-btn"
                 disabled=${pages.length <= 1}
-                onclick=${delPage}>− Del pg.</button>
+                onclick=${delPage}>− page</button>
         </div>
     </div>`;
 
@@ -980,7 +1012,9 @@ export function PluginTrackerGrid({ param, values, onChange }) {
         onpointerleave=${() => setButtonShift(false)}
         onpointercancel=${() => setButtonShift(false)}>Shift</button>`;
     const actionRow = html`<div class="tracker-keypad-actions">
-        ${actionBtn('Del', onDel, 'Clear focused cell or selection')}
+        ${actionBtn('Cut',
+            (e) => onCut(e.shiftKey || shiftEngagedRef.current),
+            'Cut focused cell or selection — Shift+Cut = whole page')}
         ${shiftBtn}
         ${actionBtn('Copy',
             (e) => onCopy(e.shiftKey || shiftEngagedRef.current),
