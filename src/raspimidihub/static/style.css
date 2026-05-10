@@ -996,6 +996,151 @@ body {
 }
 .controller-surface { /* renderParamList output renders directly into the page */ }
 
+/* Tracker step-sequencer surface (TrackerGrid).
+ *
+ * The whole pane sits inside .controller-surface and wants:
+ *   - A dense monospace grid that shrinks to fit narrow phones.
+ *   - A static-height help row above the keypad — the keypad never
+ *     moves between idle and live-value states.
+ *   - A colour highlight on the focused cell, distinct from the
+ *     `▶` row marker we'll add when the playback engine lands. */
+.trackergrid {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    color: var(--text);
+    height: 100%;
+    box-sizing: border-box;
+}
+.tracker-header { font-size: 13px; }
+.tracker-header-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+}
+.tracker-header-label { color: var(--text-dim); font-size: 11px; margin: 0 4px 0 0; }
+.tracker-header-value { color: var(--text); font-weight: 500; }
+.tracker-page-idx { color: var(--accent, #5cf); font-weight: 600; min-width: 1ch; text-align: center; }
+.tracker-page-total { color: var(--text-dim); font-size: 11px; margin-left: 4px; }
+.tracker-page-btn {
+    background: var(--surface2, #2a2a2a);
+    color: var(--text);
+    border: 1px solid var(--surface2);
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 11px;
+    font-family: inherit;
+    cursor: pointer;
+    min-width: 28px;
+}
+.tracker-page-btn[disabled] { opacity: 0.4; cursor: default; }
+.tracker-page-btn.active {
+    background: var(--accent, #357);
+    border-color: var(--accent, #5cf);
+    color: #fff;
+}
+.tracker-grid-area {
+    flex: 1;
+    overflow: auto;
+    background: var(--bg);
+    border-radius: 4px;
+    padding: 4px 0;
+}
+.tracker-track-header {
+    display: flex;
+    gap: 6px;
+    padding: 2px 4px 4px 4px;
+    border-bottom: 1px solid var(--surface2);
+    margin-bottom: 2px;
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 0.5px;
+}
+.tracker-track-step-col { display: inline-block; min-width: 1.5ch; }
+.tracker-track-label {
+    flex: 1 1 0;
+    text-align: left;
+    padding: 0 4px;
+}
+.tracker-track-label.cursor {
+    color: var(--accent, #5cf);
+    font-weight: 600;
+}
+.tracker-rows { display: flex; flex-direction: column; }
+.tracker-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 1px 4px;
+    font-size: 12px;
+    line-height: 1.5;
+    border-radius: 2px;
+}
+.tracker-row.cursor {
+    background: rgba(80, 200, 255, 0.06);
+}
+.tracker-row-num {
+    color: var(--text-dim);
+    min-width: 1.5ch;
+    text-align: right;
+    font-size: 11px;
+}
+.tracker-cell {
+    flex: 1 1 0;
+    padding: 1px 4px;
+    border-radius: 2px;
+    cursor: pointer;
+    user-select: none;
+    white-space: pre;
+}
+.tracker-cell.focused {
+    background: var(--accent, #4af);
+    color: #000;
+    font-weight: 500;
+}
+.tracker-help {
+    background: var(--surface);
+    border-radius: 4px;
+    padding: 6px 10px;
+    font-size: 12px;
+    color: var(--text-dim);
+    min-height: 18px;
+    line-height: 1.4;
+}
+.tracker-keypad-stub {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px;
+    background: var(--surface);
+    border-radius: 6px;
+    flex: 0 0 auto;
+}
+.tracker-cursor-cluster {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+}
+.tracker-arrow-bottom-row {
+    display: flex;
+    gap: 4px;
+}
+.tracker-arrow {
+    width: 36px; height: 36px;
+    background: var(--surface2);
+    color: var(--text);
+    border: 1px solid var(--surface2);
+    border-radius: 4px;
+    font-size: 16px;
+    cursor: pointer;
+    font-family: inherit;
+}
+
 /* Drop-button row — 4 quarter-width snapshot buttons above the
  * controller's cell grid. Three visual states:
  *   - unarmed   (no snapshot)  → muted grey.
