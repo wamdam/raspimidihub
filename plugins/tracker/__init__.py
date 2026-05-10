@@ -24,7 +24,7 @@ page 0.
 Per voice cell: Note (3-char pitch / Off / End / hold), Velocity (hex),
 CC# (hex or `.`), CC Val (hex). Note and CC events fire independently.
 
-End on voice 1's Note column marks the last row of the page; pages
+End on any voice's Note column marks the last row of the page; pages
 without an End play the full 16 rows. End rows are silent — playback
 jumps straight to the next page's row 0 on the same tick. Add Page /
 Del Page in the header manage the linear page chain.

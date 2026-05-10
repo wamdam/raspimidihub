@@ -440,6 +440,52 @@ def test_end_row_does_not_play_other_voices():
     assert ("on", 0, 62, 100) in s.events       # D-4 fired
 
 
+def test_end_on_any_voice_triggers_page_skip():
+    # End placed on T3 (voice index 2) — not just T1 — should still
+    # trigger the page jump on its row.
+    t = _started()
+    s = _Sender()
+    s.attach(t)
+    t._param_values["pages"] = [
+        {"rows": [
+            {"voices": [empty_voice(), empty_voice(),
+                        {"note": "End", "vel": "--", "cc_num": ".", "cc_val": "--"},
+                        empty_voice()]},
+        ] + [empty_row(4) for _ in range(15)]},
+        {"rows": [
+            {"voices": [{"note": "C-4", "vel": 90, "cc_num": ".", "cc_val": "--"},
+                        empty_voice(), empty_voice(), empty_voice()]},
+        ] + [empty_row(4) for _ in range(15)]},
+    ]
+    t._param_values["rate"] = "1/16"
+    t.on_transport_start()
+    # End at page 0 row 0 on T3 → skip to page 1 row 0, fire C-4.
+    assert ("on", 0, 60, 90) in s.events
+    assert t._play_page == 1
+
+
+def test_on_param_change_ignored_before_initialization():
+    # Simulates restore_instances replaying a saved cmd_play=True
+    # before on_start has run on the plugin thread. The trigger
+    # must NOT fire on_transport_start — otherwise every restart
+    # with a mid-play save would re-start the engine.
+    class _T(TrackerBase):
+        NAME = "T"
+        TRACK_COUNT = 4
+    t = _T()
+    # No on_start() yet → _initialized is missing / falsy.
+    s = _Sender()
+    s.attach(t)
+    t.on_param_change("cmd_play", True)
+    assert s.events == []                  # nothing fired
+    # After on_start completes, the same call works.
+    t.on_start()
+    t._param_values["pages"] = [{"rows": [empty_row(4) for _ in range(16)]}]
+    s.events.clear()
+    t.on_param_change("cmd_play", True)
+    assert t._playing is True
+
+
 def test_all_pages_end_stops_playback():
     t = _started()
     end_row = [{"note": "End", "vel": "--", "cc_num": ".", "cc_val": "--"},

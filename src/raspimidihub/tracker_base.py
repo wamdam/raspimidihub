@@ -252,6 +252,15 @@ class TrackerBase(PluginBase):
         self._preview: tuple[int, int] | None = None
         self._preview_timer: threading.Timer | None = None
 
+        # Last so on_param_change can guard against saved-config
+        # replay: restore_instances() set_params each saved param on
+        # the main thread BEFORE this plugin thread runs on_start, so
+        # any saved trigger value (cmd_play=True from a mid-play
+        # save, etc.) would re-fire its action on every restart.
+        # _initialized stays False during that replay window;
+        # on_param_change just no-ops until on_start completes.
+        self._initialized = True
+
         # Playback bookkeeping. Playhead position is intentionally
         # separate from current_page / cursor_row so editing during a
         # take doesn't reposition the playback (and vice versa).
@@ -384,11 +393,11 @@ class TrackerBase(PluginBase):
         """Fire the events at (play_page, play_row) and walk the
         playhead forward, looping at the last page.
 
-        End semantics: an `End` on voice 1 means "this row is the
-        end-of-page marker — it doesn't play and the page is over."
-        When we land on an End row, we immediately jump to the next
-        page's row 0 and fire that, all on the same tick — no audible
-        gap.
+        End semantics: `End` on *any* voice of a row means "this row
+        is the end-of-page marker — it doesn't play and the page is
+        over." When we land on an End row, we immediately jump to
+        the next page's row 0 and fire that, all on the same tick —
+        no audible gap.
 
         Bounded by max_iters so a malformed pattern (every page row
         0 = End) stops itself instead of looping forever.
@@ -442,8 +451,15 @@ class TrackerBase(PluginBase):
 
                 if isinstance(row, dict):
                     voices = row.get("voices") or []
-                    v0 = voices[0] if voices else None
-                    if isinstance(v0, dict) and v0.get("note") == "End":
+                    # End on ANY voice triggers the skip — lets the
+                    # user place the End marker on whichever track
+                    # they're already editing without having to jump
+                    # back to T1 first.
+                    is_end_row = any(
+                        isinstance(v, dict) and v.get("note") == "End"
+                        for v in voices
+                    )
+                    if is_end_row:
                         # End row — skip without firing. Jump to next
                         # page row 0 and re-evaluate.
                         self._play_page = (self._play_page + 1) % len(pages)
@@ -708,6 +724,15 @@ class TrackerBase(PluginBase):
     # ================================================================
 
     def on_param_change(self, name: str, value: Any) -> None:
+        # Guard against config-restore replay. restore_instances()
+        # synchronously set_params each saved param on the main
+        # thread BEFORE the plugin thread runs on_start; without
+        # this guard, a saved cmd_play=True (from a mid-play save)
+        # would re-fire on every plugin restart. on_start sets
+        # _initialized=True at the end, so legitimate user clicks
+        # that arrive AFTER boot still work.
+        if not getattr(self, "_initialized", False):
+            return
         # Trigger-style booleans the play-page header writes via
         # onChange. We fire the local transport handler then reset
         # the bool to False (broadcasts back to all clients).
