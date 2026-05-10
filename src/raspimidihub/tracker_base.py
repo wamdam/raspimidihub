@@ -218,11 +218,12 @@ class TrackerBase(PluginBase):
         self._param_values.setdefault("octave", 3)
         self._param_values.setdefault("rate", "1/16")
         # Playhead — broadcast via set_param every step so the
-        # frontend can render a `▶` next to the playing row. Stays at
-        # {playing: False} until the first tick or transport-start.
-        self._param_values.setdefault(
-            "playhead", {"page": 0, "row": 0, "playing": False},
-        )
+        # frontend can render a `▶` next to the playing row. Always
+        # reset to {playing: False} on plugin (re)start; a saved
+        # config could carry playing:True from a mid-play save and
+        # we don't want the Play button to read green when the
+        # engine's actual _playing state is False.
+        self._param_values["playhead"] = {"page": 0, "row": 0, "playing": False}
         # Manual transport signals from the play-page header buttons.
         # Frontend sets to True; on_param_change resets to False.
         self._param_values.setdefault("cmd_play", False)

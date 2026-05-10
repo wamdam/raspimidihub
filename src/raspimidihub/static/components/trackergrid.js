@@ -779,6 +779,7 @@ export function PluginTrackerGrid({ param, values, onChange }) {
                 case 'PageDown':   cursorMove(() => movePage(+1), e.shiftKey); e.preventDefault(); return;
                 case 'Delete':
                 case 'Backspace':  onDel(); e.preventDefault(); return;
+                case ' ':          togglePlay(); e.preventDefault(); return;
             }
 
             // Ctrl/Cmd + C / V — clipboard ops. Ctrl+Shift+C copies
@@ -807,7 +808,7 @@ export function PluginTrackerGrid({ param, values, onChange }) {
             window.removeEventListener('keyup', onKeyUp);
         };
     }, [moveRow, moveColumn, movePage, cursorMove, engageShift,
-        onDel, onCopy, onPaste, writeTypedNote]);
+        onDel, onCopy, onPaste, writeTypedNote, togglePlay]);
 
     // Tick label for the Note wheel — sentinels then 12 pitches with
     // the current Octave wheel value baked in so each detent shows
@@ -831,14 +832,21 @@ export function PluginTrackerGrid({ param, values, onChange }) {
         }
     }, [cursorRow, cursorTrack, cursorHalf, currentPage]);
 
-    // ---- Header (Rate + Play/Stop + page actions) ----
-    // Play / Stop write trigger-style booleans to cmd_play / cmd_stop;
-    // the plugin's on_param_change fires the local transport handler
-    // and resets the flag back to False. Lets the user start the
-    // tracker without an external clock+Start signal.
+    // ---- Header (Rate + Play toggle + page actions) ----
+    // Single Play button toggles transport — green = currently
+    // playing, click stops; grey = stopped, click starts. Both
+    // paths write trigger-style booleans (cmd_play / cmd_stop) the
+    // plugin's on_param_change reacts to.
     const isPlaying = !!(playhead && playhead.playing);
-    const onPlay = () => onChange(param.cmd_play_param, true);
-    const onStop = () => onChange(param.cmd_stop_param, true);
+    const isPlayingRef = useRef(false);
+    isPlayingRef.current = isPlaying;
+    const togglePlay = useCallback(() => {
+        if (isPlayingRef.current) {
+            onChange(param.cmd_stop_param, true);
+        } else {
+            onChange(param.cmd_play_param, true);
+        }
+    }, [onChange, param]);
     const header = html`<div class="tracker-header">
         <div class="tracker-header-row">
             <span class="tracker-header-label">Rate</span>
@@ -849,16 +857,14 @@ export function PluginTrackerGrid({ param, values, onChange }) {
             </select>
 
             <button class="tracker-page-btn tracker-transport-btn ${isPlaying ? 'active' : ''}"
-                title="Play (transport start)" onclick=${onPlay}>▶ Play</button>
-            <button class="tracker-page-btn tracker-transport-btn"
-                title="Stop (transport stop)" onclick=${onStop}>■ Stop</button>
+                title="Play / Stop (Space)" onclick=${togglePlay}>▶ Play</button>
 
             <button class="tracker-page-btn"
                 disabled=${pages.length >= maxPages}
-                onclick=${addPage}>+ Add</button>
+                onclick=${addPage}>+ Add pg.</button>
             <button class="tracker-page-btn"
                 disabled=${pages.length <= 1}
-                onclick=${delPage}>− Del</button>
+                onclick=${delPage}>− Del pg.</button>
         </div>
     </div>`;
 
@@ -1032,7 +1038,7 @@ export function PluginTrackerGrid({ param, values, onChange }) {
         <div class="tracker-keypad-top">
             ${cursorHalf === 'note' ? noteHalfControls : ccHalfControls}
             <div class="tracker-keypad-col tracker-keypad-cursor-col">
-                <div class="tracker-keypad-label">${cursorHalf === 'note' ? 'CURSOR · NOTE' : 'CURSOR · CC'}</div>
+                <div class="tracker-keypad-label">CURSOR</div>
                 ${cursor}
             </div>
         </div>
