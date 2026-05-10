@@ -662,24 +662,35 @@ export function PluginTrackerGrid({ param, values, onChange }) {
         }
     }, [pages, currentPage, trackCount, maxRows, onChange, param, setVoiceFields, showHelp]);
 
-    const onCopy = useCallback(() => {
+    // Copy semantics:
+    //   - Selection on screen → copy the rectangle (sub-cell area).
+    //   - No selection, plain Copy → copy the focused sub-cell (1×1 area).
+    //   - Shift+Copy (button or Ctrl+Shift+C) → copy the whole page.
+    // Single-cell copy reuses the area-buffer shape (1×1) so paste's
+    // half-compatibility check + cursor placement work uniformly.
+    const onCopy = useCallback((wholePage = false) => {
+        const page = pages[currentPage] || emptyPage(trackCount, maxRows);
+        if (wholePage) {
+            window.__trackerClipboard = { type: 'page', page: clonePage(page) };
+            showHelp('Copied page');
+            return;
+        }
         const rect = makeSelectionRect(anchorRef.current, currentPageRef.current,
                                        cursorRowRef.current,
                                        subOf(cursorTrackRef.current, cursorHalfRef.current));
         if (rect && !rectIsSingleCell(rect)) {
-            const buffer = captureArea(
-                pages[currentPage] || emptyPage(trackCount, maxRows),
-                rect, trackCount,
-            );
-            window.__trackerClipboard = buffer;
+            window.__trackerClipboard = captureArea(page, rect, trackCount);
             showHelp(`Copied selection (${rect.maxRow - rect.minRow + 1} × ${rect.maxSub - rect.minSub + 1})`);
-        } else {
-            window.__trackerClipboard = {
-                type: 'page',
-                page: clonePage(pages[currentPage] || emptyPage(trackCount, maxRows)),
-            };
-            showHelp('Copied page');
+            return;
         }
+        // No selection — capture just the focused sub-cell as a 1×1 area.
+        const sub = subOf(cursorTrackRef.current, cursorHalfRef.current);
+        const single = {
+            minRow: cursorRowRef.current, maxRow: cursorRowRef.current,
+            minSub: sub, maxSub: sub,
+        };
+        window.__trackerClipboard = captureArea(page, single, trackCount);
+        showHelp('Copied cell');
     }, [pages, currentPage, trackCount, maxRows, showHelp]);
 
     const onPaste = useCallback(() => {
@@ -770,9 +781,11 @@ export function PluginTrackerGrid({ param, values, onChange }) {
                 case 'Backspace':  onDel(); e.preventDefault(); return;
             }
 
-            // Ctrl/Cmd + C / V — clipboard ops.
+            // Ctrl/Cmd + C / V — clipboard ops. Ctrl+Shift+C copies
+            // the whole page (matches Shift-Copy on the on-screen
+            // button); plain Ctrl+C copies the cell or selection.
             if (e.ctrlKey || e.metaKey) {
-                if (e.code === 'KeyC') { onCopy(); e.preventDefault(); return; }
+                if (e.code === 'KeyC') { onCopy(e.shiftKey); e.preventDefault(); return; }
                 if (e.code === 'KeyV') { onPaste(); e.preventDefault(); return; }
                 return;
             }
@@ -961,7 +974,9 @@ export function PluginTrackerGrid({ param, values, onChange }) {
     const actionRow = html`<div class="tracker-keypad-actions">
         ${actionBtn('Del', onDel, 'Clear focused cell or selection')}
         ${shiftBtn}
-        ${actionBtn('Copy', onCopy, 'Copy selection or page')}
+        ${actionBtn('Copy',
+            (e) => onCopy(e.shiftKey || shiftEngagedRef.current),
+            'Copy focused cell or selection — Shift+Copy = whole page')}
         ${actionBtn('Paste', onPaste, 'Paste at cursor')}
     </div>`;
 
