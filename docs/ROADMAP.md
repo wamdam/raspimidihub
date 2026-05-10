@@ -209,78 +209,195 @@ to know which instrument library to pick from on next load.
 
 ### Goal
 
-Step-by-step melodic/polyphonic sequencer with record-as-you-play and
-a tracker-style grid view. Up to 4 bars of 16ths by default, extensible
-to 16 bars (256 steps).
+8-voice step sequencer on a single MIDI channel with always-on
+record, full-cell editing of note + velocity + CC pair per voice,
+and 1..16 pages chained linearly with looping back to page 0.
+Lives in the new "Play" panel alongside the Controllers.
 
 ### User stories
-- "I want a 4-bar bassline: arm record, play it in, step through and
-  fix the off-beats."
-- "I recorded a one-bar riff, now overdub a counterpoint on the same
-  track without erasing what's there."
-- "I want to play 256-step evolving lines during a live set, stepped by
-  the clock."
+- "I want to sketch an 8-voice arrangement on phone: tap a cell, set
+  the note + vel + CC live with the always-visible keypad, walk the
+  cursor row by row."
+- "Record what I'm playing on my external keyboard into the
+  sequencer in real time without losing the pass-through to my
+  synth."
+- "Build a song from up to 16 pages of patterns, each with its own
+  length set by an `End` marker, and just let it loop back to page 0
+  when the last page finishes."
 
-### Scope
+### Surface — "Play" panel
 
-- **Steps**: 16 … 256, selectable (Wheel). Default 64 (4 bars × 16ths).
-- **Step rate**: same rate Radio as Arp/Rhythm (1/4 down to 1/32 + T).
-- **Per step** (MVP — single column, polyphonic):
-  - `notes`: list of `{note, velocity}` (0…n notes per step; typical 0 or 1)
-  - `tie` flag (don't retrigger, let previous ring)
-- **Transport**: Free / Tempo / Transport sync, same as Arp.
-- **Record**:
-  - Toggle `Record` (Button). While on, incoming notes land at the
-    currently-playing step position.
-  - `Overdub` toggle — when on, recorded notes are **added** to whatever
-    is at that step; when off, they **replace** the step's contents.
-  - `Quantize` toggle — on by default: round incoming-note timing to
-    the nearest step. Off: write to the step that's active at the
-    moment the note arrives (effectively quantize to step-boundary too
-    since playback is stepped — keep the toggle for future sub-step
-    resolution).
-  - Each drawn note gets a note-off at step end unless `tie` is set on
-    the next step.
-- **Playback**: standard stepped playback, `gate %` param controls note
-  length per step (same semantics as Arp).
-- **Edit mode** (not recording):
-  - Tap a cell to toggle on/off using the last-pressed note.
-  - Scroll / paginate in 16-step pages.
-- **Controls**: Clear, Copy bar, Paste bar, Transpose ±1 / ±12.
-- **Output**: `send_note_on/off`.
+Lives in a new bottom-nav entry, **Play**, that takes the slot the
+removed Presets feature used to occupy. Plugins with
+`SURFACE_KIND = "play"` appear there; existing controllers
+(`SURFACE_KIND = "controller"`) keep their own panel and ◂surface▸
+carousel. Tracker UI inherits the same fullscreen + carousel
+navigation.
 
-### UI (new param type needed)
+Underlying refactor: the `pages/controller.js` filter on the type
+prefix `controller_*` is replaced with a server-side `kind` field
+on the instance dict that comes from `SURFACE_KIND` on the plugin
+class.
 
-- **`TrackerGrid` param** — paginated step grid showing one row of
-  cells; each cell shows note name + velocity. Tap to edit. Playback
-  cursor highlights the active step.
-- Fits the same plugin-config panel, but is tall (one row) — so the
-  paginator ("bar 1/4" buttons) sits above.
+### Voices, channel, output
 
-Page-based so 256 steps don't swamp mobile screens: **16 steps per page**,
-bars 1…16. Keyboard/MIDI-driven record means most users never scroll.
+- **8 voices**, all on the same MIDI channel (default 1, remappable
+  in the config panel). One plugin instance, one channel out — to
+  multi-channel, instance multiple Trackers and route via the matrix.
+- Each voice cell per row holds: `Note` (or `---` / `Off` / `End`),
+  `Velocity` (hex 00..7F or `--`), `CC#` (hex 00..7F or `.`),
+  `CC Val` (hex 00..7F or `--`). Note and CC events fire
+  independently per step.
+- Note format: 3 chars strict — `<letter><-|#><single-digit-octave>`.
+  Wheel covers `C..B` × octaves 0..9, so MIDI notes 12..127 are
+  representable; sub-audio bottom octave (0..11) intentionally
+  unreachable.
+- Output uses the ALSA queue with scheduled note-offs (same path the
+  Arpeggiator uses) for ~zero jitter.
+
+### Pages
+
+- Up to **16 pages per instance**, hex-numbered 0..F, linearly chained,
+  looping back to page 0 after the last page.
+- `[Add page]` inserts a blank page after the current; `[Del page]`
+  removes the current. No song-mode chain pointers — order = array
+  index.
+- Each page has 1..16 rows. Length is implicit, terminated by `End`
+  on voice 1's Note column (or row 16 if no `End` is set). `End`
+  is exclusive to voice 1; voices 2..8 don't get it on their wheel.
+- `[Copy page]` / `[Paste page]` use a session-local clipboard.
+
+### Recording, playback, transport
+
+- **Always recording** (no toggle in MVP). External notes + CCs on
+  IN are written to the row currently under the edit cursor and
+  passed through to OUT (so the user hears their playing once; no
+  double-trigger). Single note → focused (row, track). Chord of K
+  notes → focused track and the next K-1 tracks; notes past track 8
+  are dropped silently. CCs always go to the focused track only.
+- **Note preview while editing**: turning the Note wheel fires the
+  picked note out the OUT port so the user hears what they're
+  scrolling to. Recording (external MIDI capture) does not
+  re-trigger.
+- Playback walks pages 0 → N-1 → loops to 0, stepping rows at the
+  selected `Rate` (same set as Arp: 1/4 down to 1/32 + triplets).
+- Same Free / Tempo / Transport sync modes as the Arp.
+- Playhead `▶` shown only on the page currently being viewed; no
+  auto-jump when the playing page changes (optional `[Follow]`
+  button for an explicit one-shot snap is post-MVP).
+
+### UI
+
+New `TrackerGrid` component under `static/components/`:
+
+- Header row 1: `Rate`, `Page ◂N▸ N/M`, `[Add page]`, `[Del page]`,
+  `[Copy page]`, `[Paste page]`.
+- Header row 2: `Show: [2] [4] [8]` — how many tracks visible at a
+  time. Cursor's track is always kept in view; ←/→ scrolls the
+  viewport when the cursor crosses an edge. Font scales to fit the
+  device width within the chosen viewport.
+- Track-header row above the steps shows `T1..Tn` for the visible
+  window, with the cursor's track highlighted (same colour as the
+  focused cell) so the user always knows the absolute track number.
+- 16 step rows, hex-numbered 0..F, monospace, full-cell colour
+  highlight on the focused cell.
+
+Always-visible bottom data-entry keypad (never moves, layout never
+shifts):
+
+- **Note wheel**: 15 positions —
+  `--- → Off → End → C → C# → D → D# → E → F → F# → G → G# → A → A# → B`.
+  Pitch only.
+- **Octave knob**: 0..9, default 3. Sticky across cells.
+- **Velocity vertical fader**: hex 00..7F.
+- **CC# wheel**: `.`, `00`, …, `7F`. `.` = no CC event this step.
+- **CC Val vertical fader**: hex 00..7F.
+- **Cursor**: inverted-T cluster (↑ on top, ← ↓ → on bottom).
+  ↑/↓ = row prev/next. ←/→ = voice prev/next. Sub-cell focus
+  (Note/Vel/CC#/CC Val) is direct-touch only — the keypad's four
+  controls always reflect the focused voice cell.
+- **Del shortcut** under the Note wheel: clears Note + Vel of the
+  focused cell (sets them to `---` / `--`). Octave knob unaffected.
+- **Del shortcut** under the CC# wheel: clears CC# + CC Val
+  (`.` / `--`).
+- Wheel commit-on-release (no per-detent writes); no autoadvance on
+  entry.
+- Cells are tappable to focus.
+
+One-line **Help row** sits above the keypad and never changes height:
+
+- Idle (≥ 2 s since last control change): static
+  `Help: Note | Velocity | CC# | CC Val`.
+- While a control is being changed: shows the control's name + live
+  value, e.g. `Help: CC Val 2A (42)` (decimal in parens for hex
+  columns; pitch and decimal vel show their natural form).
+- Reverts to the static line after 2 s of inactivity.
 
 ### Persistence
 
-- `steps` (int), `rate` (str), `sync_mode` (str), `gate` (int),
-  `quantize` (bool), `overdub` (bool)
-- `data`: list of step dicts `[{ "notes": [{"n":60,"v":100}], "tie": false }, ...]`
+```python
+{
+  "channel": 1,
+  "rate": "1/16",
+  "sync_mode": "transport",
+  "show_tracks": 4,
+  "pages": [
+    {"rows": [
+      {"voices": [
+        {"note": "C-3", "vel": 90, "cc_num": 1, "cc_val": 127},
+        ...8 voices
+      ]},
+      ...up to 16 rows
+    ]},
+    ...up to 16 pages
+  ]
+}
+```
 
-At 256 steps × typical ~1 note/step, the JSON is small — no concern for
-the boot-partition save path.
+`---`/`Off`/`End` and `.`/`--` are encoded as their string sentinels.
+Numerics are stored as decimal ints even though the UI displays them
+in hex. Total worst-case JSON ~ a few KB — well within the boot-
+partition save path.
 
-### Open questions
+### Architecture
 
-1. **Polyphony cap per step**: hard limit (e.g. 4) or unbounded? Hard
-   limit keeps the UI cell size predictable.
-2. **Per-step CC column**: useful for filter sweeps / velocity curves.
-   MVP = no. Promote to v2 if asked.
-3. **Chains / song mode**: link multiple Tracker instances? Out of
-   scope for MVP — user can wire two Trackers in series through the
-   matrix if they want A/B patterns.
-4. **Live-play input while recording**: pass through input to the
-   output (monitor) so the user hears themselves, or only write to
-   buffer? Default pass-through, with a "local off" toggle.
+```python
+# raspimidihub/tracker_base.py (new)
+class TrackerBase(PluginBase):
+    SURFACE_KIND = "play"
+    TRACK_COUNT = 8       # subclass override hook for phase 2
+    MAX_PAGES = 16
+    MAX_ROWS_PER_PAGE = 16
+
+# plugins/tracker/__init__.py
+class Tracker(TrackerBase):
+    NAME = "Tracker"
+    DESCRIPTION = "8-voice step sequencer, single channel, paged"
+    TRACK_COUNT = 8
+```
+
+`SURFACE_KIND` is a new class attribute on `PluginBase`. Default
+`None` (matrix-only plugin). `ControllerBase` sets `"controller"`;
+`TrackerBase` sets `"play"`. The `/plugins/instances` endpoint
+serves `kind` per instance so the frontend can filter without magic
+prefix matching.
+
+### Phase 2 (deferred — architecture supports each)
+
+- **Euclidean generator** — applies to one track of one page; bakes
+  pulse pattern into the existing `voices` cells so the user can
+  generate-then-edit. Lives behind a button on the keypad (won't
+  enlarge the always-visible footprint).
+- **Pattern file format + loader** — `.trkr` files; the load path
+  must run off the asyncio loop so live playback isn't disrupted.
+- **Larger voice counts / track-kind extensions** — `TRACK_COUNT`
+  bump, plus a `TRACK_KINDS` class attribute when CC-only or drum-
+  cell tracks are introduced.
+- **Record-mode toggle** (overdub / replace / off) — currently
+  always-on.
+- **Auto-advance on entry** — currently off.
+- **"Follow play" view-jump** — optional one-shot snap to playing
+  page.
 
 ---
 
