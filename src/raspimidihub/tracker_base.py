@@ -274,14 +274,12 @@ class TrackerBase(PluginBase):
     # ================================================================
 
     def on_tick(self, division: str) -> None:
-        # If a tick arrives before a Start, treat it as the start —
-        # mirrors the Arpeggiator's behaviour and means the user can
-        # wire a Master Clock without remembering to fire Start.
+        # Strictly transport-driven: clock alone doesn't start the
+        # tracker — the user has to send a MIDI Start (which lands
+        # in on_transport_start). This avoids the playhead silently
+        # marching whenever a clock source happens to be wired in.
         if not self._playing:
-            with self._lock:
-                self._playing = True
-                self._play_page = 0
-                self._play_row = 0
+            return
         if division != self._param_values.get("rate", "1/16"):
             return
         self._advance_step()

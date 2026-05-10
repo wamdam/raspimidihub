@@ -215,9 +215,9 @@ def test_on_tick_ignores_non_matching_division():
     assert s.events == []
 
 
-def test_on_tick_first_tick_starts_playback_without_explicit_start():
-    # Mirrors the Arpeggiator's "fail-safe" behaviour: if a tick
-    # arrives before on_transport_start, treat it as the start.
+def test_on_tick_does_nothing_without_transport_start():
+    # Strictly transport-driven: clock alone shouldn't move the
+    # playhead. The user has to send MIDI Start first.
     t = _started()
     s = _Sender()
     s.attach(t)
@@ -227,6 +227,11 @@ def test_on_tick_first_tick_starts_playback_without_explicit_start():
     ]}]
     t._param_values["pages"] = pages
     t._param_values["rate"] = "1/16"
+    t.on_tick("1/16")
+    assert s.events == []
+    assert t._playing is False
+    # After Start, ticks fire normally.
+    t.on_transport_start()
     t.on_tick("1/16")
     assert ("on", 0, 60, 90) in s.events
 
