@@ -4,6 +4,14 @@ User-visible changes. Short tagged one-liners, no code or commit
 hashes. Tags: Added, Improved, Fix, Changed, Removed.
 
 
+Unreleased
+
+- Removed: Presets page and the underlying save/load/export/import
+  API. Not in use very often, cluttered the bottom-nav. Existing
+  configs with a stale "presets" key still load cleanly; the key
+  is dropped on first save.
+
+
 2026-05-08 — Version 3.0.7
 
 - Fix: Arpeggiator programmed-mode slots now clear reliably when

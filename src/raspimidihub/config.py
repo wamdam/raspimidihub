@@ -17,16 +17,12 @@ PERSISTENT_CONFIG = PERSISTENT_DIR / "config.json"
 RUNTIME_DIR = Path("/run/raspimidihub")
 RUNTIME_CONFIG = RUNTIME_DIR / "config.json"
 
-MAX_PRESETS = 100
-MAX_PRESET_SIZE = 64 * 1024  # 64 KB
-
 DEFAULT_CONFIG = {
     "version": 1,
     "mode": "all-to-all",
     "default_routing": "all",
     "connections": [],
     "disconnected": [],
-    "presets": {},
     "wifi": {
         "mode": "ap",
         "ap_ssid": "",
@@ -86,10 +82,6 @@ class Config:
         return self._data.get("disconnected", [])
 
     @property
-    def presets(self) -> dict:
-        return self._data.get("presets", {})
-
-    @property
     def wifi(self) -> dict:
         return self._data.get("wifi", DEFAULT_CONFIG["wifi"])
 
@@ -107,6 +99,9 @@ class Config:
                         log.warning("Invalid config at %s, trying next", path)
                         continue
                     self._data = _deep_merge(DEFAULT_CONFIG, data)
+                    # Drop the legacy "presets" key — feature was removed,
+                    # but old configs on disk still carry the dict.
+                    self._data.pop("presets", None)
                     self._fallback_active = False
                     log.info("Loaded config from %s", path)
                     return True
@@ -191,50 +186,3 @@ class Config:
 
     def set_connections(self, connections: list):
         self._data["connections"] = connections
-
-    # --- Presets ---
-
-    def list_presets(self) -> list[str]:
-        return list(self._data.get("presets", {}).keys())
-
-    def get_preset(self, name: str) -> dict | None:
-        return self._data.get("presets", {}).get(name)
-
-    def save_preset(self, name: str, connections: list, plugins: list | None = None) -> bool:
-        if len(self._data.get("presets", {})) >= MAX_PRESETS:
-            return False
-        if "presets" not in self._data:
-            self._data["presets"] = {}
-        preset = {"connections": connections}
-        if plugins:
-            preset["plugins"] = plugins
-        self._data["presets"][name] = preset
-        return True
-
-    def delete_preset(self, name: str) -> bool:
-        if name in self._data.get("presets", {}):
-            del self._data["presets"][name]
-            return True
-        return False
-
-    def export_preset(self, name: str) -> dict | None:
-        preset = self.get_preset(name)
-        if preset is None:
-            return None
-        result = {"name": name, "version": 1, "connections": preset.get("connections", [])}
-        if "plugins" in preset:
-            result["plugins"] = preset["plugins"]
-        return result
-
-    def import_preset(self, data: dict) -> str | None:
-        """Import a preset from JSON data. Returns preset name or None on error."""
-        name = data.get("name")
-        connections = data.get("connections")
-        if not name or not isinstance(connections, list):
-            return None
-        raw = json.dumps(data)
-        if len(raw) > MAX_PRESET_SIZE:
-            return None
-        plugins = data.get("plugins", [])
-        self.save_preset(name, connections, plugins=plugins)
-        return name

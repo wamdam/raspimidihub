@@ -38,7 +38,7 @@ See all screenshots in [docs/screenshots/](docs/screenshots/) and the full [UI G
 - **Tap-to-connect matrix** with device icons and live rate meters
 - **Single-tap context menu** on every cell, header, and mapping row -- Edit, Copy, Paste, Remove
 - **Connection / plugin / mapping clipboard** -- copy filter+mappings (or a whole plugin instance) and paste anywhere
-- **URL routing** -- back/forward and bookmarks work for /routing, /controller, /presets, /settings, and the open device panel
+- **URL routing** -- back/forward and bookmarks work for /routing, /controller, /settings, and the open device panel
 - **Dirty-state asterisk** on the bottom-nav Routing icon when in-memory state diverges from the saved config
 - **Hot-plug support** -- add or remove devices at any time, saved connections re-apply automatically
 - **Offline connections** -- saved routing for unplugged devices stays visible and toggleable
@@ -105,11 +105,6 @@ Fullscreen play surfaces that send CCs over MIDI. Each cell is renameable, MIDI-
 - **Note to CC / Note to CC toggle / CC to CC / Channel remap** mappings (CC-to-CC supports range scaling and inversion; Channel remap supports fan-out)
 - **MIDI Learn** -- press a key or move a knob to auto-fill the mapping source
 - **Wheels, faders, radio buttons, and toggles** replace dropdowns for fast editing on stage
-
-### Presets
-- **Save and recall** named routing configurations including plugin states
-- **Export/import** as JSON files for backup or sharing between devices
-- **Overwrite confirmation** prevents accidental preset loss
 
 ### Connectivity
 - **Built-in WiFi access point** -- connect from your phone, captive portal opens automatically

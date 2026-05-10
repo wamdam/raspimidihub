@@ -77,7 +77,7 @@ class Request:
         return json.loads(self.body) if self.body else {}
 
     def path_param(self, prefix: str) -> str:
-        """Extract path suffix after prefix, e.g. /api/presets/foo -> foo"""
+        """Extract path suffix after prefix, e.g. /api/devices/foo -> foo"""
         return self.path[len(prefix):].strip("/")
 
 

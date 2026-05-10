@@ -1,7 +1,7 @@
 /**
  * Tiny router for the app's three pieces of bookmarkable state:
  *
- *   - `tab`           — 'routing' | 'controller' | 'presets' | 'settings'
+ *   - `tab`           — 'routing' | 'controller' | 'settings'
  *   - `controllerId`  — selected instance on the Controller page
  *   - `deviceId`      — open device-detail panel on the Routing page
  *
@@ -12,7 +12,6 @@
  *   /routing/d/<device_id>         → routing + device panel open
  *   /controller                    → controller (last-viewed via localStorage)
  *   /controller/<instance_id>      → controller, that instance selected
- *   /presets
  *   /settings
  *
  * `navigate({...})` pushes a new history entry; the browser back/forward
@@ -24,7 +23,7 @@
 
 import { useEffect, useState, useCallback } from '../lib/hooks.module.js';
 
-const TABS = new Set(['routing', 'controller', 'presets', 'settings']);
+const TABS = new Set(['routing', 'controller', 'settings']);
 
 export function parseURL() {
     let path = '/';

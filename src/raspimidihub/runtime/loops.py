@@ -84,10 +84,10 @@ async def sse_heartbeat(server, interval: float = 30.0) -> None:
     - Without a write attempt, _handle_sse's queue.get() would block
       forever on a dead socket — the writer.drain() failure that
       triggers cleanup never fires. With the per-view subscription
-      model, a connection on Settings / Presets receives no events at
-      all, so dead-socket detection used to wait until the client
-      reconnected. The heartbeat write surfaces dead sockets within
-      one interval and lets _sse_connections shed them.
+      model, a connection on Settings receives no events at all, so
+      dead-socket detection used to wait until the client reconnected.
+      The heartbeat write surfaces dead sockets within one interval
+      and lets _sse_connections shed them.
 
     The line `:hb` is an SSE comment — browsers ignore it; servers
     write it through the existing per-conn queue + drain machinery.

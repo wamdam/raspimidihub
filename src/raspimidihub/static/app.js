@@ -5,7 +5,7 @@
  *   ui/        — shared primitives (html, hooks, icons, Toast, MidiBar)
  *   state/     — constants
  *   panels/    — full-screen overlays (mapping form, filter, device detail)
- *   pages/     — routing / presets / settings + the connection matrix
+ *   pages/     — routing / controller / settings + the connection matrix
  *   components/— plugin parameter controls (already split in step 4)
  */
 
@@ -14,14 +14,13 @@ import { useState, useEffect, useRef, useCallback } from './lib/hooks.module.js'
 import { html, api, useSSE, Toast, MidiBar, hardReload } from './ui/common.js';
 import { ContextMenu } from './ui/contextmenu.js';
 import { setSSEConnectionId, useSSESubscription } from './ui/sse-subscriptions.js';
-import { IconRouting, IconController, IconPreset, IconSettings, IconFullscreen, IconFullscreenExit } from './ui/icons.js';
+import { IconRouting, IconController, IconSettings, IconFullscreen, IconFullscreenExit } from './ui/icons.js';
 import { runStorageCleanup } from './ui/storage.js';
 import { useRouter } from './ui/router.js';
 import { noteName } from './state/constants.js';
 import { DeviceDetailPanel } from './panels/devicedetail.js';
 import { RoutingPage } from './pages/routing.js';
 import { ControllerPage } from './pages/controller.js';
-import { PresetsPage } from './pages/presets.js';
 import { SettingsPage } from './pages/settings.js';
 
 // Header badge: "RaspiMIDIHub [● if stale] v2.0.9·a1b2c3d4". The red
@@ -362,9 +361,6 @@ function App() {
                 onEditConfig=${openControllerConfig}
                 clockPosition=${clockPosition} />`;
             break;
-        case 'presets':
-            page = html`<${PresetsPage} refresh=${refresh} showToast=${showToast} />`;
-            break;
         case 'settings':
             page = html`<${SettingsPage} showToast=${showToast} showMidiBar=${showMidiBar} toggleMidiBar=${toggleMidiBar} />`;
             break;
@@ -390,7 +386,6 @@ function App() {
                 <span>Routing</span>
             </button>
             <button class=${tab === 'controller' ? 'active' : ''} onclick=${() => setTab('controller')}>${IconController}<span>Controller</span></button>
-            <button class=${tab === 'presets' ? 'active' : ''} onclick=${() => setTab('presets')}>${IconPreset}<span>Presets</span></button>
             <button class=${tab === 'settings' ? 'active' : ''} onclick=${() => setTab('settings')}>${IconSettings}<span>Settings</span></button>
         </nav>
         ${selectedDevice && html`<${DeviceDetailPanel} key=${selectedDeviceId} device=${selectedDevice}

@@ -11,7 +11,6 @@ not touched; press **Load Config** in Settings to restore it.
 | File | Screen |
 |------|--------|
 | `01-routing.png` | Routing matrix with plugin icons and rate meters |
-| `02-presets.png` | Presets page |
 | `04-settings.png` | Settings (WiFi, USB tethering, Software Versions, Stats) |
 | `05-filter-panel.png` | Filter panel (tap a connected cell, pick Edit) |
 | `06-device-detail.png` | USB device detail panel |
