@@ -71,6 +71,7 @@ def test_subclass_params_carry_tracker_grid():
     assert g.cursor_half_param == "cursor_half"
     assert g.octave_param == "octave"
     assert g.rate_param == "rate"
+    assert g.playhead_param == "playhead"
 
 
 def test_only_tracker_grid_in_params():
@@ -108,8 +109,9 @@ def test_on_start_seeds_one_blank_page():
     assert t._param_values["octave"] == 3
     assert t._param_values["rate"] == "1/16"
     assert t._param_values["cursor_half"] == "note"
+    assert t._param_values["playhead"] == {"page": 0, "row": 0, "playing": False}
     assert t.transient_params == {
-        "cursor_row", "cursor_track", "cursor_half", "octave",
+        "cursor_row", "cursor_track", "cursor_half", "octave", "playhead",
     }
 
 
@@ -338,6 +340,32 @@ def test_last_page_loops_back_to_zero():
     t.on_tick("1/16")
     assert t._play_page == 0
     assert t._play_row == 0
+
+
+def test_playhead_broadcasts_just_played_position():
+    # Visual ▶ should land on the row whose notes are sounding right
+    # now — i.e. the row that just fired, not the next-to-fire one.
+    t = _started()
+    s = _Sender()
+    s.attach(t)
+    page = {"rows": [empty_row(4) for _ in range(16)]}
+    t._param_values["pages"] = [page]
+    t._param_values["rate"] = "1/16"
+    t.on_transport_start()
+    # transport_start publishes {page:0, row:0, playing:True}
+    assert t._param_values["playhead"] == {"page": 0, "row": 0, "playing": True}
+    t.on_tick("1/16")     # fires row 0, advances to row 1
+    assert t._param_values["playhead"] == {"page": 0, "row": 0, "playing": True}
+    t.on_tick("1/16")     # fires row 1, advances to row 2
+    assert t._param_values["playhead"] == {"page": 0, "row": 1, "playing": True}
+
+
+def test_playhead_clears_on_transport_stop():
+    t = _started()
+    t.on_transport_start()
+    assert t._param_values["playhead"]["playing"] is True
+    t.on_transport_stop()
+    assert t._param_values["playhead"]["playing"] is False
 
 
 def test_transport_stop_silences_sounding():

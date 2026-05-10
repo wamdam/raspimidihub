@@ -1105,6 +1105,23 @@ body {
     color: var(--text);
     font-weight: 600;
 }
+/* Playhead gutter — always-present empty slot on every row + on the
+ * track-header row so column alignment never shifts when ▶ appears.
+ * Same width regardless of whether the row is playing. */
+.tracker-row-playhead {
+    flex: 0 0 auto;
+    min-width: 1.2ch;
+    text-align: center;
+    color: var(--accent, #5cf);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+/* Subtle row tint on the playing row so it pops even without
+ * looking at the gutter glyph — useful when the cursor isn't on
+ * the same row. */
+.tracker-row.playing {
+    background: rgba(80, 200, 255, 0.10);
+}
 
 /* Voice columns — both header label and cell use the same flex
  * basis so each Tn sits directly above its column. */

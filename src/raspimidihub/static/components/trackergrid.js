@@ -157,6 +157,13 @@ export function PluginTrackerGrid({ param, values, onChange }) {
     const currentPage = clamp(values[param.current_page_param] ?? 0, 0, pageCount - 1);
     const cursorRow = clamp(values[param.cursor_row_param] ?? 0, 0, maxRows - 1);
     const cursorTrack = clamp(values[param.cursor_track_param] ?? 0, 0, trackCount - 1);
+    // Playhead — broadcast by the engine on every step. `playing`
+    // false = no row gets a ▶; otherwise only the row whose page
+    // matches the visible page gets it (no auto-jump). Defensive
+    // shape coercion in case the SSE payload arrives malformed.
+    const ph = values[param.playhead_param];
+    const playhead = (ph && typeof ph === 'object') ? ph : null;
+    const playheadOnView = playhead && playhead.playing && playhead.page === currentPage;
     // cursor_half: which slice of the focused voice the keypad is
     // editing — "note" (Note + Octave + Vel) or "cc" (CC# + CC Val).
     // The two halves swap in place; the cursor cluster stays pinned
@@ -486,7 +493,10 @@ export function PluginTrackerGrid({ param, values, onChange }) {
     </div>`;
 
     // ---- Track-header row (above the steps) ----
+    // The empty step-col reserves the row-num + playhead gutter so
+    // T1..Tn align with the data columns below.
     const trackHeader = html`<div class="tracker-track-header">
+        <span class="tracker-row-playhead"></span>
         <span class="tracker-track-step-col"></span>
         ${range(0, trackCount).map((t) => html`<span
             class="tracker-track-label ${t === cursorTrack ? 'cursor' : ''}">T${t + 1}</span>`)}
@@ -505,7 +515,9 @@ export function PluginTrackerGrid({ param, values, onChange }) {
             // groups steps into beats so the eye lands on quarter
             // boundaries at a glance.
             const isBeat = (rowIdx & 3) === 0;
-            return html`<div class="tracker-row ${isCursorRow ? 'cursor' : ''}">
+            const isPlayhead = playheadOnView && playhead.row === rowIdx;
+            return html`<div class="tracker-row ${isCursorRow ? 'cursor' : ''} ${isPlayhead ? 'playing' : ''}">
+                <span class="tracker-row-playhead">${isPlayhead ? '▶' : ''}</span>
                 <span class="tracker-row-num ${isBeat ? 'beat' : ''}">${pagePrefix}${HEX[rowIdx]}</span>
                 ${range(0, trackCount).map((t) => {
                     const v = row.voices[t];

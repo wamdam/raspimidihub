@@ -32,7 +32,6 @@ from raspimidihub.plugin_api import (
     TrackerGrid,
 )
 
-
 # Pitch order matches the Note wheel on the frontend. MIDI 12 = C-0,
 # MIDI 119 = B-9 — same range the 3-char note string can express.
 PITCH_NAMES = ('C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B')
@@ -154,6 +153,7 @@ class TrackerBase(PluginBase):
                 cursor_half_param="cursor_half",
                 octave_param="octave",
                 rate_param="rate",
+                playhead_param="playhead",
             ),
         ]
 
@@ -174,11 +174,18 @@ class TrackerBase(PluginBase):
         self._param_values.setdefault("cursor_half", "note")
         self._param_values.setdefault("octave", 3)
         self._param_values.setdefault("rate", "1/16")
+        # Playhead — broadcast via set_param every step so the
+        # frontend can render a `▶` next to the playing row. Stays at
+        # {playing: False} until the first tick or transport-start.
+        self._param_values.setdefault(
+            "playhead", {"page": 0, "row": 0, "playing": False},
+        )
 
-        # Cursor + octave are live-play state — moving them shouldn't
-        # mark the routing config dirty.
+        # Cursor + octave + playhead are live-play state — moving
+        # them shouldn't mark the routing config dirty.
         self.transient_params = {
             "cursor_row", "cursor_track", "cursor_half", "octave",
+            "playhead",
         }
 
         # Playback bookkeeping. Playhead position is intentionally
@@ -217,6 +224,7 @@ class TrackerBase(PluginBase):
                     self.send_note_off(self.OUT_CHANNEL, note)
                 except Exception:
                     pass
+        self._publish_playhead()
 
     # ---- Internal: kill every voice's currently-sounding note. ----
     def _silence_all(self) -> None:
@@ -228,6 +236,16 @@ class TrackerBase(PluginBase):
                     pass
                 self._sounding[v_idx] = None
 
+    # ---- Internal: push the current playhead state to the UI. ----
+    def _publish_playhead(self) -> None:
+        # Dict literal so SSE serialises cleanly. set_param both stores
+        # in _param_values and emits the plugin-param event.
+        self.set_param("playhead", {
+            "page": self._play_page,
+            "row": self._play_row,
+            "playing": self._playing,
+        })
+
     # ================================================================
     # Transport — global ClockBus events
     # ================================================================
@@ -238,15 +256,18 @@ class TrackerBase(PluginBase):
             self._play_page = 0
             self._play_row = 0
             self._playing = True
+        self._publish_playhead()
 
     def on_transport_stop(self) -> None:
         with self._lock:
             self._silence_all()
             self._playing = False
+        self._publish_playhead()
 
     def on_transport_continue(self) -> None:
         with self._lock:
             self._playing = True
+        self._publish_playhead()
 
     # ================================================================
     # Tick → step advance
@@ -268,7 +289,9 @@ class TrackerBase(PluginBase):
     def _advance_step(self) -> None:
         """Fire the events at (play_page, play_row) and walk the
         playhead forward, honouring End markers and looping at the
-        last page."""
+        last page. Publishes the *just-fired* position to the UI so
+        the visual ▶ sits on the row whose notes are now sounding,
+        not the row about to fire on the next tick."""
         with self._lock:
             pages = self._param_values.get("pages") or []
             if not pages:
@@ -280,6 +303,11 @@ class TrackerBase(PluginBase):
             page = pages[self._play_page]
             rows = (page.get("rows") if isinstance(page, dict) else None) or []
             row = rows[self._play_row] if self._play_row < len(rows) else None
+
+            # Capture the position we're firing — this is what the
+            # user is hearing, regardless of where we advance to.
+            played_page = self._play_page
+            played_row = self._play_row
 
             page_break = False
             if isinstance(row, dict):
@@ -298,6 +326,13 @@ class TrackerBase(PluginBase):
                 self._play_row = 0
             else:
                 self._play_row += 1
+        # Outside the lock — set_param hops through the param-change
+        # callback to the SSE writer; the lock is held only for the
+        # state mutation. Note we publish the just-played row, not
+        # the post-advance one.
+        self.set_param("playhead", {
+            "page": played_page, "row": played_row, "playing": True,
+        })
 
     def _fire_voice(self, v_idx: int, voice: dict) -> None:
         note = voice.get("note", "---")

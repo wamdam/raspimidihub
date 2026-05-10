@@ -352,6 +352,7 @@ class TrackerGrid:
     cursor_half_param: str | None = None
     octave_param: str | None = None
     rate_param: str | None = None
+    playhead_param: str | None = None  # {page, row, playing} broadcast per step
 
     def to_dict(self) -> dict:
         d = {
@@ -364,7 +365,7 @@ class TrackerGrid:
         }
         for attr in ("pages_param", "current_page_param", "cursor_row_param",
                      "cursor_track_param", "cursor_half_param",
-                     "octave_param", "rate_param"):
+                     "octave_param", "rate_param", "playhead_param"):
             v = getattr(self, attr)
             if v:
                 d[attr] = v
