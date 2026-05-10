@@ -363,6 +363,7 @@ class TrackerGrid:
     cmd_play_param: str | None = None  # bool, frontend → backend trigger
     cmd_stop_param: str | None = None  # bool, frontend → backend trigger
     send_clock_param: str | None = None  # bool, latching toggle
+    note_preview_param: str | None = None  # int (MIDI note), frontend → backend trigger
 
     def to_dict(self) -> dict:
         d = {
@@ -382,7 +383,8 @@ class TrackerGrid:
                      "cursor_track_param", "cursor_half_param",
                      "octave_param", "rate_param", "playhead_param",
                      "track_channels_param", "cmd_play_param",
-                     "cmd_stop_param", "send_clock_param"):
+                     "cmd_stop_param", "send_clock_param",
+                     "note_preview_param"):
             v = getattr(self, attr)
             if v:
                 d[attr] = v

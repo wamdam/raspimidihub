@@ -1224,34 +1224,37 @@ body {
  * the cursor cluster on the right doesn't budge. */
 .tracker-keypad {
     display: flex;
-    align-items: stretch;
-    gap: 8px;
+    flex-direction: column;
+    gap: 6px;
     padding: 8px;
     background: var(--surface);
     border-radius: 6px;
     flex: 0 0 auto;
 }
-.tracker-keypad-half {
+/* Top of the keypad: controls (left, fluid) + cursor cluster (right,
+ * pinned). The half's row count differs (3 cols on note half, 2 on
+ * cc half), but the layout column basis is `flex: 1 1 0` per col so
+ * the controls reflow without moving the cursor cluster. */
+.tracker-keypad-top {
     display: flex;
-    flex-direction: column;
-    gap: 6px;
-    flex: 1 1 0;
-    min-width: 0;
+    align-items: stretch;
+    gap: 8px;
 }
 .tracker-keypad-controls {
     display: flex;
     align-items: stretch;
     gap: 12px;
-    flex: 1 1 auto;
+    flex: 1 1 0;
     min-width: 0;
 }
-/* Action row sits below the controls, left-aligned, with its bottom
- * edge matching the cursor cluster's bottom row (←↓→). Generic
- * across both halves — Del/Shift/Copy/Paste are half-agnostic. */
+/* Action row spans the full bottom of the keypad regardless of which
+ * half is on screen — pinned to the keypad's bottom edge so the row
+ * never moves when switching note↔cc. Left-aligned within the row. */
 .tracker-keypad-actions {
     display: flex;
     gap: 4px;
     flex: 0 0 auto;
+    justify-content: flex-start;
 }
 .tracker-keypad-action-btn {
     background: var(--surface2, #2a2a2a);

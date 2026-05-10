@@ -93,7 +93,7 @@ def test_schema_param_keys_collects_tracker_aux():
     keys = schema_param_keys(_DemoTracker.params)
     for name in ("pages", "current_page", "cursor_row", "cursor_track",
                  "cursor_half", "octave", "rate", "playhead",
-                 "cmd_play", "cmd_stop", "send_clock"):
+                 "cmd_play", "cmd_stop", "send_clock", "note_preview"):
         assert name in keys, f"missing aux key {name!r}"
     # Per-track channels (one per voice). _DemoTracker has TRACK_COUNT=4.
     for i in range(4):
@@ -119,12 +119,13 @@ def test_on_start_seeds_one_blank_page():
     assert t._param_values["cmd_play"] is False
     assert t._param_values["cmd_stop"] is False
     assert t._param_values["send_clock"] is False
+    assert t._param_values["note_preview"] == -1
     # All eight track channels default to MIDI ch 1.
     for i in range(4):
         assert t._param_values[f"track_ch_{i}"] == 1
     assert t.transient_params == {
         "cursor_row", "cursor_track", "cursor_half", "octave",
-        "playhead", "cmd_play", "cmd_stop",
+        "playhead", "cmd_play", "cmd_stop", "note_preview",
     }
 
 
@@ -712,6 +713,23 @@ def test_cmd_stop_halts_transport_and_resets_signal():
     assert t._playing is False
     assert ("off", 0, 60) in s.events
     assert t._param_values["cmd_stop"] is False
+
+
+def test_note_preview_fires_note_on_and_resets_signal():
+    # Frontend writes note_preview=<midi> when a wheel/keyboard tick
+    # picks a real pitch. Plugin fires note-on on the focused track's
+    # channel and schedules a release; the signal resets to -1.
+    t = _started()
+    s = _Sender()
+    s.attach(t)
+    t._param_values["track_ch_2"] = 5    # T3 → ch 5 (0-based 4)
+    t._param_values["cursor_track"] = 2
+    t.on_param_change("note_preview", 60)
+    assert ("on", 4, 60, 90) in s.events
+    assert t._param_values["note_preview"] == -1
+    # Cancel the release timer so it doesn't tick during teardown.
+    if t._preview_timer is not None:
+        t._preview_timer.cancel()
 
 
 # ---------------------------------------------------------------------------

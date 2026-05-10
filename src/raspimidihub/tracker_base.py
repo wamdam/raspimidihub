@@ -54,6 +54,11 @@ PITCH_NAMES = ('C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B')
 # tolerates wired-keyboard jitter without merging deliberate runs.
 _CHORD_WINDOW_S = 0.010
 
+# How long a wheel/keyboard preview note rings before auto-releasing.
+# Long enough to be audibly identifiable, short enough that scrolling
+# the wheel quickly doesn't pile up zombie notes.
+_PREVIEW_DURATION_S = 0.30
+
 
 def midi_to_note_str(midi: int) -> str | None:
     """MIDI note number → 3-char tracker note string, or None if the
@@ -183,6 +188,7 @@ class TrackerBase(PluginBase):
                 cmd_play_param="cmd_play",
                 cmd_stop_param="cmd_stop",
                 send_clock_param="send_clock",
+                note_preview_param="note_preview",
             ),
             Group("Track Channels", [
                 ChannelSelect(f"track_ch_{i}", f"T{i + 1}",
@@ -222,6 +228,11 @@ class TrackerBase(PluginBase):
         self._param_values.setdefault("cmd_play", False)
         self._param_values.setdefault("cmd_stop", False)
         self._param_values.setdefault("send_clock", False)
+        # Note-preview signal: frontend writes a MIDI note number when
+        # the user picks a pitch on the Note wheel or types one on
+        # the keyboard; the plugin fires send_note_on (with auto-
+        # release) so the user hears what they're entering. -1 = idle.
+        self._param_values.setdefault("note_preview", -1)
         # Per-track channels default to 1.
         for i in range(self.TRACK_COUNT):
             self._param_values.setdefault(f"track_ch_{i}", 1)
@@ -230,8 +241,15 @@ class TrackerBase(PluginBase):
         # state — moving them shouldn't mark the routing config dirty.
         self.transient_params = {
             "cursor_row", "cursor_track", "cursor_half", "octave",
-            "playhead", "cmd_play", "cmd_stop",
+            "playhead", "cmd_play", "cmd_stop", "note_preview",
         }
+
+        # Note-preview state: a single sounding preview note (replaces
+        # itself on each new wheel tick) with a threading.Timer to
+        # auto-release after _PREVIEW_DURATION_S so the synth doesn't
+        # ring forever.
+        self._preview: tuple[int, int] | None = None
+        self._preview_timer: threading.Timer | None = None
 
         # Playback bookkeeping. Playhead position is intentionally
         # separate from current_page / cursor_row so editing during a
@@ -662,6 +680,55 @@ class TrackerBase(PluginBase):
         elif name == "cmd_stop" and value:
             self.on_transport_stop()
             self.set_param("cmd_stop", False)
+        elif name == "note_preview" and isinstance(value, int) and 0 <= value <= 127:
+            self._preview_fire(value)
+            self.set_param("note_preview", -1)
+
+    # ---- Note preview (wheel / keyboard typing → audible OUT) ----
+    def _preview_fire(self, midi: int) -> None:
+        """Fire a brief note-on for the picked note out the focused
+        track's channel, then schedule the matching note-off after
+        _PREVIEW_DURATION_S. Fast successive calls cancel the prior
+        preview so the synth never accumulates zombies."""
+        # Cancel any in-flight preview release first.
+        if self._preview_timer is not None:
+            try:
+                self._preview_timer.cancel()
+            except Exception:
+                pass
+            self._preview_timer = None
+        if self._preview is not None:
+            prev_note, prev_ch = self._preview
+            try:
+                self.send_note_off(prev_ch, prev_note)
+            except Exception:
+                pass
+            self._preview = None
+
+        cur_track = int(self._param_values.get("cursor_track") or 0)
+        ch = self._track_channel(cur_track)
+        try:
+            self.send_note_on(ch, midi, 90)
+        except Exception:
+            return
+        self._preview = (midi, ch)
+        self._preview_timer = threading.Timer(
+            _PREVIEW_DURATION_S, self._preview_release,
+        )
+        # Daemon=True so a stray timer doesn't keep the process alive.
+        self._preview_timer.daemon = True
+        self._preview_timer.start()
+
+    def _preview_release(self) -> None:
+        if self._preview is None:
+            return
+        note, ch = self._preview
+        try:
+            self.send_note_off(ch, note)
+        except Exception:
+            pass
+        self._preview = None
+        self._preview_timer = None
 
     def _record_voice_field(self, track_idx: int, updates: dict[str, Any]) -> None:
         """Convenience wrapper for `_record_voice_field_at` at the

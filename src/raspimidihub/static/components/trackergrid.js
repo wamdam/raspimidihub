@@ -273,6 +273,21 @@ const NOTE_KEY_MAP = {
     KeyU: 'B',
 };
 
+// Frontend mirror of tracker_base.note_str_to_midi. MIDI 12 = C-0,
+// MIDI 60 = C-4 (Middle C), MIDI 127 = G-9. Used to send note-preview
+// values to the plugin so wheel-picked / keyboard-typed pitches
+// audibly fire on OUT.
+const PITCH_MIDI = {
+    'C': 0, 'C#': 1, 'D': 2, 'D#': 3, 'E': 4, 'F': 5, 'F#': 6,
+    'G': 7, 'G#': 8, 'A': 9, 'A#': 10, 'B': 11,
+};
+function pitchOctaveToMidi(pitch, octave) {
+    const base = PITCH_MIDI[pitch];
+    if (base === undefined) return null;
+    const m = 12 + octave * 12 + base;
+    return (m >= 12 && m <= 127) ? m : null;
+}
+
 // ------------------------------------------------------------------
 // Main component
 // ------------------------------------------------------------------
@@ -537,11 +552,21 @@ export function PluginTrackerGrid({ param, values, onChange }) {
     }, [pages, page, rows, cursorRow, cursorTrack, currentPage, trackCount, onChange, param]);
 
     // ---- Keypad handlers ----
+    // Helper: fire an audible preview through the plugin so the user
+    // hears whatever pitch the wheel/keyboard just landed on. The
+    // backend handles the note-on + scheduled note-off; we just
+    // signal via the trigger param.
+    const firePreview = useCallback((pitch, oct) => {
+        const midi = pitchOctaveToMidi(pitch, oct);
+        if (midi != null) onChange(param.note_preview_param, midi);
+    }, [onChange, param]);
+
     // Note + Vel travel together — picking a real pitch also writes
     // the current sticky velocity so the cell isn't left with `--`
     // (which would silently override the playback default at the
     // engine). Picking a sentinel (---/Off/End) clears velocity to
-    // `--` so the cell shape matches the meaning.
+    // `--` so the cell shape matches the meaning. Real pitches also
+    // fire an audible preview via the note_preview signal.
     const onNoteWheel = useCallback((_, idx) => {
         if (idx === 0) {
             setVoiceFields({ note: HOLD, vel: CC_HOLD });
@@ -553,13 +578,15 @@ export function PluginTrackerGrid({ param, values, onChange }) {
             setVoiceFields({ note: 'Off', vel: CC_HOLD });
             showHelp('Note  Off');
         } else {
-            const note = composeNote(NOTE_WHEEL_PITCHES[idx - 3], octave);
+            const pitch = NOTE_WHEEL_PITCHES[idx - 3];
+            const note = composeNote(pitch, octave);
             const vel = typeof focusedCell.vel === 'number'
                 ? focusedCell.vel : stickyVelRef.current;
             setVoiceFields({ note, vel });
+            firePreview(pitch, octave);
             showHelp(`Note  ${note}`);
         }
-    }, [octave, focusedCell.vel, setVoiceFields, showHelp]);
+    }, [octave, focusedCell.vel, setVoiceFields, firePreview, showHelp]);
 
     const onOctave = useCallback((_, oct) => {
         onChange(param.octave_param, oct);
@@ -687,12 +714,14 @@ export function PluginTrackerGrid({ param, values, onChange }) {
 
     // Typed note from the keyboard — same write semantics as turning
     // the Note wheel + the chord auto-advance from MIDI input. One
-    // key press = one note + sticky velocity + cursor advances.
+    // key press = one note + sticky velocity + cursor advances + an
+    // audible preview through the plugin.
     const writeTypedNote = useCallback((pitch) => {
         const note = composeNote(pitch, octave);
         const vel = typeof focusedCell.vel === 'number'
             ? focusedCell.vel : stickyVelRef.current;
         setVoiceFields({ note, vel });
+        firePreview(pitch, octave);
         // Auto-advance one row, with page-boundary wrap.
         const cr = cursorRowRef.current;
         const cp = currentPageRef.current;
@@ -705,7 +734,7 @@ export function PluginTrackerGrid({ param, values, onChange }) {
         if (nextRow !== cr) onChange(param.cursor_row_param, nextRow);
         if (nextPage !== cp) onChange(param.current_page_param, nextPage);
         showHelp(`Note  ${note}`);
-    }, [octave, focusedCell.vel, setVoiceFields, maxRows, pageCount, onChange, param, showHelp]);
+    }, [octave, focusedCell.vel, setVoiceFields, firePreview, maxRows, pageCount, onChange, param, showHelp]);
 
     // ---- Keyboard support (window-level). ----
     // Active only while this component is mounted. Skips when an
@@ -978,15 +1007,21 @@ export function PluginTrackerGrid({ param, values, onChange }) {
         </div>
     </div>`;
 
+    // Two-row keypad: top = controls + cursor cluster; bottom =
+    // action row spanning the full width. The action row's position
+    // is fixed by the keypad's column-flex layout, so it never moves
+    // when the user switches between note half (3 cols) and cc half
+    // (2 cols) — the half-controls scale to fill but the action
+    // row stays planted below them.
     const keypad = html`<div class="tracker-keypad">
-        <div class="tracker-keypad-half">
+        <div class="tracker-keypad-top">
             ${cursorHalf === 'note' ? noteHalfControls : ccHalfControls}
-            ${actionRow}
+            <div class="tracker-keypad-col tracker-keypad-cursor-col">
+                <div class="tracker-keypad-label">${cursorHalf === 'note' ? 'CURSOR · NOTE' : 'CURSOR · CC'}</div>
+                ${cursor}
+            </div>
         </div>
-        <div class="tracker-keypad-col tracker-keypad-cursor-col">
-            <div class="tracker-keypad-label">${cursorHalf === 'note' ? 'CURSOR · NOTE' : 'CURSOR · CC'}</div>
-            ${cursor}
-        </div>
+        ${actionRow}
     </div>`;
 
     return html`<div class="trackergrid">
