@@ -16,6 +16,7 @@ import { PluginNoteSelect } from './noteselect.js';
 import { PluginChannelSelect } from './channelselect.js';
 import { PluginGroup } from './group.js';
 import { PluginLayoutGrid } from './layoutgrid.js';
+import { PluginTrackerGrid } from './trackergrid.js';
 import { DisplayMeter, DisplayScope } from './display.js';
 
 // =======================================================================
@@ -107,6 +108,9 @@ export function renderParam(param, values, onChange, allValues, displayCtx) {
             return html`<${PluginLayoutGrid} param=${param} values=${values}
                 onChange=${onChange} displayCtx=${displayCtx}
                 renderParam=${renderParam} />`;
+        case 'trackergrid':
+            return html`<${PluginTrackerGrid} param=${param} values=${values}
+                onChange=${onChange} displayCtx=${displayCtx} />`;
         default:
             return html`<div style="color:var(--text-dim);font-size:12px">Unknown: ${param.type}</div>`;
     }

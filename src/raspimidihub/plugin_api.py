@@ -322,6 +322,53 @@ class XYPad(Param):
 
 
 @dataclass
+class TrackerGrid:
+    """Tracker-style sequencer grid: 16 hex-numbered step rows × 1..8
+    voice columns, paged up to 16 pages, with an always-visible
+    data-entry keypad below.
+
+    Used by the §6 Tracker plugin (and any future sequencer surface
+    sharing the same UI). Like LayoutGrid, this is a structural element
+    rather than a value-holding Param — actual sequencer state lives
+    in sibling auxiliary params named here.
+
+    `pages_param`: list of page dicts. Each page is
+      `{"rows": [{"voices": [VoiceCell × N]}, ...]}`
+      where VoiceCell is
+      `{"note": str, "vel": int|str, "cc_num": int|str, "cc_val": int|str}`.
+    `current_page_param`: int (0..MAX_PAGES-1) — visible page.
+    `cursor_row_param`, `cursor_track_param`: ints — edit-cursor focus.
+    `octave_param`: int (0..9) — sticky octave on the keypad.
+    """
+    name: str
+    label: str
+    track_count: int = 8
+    max_pages: int = 16
+    max_rows: int = 16
+    pages_param: str | None = None
+    current_page_param: str | None = None
+    cursor_row_param: str | None = None
+    cursor_track_param: str | None = None
+    octave_param: str | None = None
+
+    def to_dict(self) -> dict:
+        d = {
+            "type": "trackergrid",
+            "name": self.name,
+            "label": self.label,
+            "track_count": self.track_count,
+            "max_pages": self.max_pages,
+            "max_rows": self.max_rows,
+        }
+        for attr in ("pages_param", "current_page_param", "cursor_row_param",
+                     "cursor_track_param", "octave_param"):
+            v = getattr(self, attr)
+            if v:
+                d[attr] = v
+        return d
+
+
+@dataclass
 class LayoutCell:
     """One positioned cell in a LayoutGrid: a Param + (col, row, span).
 
@@ -425,6 +472,10 @@ def get_all_params(params: list) -> list[Param]:
             result.extend(get_all_params(p.children))
         elif isinstance(p, LayoutGrid):
             result.extend(get_all_params([c.param for c in p.cells]))
+        elif isinstance(p, TrackerGrid):
+            # No cells to flatten — TrackerGrid's data is in sibling
+            # params declared elsewhere in the plugin's params list.
+            continue
         elif isinstance(p, Param):
             result.append(p)
     return result
@@ -469,6 +520,11 @@ def schema_param_keys(params: list) -> set[str]:
                 # but its cells' params and its auxiliary pointers do.
                 collect_aux(p)
                 walk([cell.param for cell in p.cells])
+                continue
+            if isinstance(p, TrackerGrid):
+                # Structural — its data lives in the sibling *_param
+                # entries declared on the TrackerGrid itself.
+                collect_aux(p)
                 continue
             if isinstance(p, Param):
                 if p.name:
