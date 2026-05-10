@@ -347,7 +347,14 @@ export function PluginTrackerGrid({ param, values, onChange }) {
     // gets the new value.
     const focusedRow = rows[cursorRow] || emptyRow(trackCount);
     const focusedCell = focusedRow.voices[cursorTrack] || emptyVoice();
-    const octave = clamp(values[param.octave_param] ?? 3, 0, 9);
+    // OCT wheel: prefer the octave of the focused cell's note when
+    // the cell holds a real pitch — that way the wheel always
+    // mirrors what's in the cell. The sticky param only kicks in
+    // for cells with sentinels (---/Off/End) so the next note
+    // entered remembers the user's last-touched octave.
+    const stickyOctave = clamp(values[param.octave_param] ?? 3, 0, 9);
+    const focusedOctave = getOctavePart(focusedCell.note);
+    const octave = focusedOctave != null ? focusedOctave : stickyOctave;
 
     const stickyVelRef = useRef(80);
     const stickyCcNumRef = useRef(1);
