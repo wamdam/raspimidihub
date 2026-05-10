@@ -22,7 +22,6 @@ import { html } from '../ui/common.js';
 import { useCallback, useEffect, useRef, useState } from '../lib/hooks.module.js';
 import { PluginWheel } from './wheel.js';
 import { PluginKnob } from './knob.js';
-import { PluginFader } from './fader.js';
 
 const HEX = '0123456789ABCDEF';
 const HOLD = '---';
@@ -129,6 +128,11 @@ function noteToWheelIdx(note) {
     const idx = NOTE_WHEEL_PITCHES.indexOf(pitch);
     return idx >= 0 ? idx + 3 : 0;
 }
+
+// 2-char hex labels 00..7F so the VEL / CC-VAL knobs match what
+// the cell rows show. PluginKnob.labels[i - min] → display string.
+const HEX_LABELS_128 = Array.from({ length: 128 },
+    (_, i) => i.toString(16).toUpperCase().padStart(2, '0'));
 
 // ------------------------------------------------------------------
 // Main component
@@ -498,13 +502,14 @@ export function PluginTrackerGrid({ param, values, onChange }) {
         </div>
         <div class="tracker-keypad-col">
             <div class="tracker-keypad-label">OCT</div>
-            <${PluginKnob} name="octave" label="" min=${0} max=${9}
+            <${PluginWheel} name="octave_wheel" label="" min=${0} max=${9}
                 value=${octave} onChange=${onOctave} />
         </div>
         <div class="tracker-keypad-col">
             <div class="tracker-keypad-label">VEL</div>
-            <${PluginFader} name="vel" label="" min=${0} max=${127}
-                value=${velValue} vertical=${true} onChange=${onVel} />
+            <${PluginKnob} name="vel" label="" min=${0} max=${127}
+                value=${velValue} labels=${HEX_LABELS_128}
+                onChange=${onVel} />
         </div>
         <div class="tracker-keypad-col">
             <div class="tracker-keypad-label">CC#</div>
@@ -516,8 +521,9 @@ export function PluginTrackerGrid({ param, values, onChange }) {
         </div>
         <div class="tracker-keypad-col">
             <div class="tracker-keypad-label">CC VAL</div>
-            <${PluginFader} name="cc_val" label="" min=${0} max=${127}
-                value=${ccValValue} vertical=${true} onChange=${onCcVal} />
+            <${PluginKnob} name="cc_val" label="" min=${0} max=${127}
+                value=${ccValValue} labels=${HEX_LABELS_128}
+                onChange=${onCcVal} />
         </div>
         <div class="tracker-keypad-col tracker-keypad-cursor-col">
             <div class="tracker-keypad-label">CURSOR</div>

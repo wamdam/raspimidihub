@@ -1173,14 +1173,10 @@ body {
     letter-spacing: 0.5px;
     font-weight: 500;
 }
-/* Hide the inner wheel/fader/knob labels — the col label above is
- * doing that job. Empty `label=""` would still render an empty span. */
+/* Hide the inner wheel/knob labels — the col label above is doing
+ * that job. Empty `label=""` would still render an empty span. */
 .tracker-keypad-col .wheel-label,
-.tracker-keypad-col .fader-label,
 .tracker-keypad-col .knob-label { display: none; }
-/* Faders inside the keypad need a real height to be useful — the
- * default flex-row layout otherwise collapses them. */
-.tracker-keypad-col .fader-group.vertical { height: 140px; }
 .tracker-keypad-del {
     background: var(--surface2, #2a2a2a);
     color: var(--text);
