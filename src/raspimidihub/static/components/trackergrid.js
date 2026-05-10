@@ -144,6 +144,136 @@ const HEX_LABELS_128 = Array.from({ length: 128 },
     (_, i) => i.toString(16).toUpperCase().padStart(2, '0'));
 
 // ------------------------------------------------------------------
+// Sub-cell math: each voice is two sub-cells (note half, cc half).
+// sub_index = voice * 2 + (0 for note, 1 for cc). 8 voices = 16 subs.
+// ------------------------------------------------------------------
+
+function subOf(track, half) { return track * 2 + (half === 'cc' ? 1 : 0); }
+function trackOfSub(sub) { return Math.floor(sub / 2); }
+function halfOfSub(sub) { return sub % 2 === 0 ? 'note' : 'cc'; }
+
+// Selection rectangle = anchor → cursor (both on the same page).
+// Returns null when there's no anchor or anchor is on a different
+// page from the visible one — the rectangle is per-page.
+function makeSelectionRect(anchor, currentPage, cursorRow, cursorSub) {
+    if (!anchor || anchor.page !== currentPage) return null;
+    return {
+        minRow: Math.min(anchor.row, cursorRow),
+        maxRow: Math.max(anchor.row, cursorRow),
+        minSub: Math.min(anchor.sub, cursorSub),
+        maxSub: Math.max(anchor.sub, cursorSub),
+    };
+}
+
+function rectIsSingleCell(r) {
+    return r && r.minRow === r.maxRow && r.minSub === r.maxSub;
+}
+
+function rectArea(r) {
+    return r ? (r.maxRow - r.minRow + 1) * (r.maxSub - r.minSub + 1) : 0;
+}
+
+function isInRect(rect, row, sub) {
+    return rect && row >= rect.minRow && row <= rect.maxRow
+        && sub >= rect.minSub && sub <= rect.maxSub;
+}
+
+// ------------------------------------------------------------------
+// Area capture / clear / paste — operate on a Page object.
+// ------------------------------------------------------------------
+
+function captureArea(page, rect, trackCount) {
+    const cells = [];
+    for (let r = rect.minRow; r <= rect.maxRow; r++) {
+        const row = (page.rows || [])[r] || emptyRow(trackCount);
+        for (let s = rect.minSub; s <= rect.maxSub; s++) {
+            const t = trackOfSub(s);
+            const h = halfOfSub(s);
+            const v = (row.voices || [])[t] || emptyVoice();
+            const dr = r - rect.minRow;
+            const ds = s - rect.minSub;
+            if (h === 'note') {
+                cells.push({ dr, ds, half: 'note', note: v.note, vel: v.vel });
+            } else {
+                cells.push({ dr, ds, half: 'cc', cc_num: v.cc_num, cc_val: v.cc_val });
+            }
+        }
+    }
+    return {
+        type: 'area',
+        height: rect.maxRow - rect.minRow + 1,
+        width: rect.maxSub - rect.minSub + 1,
+        firstHalf: halfOfSub(rect.minSub),
+        cells,
+    };
+}
+
+function clearAreaInPage(page, rect, trackCount) {
+    const newRows = (page.rows || []).slice();
+    for (let r = rect.minRow; r <= rect.maxRow; r++) {
+        const row = newRows[r] || emptyRow(trackCount);
+        const voices = (row.voices || []).slice();
+        for (let s = rect.minSub; s <= rect.maxSub; s++) {
+            const t = trackOfSub(s);
+            const h = halfOfSub(s);
+            const v = { ...(voices[t] || emptyVoice()) };
+            if (h === 'note') {
+                v.note = HOLD;
+                v.vel = CC_HOLD;
+            } else {
+                v.cc_num = CC_NONE;
+                v.cc_val = CC_HOLD;
+            }
+            voices[t] = v;
+        }
+        newRows[r] = { ...row, voices };
+    }
+    return { ...page, rows: newRows };
+}
+
+function pasteAreaIntoPage(page, clip, atRow, atSub, trackCount, maxRows) {
+    const newRows = (page.rows || []).slice();
+    for (const cell of clip.cells) {
+        const tr = atRow + cell.dr;
+        const ts = atSub + cell.ds;
+        if (tr < 0 || tr >= maxRows) continue;
+        const t = trackOfSub(ts);
+        if (t < 0 || t >= trackCount) continue;
+        const row = newRows[tr] || emptyRow(trackCount);
+        const voices = (row.voices || []).slice();
+        const voice = { ...(voices[t] || emptyVoice()) };
+        if (cell.half === 'note') {
+            voice.note = cell.note;
+            voice.vel = cell.vel;
+        } else {
+            voice.cc_num = cell.cc_num;
+            voice.cc_val = cell.cc_val;
+        }
+        voices[t] = voice;
+        newRows[tr] = { ...row, voices };
+    }
+    return { ...page, rows: newRows };
+}
+
+// ------------------------------------------------------------------
+// Note-typing keyboard map — q..u for white keys, 2/3/5/6/7 for the
+// black keys above them.  We listen to `event.code` (physical key
+// position, layout-agnostic) so QWERTY *and* QWERTZ both work
+// without a settings switch — pressing the physical key labelled "Y"
+// on QWERTY / "Z" on QWERTZ produces event.code = 'KeyY' on both.
+// ------------------------------------------------------------------
+
+const NOTE_KEY_MAP = {
+    KeyQ: 'C',  Digit2: 'C#',
+    KeyW: 'D',  Digit3: 'D#',
+    KeyE: 'E',
+    KeyR: 'F',  Digit5: 'F#',
+    KeyT: 'G',  Digit6: 'G#',
+    KeyY: 'A',  Digit7: 'A#',
+    KeyU: 'B',
+};
+
+// ------------------------------------------------------------------
 // Main component
 // ------------------------------------------------------------------
 
@@ -187,6 +317,58 @@ export function PluginTrackerGrid({ param, values, onChange }) {
     cursorTrackRef.current = cursorTrack;
     cursorHalfRef.current = cursorHalf;
     currentPageRef.current = currentPage;
+
+    // ---- Selection: anchor + shift-engaged state. ----
+    // Anchor = (row, sub, page) where the user first pressed Shift.
+    // Selection rectangle is computed every render from anchor +
+    // current cursor. shiftEngaged is true whenever the on-screen
+    // Shift button OR keyboard Shift key is held.
+    const [anchor, setAnchor] = useState(null);
+    const anchorRef = useRef(null);
+    anchorRef.current = anchor;
+
+    const [keyboardShift, setKeyboardShift] = useState(false);
+    const [buttonShift, setButtonShift] = useState(false);
+    const shiftEngaged = keyboardShift || buttonShift;
+    const shiftEngagedRef = useRef(false);
+    shiftEngagedRef.current = shiftEngaged;
+
+    const cursorSub = subOf(cursorTrack, cursorHalf);
+    const selectionRect = makeSelectionRect(anchor, currentPage, cursorRow, cursorSub);
+
+    // First Shift engage captures the anchor at the current cursor.
+    // Subsequent moves with shift held just extend; releasing Shift
+    // freezes the rectangle (anchor stays). Cursor moves WITHOUT
+    // shift clear the anchor (handled in the move wrapper below).
+    const engageShift = useCallback(() => {
+        if (anchorRef.current) return;
+        const sub = subOf(cursorTrackRef.current, cursorHalfRef.current);
+        const next = {
+            row: cursorRowRef.current,
+            sub,
+            page: currentPageRef.current,
+        };
+        anchorRef.current = next;
+        setAnchor(next);
+    }, []);
+
+    const clearAnchor = useCallback(() => {
+        if (!anchorRef.current) return;
+        anchorRef.current = null;
+        setAnchor(null);
+    }, []);
+
+    // Wraps a cursor-move action with selection extension /
+    // clearing. Pass `extending=true` (shift held) to keep the
+    // anchor in place; `false` to clear it before the move.
+    const cursorMove = useCallback((action, extending) => {
+        if (extending) {
+            engageShift();
+        } else if (anchorRef.current) {
+            clearAnchor();
+        }
+        action();
+    }, [engageShift, clearAnchor]);
 
     // ---- Cursor moves with page-boundary wrap on row ↑/↓. ----
     // Wrapping rules:
@@ -262,15 +444,19 @@ export function PluginTrackerGrid({ param, values, onChange }) {
     }, [stopRepeat]);
     useEffect(() => () => stopRepeat(), [stopRepeat]);
 
-    // Tap a half directly to focus that half; default 'note' if the
-    // caller doesn't say. Lets the user jump straight to the CC slice
-    // of any voice without first focusing the note slice and stepping
-    // right.
-    const focusCell = useCallback((row, track, half = 'note') => {
+    // Tap a half directly to focus that half. With Shift held, the
+    // tap extends the selection from the anchor to the tapped
+    // sub-cell instead of clearing.
+    const focusCell = useCallback((row, track, half = 'note', extending = false) => {
+        if (extending) {
+            engageShift();
+        } else if (anchorRef.current) {
+            clearAnchor();
+        }
         if (row !== cursorRow) onChange(param.cursor_row_param, row);
         if (track !== cursorTrack) onChange(param.cursor_track_param, track);
         if (cursorHalf !== half) onChange(param.cursor_half_param, half);
-    }, [cursorRow, cursorTrack, cursorHalf, onChange, param]);
+    }, [cursorRow, cursorTrack, cursorHalf, onChange, param, engageShift, clearAnchor]);
 
     // ---- Page management. ----
     const addPage = useCallback(() => {
@@ -289,41 +475,6 @@ export function PluginTrackerGrid({ param, values, onChange }) {
         const nextIdx = Math.min(currentPage, next.length - 1);
         onChange(param.current_page_param, nextIdx);
     }, [pages, currentPage, onChange, param]);
-
-    const copyPage = useCallback(() => {
-        // Session-local clipboard on window so /play unmount doesn't
-        // lose it. Single typed slot.
-        window.__trackerPageClipboard = clonePage(pages[currentPage] || emptyPage(trackCount, maxRows));
-    }, [pages, currentPage, trackCount, maxRows]);
-
-    const pastePage = useCallback(() => {
-        const clip = window.__trackerPageClipboard;
-        if (!clip) return;
-        const next = pages.slice();
-        next[currentPage] = clonePage(clip);
-        onChange(param.pages_param, next);
-    }, [pages, currentPage, onChange, param]);
-
-    // ---- Keyboard support (window-level). ----
-    // Active only while this component is mounted. Skips when an
-    // input/select/textarea has focus so the rate dropdown still
-    // works as expected.
-    useEffect(() => {
-        const onKey = (e) => {
-            const tag = (e.target && e.target.tagName) || '';
-            if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
-            switch (e.key) {
-                case 'ArrowUp':    moveRow(-1); e.preventDefault(); break;
-                case 'ArrowDown':  moveRow(+1); e.preventDefault(); break;
-                case 'ArrowLeft':  moveColumn(-1); e.preventDefault(); break;
-                case 'ArrowRight': moveColumn(+1); e.preventDefault(); break;
-                case 'PageUp':     movePage(-1); e.preventDefault(); break;
-                case 'PageDown':   movePage(+1); e.preventDefault(); break;
-            }
-        };
-        window.addEventListener('keydown', onKey);
-        return () => window.removeEventListener('keydown', onKey);
-    }, [moveRow, moveColumn, movePage]);
 
     // ---- Help row (live-value while a control is touched). ----
     // Reverts to the static four-column key after 2 s of inactivity.
@@ -446,15 +597,175 @@ export function PluginTrackerGrid({ param, values, onChange }) {
         showHelp(`CC Val  ${fmt2hex(v)} (${v})`);
     }, [setVoiceFields, showHelp]);
 
-    const onDelNote = useCallback(() => {
-        setVoiceFields({ note: HOLD, vel: CC_HOLD });
-        showHelp('Cleared Note + Vel');
-    }, [setVoiceFields, showHelp]);
+    // ---- Unified Del / Copy / Paste action handlers ----
+    // All three are selection-aware. With a selection rectangle:
+    //   Del   → clear every sub-cell in the rectangle
+    //   Copy  → capture the rectangle to a session-local clipboard
+    //   Paste → place the rectangle's top-left at the cursor sub-cell,
+    //           rejecting the paste if the cursor's half doesn't match
+    //           the clipboard's first-cell half.
+    // Without a selection:
+    //   Del   → clear just the focused sub-cell (note half clears
+    //           note + vel; cc half clears cc_num + cc_val).
+    //   Copy  → grab the whole current page.
+    //   Paste → page-clipboard replaces the current page; area-
+    //           clipboard pastes at the cursor (with half-match check).
 
-    const onDelCc = useCallback(() => {
-        setVoiceFields({ cc_num: CC_NONE, cc_val: CC_HOLD });
-        showHelp('Cleared CC# + CC Val');
-    }, [setVoiceFields, showHelp]);
+    const onDel = useCallback(() => {
+        const rect = makeSelectionRect(anchorRef.current, currentPageRef.current,
+                                       cursorRowRef.current,
+                                       subOf(cursorTrackRef.current, cursorHalfRef.current));
+        if (rect && !rectIsSingleCell(rect)) {
+            const newPages = pages.slice();
+            newPages[currentPage] = clearAreaInPage(
+                pages[currentPage] || emptyPage(trackCount, maxRows),
+                rect, trackCount,
+            );
+            onChange(param.pages_param, newPages);
+            showHelp(`Cleared selection (${rect.maxRow - rect.minRow + 1} × ${rect.maxSub - rect.minSub + 1})`);
+        } else {
+            const half = cursorHalfRef.current;
+            if (half === 'note') {
+                setVoiceFields({ note: HOLD, vel: CC_HOLD });
+                showHelp('Cleared Note + Vel');
+            } else {
+                setVoiceFields({ cc_num: CC_NONE, cc_val: CC_HOLD });
+                showHelp('Cleared CC# + CC Val');
+            }
+        }
+    }, [pages, currentPage, trackCount, maxRows, onChange, param, setVoiceFields, showHelp]);
+
+    const onCopy = useCallback(() => {
+        const rect = makeSelectionRect(anchorRef.current, currentPageRef.current,
+                                       cursorRowRef.current,
+                                       subOf(cursorTrackRef.current, cursorHalfRef.current));
+        if (rect && !rectIsSingleCell(rect)) {
+            const buffer = captureArea(
+                pages[currentPage] || emptyPage(trackCount, maxRows),
+                rect, trackCount,
+            );
+            window.__trackerClipboard = buffer;
+            showHelp(`Copied selection (${rect.maxRow - rect.minRow + 1} × ${rect.maxSub - rect.minSub + 1})`);
+        } else {
+            window.__trackerClipboard = {
+                type: 'page',
+                page: clonePage(pages[currentPage] || emptyPage(trackCount, maxRows)),
+            };
+            showHelp('Copied page');
+        }
+    }, [pages, currentPage, trackCount, maxRows, showHelp]);
+
+    const onPaste = useCallback(() => {
+        const clip = window.__trackerClipboard;
+        if (!clip) {
+            showHelp('Clipboard empty');
+            return;
+        }
+        if (clip.type === 'page') {
+            const next = pages.slice();
+            next[currentPage] = clonePage(clip.page);
+            onChange(param.pages_param, next);
+            showHelp('Pasted page');
+            return;
+        }
+        // Area clip — half-compatibility check before walking cells.
+        const at = subOf(cursorTrackRef.current, cursorHalfRef.current);
+        const cursorHalfNow = halfOfSub(at);
+        if (clip.firstHalf !== cursorHalfNow) {
+            showHelp(`Can't paste — clipboard starts on ${clip.firstHalf} column`);
+            return;
+        }
+        const newPages = pages.slice();
+        newPages[currentPage] = pasteAreaIntoPage(
+            pages[currentPage] || emptyPage(trackCount, maxRows),
+            clip, cursorRowRef.current, at,
+            trackCount, maxRows,
+        );
+        onChange(param.pages_param, newPages);
+        showHelp(`Pasted selection (${clip.height} × ${clip.width})`);
+    }, [pages, currentPage, trackCount, maxRows, onChange, param, showHelp]);
+
+    // Typed note from the keyboard — same write semantics as turning
+    // the Note wheel + the chord auto-advance from MIDI input. One
+    // key press = one note + sticky velocity + cursor advances.
+    const writeTypedNote = useCallback((pitch) => {
+        const note = composeNote(pitch, octave);
+        const vel = typeof focusedCell.vel === 'number'
+            ? focusedCell.vel : stickyVelRef.current;
+        setVoiceFields({ note, vel });
+        // Auto-advance one row, with page-boundary wrap.
+        const cr = cursorRowRef.current;
+        const cp = currentPageRef.current;
+        let nextRow = cr + 1;
+        let nextPage = cp;
+        if (nextRow >= maxRows) {
+            nextRow = 0;
+            nextPage = (cp + 1) % pageCount;
+        }
+        if (nextRow !== cr) onChange(param.cursor_row_param, nextRow);
+        if (nextPage !== cp) onChange(param.current_page_param, nextPage);
+        showHelp(`Note  ${note}`);
+    }, [octave, focusedCell.vel, setVoiceFields, maxRows, pageCount, onChange, param, showHelp]);
+
+    // ---- Keyboard support (window-level). ----
+    // Active only while this component is mounted. Skips when an
+    // input/select/textarea has focus so the rate dropdown still
+    // works as expected. Note-typing keys use event.code (physical
+    // position) so QWERTY and QWERTZ both work without a settings
+    // toggle — both layouts share the same physical positions for
+    // q/w/e/r/t/u and 2/3/5/6/7; only the y/z key is labelled
+    // differently and event.code = 'KeyY' for both.
+    useEffect(() => {
+        const onKeyDown = (e) => {
+            const tag = (e.target && e.target.tagName) || '';
+            if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+
+            // Shift modifier: track key state so the on-screen Shift
+            // and the keyboard Shift compose (either source can hold
+            // selection mode).
+            if (e.key === 'Shift') {
+                setKeyboardShift(true);
+                engageShift();
+                return;
+            }
+
+            // Cursor + page navigation, with shift-extends-selection.
+            switch (e.key) {
+                case 'ArrowUp':    cursorMove(() => moveRow(-1), e.shiftKey); e.preventDefault(); return;
+                case 'ArrowDown':  cursorMove(() => moveRow(+1), e.shiftKey); e.preventDefault(); return;
+                case 'ArrowLeft':  cursorMove(() => moveColumn(-1), e.shiftKey); e.preventDefault(); return;
+                case 'ArrowRight': cursorMove(() => moveColumn(+1), e.shiftKey); e.preventDefault(); return;
+                case 'PageUp':     cursorMove(() => movePage(-1), e.shiftKey); e.preventDefault(); return;
+                case 'PageDown':   cursorMove(() => movePage(+1), e.shiftKey); e.preventDefault(); return;
+                case 'Delete':
+                case 'Backspace':  onDel(); e.preventDefault(); return;
+            }
+
+            // Ctrl/Cmd + C / V — clipboard ops.
+            if (e.ctrlKey || e.metaKey) {
+                if (e.code === 'KeyC') { onCopy(); e.preventDefault(); return; }
+                if (e.code === 'KeyV') { onPaste(); e.preventDefault(); return; }
+                return;
+            }
+
+            // Note-typing keys (no modifier).
+            const pitch = NOTE_KEY_MAP[e.code];
+            if (pitch) {
+                writeTypedNote(pitch);
+                e.preventDefault();
+            }
+        };
+        const onKeyUp = (e) => {
+            if (e.key === 'Shift') setKeyboardShift(false);
+        };
+        window.addEventListener('keydown', onKeyDown);
+        window.addEventListener('keyup', onKeyUp);
+        return () => {
+            window.removeEventListener('keydown', onKeyDown);
+            window.removeEventListener('keyup', onKeyUp);
+        };
+    }, [moveRow, moveColumn, movePage, cursorMove, engageShift,
+        onDel, onCopy, onPaste, writeTypedNote]);
 
     // Tick label for the Note wheel — sentinels then 12 pitches with
     // the current Octave wheel value baked in so each detent shows
@@ -506,8 +817,6 @@ export function PluginTrackerGrid({ param, values, onChange }) {
             <button class="tracker-page-btn"
                 disabled=${pages.length <= 1}
                 onclick=${delPage}>− Del</button>
-            <button class="tracker-page-btn" onclick=${copyPage}>Copy</button>
-            <button class="tracker-page-btn" onclick=${pastePage}>Paste</button>
         </div>
     </div>`;
 
@@ -549,11 +858,15 @@ export function PluginTrackerGrid({ param, values, onChange }) {
                     const cls = focused
                         ? (cursorHalf === 'cc' ? 'focus-cc' : 'focus-note')
                         : '';
+                    const noteSel = isInRect(selectionRect, rowIdx, subOf(t, 'note'));
+                    const ccSel = isInRect(selectionRect, rowIdx, subOf(t, 'cc'));
                     return html`<span class="tracker-cell ${cls}">
-                        <span class="tracker-cell-note"
-                            onclick=${() => focusCell(rowIdx, t, 'note')}>${fmtVoiceNote(v)}</span>
-                        <span class="tracker-cell-cc"
-                            onclick=${() => focusCell(rowIdx, t, 'cc')}>${fmtVoiceCc(v)}</span>
+                        <span class="tracker-cell-note ${noteSel ? 'sel' : ''}"
+                            onclick=${(ev) => focusCell(rowIdx, t, 'note',
+                                ev.shiftKey || shiftEngagedRef.current)}>${fmtVoiceNote(v)}</span>
+                        <span class="tracker-cell-cc ${ccSel ? 'sel' : ''}"
+                            onclick=${(ev) => focusCell(rowIdx, t, 'cc',
+                                ev.shiftKey || shiftEngagedRef.current)}>${fmtVoiceCc(v)}</span>
                     </span>`;
                 })}
             </div>`;
@@ -566,12 +879,18 @@ export function PluginTrackerGrid({ param, values, onChange }) {
     // ---- Cursor cluster: PgUp / ↑ / PgDn on top, ← / ↓ / → on bottom ----
     // Each button uses pointer events so press-and-hold repeats while
     // the touch is held; click-only (mouse) still works because pointer
-    // events fire for the mouse too.
+    // events fire for the mouse too. Each repeated action call wraps
+    // in cursorMove(action, shiftEngagedRef.current) so the on-screen
+    // Shift button (or held keyboard Shift) extends the selection
+    // live as the cursor walks.
     const arrow = (action, label, title, extraClass = '') => html`<button
         class="tracker-arrow ${extraClass}"
         title=${title}
         oncontextmenu=${(e) => e.preventDefault()}
-        onpointerdown=${(e) => { e.preventDefault(); startRepeat(action); }}
+        onpointerdown=${(e) => {
+            e.preventDefault();
+            startRepeat(() => cursorMove(action, shiftEngagedRef.current));
+        }}
         onpointerup=${stopRepeat}
         onpointerleave=${stopRepeat}
         onpointercancel=${stopRepeat}>${label}</button>`;
@@ -588,20 +907,48 @@ export function PluginTrackerGrid({ param, values, onChange }) {
         </div>
     </div>`;
 
+    // ---- Action row (left side of each keypad half): ----
+    // Del / Shift / Copy / Paste — generic across both halves. Shift
+    // is press-and-hold (pointerdown engages, pointerup disengages);
+    // Del/Copy/Paste are taps. The whole row sits below the controls
+    // and aligns its bottom with the cursor cluster's ←↓→ row.
+    const actionBtn = (label, onClick, title, extraClass = '') => html`<button
+        class="tracker-keypad-action-btn ${extraClass}"
+        title=${title}
+        oncontextmenu=${(e) => e.preventDefault()}
+        onclick=${onClick}>${label}</button>`;
+    const shiftBtn = html`<button
+        class="tracker-keypad-action-btn ${buttonShift ? 'active' : ''}"
+        title="Hold to extend selection (or hold keyboard Shift)"
+        oncontextmenu=${(e) => e.preventDefault()}
+        onpointerdown=${(e) => {
+            e.preventDefault();
+            setButtonShift(true);
+            engageShift();
+        }}
+        onpointerup=${() => setButtonShift(false)}
+        onpointerleave=${() => setButtonShift(false)}
+        onpointercancel=${() => setButtonShift(false)}>Shift</button>`;
+    const actionRow = html`<div class="tracker-keypad-actions">
+        ${actionBtn('Del', onDel, 'Clear focused cell or selection')}
+        ${shiftBtn}
+        ${actionBtn('Copy', onCopy, 'Copy selection or page')}
+        ${actionBtn('Paste', onPaste, 'Paste at cursor')}
+    </div>`;
+
     // ---- Keypad: split between two halves of the focused voice. ----
-    // Note half (cursor_half === 'note') shows NOTE + OCT + VEL +
-    // a Del that clears the pair. CC half shows CC# + CC VAL + Del.
-    // The cursor cluster is pinned right via .tracker-keypad-cursor-col
-    // + margin-left:auto so it stays put regardless of which half
-    // is on screen.
-    const noteHalf = html`<div class="tracker-keypad-half">
+    // Each half is a vertical stack: controls (top) + action row
+    // (bottom). The bottom action row is generic (Del/Shift/Copy/
+    // Paste) and replaces the per-wheel Del that used to live under
+    // each wheel. The cursor cluster is pinned right via
+    // margin-left:auto and aligns its top + bottom rows to the
+    // half's top + bottom areas.
+    const noteHalfControls = html`<div class="tracker-keypad-controls">
         <div class="tracker-keypad-col">
             <div class="tracker-keypad-label">NOTE</div>
             <${PluginWheel} name="note_wheel" label="" min=${0} max=${14}
                 value=${noteWheelIdx}
                 onChange=${onNoteWheel} tickLabel=${noteTickLabel} />
-            <button class="tracker-keypad-del" onclick=${onDelNote}
-                title="Clear Note + Velocity">Del</button>
         </div>
         <div class="tracker-keypad-col">
             <div class="tracker-keypad-label">OCT</div>
@@ -616,14 +963,12 @@ export function PluginTrackerGrid({ param, values, onChange }) {
         </div>
     </div>`;
 
-    const ccHalf = html`<div class="tracker-keypad-half">
+    const ccHalfControls = html`<div class="tracker-keypad-controls">
         <div class="tracker-keypad-col">
             <div class="tracker-keypad-label">CC#</div>
             <${PluginWheel} name="cc_num_wheel" label="" min=${-1} max=${127}
                 value=${ccNumValue}
                 onChange=${onCcNum} tickLabel=${ccNumTickLabel} />
-            <button class="tracker-keypad-del" onclick=${onDelCc}
-                title="Clear CC# + CC Val">Del</button>
         </div>
         <div class="tracker-keypad-col">
             <div class="tracker-keypad-label">CC VAL</div>
@@ -634,7 +979,10 @@ export function PluginTrackerGrid({ param, values, onChange }) {
     </div>`;
 
     const keypad = html`<div class="tracker-keypad">
-        ${cursorHalf === 'note' ? noteHalf : ccHalf}
+        <div class="tracker-keypad-half">
+            ${cursorHalf === 'note' ? noteHalfControls : ccHalfControls}
+            ${actionRow}
+        </div>
         <div class="tracker-keypad-col tracker-keypad-cursor-col">
             <div class="tracker-keypad-label">${cursorHalf === 'note' ? 'CURSOR · NOTE' : 'CURSOR · CC'}</div>
             ${cursor}

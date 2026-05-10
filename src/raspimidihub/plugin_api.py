@@ -240,10 +240,14 @@ class Display(Param):
 
 @dataclass
 class Group:
-    """Titled section grouping related params."""
+    """Titled section grouping related params. `config_only=True`
+    hides the entire group (title + children) from a play surface —
+    use it when every child is config-only and you don't want an
+    empty title leaking through to the play view."""
     title: str
     children: list = field(default_factory=list)
     cols: int | None = None  # override default 4-col grid for this group's inline row
+    config_only: bool = False
 
     def to_dict(self) -> dict:
         d = {
@@ -253,6 +257,8 @@ class Group:
         }
         if self.cols is not None:
             d["cols"] = self.cols
+        if self.config_only:
+            d["config_only"] = True
         return d
 
 

@@ -188,7 +188,7 @@ class TrackerBase(PluginBase):
                 ChannelSelect(f"track_ch_{i}", f"T{i + 1}",
                               default=1, config_only=True)
                 for i in range(cls.TRACK_COUNT)
-            ]),
+            ], config_only=True),
             Button("send_clock", "Send Clock + Transport",
                    default=False, color="green", config_only=True),
         ]

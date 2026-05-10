@@ -1183,6 +1183,13 @@ body {
 }
 .tracker-cell-note { min-width: 7ch; }   /* "C-3 5A" + breathing room */
 .tracker-cell-cc   { min-width: 5ch; }   /* "017F"  + breathing room */
+/* Selection — lighter accent tint so the focused cell stays the
+ * brightest mark in the rectangle. Listed first so the focus rule
+ * below wins on the focused sub-cell (CSS source-order tie-break). */
+.tracker-cell-note.sel,
+.tracker-cell-cc.sel {
+    background: rgba(80, 200, 255, 0.22);
+}
 .tracker-cell.focus-note .tracker-cell-note,
 .tracker-cell.focus-cc   .tracker-cell-cc {
     background: var(--accent, #4af);
@@ -1226,10 +1233,47 @@ body {
 }
 .tracker-keypad-half {
     display: flex;
-    align-items: stretch;
-    gap: 12px;
+    flex-direction: column;
+    gap: 6px;
     flex: 1 1 0;
     min-width: 0;
+}
+.tracker-keypad-controls {
+    display: flex;
+    align-items: stretch;
+    gap: 12px;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+/* Action row sits below the controls, left-aligned, with its bottom
+ * edge matching the cursor cluster's bottom row (←↓→). Generic
+ * across both halves — Del/Shift/Copy/Paste are half-agnostic. */
+.tracker-keypad-actions {
+    display: flex;
+    gap: 4px;
+    flex: 0 0 auto;
+}
+.tracker-keypad-action-btn {
+    background: var(--surface2, #2a2a2a);
+    color: var(--text);
+    border: 1px solid var(--surface2);
+    border-radius: 4px;
+    padding: 4px 12px;
+    font-size: 12px;
+    font-family: inherit;
+    cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+    touch-action: manipulation;
+}
+/* Shift button glows accent while engaged so the user can see at a
+ * glance whether the next cursor move will extend the selection. */
+.tracker-keypad-action-btn.active {
+    background: var(--accent, #4af);
+    border-color: var(--accent, #5cf);
+    color: #000;
+    font-weight: 600;
 }
 .tracker-keypad-col {
     display: flex;
