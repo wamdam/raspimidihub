@@ -19,7 +19,10 @@
  */
 
 import { html } from '../ui/common.js';
-import { useCallback, useEffect, useRef } from '../lib/hooks.module.js';
+import { useCallback, useEffect, useRef, useState } from '../lib/hooks.module.js';
+import { PluginWheel } from './wheel.js';
+import { PluginKnob } from './knob.js';
+import { PluginFader } from './fader.js';
 
 const HEX = '0123456789ABCDEF';
 const HOLD = '---';
@@ -85,6 +88,47 @@ const RATE_OPTIONS = [
     '1/2', '1/2T', '1/4', '1/4T', '1/8', '1/8T',
     '1/16', '1/16T', '1/32',
 ];
+
+// Note wheel — 15 positions. Sentinels at the start so they're a
+// thumb-flick away from "no entry"; the 12 chromatic pitches follow
+// at indices 3..14. The actual cell.note string is composed with the
+// sticky octave knob (composeNote).
+const NOTE_WHEEL_LABELS = ['---', 'End', 'Off',
+    'C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+const NOTE_WHEEL_PITCHES = NOTE_WHEEL_LABELS.slice(3);
+const NOTE_SENTINELS = new Set([HOLD, 'End', 'Off']);
+
+function isRealPitch(note) {
+    return typeof note === 'string' && note.length === 3
+        && !NOTE_SENTINELS.has(note);
+}
+
+function getPitchPart(note) {
+    if (!isRealPitch(note)) return null;
+    if (note[1] === '-') return note[0];
+    if (note[1] === '#') return note.slice(0, 2);
+    return null;
+}
+
+function getOctavePart(note) {
+    if (!isRealPitch(note)) return null;
+    const oct = parseInt(note[2], 10);
+    return Number.isFinite(oct) ? oct : null;
+}
+
+function composeNote(pitch, octave) {
+    return pitch.length === 1 ? `${pitch}-${octave}` : `${pitch}${octave}`;
+}
+
+function noteToWheelIdx(note) {
+    if (note === HOLD) return 0;
+    if (note === 'End') return 1;
+    if (note === 'Off') return 2;
+    const pitch = getPitchPart(note);
+    if (!pitch) return 0;
+    const idx = NOTE_WHEEL_PITCHES.indexOf(pitch);
+    return idx >= 0 ? idx + 3 : 0;
+}
 
 // ------------------------------------------------------------------
 // Main component
@@ -228,6 +272,128 @@ export function PluginTrackerGrid({ param, values, onChange }) {
         return () => window.removeEventListener('keydown', onKey);
     }, [moveRow, moveTrack, movePage]);
 
+    // ---- Help row (live-value while a control is touched). ----
+    // Reverts to the static four-column key after 2 s of inactivity.
+    const [liveHelp, setLiveHelp] = useState(null);
+    const helpTimerRef = useRef(null);
+    const showHelp = useCallback((text) => {
+        setLiveHelp(text);
+        if (helpTimerRef.current) clearTimeout(helpTimerRef.current);
+        helpTimerRef.current = setTimeout(() => setLiveHelp(null), 2000);
+    }, []);
+    useEffect(() => () => {
+        if (helpTimerRef.current) clearTimeout(helpTimerRef.current);
+    }, []);
+
+    // ---- Keypad: derived state + sticky-default refs. ----
+    // Always-recording semantics: every wheel/fader change writes
+    // straight to the focused voice cell. When the cell shows a hold
+    // sentinel ('--' or '.'), the keypad still needs a numeric to
+    // display, so we keep last-touched values in refs that stick
+    // across cells. As soon as the user moves the control, the cell
+    // gets the new value.
+    const focusedRow = rows[cursorRow] || emptyRow(trackCount);
+    const focusedCell = focusedRow.voices[cursorTrack] || emptyVoice();
+    const octave = clamp(values[param.octave_param] ?? 3, 0, 9);
+
+    const stickyVelRef = useRef(80);
+    const stickyCcNumRef = useRef(1);
+    const stickyCcValRef = useRef(64);
+    if (typeof focusedCell.vel === 'number') stickyVelRef.current = focusedCell.vel;
+    if (typeof focusedCell.cc_num === 'number') stickyCcNumRef.current = focusedCell.cc_num;
+    if (typeof focusedCell.cc_val === 'number') stickyCcValRef.current = focusedCell.cc_val;
+
+    const noteWheelIdx = noteToWheelIdx(focusedCell.note);
+    const velValue = typeof focusedCell.vel === 'number'
+        ? focusedCell.vel : stickyVelRef.current;
+    const ccNumValue = focusedCell.cc_num === CC_NONE ? -1
+        : (typeof focusedCell.cc_num === 'number'
+            ? focusedCell.cc_num : stickyCcNumRef.current);
+    const ccValValue = typeof focusedCell.cc_val === 'number'
+        ? focusedCell.cc_val : stickyCcValRef.current;
+
+    // Cell mutation — immutable update of pages → page → row → voice.
+    const setVoiceFields = useCallback((updates) => {
+        const r = rows[cursorRow] || emptyRow(trackCount);
+        const v = r.voices[cursorTrack] || emptyVoice();
+        const newVoices = r.voices.slice();
+        newVoices[cursorTrack] = { ...v, ...updates };
+        const newRows = rows.slice();
+        newRows[cursorRow] = { ...r, voices: newVoices };
+        const newPages = pages.slice();
+        newPages[currentPage] = { ...page, rows: newRows };
+        onChange(param.pages_param, newPages);
+    }, [pages, page, rows, cursorRow, cursorTrack, currentPage, trackCount, onChange, param]);
+
+    // ---- Keypad handlers ----
+    const onNoteWheel = useCallback((_, idx) => {
+        if (idx === 0) {
+            setVoiceFields({ note: HOLD });
+            showHelp(`Note  ${HOLD}`);
+        } else if (idx === 1) {
+            setVoiceFields({ note: 'End' });
+            showHelp('Note  End');
+        } else if (idx === 2) {
+            setVoiceFields({ note: 'Off' });
+            showHelp('Note  Off');
+        } else {
+            const note = composeNote(NOTE_WHEEL_PITCHES[idx - 3], octave);
+            setVoiceFields({ note });
+            showHelp(`Note  ${note}`);
+        }
+    }, [octave, setVoiceFields, showHelp]);
+
+    const onOctave = useCallback((_, oct) => {
+        onChange(param.octave_param, oct);
+        showHelp(`Octave  ${oct}`);
+        // If the focused cell currently holds a real pitch, rewrite
+        // its octave digit so what you see in the cell matches the
+        // knob. Sentinels (---/End/Off) stay as-is — the knob just
+        // sticks for next entry.
+        const pitch = getPitchPart(focusedCell.note);
+        if (pitch) setVoiceFields({ note: composeNote(pitch, oct) });
+    }, [focusedCell.note, onChange, param, setVoiceFields, showHelp]);
+
+    const onVel = useCallback((_, v) => {
+        setVoiceFields({ vel: v });
+        showHelp(`Velocity  ${fmt2hex(v)} (${v})`);
+    }, [setVoiceFields, showHelp]);
+
+    const onCcNum = useCallback((_, v) => {
+        if (v === -1) {
+            setVoiceFields({ cc_num: CC_NONE });
+            showHelp('CC#  .  (no event)');
+        } else {
+            setVoiceFields({ cc_num: v });
+            showHelp(`CC#  ${fmt2hex(v)} (${v})`);
+        }
+    }, [setVoiceFields, showHelp]);
+
+    const onCcVal = useCallback((_, v) => {
+        setVoiceFields({ cc_val: v });
+        showHelp(`CC Val  ${fmt2hex(v)} (${v})`);
+    }, [setVoiceFields, showHelp]);
+
+    const onDelNote = useCallback(() => {
+        setVoiceFields({ note: HOLD, vel: CC_HOLD });
+        showHelp('Cleared Note + Vel');
+    }, [setVoiceFields, showHelp]);
+
+    const onDelCc = useCallback(() => {
+        setVoiceFields({ cc_num: CC_NONE, cc_val: CC_HOLD });
+        showHelp('Cleared CC# + CC Val');
+    }, [setVoiceFields, showHelp]);
+
+    // Tick label for the Note wheel — pitches show with the current
+    // sticky octave so you can read what each detent will commit.
+    const noteTickLabel = useCallback((idx) => {
+        if (idx <= 2) return NOTE_WHEEL_LABELS[idx];
+        return composeNote(NOTE_WHEEL_PITCHES[idx - 3], octave);
+    }, [octave]);
+
+    // Tick label for the CC# wheel — `.` at -1, hex elsewhere.
+    const ccNumTickLabel = useCallback((v) => v === -1 ? '.' : fmt2hex(v), []);
+
     // Scroll the focused cell into view on cursor / page changes.
     const gridRef = useRef(null);
     useEffect(() => {
@@ -293,8 +459,8 @@ export function PluginTrackerGrid({ param, values, onChange }) {
         })}
     </div>`;
 
-    // ---- Help row (static for now; live-value in keypad commit) ----
-    const helpRow = html`<div class="tracker-help">${HELP_STATIC}</div>`;
+    // ---- Help row ----
+    const helpRow = html`<div class="tracker-help">${liveHelp ? `Help: ${liveHelp}` : HELP_STATIC}</div>`;
 
     // ---- Cursor cluster: PgUp / ↑ / PgDn on top, ← / ↓ / → on bottom ----
     // Each button uses pointer events so press-and-hold repeats while
@@ -320,6 +486,45 @@ export function PluginTrackerGrid({ param, values, onChange }) {
         </div>
     </div>`;
 
+    // ---- Keypad: Note + Octave + Vel + CC# + CC Val + cursor ----
+    const keypad = html`<div class="tracker-keypad">
+        <div class="tracker-keypad-col">
+            <div class="tracker-keypad-label">NOTE</div>
+            <${PluginWheel} name="note_wheel" label="" min=${0} max=${14}
+                value=${noteWheelIdx}
+                onChange=${onNoteWheel} tickLabel=${noteTickLabel} />
+            <button class="tracker-keypad-del" onclick=${onDelNote}
+                title="Clear Note + Velocity">Del</button>
+        </div>
+        <div class="tracker-keypad-col">
+            <div class="tracker-keypad-label">OCT</div>
+            <${PluginKnob} name="octave" label="" min=${0} max=${9}
+                value=${octave} onChange=${onOctave} />
+        </div>
+        <div class="tracker-keypad-col">
+            <div class="tracker-keypad-label">VEL</div>
+            <${PluginFader} name="vel" label="" min=${0} max=${127}
+                value=${velValue} vertical=${true} onChange=${onVel} />
+        </div>
+        <div class="tracker-keypad-col">
+            <div class="tracker-keypad-label">CC#</div>
+            <${PluginWheel} name="cc_num_wheel" label="" min=${-1} max=${127}
+                value=${ccNumValue}
+                onChange=${onCcNum} tickLabel=${ccNumTickLabel} />
+            <button class="tracker-keypad-del" onclick=${onDelCc}
+                title="Clear CC# + CC Val">Del</button>
+        </div>
+        <div class="tracker-keypad-col">
+            <div class="tracker-keypad-label">CC VAL</div>
+            <${PluginFader} name="cc_val" label="" min=${0} max=${127}
+                value=${ccValValue} vertical=${true} onChange=${onCcVal} />
+        </div>
+        <div class="tracker-keypad-col tracker-keypad-cursor-col">
+            <div class="tracker-keypad-label">CURSOR</div>
+            ${cursor}
+        </div>
+    </div>`;
+
     return html`<div class="trackergrid">
         ${header}
         <div class="tracker-grid-area" ref=${gridRef}>
@@ -327,12 +532,7 @@ export function PluginTrackerGrid({ param, values, onChange }) {
             ${stepRows}
         </div>
         ${helpRow}
-        <div class="tracker-keypad-stub">
-            <div style="color:var(--text-dim);font-size:11px;text-align:center;padding:8px">
-                Note · Octave · Velocity · CC# · CC Val keypad — coming next commit
-            </div>
-            ${cursor}
-        </div>
+        ${keypad}
     </div>`;
 }
 

@@ -1138,16 +1138,58 @@ body {
     color: var(--text-dim);
     min-height: 18px;
     line-height: 1.4;
+    flex: 0 0 auto;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;        /* keep "Help: …" on a single line so layout never reflows */
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
-.tracker-keypad-stub {
+/* Always-visible data-entry keypad: Note wheel + Octave knob + Vel
+ * fader + CC# wheel + CC Val fader + cursor cluster, in that order.
+ * Layout never shifts — even when the help row above swaps between
+ * idle and live-value text (the help row has its own min-height). */
+.tracker-keypad {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
+    align-items: stretch;
+    justify-content: space-around;
+    gap: 8px;
     padding: 8px;
     background: var(--surface);
     border-radius: 6px;
     flex: 0 0 auto;
+}
+.tracker-keypad-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    flex: 0 1 auto;
+    min-width: 60px;
+}
+.tracker-keypad-cursor-col { min-width: 130px; }
+.tracker-keypad-label {
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 0.5px;
+    font-weight: 500;
+}
+/* Hide the inner wheel/fader/knob labels — the col label above is
+ * doing that job. Empty `label=""` would still render an empty span. */
+.tracker-keypad-col .wheel-label,
+.tracker-keypad-col .fader-label,
+.tracker-keypad-col .knob-label { display: none; }
+/* Faders inside the keypad need a real height to be useful — the
+ * default flex-row layout otherwise collapses them. */
+.tracker-keypad-col .fader-group.vertical { height: 140px; }
+.tracker-keypad-del {
+    background: var(--surface2, #2a2a2a);
+    color: var(--text);
+    border: 1px solid var(--surface2);
+    border-radius: 4px;
+    padding: 3px 10px;
+    font-size: 11px;
+    font-family: inherit;
+    cursor: pointer;
 }
 .tracker-cursor-cluster {
     display: flex;
