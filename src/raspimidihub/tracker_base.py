@@ -17,14 +17,60 @@ Persistent state lives in `_param_values`:
 Output is always MIDI channel 1; remap downstream via the matrix.
 Transport is always external (clock + Start/Stop), so there's no
 free-running BPM and no sync-mode picker.
+
+Playback fires note-on / note-off / CC for each voice on every tick
+of the configured rate. Auto-learn writes incoming notes / CCs into
+the focused (row, voice) and passes them through to OUT.
 """
 
+import threading
+import time
 from typing import Any
 
 from raspimidihub.plugin_api import (
     PluginBase,
     TrackerGrid,
 )
+
+
+# Pitch order matches the Note wheel on the frontend. MIDI 12 = C-0,
+# MIDI 119 = B-9 — same range the 3-char note string can express.
+PITCH_NAMES = ('C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B')
+
+# Notes arriving within this window of each other count as one chord
+# and are spread across consecutive tracks during recording. ~10 ms
+# tolerates wired-keyboard jitter without merging deliberate runs.
+_CHORD_WINDOW_S = 0.010
+
+
+def midi_to_note_str(midi: int) -> str | None:
+    """MIDI note number → 3-char tracker note string, or None if the
+    pitch is outside the representable range (MIDI 12..127 = C-0..G-9
+    — the 3-char rule limits octaves to a single digit, and the top
+    octave runs only through G because B-9 would land at MIDI 131)."""
+    if not (12 <= midi <= 127):
+        return None
+    n = midi - 12
+    octave = n // 12
+    pitch = PITCH_NAMES[n % 12]
+    return f"{pitch}-{octave}" if len(pitch) == 1 else f"{pitch}{octave}"
+
+
+def note_str_to_midi(s: str) -> int | None:
+    """3-char tracker note string → MIDI note number, or None for any
+    of the sentinels (---/Off/End) or for malformed strings."""
+    if not isinstance(s, str) or len(s) != 3:
+        return None
+    if s in ("---", "Off", "End"):
+        return None
+    pitch = s[0] if s[1] == "-" else s[:2]
+    if pitch not in PITCH_NAMES:
+        return None
+    try:
+        octave = int(s[2])
+    except ValueError:
+        return None
+    return 12 + octave * 12 + PITCH_NAMES.index(pitch)
 
 # Same rate set as the Arpeggiator — keeps the project's clock idiom
 # uniform. Tracker uses these to drive step advance.
@@ -112,7 +158,8 @@ class TrackerBase(PluginBase):
         ]
 
     def on_start(self) -> None:
-        """Initialise the persistent state with one blank page."""
+        """Initialise the persistent state with one blank page, plus
+        playback / recording bookkeeping that lives only at runtime."""
         self._param_values.setdefault(
             "pages",
             [empty_page(self.TRACK_COUNT, self.MAX_ROWS_PER_PAGE)],
@@ -134,14 +181,254 @@ class TrackerBase(PluginBase):
             "cursor_row", "cursor_track", "cursor_half", "octave",
         }
 
+        # Playback bookkeeping. Playhead position is intentionally
+        # separate from current_page / cursor_row so editing during a
+        # take doesn't reposition the playback (and vice versa).
+        self._lock = threading.RLock()
+        self._playing = False
+        self._play_page = 0
+        self._play_row = 0
+        # Currently-sounding MIDI note per voice — used to fire the
+        # implicit note-off when the next non-`---` cell rolls in.
+        self._sounding: list[int | None] = [None] * self.TRACK_COUNT
+        # Chord-detection state for record-as-you-play. Notes arriving
+        # within _CHORD_WINDOW_S spread across consecutive tracks
+        # starting at the focused track.
+        self._chord_window_start = 0.0
+        self._chord_offset = 0
+
     # Output is always MIDI channel 1 (0-based: 0). Remap downstream
     # via the matrix if a different channel is needed.
     OUT_CHANNEL = 0
 
+    def on_stop(self) -> None:
+        self._silence_all()
+
     def panic(self) -> None:
-        """All notes off on the configured output channel."""
-        for note in range(128):
+        """All notes off on the configured output channel + stop the
+        playhead."""
+        with self._lock:
+            self._playing = False
+            self._silence_all()
+            # Belt-and-braces: also blanket-clear in case the synth
+            # held a note we never tracked (unlikely but cheap).
+            for note in range(128):
+                try:
+                    self.send_note_off(self.OUT_CHANNEL, note)
+                except Exception:
+                    pass
+
+    # ---- Internal: kill every voice's currently-sounding note. ----
+    def _silence_all(self) -> None:
+        for v_idx, note in enumerate(self._sounding):
+            if note is not None:
+                try:
+                    self.send_note_off(self.OUT_CHANNEL, note)
+                except Exception:
+                    pass
+                self._sounding[v_idx] = None
+
+    # ================================================================
+    # Transport — global ClockBus events
+    # ================================================================
+
+    def on_transport_start(self) -> None:
+        with self._lock:
+            self._silence_all()
+            self._play_page = 0
+            self._play_row = 0
+            self._playing = True
+
+    def on_transport_stop(self) -> None:
+        with self._lock:
+            self._silence_all()
+            self._playing = False
+
+    def on_transport_continue(self) -> None:
+        with self._lock:
+            self._playing = True
+
+    # ================================================================
+    # Tick → step advance
+    # ================================================================
+
+    def on_tick(self, division: str) -> None:
+        # If a tick arrives before a Start, treat it as the start —
+        # mirrors the Arpeggiator's behaviour and means the user can
+        # wire a Master Clock without remembering to fire Start.
+        if not self._playing:
+            with self._lock:
+                self._playing = True
+                self._play_page = 0
+                self._play_row = 0
+        if division != self._param_values.get("rate", "1/16"):
+            return
+        self._advance_step()
+
+    def _advance_step(self) -> None:
+        """Fire the events at (play_page, play_row) and walk the
+        playhead forward, honouring End markers and looping at the
+        last page."""
+        with self._lock:
+            pages = self._param_values.get("pages") or []
+            if not pages:
+                return
+            if self._play_page >= len(pages):
+                self._play_page = 0
+                self._play_row = 0
+
+            page = pages[self._play_page]
+            rows = (page.get("rows") if isinstance(page, dict) else None) or []
+            row = rows[self._play_row] if self._play_row < len(rows) else None
+
+            page_break = False
+            if isinstance(row, dict):
+                voices = row.get("voices") or []
+                # `End` on voice 1 (index 0) marks the last row of the
+                # page. Fire the row's events first, then jump.
+                v0 = voices[0] if voices else None
+                if isinstance(v0, dict) and v0.get("note") == "End":
+                    page_break = True
+                for v_idx in range(self.TRACK_COUNT):
+                    if v_idx < len(voices) and isinstance(voices[v_idx], dict):
+                        self._fire_voice(v_idx, voices[v_idx])
+
+            if page_break or self._play_row + 1 >= self.MAX_ROWS_PER_PAGE:
+                self._play_page = (self._play_page + 1) % len(pages)
+                self._play_row = 0
+            else:
+                self._play_row += 1
+
+    def _fire_voice(self, v_idx: int, voice: dict) -> None:
+        note = voice.get("note", "---")
+        vel = voice.get("vel")
+        cc_num = voice.get("cc_num")
+        cc_val = voice.get("cc_val")
+
+        # `---` = leave previous note ringing; any other value (Off /
+        # End / real pitch) implicitly note-offs the previous one.
+        if note != "---":
+            prev = self._sounding[v_idx]
+            if prev is not None:
+                try:
+                    self.send_note_off(self.OUT_CHANNEL, prev)
+                except Exception:
+                    pass
+                self._sounding[v_idx] = None
+
+            midi = note_str_to_midi(note)
+            if midi is not None:
+                v = vel if isinstance(vel, int) else 90
+                v = max(1, min(127, int(v)))
+                try:
+                    self.send_note_on(self.OUT_CHANNEL, midi, v)
+                except Exception:
+                    pass
+                self._sounding[v_idx] = midi
+
+        # CC fires independently — `.` / "--" sentinels mean "no event
+        # this step", anything numeric on both columns sends.
+        if isinstance(cc_num, int) and isinstance(cc_val, int):
             try:
-                self.send_note_off(self.OUT_CHANNEL, note)
+                self.send_cc(
+                    self.OUT_CHANNEL,
+                    max(0, min(127, int(cc_num))),
+                    max(0, min(127, int(cc_val))),
+                )
             except Exception:
                 pass
+
+    # ================================================================
+    # Recording (auto-learn) + pass-through
+    # ================================================================
+
+    def on_note_on(self, channel: int, note: int, velocity: int) -> None:
+        # Pass through to OUT first so the user always hears their
+        # playing once. Velocity 0 = note-off in the MIDI spec; just
+        # forward and let on_note_off handle the symmetric cleanup.
+        try:
+            self.send_note_on(
+                self.OUT_CHANNEL, note, max(1, min(127, int(velocity))),
+            )
+        except Exception:
+            pass
+        if velocity <= 0:
+            return
+
+        # Chord spread: notes within _CHORD_WINDOW_S land on
+        # consecutive tracks starting at cursor_track. Excess notes
+        # past TRACK_COUNT are dropped silently.
+        now = time.monotonic()
+        if now - self._chord_window_start > _CHORD_WINDOW_S:
+            self._chord_window_start = now
+            self._chord_offset = 0
+        else:
+            self._chord_offset += 1
+
+        cur_track = int(self._param_values.get("cursor_track") or 0)
+        target = cur_track + self._chord_offset
+        if target >= self.TRACK_COUNT:
+            return
+
+        note_str = midi_to_note_str(note)
+        if note_str is None:
+            return
+        self._record_voice_field(target, {
+            "note": note_str,
+            "vel": max(1, min(127, int(velocity))),
+        })
+
+    def on_note_off(self, channel: int, note: int) -> None:
+        # Pass-through only. Playback emits its own note-offs from
+        # the next non-`---` cell or `Off` cell — recording the
+        # release would just clutter the row with `Off` entries the
+        # user didn't ask for.
+        try:
+            self.send_note_off(self.OUT_CHANNEL, note)
+        except Exception:
+            pass
+
+    def on_cc(self, channel: int, cc: int, value: int) -> None:
+        try:
+            self.send_cc(
+                self.OUT_CHANNEL,
+                max(0, min(127, int(cc))),
+                max(0, min(127, int(value))),
+            )
+        except Exception:
+            pass
+        cur_track = int(self._param_values.get("cursor_track") or 0)
+        if cur_track >= self.TRACK_COUNT:
+            return
+        self._record_voice_field(cur_track, {
+            "cc_num": max(0, min(127, int(cc))),
+            "cc_val": max(0, min(127, int(value))),
+        })
+
+    def _record_voice_field(self, track_idx: int, updates: dict[str, Any]) -> None:
+        """Mutate the focused row's voice cell at `track_idx`,
+        applying every key/value in `updates`. Broadcast the new
+        `pages` via set_param so the UI reflects the recorded value
+        live across browsers."""
+        with self._lock:
+            pages = list(self._param_values.get("pages") or [])
+            cur_page = int(self._param_values.get("current_page") or 0)
+            cur_row = int(self._param_values.get("cursor_row") or 0)
+            if cur_page >= len(pages):
+                return
+            page = dict(pages[cur_page])
+            rows = list(page.get("rows") or [])
+            if cur_row >= len(rows):
+                return
+            row = dict(rows[cur_row])
+            voices = list(row.get("voices") or [])
+            if track_idx >= len(voices):
+                return
+            voice = dict(voices[track_idx])
+            voice.update(updates)
+            voices[track_idx] = voice
+            row["voices"] = voices
+            rows[cur_row] = row
+            page["rows"] = rows
+            pages[cur_page] = page
+            self.set_param("pages", pages)

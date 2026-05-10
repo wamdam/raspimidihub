@@ -372,22 +372,29 @@ export function PluginTrackerGrid({ param, values, onChange }) {
     }, [pages, page, rows, cursorRow, cursorTrack, currentPage, trackCount, onChange, param]);
 
     // ---- Keypad handlers ----
+    // Note + Vel travel together — picking a real pitch also writes
+    // the current sticky velocity so the cell isn't left with `--`
+    // (which would silently override the playback default at the
+    // engine). Picking a sentinel (---/Off/End) clears velocity to
+    // `--` so the cell shape matches the meaning.
     const onNoteWheel = useCallback((_, idx) => {
         if (idx === 0) {
-            setVoiceFields({ note: HOLD });
+            setVoiceFields({ note: HOLD, vel: CC_HOLD });
             showHelp(`Note  ${HOLD}`);
         } else if (idx === 1) {
-            setVoiceFields({ note: 'End' });
+            setVoiceFields({ note: 'End', vel: CC_HOLD });
             showHelp('Note  End');
         } else if (idx === 2) {
-            setVoiceFields({ note: 'Off' });
+            setVoiceFields({ note: 'Off', vel: CC_HOLD });
             showHelp('Note  Off');
         } else {
             const note = composeNote(NOTE_WHEEL_PITCHES[idx - 3], octave);
-            setVoiceFields({ note });
+            const vel = typeof focusedCell.vel === 'number'
+                ? focusedCell.vel : stickyVelRef.current;
+            setVoiceFields({ note, vel });
             showHelp(`Note  ${note}`);
         }
-    }, [octave, setVoiceFields, showHelp]);
+    }, [octave, focusedCell.vel, setVoiceFields, showHelp]);
 
     const onOctave = useCallback((_, oct) => {
         onChange(param.octave_param, oct);
@@ -395,10 +402,15 @@ export function PluginTrackerGrid({ param, values, onChange }) {
         // If the focused cell currently holds a real pitch, rewrite
         // its octave digit so what you see in the cell matches the
         // wheel. Sentinels (---/End/Off) stay as-is — the wheel just
-        // sticks for next entry.
+        // sticks for next entry. Vel goes along with the rewrite so
+        // the cell never carries a real pitch with `--` velocity.
         const pitch = getPitchPart(focusedCell.note);
-        if (pitch) setVoiceFields({ note: composeNote(pitch, oct) });
-    }, [focusedCell.note, onChange, param, setVoiceFields, showHelp]);
+        if (pitch) {
+            const vel = typeof focusedCell.vel === 'number'
+                ? focusedCell.vel : stickyVelRef.current;
+            setVoiceFields({ note: composeNote(pitch, oct), vel });
+        }
+    }, [focusedCell.note, focusedCell.vel, onChange, param, setVoiceFields, showHelp]);
 
     const onVel = useCallback((_, v) => {
         setVoiceFields({ vel: v });

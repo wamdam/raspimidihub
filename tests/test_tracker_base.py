@@ -1,7 +1,7 @@
-"""Tracker MVP — covers the data model + plugin registration shape.
-
-Playback / auto-learn behaviour is exercised in later tests once the
-engine is wired."""
+"""Tracker MVP — data model, plugin registration, playback engine,
+and auto-learn recording. The frontend's covered by manual /
+Playwright checks; this file pins the Python-side behaviours so the
+ALSA-scheduling refactor can land later without breaking semantics."""
 
 import pytest
 
@@ -16,6 +16,8 @@ from raspimidihub.tracker_base import (
     empty_page,
     empty_row,
     empty_voice,
+    midi_to_note_str,
+    note_str_to_midi,
 )
 
 
@@ -113,7 +115,7 @@ def test_on_start_seeds_one_blank_page():
 
 def test_on_start_preserves_existing_state():
     t = _DemoTracker()
-    custom_page = {"rows": [{"voices": [{"note": "C-3", "vel": 90,
+    custom_page = {"rows": [{"voices": [{"note": "C-4", "vel": 90,
                                           "cc_num": 1, "cc_val": 64}]}]}
     t._param_values["pages"] = [custom_page]
     t._param_values["octave"] = 5
@@ -137,3 +139,294 @@ def test_panic_calls_send_note_off_for_every_pitch():
 @pytest.mark.parametrize("rate", ["1/4", "1/8", "1/16", "1/16T"])
 def test_clock_divisions_include_standard_rates(rate):
     assert rate in TrackerBase.clock_divisions
+
+
+# ---------------------------------------------------------------------------
+# Note-string ↔ MIDI conversion
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("midi,expected", [
+    (12, "C-0"),
+    (13, "C#0"),
+    (60, "C-4"),         # Middle C in our 0-based-octave convention
+    (61, "C#4"),
+    (119, "B-8"),        # B-9 = MIDI 131 → unreachable
+    (127, "G-9"),        # top of MIDI range, last representable note
+])
+def test_midi_to_note_str_in_range(midi, expected):
+    assert midi_to_note_str(midi) == expected
+
+
+@pytest.mark.parametrize("midi", [-1, 0, 11, 128, 200])
+def test_midi_to_note_str_out_of_range(midi):
+    assert midi_to_note_str(midi) is None
+
+
+def test_note_str_to_midi_roundtrip_full_range():
+    for midi in range(12, 128):
+        s = midi_to_note_str(midi)
+        assert s is not None
+        assert note_str_to_midi(s) == midi
+
+
+@pytest.mark.parametrize("s", ["---", "Off", "End", "", "X-3", "C#A", "C+3"])
+def test_note_str_to_midi_rejects_sentinels_and_garbage(s):
+    assert note_str_to_midi(s) is None
+
+
+# ---------------------------------------------------------------------------
+# Playback engine
+# ---------------------------------------------------------------------------
+
+class _Sender:
+    """Captures every send_* call as a tagged tuple in the order
+    fired so tests can assert sequence + payload."""
+
+    def __init__(self):
+        self.events: list[tuple] = []
+
+    def attach(self, plugin):
+        plugin._send_note_on = lambda ch, note, vel: self.events.append(("on", ch, note, vel))
+        plugin._send_note_off = lambda ch, note: self.events.append(("off", ch, note))
+        plugin._send_cc = lambda ch, cc, val: self.events.append(("cc", ch, cc, val))
+
+
+def _started(track_count=4):
+    """Tracker subclass instance with the engine wired up."""
+
+    class _T(TrackerBase):
+        NAME = "T"
+        TRACK_COUNT = track_count
+
+    t = _T()
+    t.on_start()
+    return t
+
+
+def test_on_tick_ignores_non_matching_division():
+    t = _started()
+    s = _Sender()
+    s.attach(t)
+    t._param_values["rate"] = "1/16"
+    t.on_transport_start()
+    t.on_tick("1/4")
+    assert s.events == []
+
+
+def test_on_tick_first_tick_starts_playback_without_explicit_start():
+    # Mirrors the Arpeggiator's "fail-safe" behaviour: if a tick
+    # arrives before on_transport_start, treat it as the start.
+    t = _started()
+    s = _Sender()
+    s.attach(t)
+    pages = [{"rows": [
+        {"voices": [{"note": "C-4", "vel": 90, "cc_num": ".", "cc_val": "--"}] +
+                   [empty_voice() for _ in range(3)]},
+    ]}]
+    t._param_values["pages"] = pages
+    t._param_values["rate"] = "1/16"
+    t.on_tick("1/16")
+    assert ("on", 0, 60, 90) in s.events
+
+
+def test_advance_step_fires_note_on_and_tracks_sounding():
+    t = _started()
+    s = _Sender()
+    s.attach(t)
+    page = {"rows": [
+        {"voices": [{"note": "C-4", "vel": 90, "cc_num": ".", "cc_val": "--"},
+                    empty_voice(), empty_voice(), empty_voice()]},
+        {"voices": [{"note": "D-4", "vel": 100, "cc_num": ".", "cc_val": "--"},
+                    empty_voice(), empty_voice(), empty_voice()]},
+    ]}
+    t._param_values["pages"] = [page]
+    t._param_values["rate"] = "1/16"
+    t.on_transport_start()
+    t.on_tick("1/16")
+    t.on_tick("1/16")
+    # Row 0: note-on C-3. Row 1: note-off C-3 (implicit) + note-on D-3.
+    assert ("on", 0, 60, 90) in s.events
+    assert ("off", 0, 60) in s.events
+    assert ("on", 0, 62, 100) in s.events
+    assert s.events.index(("off", 0, 60)) < s.events.index(("on", 0, 62, 100))
+    assert t._sounding[0] == 62
+
+
+def test_off_cell_silences_voice():
+    t = _started()
+    s = _Sender()
+    s.attach(t)
+    t._param_values["pages"] = [{"rows": [
+        {"voices": [{"note": "C-4", "vel": 90, "cc_num": ".", "cc_val": "--"},
+                    empty_voice(), empty_voice(), empty_voice()]},
+        {"voices": [{"note": "Off", "vel": "--", "cc_num": ".", "cc_val": "--"},
+                    empty_voice(), empty_voice(), empty_voice()]},
+    ]}]
+    t._param_values["rate"] = "1/16"
+    t.on_transport_start()
+    t.on_tick("1/16")
+    t.on_tick("1/16")
+    assert ("off", 0, 60) in s.events
+    assert t._sounding[0] is None
+
+
+def test_hold_sentinel_does_not_retrigger():
+    t = _started()
+    s = _Sender()
+    s.attach(t)
+    t._param_values["pages"] = [{"rows": [
+        {"voices": [{"note": "C-4", "vel": 90, "cc_num": ".", "cc_val": "--"},
+                    empty_voice(), empty_voice(), empty_voice()]},
+        {"voices": [{"note": "---", "vel": "--", "cc_num": ".", "cc_val": "--"},
+                    empty_voice(), empty_voice(), empty_voice()]},
+    ]}]
+    t._param_values["rate"] = "1/16"
+    t.on_transport_start()
+    t.on_tick("1/16")
+    s.events.clear()       # discard the row-0 events
+    t.on_tick("1/16")      # row 1 is `---` → no MIDI
+    assert s.events == []
+    assert t._sounding[0] == 60
+
+
+def test_cc_fires_independent_of_note():
+    t = _started()
+    s = _Sender()
+    s.attach(t)
+    t._param_values["pages"] = [{"rows": [
+        {"voices": [{"note": "---", "vel": "--", "cc_num": 1, "cc_val": 64},
+                    empty_voice(), empty_voice(), empty_voice()]},
+    ]}]
+    t._param_values["rate"] = "1/16"
+    t.on_transport_start()
+    t.on_tick("1/16")
+    assert ("cc", 0, 1, 64) in s.events
+
+
+def test_end_marker_jumps_to_next_page():
+    t = _started()
+    s = _Sender()
+    s.attach(t)
+    t._param_values["pages"] = [
+        {"rows": [
+            {"voices": [{"note": "End", "vel": "--", "cc_num": ".", "cc_val": "--"},
+                        empty_voice(), empty_voice(), empty_voice()]},
+        ] + [empty_row(4) for _ in range(15)]},
+        {"rows": [
+            {"voices": [{"note": "C-4", "vel": 90, "cc_num": ".", "cc_val": "--"},
+                        empty_voice(), empty_voice(), empty_voice()]},
+        ] + [empty_row(4) for _ in range(15)]},
+    ]
+    t._param_values["rate"] = "1/16"
+    t.on_transport_start()
+    t.on_tick("1/16")     # row 0 of page 0 = End — fires nothing, jumps
+    t.on_tick("1/16")     # row 0 of page 1 — should fire C-3
+    assert ("on", 0, 60, 90) in s.events
+    assert t._play_page == 1
+    assert t._play_row == 1
+
+
+def test_last_page_loops_back_to_zero():
+    t = _started()
+    s = _Sender()
+    s.attach(t)
+    page = {"rows": [empty_row(4) for _ in range(16)]}
+    t._param_values["pages"] = [page]   # single page → row F should wrap
+    t._param_values["rate"] = "1/16"
+    t.on_transport_start()
+    t._play_row = 15
+    t.on_tick("1/16")
+    assert t._play_page == 0
+    assert t._play_row == 0
+
+
+def test_transport_stop_silences_sounding():
+    t = _started()
+    s = _Sender()
+    s.attach(t)
+    t._sounding[0] = 60
+    t._sounding[2] = 64
+    t.on_transport_stop()
+    assert ("off", 0, 60) in s.events
+    assert ("off", 0, 64) in s.events
+    assert all(n is None for n in t._sounding)
+    assert t._playing is False
+
+
+# ---------------------------------------------------------------------------
+# Recording / auto-learn
+# ---------------------------------------------------------------------------
+
+def test_on_note_on_passes_through_and_records():
+    t = _started()
+    s = _Sender()
+    s.attach(t)
+    t._param_values["cursor_row"] = 4
+    t._param_values["cursor_track"] = 1
+    t.on_note_on(channel=2, note=60, velocity=100)
+    assert ("on", 0, 60, 100) in s.events       # pass-through to ch 1
+    cell = t._param_values["pages"][0]["rows"][4]["voices"][1]
+    assert cell["note"] == "C-4"
+    assert cell["vel"] == 100
+
+
+def test_chord_spreads_across_consecutive_tracks():
+    t = _started()
+    t._param_values["cursor_row"] = 0
+    t._param_values["cursor_track"] = 1
+    # Three notes within the chord window → tracks 1, 2, 3.
+    t.on_note_on(2, 60, 100)
+    t.on_note_on(2, 64, 100)
+    t.on_note_on(2, 67, 100)
+    voices = t._param_values["pages"][0]["rows"][0]["voices"]
+    assert voices[1]["note"] == "C-4"
+    assert voices[2]["note"] == "E-4"
+    assert voices[3]["note"] == "G-4"
+
+
+def test_chord_overflow_drops_silently():
+    t = _started(track_count=4)
+    t._param_values["cursor_row"] = 0
+    t._param_values["cursor_track"] = 3   # only T4 left
+    t.on_note_on(2, 60, 100)              # → T4
+    t.on_note_on(2, 64, 100)              # off the end, dropped
+    voices = t._param_values["pages"][0]["rows"][0]["voices"]
+    assert voices[3]["note"] == "C-4"
+    # The dropped note should not appear anywhere.
+    assert all(v["note"] != "E-4" for v in voices)
+
+
+def test_on_cc_passes_through_and_records():
+    t = _started()
+    s = _Sender()
+    s.attach(t)
+    t._param_values["cursor_row"] = 2
+    t._param_values["cursor_track"] = 0
+    t.on_cc(channel=2, cc=7, value=100)
+    assert ("cc", 0, 7, 100) in s.events
+    cell = t._param_values["pages"][0]["rows"][2]["voices"][0]
+    assert cell["cc_num"] == 7
+    assert cell["cc_val"] == 100
+
+
+def test_on_note_off_passes_through_only():
+    t = _started()
+    s = _Sender()
+    s.attach(t)
+    t.on_note_off(channel=2, note=60)
+    assert s.events == [("off", 0, 60)]
+    # No row was touched — the cells are still default sentinels.
+    cell = t._param_values["pages"][0]["rows"][0]["voices"][0]
+    assert cell["note"] == NOTE_HOLD
+
+
+def test_panic_silences_all_voices_and_stops_playback():
+    t = _started()
+    s = _Sender()
+    s.attach(t)
+    t._sounding[0] = 60
+    t._playing = True
+    t.panic()
+    assert ("off", 0, 60) in s.events
+    assert t._playing is False
+    assert all(n is None for n in t._sounding)
