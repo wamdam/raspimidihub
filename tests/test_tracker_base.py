@@ -230,9 +230,8 @@ def test_on_tick_does_nothing_without_transport_start():
     t.on_tick("1/16")
     assert s.events == []
     assert t._playing is False
-    # After Start, ticks fire normally.
+    # Start fires row 0 immediately (no 1/16 lag).
     t.on_transport_start()
-    t.on_tick("1/16")
     assert ("on", 0, 60, 90) in s.events
 
 
@@ -248,10 +247,8 @@ def test_advance_step_fires_note_on_and_tracks_sounding():
     ]}
     t._param_values["pages"] = [page]
     t._param_values["rate"] = "1/16"
-    t.on_transport_start()
-    t.on_tick("1/16")
-    t.on_tick("1/16")
-    # Row 0: note-on C-3. Row 1: note-off C-3 (implicit) + note-on D-3.
+    t.on_transport_start()    # fires row 0 (C-4) immediately
+    t.on_tick("1/16")         # fires row 1 (D-4): off C-4, on D-4
     assert ("on", 0, 60, 90) in s.events
     assert ("off", 0, 60) in s.events
     assert ("on", 0, 62, 100) in s.events
@@ -270,9 +267,8 @@ def test_off_cell_silences_voice():
                     empty_voice(), empty_voice(), empty_voice()]},
     ]}]
     t._param_values["rate"] = "1/16"
-    t.on_transport_start()
-    t.on_tick("1/16")
-    t.on_tick("1/16")
+    t.on_transport_start()    # row 0 fires C-4
+    t.on_tick("1/16")         # row 1 fires Off → cuts C-4
     assert ("off", 0, 60) in s.events
     assert t._sounding[0] is None
 
@@ -288,10 +284,9 @@ def test_hold_sentinel_does_not_retrigger():
                     empty_voice(), empty_voice(), empty_voice()]},
     ]}]
     t._param_values["rate"] = "1/16"
-    t.on_transport_start()
-    t.on_tick("1/16")
-    s.events.clear()       # discard the row-0 events
-    t.on_tick("1/16")      # row 1 is `---` → no MIDI
+    t.on_transport_start()  # row 0 fires C-4
+    s.events.clear()        # discard the row-0 events
+    t.on_tick("1/16")       # row 1 is `---` → no MIDI
     assert s.events == []
     assert t._sounding[0] == 60
 
@@ -305,8 +300,7 @@ def test_cc_fires_independent_of_note():
                     empty_voice(), empty_voice(), empty_voice()]},
     ]}]
     t._param_values["rate"] = "1/16"
-    t.on_transport_start()
-    t.on_tick("1/16")
+    t.on_transport_start()    # row 0 fires immediately — CC and all
     assert ("cc", 0, 1, 64) in s.events
 
 
@@ -325,9 +319,8 @@ def test_end_marker_jumps_to_next_page():
         ] + [empty_row(4) for _ in range(15)]},
     ]
     t._param_values["rate"] = "1/16"
-    t.on_transport_start()
-    t.on_tick("1/16")     # row 0 of page 0 = End — fires nothing, jumps
-    t.on_tick("1/16")     # row 0 of page 1 — should fire C-3
+    t.on_transport_start()  # fires End at page 0 row 0, jumps to page 1
+    t.on_tick("1/16")       # fires page 1 row 0 (C-4)
     assert ("on", 0, 60, 90) in s.events
     assert t._play_page == 1
     assert t._play_row == 1
@@ -356,17 +349,17 @@ def test_playhead_broadcasts_just_played_position():
     page = {"rows": [empty_row(4) for _ in range(16)]}
     t._param_values["pages"] = [page]
     t._param_values["rate"] = "1/16"
-    t.on_transport_start()
-    # transport_start publishes {page:0, row:0, playing:True}
+    t.on_transport_start()    # fires row 0 immediately
     assert t._param_values["playhead"] == {"page": 0, "row": 0, "playing": True}
-    t.on_tick("1/16")     # fires row 0, advances to row 1
-    assert t._param_values["playhead"] == {"page": 0, "row": 0, "playing": True}
-    t.on_tick("1/16")     # fires row 1, advances to row 2
+    t.on_tick("1/16")         # fires row 1
     assert t._param_values["playhead"] == {"page": 0, "row": 1, "playing": True}
+    t.on_tick("1/16")         # fires row 2
+    assert t._param_values["playhead"] == {"page": 0, "row": 2, "playing": True}
 
 
 def test_playhead_clears_on_transport_stop():
     t = _started()
+    t._param_values["pages"] = [{"rows": [empty_row(4) for _ in range(16)]}]
     t.on_transport_start()
     assert t._param_values["playhead"]["playing"] is True
     t.on_transport_stop()
@@ -403,11 +396,51 @@ def test_on_note_on_passes_through_and_records():
     assert cell["vel"] == 100
 
 
+def test_single_note_on_advances_cursor_one_row():
+    t = _started()
+    t._param_values["cursor_row"] = 5
+    t._param_values["cursor_track"] = 0
+    t.on_note_on(2, 60, 100)
+    assert t._param_values["pages"][0]["rows"][5]["voices"][0]["note"] == "C-4"
+    assert t._param_values["cursor_row"] == 6
+
+
+def test_cursor_wraps_at_row_F_to_next_page_on_recording():
+    t = _started()
+    t._param_values["pages"] = [
+        {"rows": [empty_row(4) for _ in range(16)]},
+        {"rows": [empty_row(4) for _ in range(16)]},
+    ]
+    t._param_values["current_page"] = 0
+    t._param_values["cursor_row"] = 15      # row F
+    t._param_values["cursor_track"] = 0
+    t.on_note_on(2, 60, 100)
+    # The note still wrote to row F of page 0 (the captured chord row).
+    assert t._param_values["pages"][0]["rows"][15]["voices"][0]["note"] == "C-4"
+    # Cursor advanced past F → next page row 0.
+    assert t._param_values["cursor_row"] == 0
+    assert t._param_values["current_page"] == 1
+
+
+def test_cursor_wraps_from_last_page_back_to_zero_on_recording():
+    t = _started()
+    t._param_values["pages"] = [{"rows": [empty_row(4) for _ in range(16)]}]
+    t._param_values["current_page"] = 0
+    t._param_values["cursor_row"] = 15
+    t._param_values["cursor_track"] = 0
+    t.on_note_on(2, 60, 100)
+    # Single page → row F wraps back to row 0 of the same (only) page.
+    assert t._param_values["cursor_row"] == 0
+    assert t._param_values["current_page"] == 0
+
+
 def test_chord_spreads_across_consecutive_tracks():
     t = _started()
     t._param_values["cursor_row"] = 0
     t._param_values["cursor_track"] = 1
-    # Three notes within the chord window → tracks 1, 2, 3.
+    # Three notes within the chord window → tracks 1, 2, 3 of the
+    # captured chord row (row 0). Cursor itself advances one step at
+    # chord-start so the next chord lands on row 1.
     t.on_note_on(2, 60, 100)
     t.on_note_on(2, 64, 100)
     t.on_note_on(2, 67, 100)
@@ -415,6 +448,7 @@ def test_chord_spreads_across_consecutive_tracks():
     assert voices[1]["note"] == "C-4"
     assert voices[2]["note"] == "E-4"
     assert voices[3]["note"] == "G-4"
+    assert t._param_values["cursor_row"] == 1
 
 
 def test_chord_overflow_drops_silently():
@@ -440,6 +474,9 @@ def test_on_cc_passes_through_and_records():
     cell = t._param_values["pages"][0]["rows"][2]["voices"][0]
     assert cell["cc_num"] == 7
     assert cell["cc_val"] == 100
+    # CCs don't auto-advance — only notes do. (Twiddling a knob
+    # would race the cursor down otherwise.)
+    assert t._param_values["cursor_row"] == 2
 
 
 def test_on_note_off_passes_through_only():

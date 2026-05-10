@@ -200,9 +200,14 @@ class TrackerBase(PluginBase):
         self._sounding: list[int | None] = [None] * self.TRACK_COUNT
         # Chord-detection state for record-as-you-play. Notes arriving
         # within _CHORD_WINDOW_S spread across consecutive tracks
-        # starting at the focused track.
+        # starting at the focused track. `_chord_page` / `_chord_row`
+        # snapshot the cursor at chord-start so all chord notes land
+        # on the same row even though the cursor advances right away
+        # to the next row (so the next chord goes one step down).
         self._chord_window_start = 0.0
         self._chord_offset = 0
+        self._chord_page = 0
+        self._chord_row = 0
 
     # Output is always MIDI channel 1 (0-based: 0). Remap downstream
     # via the matrix if a different channel is needed.
@@ -256,7 +261,15 @@ class TrackerBase(PluginBase):
             self._play_page = 0
             self._play_row = 0
             self._playing = True
-        self._publish_playhead()
+        # Fire row 0 right at the Start moment. Without this the first
+        # row would sound 1/16 (or whatever rate) late: the ClockBus
+        # increments tick_count to 1 on the first MIDI Clock after
+        # Start and only fires `on_tick(<division>)` when
+        # tick_count % div_ticks == 0 — i.e. on tick 6 for 1/16. So
+        # the very first division-tick lands a full step late. Firing
+        # row 0 here closes that gap; subsequent on_tick callbacks
+        # walk through rows 1, 2, … on time.
+        self._advance_step()
 
     def on_transport_stop(self) -> None:
         with self._lock:
@@ -388,28 +401,52 @@ class TrackerBase(PluginBase):
         if velocity <= 0:
             return
 
-        # Chord spread: notes within _CHORD_WINDOW_S land on
-        # consecutive tracks starting at cursor_track. Excess notes
-        # past TRACK_COUNT are dropped silently.
+        # Chord boundary detection. The first note of a chord captures
+        # the current cursor row + page (where chord notes go) and
+        # immediately advances the cursor down one step so the next
+        # chord lands on the next row. Subsequent chord notes within
+        # _CHORD_WINDOW_S keep writing to the captured row.
         now = time.monotonic()
         if now - self._chord_window_start > _CHORD_WINDOW_S:
             self._chord_window_start = now
             self._chord_offset = 0
+            self._chord_page = int(self._param_values.get("current_page") or 0)
+            self._chord_row = int(self._param_values.get("cursor_row") or 0)
+            self._auto_advance_cursor()
         else:
             self._chord_offset += 1
 
         cur_track = int(self._param_values.get("cursor_track") or 0)
         target = cur_track + self._chord_offset
         if target >= self.TRACK_COUNT:
-            return
+            return  # excess chord notes drop silently
 
         note_str = midi_to_note_str(note)
         if note_str is None:
             return
-        self._record_voice_field(target, {
-            "note": note_str,
-            "vel": max(1, min(127, int(velocity))),
-        })
+        self._record_voice_field_at(
+            self._chord_page, self._chord_row, target,
+            {"note": note_str, "vel": max(1, min(127, int(velocity)))},
+        )
+
+    def _auto_advance_cursor(self) -> None:
+        """Step cursor_row down by 1, wrapping at the page boundary
+        (row F → next page row 0; last page wraps to page 0). Both
+        cursor_row and current_page broadcast via set_param so the
+        frontend cursor moves visibly."""
+        pages = self._param_values.get("pages") or []
+        page_count = max(1, len(pages))
+        cur_row = int(self._param_values.get("cursor_row") or 0)
+        cur_page = int(self._param_values.get("current_page") or 0)
+        next_row = cur_row + 1
+        next_page = cur_page
+        if next_row >= self.MAX_ROWS_PER_PAGE:
+            next_row = 0
+            next_page = (cur_page + 1) % page_count
+        if next_row != cur_row:
+            self.set_param("cursor_row", next_row)
+        if next_page != cur_page:
+            self.set_param("current_page", next_page)
 
     def on_note_off(self, channel: int, note: int) -> None:
         # Pass-through only. Playback emits its own note-offs from
@@ -439,21 +476,31 @@ class TrackerBase(PluginBase):
         })
 
     def _record_voice_field(self, track_idx: int, updates: dict[str, Any]) -> None:
-        """Mutate the focused row's voice cell at `track_idx`,
-        applying every key/value in `updates`. Broadcast the new
-        `pages` via set_param so the UI reflects the recorded value
-        live across browsers."""
+        """Convenience wrapper for `_record_voice_field_at` at the
+        currently focused (page, row). Used for CC recording where
+        the target is always wherever the cursor is right now."""
+        cur_page = int(self._param_values.get("current_page") or 0)
+        cur_row = int(self._param_values.get("cursor_row") or 0)
+        self._record_voice_field_at(cur_page, cur_row, track_idx, updates)
+
+    def _record_voice_field_at(
+        self, page_idx: int, row_idx: int, track_idx: int,
+        updates: dict[str, Any],
+    ) -> None:
+        """Mutate `pages[page_idx].rows[row_idx].voices[track_idx]`
+        with `updates`. Broadcasts the new `pages` via set_param so
+        the UI reflects the recorded value live across browsers.
+        Called with an explicit (page, row) so chord notes write to
+        the captured chord row even after the cursor has advanced."""
         with self._lock:
             pages = list(self._param_values.get("pages") or [])
-            cur_page = int(self._param_values.get("current_page") or 0)
-            cur_row = int(self._param_values.get("cursor_row") or 0)
-            if cur_page >= len(pages):
+            if page_idx >= len(pages):
                 return
-            page = dict(pages[cur_page])
+            page = dict(pages[page_idx])
             rows = list(page.get("rows") or [])
-            if cur_row >= len(rows):
+            if row_idx >= len(rows):
                 return
-            row = dict(rows[cur_row])
+            row = dict(rows[row_idx])
             voices = list(row.get("voices") or [])
             if track_idx >= len(voices):
                 return
@@ -461,7 +508,7 @@ class TrackerBase(PluginBase):
             voice.update(updates)
             voices[track_idx] = voice
             row["voices"] = voices
-            rows[cur_row] = row
+            rows[row_idx] = row
             page["rows"] = rows
-            pages[cur_page] = page
+            pages[page_idx] = page
             self.set_param("pages", pages)
