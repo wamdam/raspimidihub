@@ -67,6 +67,7 @@ def test_subclass_params_carry_tracker_grid():
     assert g.cursor_row_param == "cursor_row"
     assert g.cursor_track_param == "cursor_track"
     assert g.cursor_half_param == "cursor_half"
+    assert g.octave_param == "octave"
     assert g.rate_param == "rate"
 
 
@@ -84,7 +85,7 @@ def test_schema_param_keys_collects_tracker_aux():
     # `rate` which is now reached through `rate_param` instead of a
     # standalone Radio, and `cursor_half` which controls keypad split.
     for name in ("pages", "current_page", "cursor_row", "cursor_track",
-                 "cursor_half", "rate"):
+                 "cursor_half", "octave", "rate"):
         assert name in keys, f"missing aux key {name!r}"
     # Channel / sync / show-tracks were trimmed: output is always ch 1
     # and transport is always external. Make sure the schema doesn't
@@ -102,10 +103,11 @@ def test_on_start_seeds_one_blank_page():
     assert t._param_values["current_page"] == 0
     assert t._param_values["cursor_row"] == 0
     assert t._param_values["cursor_track"] == 0
+    assert t._param_values["octave"] == 3
     assert t._param_values["rate"] == "1/16"
     assert t._param_values["cursor_half"] == "note"
     assert t.transient_params == {
-        "cursor_row", "cursor_track", "cursor_half",
+        "cursor_row", "cursor_track", "cursor_half", "octave",
     }
 
 
@@ -114,10 +116,10 @@ def test_on_start_preserves_existing_state():
     custom_page = {"rows": [{"voices": [{"note": "C-3", "vel": 90,
                                           "cc_num": 1, "cc_val": 64}]}]}
     t._param_values["pages"] = [custom_page]
-    t._param_values["rate"] = "1/8"
+    t._param_values["octave"] = 5
     t.on_start()
     assert t._param_values["pages"] == [custom_page]
-    assert t._param_values["rate"] == "1/8"
+    assert t._param_values["octave"] == 5
 
 
 def test_panic_calls_send_note_off_for_every_pitch():

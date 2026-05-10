@@ -1187,6 +1187,15 @@ body {
     flex: 0 1 auto;
     min-width: 60px;
 }
+/* Narrow column for the Octave wheel: single hex digit, no need for
+ * the standard 80-px container. */
+.tracker-keypad-col-narrow { min-width: 44px; }
+.tracker-keypad-col-narrow .wheel-container { width: 44px; }
+/* Small column for the Vel / CC-Val knobs — the default 72-px knob
+ * + 2-char hex value is overkill next to a tight Octave wheel. */
+.tracker-keypad-col-small { min-width: 56px; }
+.tracker-keypad-col-small .knob-container { max-width: 50px; width: 50px; }
+.tracker-keypad-col-small .knob-value { font-size: 12px; }
 /* Cursor stays pinned right regardless of which half is shown on
  * the left, so the inverted-T never jumps under the user's thumb. */
 .tracker-keypad-cursor-col {

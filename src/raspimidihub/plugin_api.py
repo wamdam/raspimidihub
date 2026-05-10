@@ -350,6 +350,7 @@ class TrackerGrid:
     cursor_row_param: str | None = None
     cursor_track_param: str | None = None
     cursor_half_param: str | None = None
+    octave_param: str | None = None
     rate_param: str | None = None
 
     def to_dict(self) -> dict:
@@ -363,7 +364,7 @@ class TrackerGrid:
         }
         for attr in ("pages_param", "current_page_param", "cursor_row_param",
                      "cursor_track_param", "cursor_half_param",
-                     "rate_param"):
+                     "octave_param", "rate_param"):
             v = getattr(self, attr)
             if v:
                 d[attr] = v

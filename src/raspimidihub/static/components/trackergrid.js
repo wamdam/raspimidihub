@@ -97,15 +97,13 @@ const RATE_OPTIONS = [
     '1/16', '1/16T', '1/32',
 ];
 
-// Note wheel — one continuous wheel holding every note the cell can
-// take, plus the three sentinels. Index 0..2 = ---/End/Off, then
-// 12 pitches × 10 octaves (C-0..B-9) at indices 3..122. Replaces the
-// earlier two-wheel design (pitch + octave) — Note + Octave together
-// took too much horizontal space on phone.
-const NOTE_PITCHES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-const NOTE_OCTAVES = 10;                      // 0..9, single hex digit
-const NOTE_WHEEL_PITCH_BASE = 3;              // index of first real pitch
-const NOTE_WHEEL_MAX = NOTE_WHEEL_PITCH_BASE + NOTE_PITCHES.length * NOTE_OCTAVES - 1;
+// Note wheel — 15 positions. Sentinels at the start so they're a
+// thumb-flick away from "no entry"; the 12 chromatic pitches follow
+// at indices 3..14. The actual cell.note string is composed with the
+// adjacent Octave wheel (composeNote).
+const NOTE_WHEEL_LABELS = ['---', 'End', 'Off',
+    'C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+const NOTE_WHEEL_PITCHES = NOTE_WHEEL_LABELS.slice(3);
 const NOTE_SENTINELS = new Set([HOLD, 'End', 'Off']);
 
 function isRealPitch(note) {
@@ -130,25 +128,14 @@ function composeNote(pitch, octave) {
     return pitch.length === 1 ? `${pitch}-${octave}` : `${pitch}${octave}`;
 }
 
-function noteWheelLabel(idx) {
-    if (idx === 0) return HOLD;
-    if (idx === 1) return 'End';
-    if (idx === 2) return 'Off';
-    const n = idx - NOTE_WHEEL_PITCH_BASE;
-    const oct = Math.floor(n / NOTE_PITCHES.length);
-    return composeNote(NOTE_PITCHES[n % NOTE_PITCHES.length], oct);
-}
-
 function noteToWheelIdx(note) {
     if (note === HOLD) return 0;
     if (note === 'End') return 1;
     if (note === 'Off') return 2;
     const pitch = getPitchPart(note);
-    const oct = getOctavePart(note);
-    if (pitch == null || oct == null) return 0;
-    const pitchIdx = NOTE_PITCHES.indexOf(pitch);
-    if (pitchIdx < 0) return 0;
-    return NOTE_WHEEL_PITCH_BASE + oct * NOTE_PITCHES.length + pitchIdx;
+    if (!pitch) return 0;
+    const idx = NOTE_WHEEL_PITCHES.indexOf(pitch);
+    return idx >= 0 ? idx + 3 : 0;
 }
 
 // 2-char hex labels 00..7F so the VEL / CC-VAL knobs match what
@@ -353,6 +340,7 @@ export function PluginTrackerGrid({ param, values, onChange }) {
     // gets the new value.
     const focusedRow = rows[cursorRow] || emptyRow(trackCount);
     const focusedCell = focusedRow.voices[cursorTrack] || emptyVoice();
+    const octave = clamp(values[param.octave_param] ?? 3, 0, 9);
 
     const stickyVelRef = useRef(80);
     const stickyCcNumRef = useRef(1);
@@ -385,10 +373,32 @@ export function PluginTrackerGrid({ param, values, onChange }) {
 
     // ---- Keypad handlers ----
     const onNoteWheel = useCallback((_, idx) => {
-        const note = noteWheelLabel(idx);
-        setVoiceFields({ note });
-        showHelp(`Note  ${note}`);
-    }, [setVoiceFields, showHelp]);
+        if (idx === 0) {
+            setVoiceFields({ note: HOLD });
+            showHelp(`Note  ${HOLD}`);
+        } else if (idx === 1) {
+            setVoiceFields({ note: 'End' });
+            showHelp('Note  End');
+        } else if (idx === 2) {
+            setVoiceFields({ note: 'Off' });
+            showHelp('Note  Off');
+        } else {
+            const note = composeNote(NOTE_WHEEL_PITCHES[idx - 3], octave);
+            setVoiceFields({ note });
+            showHelp(`Note  ${note}`);
+        }
+    }, [octave, setVoiceFields, showHelp]);
+
+    const onOctave = useCallback((_, oct) => {
+        onChange(param.octave_param, oct);
+        showHelp(`Octave  ${oct}`);
+        // If the focused cell currently holds a real pitch, rewrite
+        // its octave digit so what you see in the cell matches the
+        // wheel. Sentinels (---/End/Off) stay as-is — the wheel just
+        // sticks for next entry.
+        const pitch = getPitchPart(focusedCell.note);
+        if (pitch) setVoiceFields({ note: composeNote(pitch, oct) });
+    }, [focusedCell.note, onChange, param, setVoiceFields, showHelp]);
 
     const onVel = useCallback((_, v) => {
         setVoiceFields({ vel: v });
@@ -420,9 +430,13 @@ export function PluginTrackerGrid({ param, values, onChange }) {
         showHelp('Cleared CC# + CC Val');
     }, [setVoiceFields, showHelp]);
 
-    // Tick label for the Note wheel — single wheel iterating
-    // ---/End/Off then C-0..B-9.
-    const noteTickLabel = useCallback((idx) => noteWheelLabel(idx), []);
+    // Tick label for the Note wheel — sentinels then 12 pitches with
+    // the current Octave wheel value baked in so each detent shows
+    // what it will commit ("F#3", not "F#").
+    const noteTickLabel = useCallback((idx) => {
+        if (idx <= 2) return NOTE_WHEEL_LABELS[idx];
+        return composeNote(NOTE_WHEEL_PITCHES[idx - 3], octave);
+    }, [octave]);
 
     // Tick label for the CC# wheel — `.` at -1, hex elsewhere.
     const ccNumTickLabel = useCallback((v) => v === -1 ? '.' : fmt2hex(v), []);
@@ -535,14 +549,18 @@ export function PluginTrackerGrid({ param, values, onChange }) {
     const noteHalf = html`<div class="tracker-keypad-half">
         <div class="tracker-keypad-col">
             <div class="tracker-keypad-label">NOTE</div>
-            <${PluginWheel} name="note_wheel" label=""
-                min=${0} max=${NOTE_WHEEL_MAX}
+            <${PluginWheel} name="note_wheel" label="" min=${0} max=${14}
                 value=${noteWheelIdx}
                 onChange=${onNoteWheel} tickLabel=${noteTickLabel} />
             <button class="tracker-keypad-del" onclick=${onDelNote}
                 title="Clear Note + Velocity">Del</button>
         </div>
-        <div class="tracker-keypad-col">
+        <div class="tracker-keypad-col tracker-keypad-col-narrow">
+            <div class="tracker-keypad-label">OCT</div>
+            <${PluginWheel} name="octave_wheel" label="" min=${0} max=${9}
+                value=${octave} onChange=${onOctave} />
+        </div>
+        <div class="tracker-keypad-col tracker-keypad-col-small">
             <div class="tracker-keypad-label">VEL</div>
             <${PluginKnob} name="vel" label="" min=${0} max=${127}
                 value=${velValue} labels=${HEX_LABELS_128}
@@ -559,7 +577,7 @@ export function PluginTrackerGrid({ param, values, onChange }) {
             <button class="tracker-keypad-del" onclick=${onDelCc}
                 title="Clear CC# + CC Val">Del</button>
         </div>
-        <div class="tracker-keypad-col">
+        <div class="tracker-keypad-col tracker-keypad-col-small">
             <div class="tracker-keypad-label">CC VAL</div>
             <${PluginKnob} name="cc_val" label="" min=${0} max=${127}
                 value=${ccValValue} labels=${HEX_LABELS_128}
