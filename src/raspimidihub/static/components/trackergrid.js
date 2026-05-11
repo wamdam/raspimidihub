@@ -824,6 +824,20 @@ export function PluginTrackerGrid({ param, values, onChange }) {
                 case 'Delete':
                 case 'Backspace':  onCut(); e.preventDefault(); return;
                 case ' ':          togglePlay(); e.preventDefault(); return;
+                // Octave nudges — `+` and `-` step the sticky octave
+                // up / down one. `=` and `_` also match so the user
+                // doesn't have to hold Shift on US keyboards just to
+                // hit `+`. Clamped to 0..9; reuses onOctave so the
+                // focused cell's pitch rewrites with the new octave
+                // when it holds a real note.
+                case '+':
+                case '=':
+                    if (octave < 9) onOctave(null, octave + 1);
+                    e.preventDefault(); return;
+                case '-':
+                case '_':
+                    if (octave > 0) onOctave(null, octave - 1);
+                    e.preventDefault(); return;
             }
 
             // Ctrl/Cmd + C / V / X — clipboard ops. Ctrl+Shift+{C,X}
@@ -854,7 +868,8 @@ export function PluginTrackerGrid({ param, values, onChange }) {
             window.removeEventListener('keyup', onKeyUp);
         };
     }, [moveRow, moveColumn, movePage, cursorMove, engageShift,
-        onDel, onCopy, onCut, onPaste, writeTypedNote, togglePlay]);
+        onDel, onCopy, onCut, onPaste, writeTypedNote, togglePlay,
+        octave, onOctave]);
 
     // Tick label for the Note wheel — sentinels then 12 pitches with
     // the current Octave wheel value baked in so each detent shows
