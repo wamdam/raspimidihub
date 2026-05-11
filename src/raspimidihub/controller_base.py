@@ -38,6 +38,8 @@ class ControllerBase(PluginBase):
     `drop_states`, `drop_snapshots`, `drop_modes`, `drop_labels`,
     `drop_schedule`) for full functionality."""
 
+    SURFACE_KIND = "controller"
+
     inputs = ["CC (bidirectional sync — silent UI updates, no re-emit)"]
     outputs = ["CC per cell — see HELP for default channel/cc bindings"]
 

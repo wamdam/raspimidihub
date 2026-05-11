@@ -6,10 +6,43 @@ hashes. Tags: Added, Improved, Fix, Changed, Removed.
 
 Unreleased
 
+- Added: Tracker — 8-voice step sequencer on the new "Play" panel.
+  16 hex-numbered rows × 8 voice columns, up to 16 pages linearly
+  chained, looping back to page 0. Per voice cell: Note (3-char
+  pitch / Off / End / hold), Velocity (hex), CC# (hex or `.`), CC
+  Val (hex). Note and CC events fire independently per step.
+- Added: Per-track output channel on the Tracker — T1..T8 each
+  route to their own MIDI channel, configured in the device-detail
+  panel. Track header on the play surface reads "T1 [Ch 3]" etc.
+- Added: Play / Stop toggle in the Tracker header (Space toggles).
+  Manual transport without an external clock+Start.
+- Added: "Send Clock + Transport" toggle on the Tracker — when on,
+  forwards incoming CLOCK / START / STOP / CONTINUE to OUT so
+  downstream gear can slave off the Tracker instance.
+- Added: Live recording on the Tracker. Notes / CCs played in
+  while playback runs land on the row whose events are currently
+  sounding (cursor stays put); when stopped, step-record at the
+  cursor with auto-advance after each note.
+- Added: Tracker selection, Cut / Copy / Paste, keyboard typing
+  (q..u + 2,3,5,6,7 for chromatic note entry — QWERTY *and*
+  QWERTZ both work via event.code). Shift held + cursor move
+  extends a sub-cell rectangle; Cut removes the area into the
+  paste buffer; Shift+Cut/Copy targets the whole page. Paste
+  refuses to overlay a note-column buffer onto a cc-column cursor.
+- Added: New "Play" bottom-nav entry replaces Presets. Hosts the
+  Tracker (and any future SURFACE_KIND="play" plugins) alongside
+  the existing Controllers carousel.
+- Added: Note preview — turning the Note wheel or typing on the
+  keyboard fires the picked note out the Tracker's OUT port so
+  the user hears what they're entering. Auto-released after 300 ms.
 - Removed: Presets page and the underlying save/load/export/import
   API. Not in use very often, cluttered the bottom-nav. Existing
   configs with a stale "presets" key still load cleanly; the key
   is dropped on first save.
+- Fix: Transient plugin params (cursor / playhead / cmd_play /
+  cmd_stop / drop fire signals, …) no longer get saved into
+  config.json — a mid-play snapshot used to replay cmd_play=True
+  on restart and re-fire whatever action the trigger signalled.
 
 
 2026-05-08 — Version 3.0.7

@@ -45,7 +45,7 @@ See all screenshots in [docs/screenshots/](docs/screenshots/) and the full [UI G
 - **Loop prevention** and **multi-port devices** fully supported
 
 ### Virtual Instruments and Plugins
-- **15 built-in plugins** that appear as routable MIDI devices
+- **16 built-in plugins** that appear as routable MIDI devices
 - **Plugins start unconnected** -- route them manually for precise control
 - **Custom UI controls** -- wheels, faders, knobs, XY pads, toggles, step editors, curve editors, scopes, meters
 - **MIDI clock sync** -- plugins can sync to external clock or generate their own
@@ -71,6 +71,7 @@ See all screenshots in [docs/screenshots/](docs/screenshots/) and the full [UI G
 | Panic Button | Momentary trigger -- All Notes Off; second tap upgrades to All Sound Off |
 | Scale Remapper | Quantizes notes to a scale (major, minor, pentatonic, blues, ...) with labeled root selector |
 | SysEx Sender | Upload a .syx file in the panel; bytes stream straight to the destination (256-byte chunks, ~5 ms gap; nothing saved) |
+| Tracker | 8-voice step sequencer on its own Play panel. 16 hex-numbered rows × 16 pages; per-voice Note + Velocity + CC# + CC Val; per-track output channel; Play / Stop transport + send-clock toggle; live recording while playing + keyboard note entry |
 | Velocity Curve | Drawable 128-point velocity response curve with shape presets |
 | Velocity Equalizer | Normalize velocity to a fixed value or compress the range |
 
@@ -90,6 +91,15 @@ Fullscreen play surfaces that send CCs over MIDI. Each cell is renameable, MIDI-
 - **Per-axis MIDI Learn** on XY pads
 - **8 dark themes** per controller (Default / Navy / Forest / Wine / Plum / Teal / Sienna / Slate)
 - **Top nav** -- swipe / arrow / dropdown to switch between instances; last-viewed remembered
+
+### Tracker / Play Surface
+- **8-voice step sequencer** on a new "Play" bottom-nav entry (alongside Controllers)
+- **16 hex-numbered rows × up to 16 pages** chained linearly, loops back to page 0
+- **Per voice cell** -- Note (3-char pitch / Off / End / hold), Velocity (hex), CC# (hex or `.`), CC Val (hex). Note and CC events fire independently
+- **Per-track output channel** -- T1..T8 each route to their own MIDI channel (defaults all 1, remappable in the device-detail panel)
+- **Live recording** -- play notes / move CCs in time with playback and they land on the currently-sounding row. Cursor stays put while playing; step-record at cursor when stopped
+- **Keyboard entry** -- q..u for white keys + 2/3/5/6/7 for black keys (QWERTY and QWERTZ both work via physical-key code); Space toggles play; Shift held + cursor extends a sub-cell selection; Cut / Copy / Paste with half-compatibility check
+- **Send clock + transport** -- optional toggle forwards CLOCK / START / STOP / CONTINUE through to OUT so downstream gear can slave off the Tracker instance
 
 ### Bluetooth MIDI (BLE-MIDI)
 - **Pair, connect, disconnect, forget** any BLE-MIDI peripheral from the matrix UI -- Add Device → Bluetooth → Scan

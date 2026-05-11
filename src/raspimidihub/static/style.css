@@ -996,6 +996,376 @@ body {
 }
 .controller-surface { /* renderParamList output renders directly into the page */ }
 
+/* Tracker step-sequencer surface (TrackerGrid).
+ *
+ * The whole pane sits inside .controller-surface and wants:
+ *   - A dense monospace grid that shrinks to fit narrow phones.
+ *   - A static-height help row above the keypad — the keypad never
+ *     moves between idle and live-value states.
+ *   - A colour highlight on the focused cell, distinct from the
+ *     `▶` row marker we'll add when the playback engine lands. */
+.trackergrid {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    color: var(--text);
+    height: 100%;
+    box-sizing: border-box;
+}
+.tracker-header { font-size: 13px; }
+.tracker-header-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+}
+.tracker-header-label { color: var(--text-dim); font-size: 11px; margin: 0 4px 0 0; }
+.tracker-header-value { color: var(--text); font-weight: 500; }
+.tracker-page-idx { color: var(--accent, #5cf); font-weight: 600; min-width: 1ch; text-align: center; }
+.tracker-page-total { color: var(--text-dim); font-size: 11px; margin-left: 4px; }
+.tracker-page-btn {
+    background: var(--surface2, #2a2a2a);
+    color: var(--text);
+    border: 1px solid var(--surface2);
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 11px;
+    font-family: inherit;
+    cursor: pointer;
+    min-width: 28px;
+}
+.tracker-page-btn[disabled] { opacity: 0.4; cursor: default; }
+.tracker-page-btn.active {
+    background: var(--accent, #357);
+    border-color: var(--accent, #5cf);
+    color: #fff;
+}
+/* Transport buttons — slightly larger + a green tint when actively
+ * playing so the user can spot them at a glance from across a stage. */
+.tracker-transport-btn { padding: 4px 10px; font-weight: 600; }
+.tracker-transport-btn.active {
+    background: rgba(76, 175, 80, 0.35);
+    border-color: rgba(76, 175, 80, 0.7);
+    color: #fff;
+}
+/* Compact rate dropdown sitting next to the page controls. Native
+ * <select> reskinned to fit the surrounding pill-button row instead
+ * of the wide horizontal radio that the standard PluginRadio renders. */
+.tracker-rate-select {
+    background: var(--surface2, #2a2a2a);
+    color: var(--text);
+    border: 1px solid var(--surface2);
+    border-radius: 4px;
+    padding: 3px 6px;
+    font-size: 11px;
+    font-family: inherit;
+    cursor: pointer;
+}
+.tracker-grid-area {
+    flex: 1;
+    overflow: auto;          /* horizontal scroll for many voices, vertical for tall pages */
+    background: var(--bg);
+    border-radius: 4px;
+    padding: 4px 0;
+}
+/* Header + step rows share these metrics so the T1..Tn labels sit
+ * exactly above the C-3 5A 017F cells. Any divergence in font-size,
+ * gap, padding, or column min-width misaligns the columns — `ch`
+ * units measure off the active font-size, so headers MUST inherit
+ * the same size as the cells. Line-height kept tight so 16 rows
+ * plus header + help + keypad fit a phone screen.
+ *
+ * `min-width: max-content` so the row's layout box stretches to fit
+ * all eight voice columns even when the parent grid-area scrolls
+ * horizontally on a phone. Without this, the playing-row tint and
+ * cell backgrounds get clipped at the viewport edge — only the
+ * visible cells inherit the row's background. */
+.tracker-track-header,
+.tracker-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 4px;
+    font-size: 12px;
+    font-family: inherit;
+    line-height: 1.2;
+    min-width: max-content;
+}
+.tracker-track-header {
+    border-bottom: 1px solid var(--surface2);
+    margin-bottom: 2px;
+    color: var(--text-dim);
+    letter-spacing: 0.5px;
+}
+.tracker-row { border-radius: 2px; }
+.tracker-row.cursor { background: rgba(80, 200, 255, 0.06); }
+
+/* Gutter — same width on header and data rows so the first cell
+ * column lines up. Two hex digits ("0F", "1A", …) plus a touch of
+ * breathing room. */
+.tracker-track-step-col,
+.tracker-row-num {
+    flex: 0 0 auto;
+    min-width: 2.5ch;
+    text-align: right;
+    color: var(--text-dim);
+    font-variant-numeric: tabular-nums;
+}
+/* Beat marker on rows 0/4/8/C of every page: brighter colour so the
+ * eye lands on quarter-note boundaries at a glance. Highlights only
+ * the row-num itself; the data cells stay uniform. */
+.tracker-row-num.beat {
+    color: var(--text);
+    font-weight: 600;
+}
+/* Playhead gutter — always-present empty slot on every row + on the
+ * track-header row so column alignment never shifts when ▶ appears.
+ * Fixed flex-basis + width + overflow so the glyph (which is wider
+ * than a digit cell in most monospace fonts) can't grow the column
+ * and push the rest of the row right. */
+.tracker-row-playhead {
+    flex: 0 0 1.5ch;
+    width: 1.5ch;
+    text-align: center;
+    color: var(--accent, #5cf);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    overflow: hidden;
+}
+/* Subtle row tint on the playing row so it pops even without
+ * looking at the gutter glyph — useful when the cursor isn't on
+ * the same row. */
+.tracker-row.playing {
+    background: rgba(80, 200, 255, 0.10);
+}
+
+/* Voice columns — both header label and cell use the same flex
+ * basis so each Tn sits directly above its column. */
+.tracker-track-label,
+.tracker-cell {
+    flex: 0 0 auto;
+    min-width: 13ch;
+    padding: 0 4px;
+    box-sizing: border-box;
+}
+.tracker-track-label.cursor {
+    color: var(--accent, #5cf);
+    font-weight: 600;
+}
+/* Channel suffix on each track label — dimmer than the track name
+ * itself so T1 / T2 still read as the primary identifier and the
+ * [Ch N] hangs back as metadata. */
+.tracker-track-ch {
+    color: var(--text-dim);
+    font-weight: 400;
+    margin-left: 4px;
+}
+.tracker-rows { display: flex; flex-direction: column; }
+/* Each voice cell renders as two halves — note slice ("C-3 5A") and
+ * cc slice ("017F") — so the cursor highlight can fall on just the
+ * half the keypad is editing. Outer .tracker-cell is the alignment
+ * container (matches T1..Tn header column width); inner halves are
+ * the actual click targets and highlighted areas. */
+.tracker-cell {
+    user-select: none;
+    white-space: pre;
+    scroll-margin: 60px;
+    padding: 0;          /* halves carry their own padding */
+}
+.tracker-cell-note,
+.tracker-cell-cc {
+    display: inline-block;
+    cursor: pointer;
+    border-radius: 2px;
+    padding: 1px 3px;
+}
+.tracker-cell-note { min-width: 7ch; }   /* "C-3 5A" + breathing room */
+.tracker-cell-cc   { min-width: 5ch; }   /* "017F"  + breathing room */
+/* Selection — lighter accent tint so the focused cell stays the
+ * brightest mark in the rectangle. Listed first so the focus rule
+ * below wins on the focused sub-cell (CSS source-order tie-break). */
+.tracker-cell-note.sel,
+.tracker-cell-cc.sel {
+    background: rgba(80, 200, 255, 0.22);
+}
+.tracker-cell.focus-note .tracker-cell-note,
+.tracker-cell.focus-cc   .tracker-cell-cc {
+    background: var(--accent, #4af);
+    color: #000;
+    font-weight: 500;
+}
+.tracker-help {
+    background: var(--surface);
+    border-radius: 4px;
+    padding: 6px 10px;
+    font-size: 12px;
+    color: var(--text-dim);
+    min-height: 18px;
+    line-height: 1.4;
+    flex: 0 0 auto;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;        /* keep "Help: …" on a single line so layout never reflows */
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+/* Always-visible data-entry keypad. Splits in half so it fits a
+ * phone width: the left side carries either the Note slice
+ * (NOTE + OCT + VEL) or the CC slice (CC# + CC VAL) of the focused
+ * voice cell — see cursorHalf in trackergrid.js.
+ *
+ * Sizing strategy mirrors the Controller LayoutGrid: each
+ * .tracker-keypad-col is `flex: 1 1 0` and the wheel / knob
+ * containers inside scale to the cell width (with a sensible max
+ * so they don't bloat on desktop). When the left side swaps from
+ * 3 cols (note half) to 2 cols (cc half), the half-container width
+ * stays the same and the controls just expand or shrink to fit —
+ * the cursor cluster on the right doesn't budge. */
+.tracker-keypad {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px;
+    background: var(--surface);
+    border-radius: 6px;
+    flex: 0 0 auto;
+}
+/* Top of the keypad: controls (left, fluid) + cursor cluster (right,
+ * pinned). The half's row count differs (3 cols on note half, 2 on
+ * cc half), but the layout column basis is `flex: 1 1 0` per col so
+ * the controls reflow without moving the cursor cluster. */
+.tracker-keypad-top {
+    display: flex;
+    align-items: stretch;
+    gap: 8px;
+}
+.tracker-keypad-controls {
+    display: flex;
+    align-items: stretch;
+    gap: 12px;
+    flex: 1 1 0;
+    min-width: 0;
+}
+/* Action row spans the full bottom of the keypad regardless of which
+ * half is on screen — pinned to the keypad's bottom edge so the row
+ * never moves when switching note↔cc. Left-aligned within the row. */
+.tracker-keypad-actions {
+    display: flex;
+    gap: 4px;
+    flex: 0 0 auto;
+    justify-content: flex-start;
+}
+.tracker-keypad-action-btn {
+    background: var(--surface2, #2a2a2a);
+    color: var(--text);
+    border: 1px solid var(--surface2);
+    border-radius: 4px;
+    padding: 4px 12px;
+    font-size: 12px;
+    font-family: inherit;
+    cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+    touch-action: manipulation;
+}
+/* Shift button glows accent while engaged so the user can see at a
+ * glance whether the next cursor move will extend the selection. */
+.tracker-keypad-action-btn.active {
+    background: var(--accent, #4af);
+    border-color: var(--accent, #5cf);
+    color: #000;
+    font-weight: 600;
+}
+.tracker-keypad-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    flex: 1 1 0;
+    min-width: 0;
+}
+/* Wheel / knob containers fill their cell with a cap so they don't
+ * grow unreadably wide on desktop. Same idiom Controller LayoutGrid
+ * uses (.layout-cell .wheel-container { width: 100% }). The inner
+ * .wheel-group / .knob-group also has to stretch — its default
+ * align-items:flex-start would collapse the 100%-wide container
+ * back to its intrinsic 0 width. */
+.tracker-keypad-col .wheel-group,
+.tracker-keypad-col .knob-group {
+    width: 100%;
+    align-items: center;
+    margin: 0;
+}
+.tracker-keypad-col .wheel-container {
+    width: 100%;
+    max-width: 80px;
+}
+.tracker-keypad-col .knob-container {
+    width: 100%;
+    max-width: 64px;
+}
+.tracker-keypad-col .knob-value { font-size: 12px; }
+/* Cursor pinned right at a fixed width so the inverted-T never
+ * jumps under the user's thumb when the left half swaps content. */
+.tracker-keypad-cursor-col {
+    flex: 0 0 auto;
+    min-width: 130px;
+}
+.tracker-keypad-label {
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 0.5px;
+    font-weight: 500;
+}
+/* Hide the inner wheel/knob labels — the col label above is doing
+ * that job. Empty `label=""` would still render an empty span. */
+.tracker-keypad-col .wheel-label,
+.tracker-keypad-col .knob-label { display: none; }
+.tracker-keypad-del {
+    background: var(--surface2, #2a2a2a);
+    color: var(--text);
+    border: 1px solid var(--surface2);
+    border-radius: 4px;
+    padding: 3px 10px;
+    font-size: 11px;
+    font-family: inherit;
+    cursor: pointer;
+}
+.tracker-cursor-cluster {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+}
+.tracker-arrow-row {
+    display: flex;
+    gap: 4px;
+}
+.tracker-arrow {
+    width: 36px; height: 36px;
+    background: var(--surface2);
+    color: var(--text);
+    border: 1px solid var(--surface2);
+    border-radius: 4px;
+    font-size: 16px;
+    cursor: pointer;
+    font-family: inherit;
+    line-height: 1;
+    /* Long-press triggers our key-repeat at 350 ms; that's earlier
+     * than the OS context-menu / "Copy" callout, but we still need
+     * to suppress the selection + callout + Android long-press menu
+     * so the user gets the repeat instead of the system UI taking
+     * over the touch. */
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+}
+.tracker-arrow-page { font-size: 18px; }
+
 /* Drop-button row — 4 quarter-width snapshot buttons above the
  * controller's cell grid. Three visual states:
  *   - unarmed   (no snapshot)  → muted grey.

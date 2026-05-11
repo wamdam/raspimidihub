@@ -727,14 +727,22 @@ class PluginHost:
     # --- Serialization for config persistence ---
 
     def serialize_instances(self) -> list[dict]:
-        """Serialize all instances for config save."""
+        """Serialize all instances for config save. Transient params
+        (live-play state — playhead position, drop fire signals,
+        cmd_play / cmd_stop, note_preview …) are filtered out so a
+        save mid-play doesn't carry trigger-style truthy values into
+        the next plugin restart, where they'd replay through
+        on_param_change and re-fire whatever action they signal."""
         result = []
         for instance in self._instances.values():
+            transient = getattr(instance.plugin, "transient_params", set()) or set()
+            params = {k: v for k, v in instance.plugin._param_values.items()
+                      if k not in transient}
             result.append({
                 "id": instance.id,
                 "type": instance.plugin_type,
                 "name": instance.name,
-                "params": dict(instance.plugin._param_values),
+                "params": params,
             })
         return result
 

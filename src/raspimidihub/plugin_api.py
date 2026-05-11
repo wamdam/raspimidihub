@@ -240,10 +240,14 @@ class Display(Param):
 
 @dataclass
 class Group:
-    """Titled section grouping related params."""
+    """Titled section grouping related params. `config_only=True`
+    hides the entire group (title + children) from a play surface —
+    use it when every child is config-only and you don't want an
+    empty title leaking through to the play view."""
     title: str
     children: list = field(default_factory=list)
     cols: int | None = None  # override default 4-col grid for this group's inline row
+    config_only: bool = False
 
     def to_dict(self) -> dict:
         d = {
@@ -253,6 +257,8 @@ class Group:
         }
         if self.cols is not None:
             d["cols"] = self.cols
+        if self.config_only:
+            d["config_only"] = True
         return d
 
 
@@ -318,6 +324,70 @@ class XYPad(Param):
         d = super().to_dict()
         d.update({"min": self.min, "max": self.max,
                   "default_x": self.default_x, "default_y": self.default_y})
+        return d
+
+
+@dataclass
+class TrackerGrid:
+    """Tracker-style sequencer grid: 16 hex-numbered step rows × 1..8
+    voice columns, paged up to 16 pages, with an always-visible
+    data-entry keypad below.
+
+    Used by the §6 Tracker plugin (and any future sequencer surface
+    sharing the same UI). Like LayoutGrid, this is a structural element
+    rather than a value-holding Param — actual sequencer state lives
+    in sibling auxiliary params named here.
+
+    `pages_param`: list of page dicts. Each page is
+      `{"rows": [{"voices": [VoiceCell × N]}, ...]}`
+      where VoiceCell is
+      `{"note": str, "vel": int|str, "cc_num": int|str, "cc_val": int|str}`.
+    `current_page_param`: int (0..MAX_PAGES-1) — visible page.
+    `cursor_row_param`, `cursor_track_param`: ints — edit-cursor focus.
+    `octave_param`: int (0..9) — sticky octave on the keypad.
+    """
+    name: str
+    label: str
+    track_count: int = 8
+    max_pages: int = 16
+    max_rows: int = 16
+    pages_param: str | None = None
+    current_page_param: str | None = None
+    cursor_row_param: str | None = None
+    cursor_track_param: str | None = None
+    cursor_half_param: str | None = None
+    octave_param: str | None = None
+    rate_param: str | None = None
+    playhead_param: str | None = None  # {page, row, playing} broadcast per step
+    track_channels_param: str | None = None  # base name; per-track lookup as <name>_<idx>
+    cmd_play_param: str | None = None  # bool, frontend → backend trigger
+    cmd_stop_param: str | None = None  # bool, frontend → backend trigger
+    send_clock_param: str | None = None  # bool, latching toggle
+    note_preview_param: str | None = None  # int (MIDI note), frontend → backend trigger
+
+    def to_dict(self) -> dict:
+        d = {
+            "type": "trackergrid",
+            # `play_only` is a hint to the renderparam dispatcher: the
+            # tracker grid + keypad only make sense on the play
+            # surface (not the device-detail config card), so the
+            # frontend skips it when displayCtx.playOnly is false.
+            "play_only": True,
+            "name": self.name,
+            "label": self.label,
+            "track_count": self.track_count,
+            "max_pages": self.max_pages,
+            "max_rows": self.max_rows,
+        }
+        for attr in ("pages_param", "current_page_param", "cursor_row_param",
+                     "cursor_track_param", "cursor_half_param",
+                     "octave_param", "rate_param", "playhead_param",
+                     "track_channels_param", "cmd_play_param",
+                     "cmd_stop_param", "send_clock_param",
+                     "note_preview_param"):
+            v = getattr(self, attr)
+            if v:
+                d[attr] = v
         return d
 
 
@@ -425,6 +495,10 @@ def get_all_params(params: list) -> list[Param]:
             result.extend(get_all_params(p.children))
         elif isinstance(p, LayoutGrid):
             result.extend(get_all_params([c.param for c in p.cells]))
+        elif isinstance(p, TrackerGrid):
+            # No cells to flatten — TrackerGrid's data is in sibling
+            # params declared elsewhere in the plugin's params list.
+            continue
         elif isinstance(p, Param):
             result.append(p)
     return result
@@ -469,6 +543,11 @@ def schema_param_keys(params: list) -> set[str]:
                 # but its cells' params and its auxiliary pointers do.
                 collect_aux(p)
                 walk([cell.param for cell in p.cells])
+                continue
+            if isinstance(p, TrackerGrid):
+                # Structural — its data lives in the sibling *_param
+                # entries declared on the TrackerGrid itself.
+                collect_aux(p)
                 continue
             if isinstance(p, Param):
                 if p.name:
@@ -533,6 +612,15 @@ class PluginBase:
     # like Clock Divider must not feed the bus or they'd pollute the
     # system's tempo perception with their own divided output.
     feeds_clock_bus: bool = False
+
+    # --- Surface kind ---
+    # Which top-level UI panel this plugin's instances appear in:
+    #   None         — matrix-only plugin (default)
+    #   "controller" — fullscreen play surface in /controller
+    #   "play"       — fullscreen play surface in /play (sequencers)
+    # The /plugins/instances API echoes this back to the frontend as
+    # `kind`, replacing the old startswith("controller_") prefix filter.
+    SURFACE_KIND: str | None = None
 
     # --- Display outputs (declared in subclass, framework renders read-only) ---
     # Each entry: {"name": str, "type": "meter"|"text", "label": str, "min": 0, "max": 127}
