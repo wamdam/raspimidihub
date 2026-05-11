@@ -1,0 +1,237 @@
+% RaspiMIDIHub manual -- LaTeX header includes
+%
+% Pulled in via `--include-in-header=templates/header.tex` from the
+% `make manual` target. Keep LaTeX-specific tweaks here so the YAML
+% metadata stays declarative.
+
+% ------------------------------------------------------------------
+% Brand palette. Sourced from website/style.css so the manual and
+% the marketing site stay visually aligned.
+% ------------------------------------------------------------------
+\definecolor{darkBg}{HTML}{0d0d1a}            % cover background
+\definecolor{darkBgLight}{HTML}{1a1a2e}       % cover gradient stop
+\definecolor{accentColour}{HTML}{00d4aa}      % brand turquoise
+\definecolor{accentCoral}{HTML}{e94560}       % brand coral
+\definecolor{accentSoft}{HTML}{D9F7F0}        % pale turquoise tint -- table headers
+\definecolor{accentCoralSoft}{HTML}{FCE3E8}   % pale coral tint -- warning blocks
+\definecolor{lightText}{HTML}{e0e0e0}         % cover body text
+\definecolor{mutedText}{HTML}{8892a4}         % cover subtitle / cover author
+\definecolor{codeTint}{HTML}{F2F4F7}          % inline code background
+
+% Manual version shown on the cover. Bump alongside the `version`
+% field in `metadata.yaml`. Both should match the released `.deb`.
+\providecommand{\manualversion}{3.1.0}
+
+% ------------------------------------------------------------------
+% Branded cover. Pandoc emits \maketitle; we override it with a dark
+% splash that mirrors the website hero. The dark background applies
+% only to the title page via eso-pic's starred AddToShipoutPictureBG
+% variant. Subsequent pages return to white.
+% ------------------------------------------------------------------
+\usepackage{eso-pic}
+\usepackage{tikz}
+
+\makeatletter
+\renewcommand{\maketitle}{%
+  \begin{titlepage}%
+    \thispagestyle{empty}%
+    \AddToShipoutPictureBG*{%
+      \AtPageLowerLeft{%
+        \begin{tikzpicture}[remember picture, overlay]
+          \fill[darkBg] (current page.south west) rectangle (current page.north east);
+          \fill[accentColour] (current page.north west) rectangle ([yshift=-8pt]current page.north east);
+          \fill[accentCoral] ([yshift=8pt]current page.south west) rectangle (current page.south east);
+        \end{tikzpicture}%
+      }%
+    }%
+    \begingroup
+    \color{lightText}\sffamily%
+    \vspace*{5cm}%
+    \begin{center}%
+      % Brand mark with the coral "MIDI" middle, exactly like the
+      % website hero.
+      {\fontsize{56pt}{60pt}\bfseries
+        \textcolor{lightText}{Raspi}%
+        \textcolor{accentCoral}{MIDI}%
+        \textcolor{lightText}{Hub}\par}%
+      \vspace{1.2cm}%
+      % Subtitle pill -- turquoise rounded background, dark text.
+      {\tikz\node[fill=accentColour,
+                  text=darkBg,
+                  rounded corners=12pt,
+                  inner xsep=18pt, inner ysep=8pt,
+                  font=\sffamily\bfseries\large]
+              {USER MANUAL \enspace$\cdot$\enspace VERSION~\manualversion};%
+      \par}%
+    \end{center}%
+    \vfill
+    \begin{center}%
+      {\color{mutedText}\large\@author\par}
+      \vspace{0.4cm}%
+      {\color{mutedText}\large\@date\par}
+    \end{center}%
+    \vspace*{2.5cm}%
+    \endgroup
+  \end{titlepage}%
+}
+\makeatother
+
+% ------------------------------------------------------------------
+% Chapter headings: chapter tag in coral, title big and black, with
+% a turquoise rule underneath. Mirrors the website's mixed-colour
+% accent treatment.
+% ------------------------------------------------------------------
+\usepackage[explicit]{titlesec}
+
+\titleformat{\chapter}[display]%
+  {\sffamily}%
+  {\color{accentCoral}\fontsize{14pt}{16pt}\bfseries
+    \MakeUppercase{\chaptertitlename\,\thechapter}}%
+  {8pt}%
+  {\fontsize{30pt}{34pt}\bfseries\color{black} #1}%
+  [\vskip 6pt {\color{accentColour}\hrule height 1.4pt}]%
+
+\titlespacing*{\chapter}{0pt}{-20pt}{30pt}
+
+% Section / subsection numbers in turquoise.
+\titleformat{\section}%
+  {\sffamily\Large\bfseries}%
+  {\color{accentColour}\thesection}%
+  {0.8em}%
+  {#1}
+
+\titleformat{\subsection}%
+  {\sffamily\large\bfseries}%
+  {\color{accentColour}\thesubsection}%
+  {0.7em}%
+  {#1}
+
+\titleformat{\subsubsection}%
+  {\sffamily\normalsize\bfseries}%
+  {\color{accentColour}\thesubsubsection}%
+  {0.6em}%
+  {#1}
+
+% ------------------------------------------------------------------
+% Page style: running header with chapter/section names, page number
+% in the outer corner. Chapter-opening pages keep the plain style.
+% ------------------------------------------------------------------
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[LE,RO]{\sffamily\thepage}
+\fancyhead[LO]{\sffamily\small\nouppercase{\rightmark}}
+\fancyhead[RE]{\sffamily\small\nouppercase{\leftmark}}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\footrulewidth}{0pt}
+
+\fancypagestyle{plain}{%
+  \fancyhf{}%
+  \fancyfoot[C]{\sffamily\thepage}%
+  \renewcommand{\headrulewidth}{0pt}%
+}
+
+% ------------------------------------------------------------------
+% Tables: turquoise rules + tinted header row. Apply \rowcolor in
+% the first row of every longtable via a hook. Pandoc emits one
+% header row at the top of each longtable; we colour it.
+% ------------------------------------------------------------------
+\usepackage{longtable}
+\usepackage{booktabs}
+\usepackage[table]{xcolor}
+\arrayrulecolor{accentColour}
+\renewcommand{\arraystretch}{1.20}
+
+% Wrap pandoc's \toprule-emitted header in a coloured row by
+% redefining \toprule so the first row in each longtable picks up
+% the tint without per-table source edits.
+\let\origtoprule\toprule
+\renewcommand{\toprule}{\origtoprule\rowcolor{accentSoft}}
+
+% ------------------------------------------------------------------
+% Inline code: light grey tint background. Wrap pandoc's emitted
+% \texttt with a tight colorbox; uses \rule with raisebox so the
+% colour rectangle stays within the line.
+% ------------------------------------------------------------------
+\let\origtexttt\texttt
+\renewcommand{\texttt}[1]{%
+  \begingroup
+    \setlength{\fboxsep}{1.5pt}%
+    \colorbox{codeTint}{\origtexttt{\textcolor{black}{#1}}}%
+  \endgroup
+}
+
+% ------------------------------------------------------------------
+% Figure placement: anchor in source position (fig-pos=H requires
+% the float package). Captions in sans-serif, accent-coloured label.
+% ------------------------------------------------------------------
+\usepackage{float}
+\usepackage[font=small,labelfont={sf,bf,color=accentColour},
+            textfont=sf, justification=centering]{caption}
+
+% ------------------------------------------------------------------
+% Code blocks: smaller font, wrap long lines instead of running off
+% the page. fvextra is required for the `breakanywhere` option.
+% ------------------------------------------------------------------
+\usepackage{fvextra}
+\DefineVerbatimEnvironment{Highlighting}{Verbatim}{%
+  breaklines,%
+  breakanywhere,%
+  fontsize=\small,%
+  commandchars=\\\{\}}
+\fvset{breaklines=true, breakanywhere=true, fontsize=\small}
+
+% ------------------------------------------------------------------
+% Paragraph spacing: a bit more air between paragraphs, less first-
+% line indentation. Reads better at manual length.
+% ------------------------------------------------------------------
+\usepackage{parskip}
+
+% ------------------------------------------------------------------
+% Admonitions. Pandoc emits fenced divs with class .note, .warning,
+% or .tip as `\begin{note}` / `\begin{warning}` / `\begin{tip}` --
+% Lua filter `templates/admonitions.lua` does the mapping. Here we
+% define how each renders: a left rule + soft background + pill
+% label inline at the start.
+% ------------------------------------------------------------------
+\usepackage{mdframed}
+\usepackage{tcolorbox}
+
+\newcommand{\admlabel}[2]{%
+  \begin{tikzpicture}[baseline=(b.base)]%
+    \node[fill=#1, text=white, rounded corners=4pt,
+          inner xsep=6pt, inner ysep=2pt,
+          font=\sffamily\bfseries\scriptsize] (b) {#2};%
+  \end{tikzpicture}\hspace{0.6em}\ignorespaces}
+
+\newmdenv[
+  linecolor=accentColour,
+  linewidth=3pt,
+  topline=false, bottomline=false, rightline=false,
+  innerleftmargin=12pt, innerrightmargin=10pt,
+  innertopmargin=8pt, innerbottommargin=8pt,
+  skipabove=8pt, skipbelow=8pt,
+  backgroundcolor=accentSoft,
+]{noteframe}
+
+\newmdenv[
+  linecolor=accentCoral,
+  linewidth=3pt,
+  topline=false, bottomline=false, rightline=false,
+  innerleftmargin=12pt, innerrightmargin=10pt,
+  innertopmargin=8pt, innerbottommargin=8pt,
+  skipabove=8pt, skipbelow=8pt,
+  backgroundcolor=accentCoralSoft,
+]{warningframe}
+
+\newenvironment{note}%
+  {\begin{noteframe}\admlabel{accentColour}{NOTE}}%
+  {\end{noteframe}}
+
+\newenvironment{warning}%
+  {\begin{warningframe}\admlabel{accentCoral}{WARNING}}%
+  {\end{warningframe}}
+
+\newenvironment{tip}%
+  {\begin{noteframe}\admlabel{accentColour}{TIP}}%
+  {\end{noteframe}}

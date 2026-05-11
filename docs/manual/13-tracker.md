@@ -7,6 +7,8 @@ appearance, instance lifecycle, and config-panel mechanics all
 follow chapter 11; this chapter is the surface-and-workflow
 reference.
 
+![The Tracker play surface: 8 voice columns (T1..T8), 16 hex-numbered rows per page, up to 16 pages.](../screenshots/tracker.png){width=42%}
+
 ## Concept
 
 The Tracker is a grid:
@@ -186,15 +188,3 @@ a second Tracker instance with the same grid -- useful for
 splitting a song into "A part" and "B part" Trackers that you swap
 between with a controller drop button.
 
-## Screenshots referenced {.unnumbered}
-
-- `../screenshots/tracker.png` -- the play surface.
-- `../screenshots/28-plugin-tracker-config.png` -- the
-  configuration panel with the per-track channel wheels.
-
-## Screenshots needed {.unnumbered}
-
-- `tracker-selection.png` -- the play surface mid-edit with a
-  shift-extended selection rectangle visible.
-- `tracker-live-record.png` -- the play surface during live
-  recording with a Note On landing on the currently-sounding row.

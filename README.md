@@ -27,7 +27,7 @@ A full walkthrough of the routing matrix, MIDI mapping, and virtual instruments 
   <img src="docs/screenshots/19-plugin-velocity-curve.png" width="200" alt="Velocity Curve" />
 </p>
 
-See all screenshots in [docs/screenshots/](docs/screenshots/) and the full [UI Guide](docs/UI_GUIDE.md).
+See all screenshots in [docs/screenshots/](docs/screenshots/). The full **[User Manual (PDF)](https://github.com/wamdam/raspimidihub/releases/latest/download/raspimidihub-manual.pdf)** is shipped with every release and covers every screen end-to-end.
 
 ---
 
@@ -302,12 +302,11 @@ Tests run without ALSA hardware (`RASPIMIDIHUB_TEST_MODE=1`). No Raspberry Pi re
 
 ## Documentation
 
-- [UI Guide](docs/UI_GUIDE.md) -- Walkthrough of every screen
-- [Bluetooth MIDI](docs/BLUETOOTH.md) -- Pairing, reconnection, and troubleshooting
-- [Plugin Developer Guide](plugins/README.md) -- Creating custom plugins
-- [Building from Source](docs/BUILDING.md) -- How to build the .deb packages
-- [Changelog](CHANGELOG.txt) -- Release history
-- [Roadmap](docs/ROADMAP.md) -- Living design doc for upcoming work
+- **[User Manual (PDF)](https://github.com/wamdam/raspimidihub/releases/latest/download/raspimidihub-manual.pdf)** -- the canonical user-facing reference; covers every screen, plugin, controller, and setup flow. Markdown source under [docs/manual/](docs/manual/).
+- [Plugin Developer Guide](plugins/README.md) -- creating custom plugins
+- [Building from Source](docs/BUILDING.md) -- how to build the `.deb` packages
+- [Changelog](CHANGELOG.txt) -- release history
+- [Roadmap](docs/ROADMAP.md) -- living design doc for upcoming work
 
 ---
 

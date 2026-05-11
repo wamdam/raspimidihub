@@ -1,5 +1,5 @@
 PACKAGE = raspimidihub
-VERSION = 3.0.7
+VERSION = 3.1.0
 DEB_NAME = $(PACKAGE)_$(VERSION)-1_all
 BUILD_DIR = build/$(DEB_NAME)
 DEB_FILE = dist/$(DEB_NAME).deb
@@ -12,7 +12,7 @@ ROSETUP_DEB_FILE = dist/$(ROSETUP_DEB_NAME).deb
 
 PI_HOST = user@10.1.1.2
 
-.PHONY: all clean deb deb-rosetup deploy deploy-rosetup install uninstall test test-pi run lint fmt fmt-check screenshots
+.PHONY: all clean deb deb-rosetup deploy deploy-rosetup install uninstall test test-pi run lint fmt fmt-check screenshots manual manual-deps manual-clean
 
 all: deb deb-rosetup
 
@@ -130,7 +130,7 @@ clean:
 # Usage: make release NOTES="changelog text here"
 # This builds the deb, tags, pushes, and creates a GitHub release with all required assets.
 
-release: $(DEB_FILE) $(ROSETUP_DEB_FILE)
+release: $(DEB_FILE) $(ROSETUP_DEB_FILE) $(MANUAL_PDF)
 	@if git diff --quiet && git diff --cached --quiet; then \
 		echo "Working tree clean, proceeding..."; \
 	else \
@@ -157,6 +157,7 @@ release: $(DEB_FILE) $(ROSETUP_DEB_FILE)
 		$(DEB_FILE) \
 		$(ROSETUP_DEB_FILE) \
 		dist/install.sh \
+		$(MANUAL_PDF) \
 		--title "v$(VERSION)" \
 		$(PRERELEASE) \
 		--notes "$${NOTES:-Release v$(VERSION)}"
@@ -250,3 +251,70 @@ screenshots:
 		.venv/bin/playwright install chromium; \
 	fi
 	.venv/bin/python scripts/screenshots/run.py --target=$(TARGET)
+
+# --- Manual (PDF build via pandoc + xelatex) ---
+# `make manual`       -- build docs/manual/raspimidihub-manual.pdf
+# `make manual-deps`  -- apt-install the LaTeX toolchain (~700 MB,
+#                        one-time; needs sudo).
+# `make manual-clean` -- remove the built PDF.
+#
+# The chapter sources, the metadata block, the SVG diagram, the
+# screenshots, and the header.tex template are all tracked here as
+# prerequisites so a touch in any of them invalidates the PDF.
+
+MANUAL_DIR     = docs/manual
+MANUAL_PDF     = $(MANUAL_DIR)/raspimidihub-manual.pdf
+MANUAL_SOURCES = $(wildcard $(MANUAL_DIR)/[0-9A-E]*.md) \
+                 $(MANUAL_DIR)/metadata.yaml \
+                 $(MANUAL_DIR)/templates/header.tex \
+                 $(wildcard docs/screenshots/*.png) \
+                 docs/screenshots/architecture-block-diagram.svg
+
+# The apt packages we install for `make manual-deps`. Keep this in
+# one place so it can be inspected and changed without hunting.
+MANUAL_APT_PACKAGES = \
+    pandoc \
+    texlive-xetex \
+    texlive-fonts-recommended \
+    texlive-latex-recommended \
+    texlive-latex-extra \
+    librsvg2-bin \
+    fonts-dejavu
+
+manual: $(MANUAL_PDF)
+
+$(MANUAL_PDF): $(MANUAL_SOURCES)
+	@command -v pandoc   >/dev/null 2>&1 || { \
+		echo "ERROR: pandoc not found."; \
+		echo "       Run 'make manual-deps' first (one-time install)."; \
+		exit 1; }
+	@command -v xelatex  >/dev/null 2>&1 || { \
+		echo "ERROR: xelatex not found."; \
+		echo "       Run 'make manual-deps' first (one-time install)."; \
+		exit 1; }
+	@command -v rsvg-convert >/dev/null 2>&1 || { \
+		echo "ERROR: rsvg-convert not found (needed for SVG embedding)."; \
+		echo "       Run 'make manual-deps' first (one-time install)."; \
+		exit 1; }
+	@echo "  PANDOC $(MANUAL_PDF)"
+	@cd $(MANUAL_DIR) && pandoc \
+		metadata.yaml \
+		$$(ls [0-9A-D]*.md | sort) \
+		--pdf-engine=xelatex \
+		--include-in-header=templates/header.tex \
+		--lua-filter=templates/admonitions.lua \
+		--toc --toc-depth=3 \
+		--number-sections \
+		--resource-path=.:../screenshots \
+		-o $$(basename $(MANUAL_PDF))
+	@echo "  done -> $(MANUAL_PDF)"
+
+manual-deps:
+	@echo "Installing LaTeX toolchain for manual PDF build."
+	@echo "Packages: $(MANUAL_APT_PACKAGES)"
+	@echo "This is a one-time install (~700 MB). You'll be prompted for sudo."
+	sudo apt-get update
+	sudo apt-get install -y $(MANUAL_APT_PACKAGES)
+
+manual-clean:
+	rm -f $(MANUAL_PDF)

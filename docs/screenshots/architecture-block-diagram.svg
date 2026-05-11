@@ -1,0 +1,140 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 720" font-family="Helvetica, Arial, sans-serif" font-size="13">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#333"/>
+    </marker>
+    <style><![CDATA[
+      .box        { fill: #fff;    stroke: #333; stroke-width: 1.5; rx: 6; ry: 6; }
+      .src        { fill: #eaf3ff; stroke: #1f6fb0; }
+      .core       { fill: #fffbe1; stroke: #b09100; }
+      .direct     { fill: #d8e8ff; stroke: #2a64a8; }
+      .filt       { fill: #ead8ff; stroke: #6c2bb0; }
+      .out        { fill: #d9efd9; stroke: #2b8a3e; }
+      .web        { fill: #fde7e3; stroke: #b04a2a; }
+      .pers       { fill: #f0eee9; stroke: #555; }
+      .lbl        { font-size: 13px; fill: #111; }
+      .sub        { font-size: 11px; fill: #444; }
+      .h          { font-size: 13px; font-weight: bold; fill: #111; }
+      .stroke-dash{ stroke-dasharray: 4 3; }
+      .axis-label { font-size: 11px; fill: #666; font-style: italic; }
+    ]]></style>
+  </defs>
+
+  <!-- Title -->
+  <text x="500" y="28" text-anchor="middle" font-size="18" font-weight="bold">RaspiMIDIHub -- System Architecture</text>
+  <text x="500" y="48" text-anchor="middle" class="sub">Hot path (MIDI events) on the left; cold path (web UI + persistence) on the right.</text>
+
+  <!-- Sources -->
+  <g>
+    <rect class="box src" x="40"  y="80" width="180" height="80"/>
+    <text x="130" y="105" text-anchor="middle" class="h">USB MIDI devices</text>
+    <text x="130" y="125" text-anchor="middle" class="sub">hot-plug, multi-port</text>
+    <text x="130" y="143" text-anchor="middle" class="sub">renamed by USB topology</text>
+
+    <rect class="box src" x="240" y="80" width="180" height="80"/>
+    <text x="330" y="105" text-anchor="middle" class="h">BLE-MIDI peripherals</text>
+    <text x="330" y="125" text-anchor="middle" class="sub">via ble_midi_bridge</text>
+    <text x="330" y="143" text-anchor="middle" class="sub">bond snapshot persisted</text>
+
+    <rect class="box src" x="440" y="80" width="200" height="80"/>
+    <text x="540" y="105" text-anchor="middle" class="h">Plugin / Controller</text>
+    <text x="540" y="120" text-anchor="middle" class="h">instances</text>
+    <text x="540" y="143" text-anchor="middle" class="sub">each = one ALSA client</text>
+  </g>
+
+  <!-- Routing tier -->
+  <rect class="box core" x="40" y="200" width="600" height="60"/>
+  <text x="340" y="225" text-anchor="middle" class="h">ALSA sequencer (kernel)</text>
+  <text x="340" y="244" text-anchor="middle" class="sub">libasound2 via ctypes  --  alsa_seq.py / midi_engine.py</text>
+
+  <!-- Decision: direct vs filter path -->
+  <g>
+    <rect class="box direct" x="80"  y="300" width="240" height="90"/>
+    <text x="200" y="325" text-anchor="middle" class="h">Direct edge</text>
+    <text x="200" y="345" text-anchor="middle" class="sub">no filter, no mappings</text>
+    <text x="200" y="362" text-anchor="middle" class="sub">kernel port subscribe</text>
+    <text x="200" y="380" text-anchor="middle" class="sub">latency  ≈  zero  --  blue cell</text>
+
+    <rect class="box filt" x="360" y="300" width="280" height="90"/>
+    <text x="500" y="325" text-anchor="middle" class="h">Filter / mapper path</text>
+    <text x="500" y="345" text-anchor="middle" class="sub">channel + msg-type filter,</text>
+    <text x="500" y="362" text-anchor="middle" class="sub">Note/CC mappings, channel remap</text>
+    <text x="500" y="380" text-anchor="middle" class="sub">asyncio CPU 3  --  1-3 ms  --  purple cell</text>
+  </g>
+
+  <!-- Plugin host -->
+  <rect class="box core" x="80" y="430" width="560" height="80"/>
+  <text x="360" y="455" text-anchor="middle" class="h">Plugin host</text>
+  <text x="360" y="473" text-anchor="middle" class="sub">PluginHost / PluginInstance / PluginAlsaClient / ClockBus</text>
+  <text x="360" y="491" text-anchor="middle" class="sub">sample-accurate scheduling via ALSA kernel queue (Master Clock, MIDI Delay, Arp, drop buttons)</text>
+
+  <!-- Outputs -->
+  <rect class="box out" x="80" y="550" width="560" height="60"/>
+  <text x="360" y="575" text-anchor="middle" class="h">Outputs</text>
+  <text x="360" y="594" text-anchor="middle" class="sub">USB MIDI  +  BLE-MIDI  +  plugin instances (loop-prevented)</text>
+
+  <!-- Arrows hot path -->
+  <line x1="130" y1="160" x2="130" y2="198" stroke="#333" marker-end="url(#arrow)"/>
+  <line x1="330" y1="160" x2="330" y2="198" stroke="#333" marker-end="url(#arrow)"/>
+  <line x1="540" y1="160" x2="540" y2="198" stroke="#333" marker-end="url(#arrow)"/>
+
+  <line x1="250" y1="262" x2="200" y2="298" stroke="#333" marker-end="url(#arrow)"/>
+  <line x1="440" y1="262" x2="500" y2="298" stroke="#333" marker-end="url(#arrow)"/>
+
+  <line x1="200" y1="392" x2="200" y2="428" stroke="#333" marker-end="url(#arrow)"/>
+  <line x1="500" y1="392" x2="500" y2="428" stroke="#333" marker-end="url(#arrow)"/>
+
+  <line x1="360" y1="512" x2="360" y2="548" stroke="#333" marker-end="url(#arrow)"/>
+
+  <!-- Side channel: web UI -->
+  <g>
+    <rect class="box web" x="700" y="80" width="260" height="80"/>
+    <text x="830" y="105" text-anchor="middle" class="h">Web UI (Preact SPA)</text>
+    <text x="830" y="125" text-anchor="middle" class="sub">no build step  --  HTM-templated</text>
+    <text x="830" y="143" text-anchor="middle" class="sub">/routing /controller /play /settings</text>
+
+    <rect class="box web" x="700" y="200" width="260" height="100"/>
+    <text x="830" y="225" text-anchor="middle" class="h">HTTP / SSE server</text>
+    <text x="830" y="245" text-anchor="middle" class="sub">Python stdlib asyncio HTTP</text>
+    <text x="830" y="263" text-anchor="middle" class="sub">REST API  --  api.py</text>
+    <text x="830" y="281" text-anchor="middle" class="sub">SSE per-view subscriptions</text>
+
+    <line x1="830" y1="160" x2="830" y2="198" stroke="#b04a2a" marker-end="url(#arrow)" class="stroke-dash"/>
+    <line x1="830" y1="200" x2="830" y2="162" stroke="#b04a2a" marker-end="url(#arrow)" class="stroke-dash"/>
+
+    <text x="850" y="183" class="axis-label">HTTP + SSE</text>
+  </g>
+
+  <!-- Cross link: web → routing core (config changes) -->
+  <line x1="700" y1="240" x2="640" y2="230" stroke="#b04a2a" marker-end="url(#arrow)" class="stroke-dash"/>
+  <text x="640" y="220" class="axis-label" text-anchor="end">config + state mutations</text>
+
+  <!-- Cross link: plugin host → web (SSE plugin-display / param) -->
+  <line x1="640" y1="470" x2="700" y2="280" stroke="#b04a2a" marker-end="url(#arrow)" class="stroke-dash"/>
+  <text x="720" y="450" class="axis-label">SSE: plugin-display / param</text>
+
+  <!-- Persistence -->
+  <g>
+    <rect class="box pers" x="700" y="340" width="260" height="70"/>
+    <text x="830" y="362" text-anchor="middle" class="h">Working copy</text>
+    <text x="830" y="382" text-anchor="middle" class="sub">/run/raspimidihub/config.json</text>
+    <text x="830" y="400" text-anchor="middle" class="sub">tmpfs (RAM)</text>
+
+    <rect class="box pers" x="700" y="450" width="260" height="90"/>
+    <text x="830" y="472" text-anchor="middle" class="h">Persistent copy</text>
+    <text x="830" y="492" text-anchor="middle" class="sub">/boot/firmware/raspimidihub/</text>
+    <text x="830" y="508" text-anchor="middle" class="sub">config.json  (FAT32, boot part.)</text>
+    <text x="830" y="526" text-anchor="middle" class="sub">+ bluetooth-state.tar (BlueZ)</text>
+
+    <line x1="830" y1="410" x2="830" y2="448" stroke="#333" marker-end="url(#arrow)"/>
+    <text x="845" y="432" class="axis-label">atomic copy on Save Config</text>
+  </g>
+
+  <!-- WiFi / network row -->
+  <g>
+    <rect class="box pers" x="40" y="640" width="920" height="60"/>
+    <text x="60" y="662" class="h">Network layer:</text>
+    <text x="60" y="682" class="sub">hostapd + dnsmasq (AP mode)   |   wpa_supplicant (client mode)   |   avahi (raspimidihub.local)   |   usb_tether (CDC over USB-A)</text>
+  </g>
+</svg>

@@ -59,3 +59,10 @@ node_modules/
 !docs/screenshots/*.png
 !website/screenshots/*.png
 masquerade.sh
+
+# Image build artifacts (Pi OS bootstrap image)
+image/cache/
+image/work/
+
+# Built manual PDF (regenerate with `make manual`)
+docs/manual/*.pdf

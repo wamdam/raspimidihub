@@ -1,0 +1,30 @@
+---
+title: "RaspiMIDIHub"
+subtitle: "User Manual -- Version 3.1.0"
+author: "RaspiMIDIHub Project"
+version: "3.1.0"
+date: "2026-05-11"
+documentclass: report
+papersize: a4
+fontsize: 10pt
+geometry:
+  - margin=2.5cm
+toc-title: "Contents"
+colorlinks: true
+linkcolor: accentColour
+urlcolor: accentColour
+toccolor: black
+# Sans-serif body text. DejaVu Sans has comprehensive Unicode
+# coverage (≥, ✓, ↔, ←, → etc.) and DejaVu Sans Mono renders the
+# box-drawing glyphs in code blocks correctly.
+mainfont: "DejaVu Sans"
+sansfont: "DejaVu Sans"
+monofont: "DejaVu Sans Mono"
+monofontoptions:
+  - Scale=0.9
+# Anchor figures where they appear in the source instead of letting
+# LaTeX float them to the top/bottom of a page. Requires the `float`
+# package, loaded in templates/header.tex.
+fig-pos: "H"
+# Layout customisations live in templates/header.tex.
+---

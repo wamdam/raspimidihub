@@ -1,0 +1,200 @@
+# UI Controls
+
+Across every panel the UI uses the same small set of touch-first
+controls. The shapes and gestures are consistent across the routing
+matrix, the plugin configuration panels, the controller surfaces,
+the Tracker, and the **Settings** page. Knowing how each control
+behaves once -- here -- pays off in every chapter that follows.
+
+## Wheel
+
+A vertical scrollable drum, used for any value with discrete steps
+and a meaningful order: note pitch, BPM, MIDI channel, depth
+percentage. Drag the drum up or down; the value snaps to a tick.
+
+Wheels are the default for parameters that benefit from rotary
+feedback -- the visible "drum" makes it clear how much range is
+above and below the current value. Some wheels display labels
+instead of numbers where words make more sense; the **Scale
+Remapper** root selector, for example, shows note names (`C`,
+`C#`, `D`, ...) instead of integers.
+
+A wheel can also display a scaled value -- the **CC LFO**'s
+**Frequency** wheel stores `5` internally but displays it as
+`0.5 Hz`.
+
+## Fader
+
+A horizontal or vertical mixer-style slider, used for continuous
+values where the metaphor of a "level" applies: volume, depth, mix,
+LFO rate. Drag the thumb to set; the value follows the finger
+without interpolation lag.
+
+Faders carry a tick sound on each integer step (subtle, optional;
+toggle in **Settings → Display**) and a metallic thumb that
+catches the eye when scanning a panel of many controls. The
+**CC LFO** rate fader is the canonical example -- displayed as
+`0.5 Hz`, stored as a raw integer.
+
+## Knob
+
+The circular control used on the controller surfaces. Vertical
+drag changes the value; the pointer angle reflects the current
+value. Mouse-wheel / two-finger scroll nudges by one step.
+
+Knobs only appear on controller surfaces (chapter 12). The matching
+"set Ch / CC / On / Off" controls on a controller's *configuration*
+panel are wheels, not knobs -- knobs are for performance, wheels
+are for setup.
+
+## Radio
+
+Pill-shaped tap-to-select for small enumerations: waveform shape,
+scale type, drop-button mode, arpeggiator pattern. Each option is
+its own pill; the selected one is filled, the others are outlined.
+Tap to switch. No scrolling, no submenus.
+
+Radios are preferred over dropdowns wherever the option count is
+five or fewer.
+
+## Toggle
+
+A metal switch with a coloured LED dot: on or off, nothing in
+between. The LED dot is green by default; some toggles use yellow
+or red where the colour has semantic meaning (a "destructive" red
+on a panic button, for example).
+
+Toggles flip on a single tap. There is no long-press behaviour;
+the same tap that toggles to on toggles to off.
+
+## Step Editor
+
+A step-sequencer grid: a row of cells, each with an on/off dot, an
+optional per-step note offset, and an optional accent flag. The
+**Arpeggiator** uses it for the pattern; the **Tracker** uses a
+larger and more specialised variant (chapter 13).
+
+Tap a cell to toggle on or off. Drag vertically on a step to set
+its note offset. A surrounding length parameter controls how many
+cells are active; cells beyond the length appear greyed.
+
+## Curve Editor
+
+A drawable 128-point canvas, one value per MIDI integer 0--127.
+Used by the **Velocity Curve** plugin and any plugin that needs a
+per-MIDI-value lookup. Draw with a finger or stylus; the curve
+re-samples cleanly between control points.
+
+Curve editors include shape presets along the edge of the canvas
+(linear, ease-in, ease-out, S-curve, ...). Tapping a preset sets
+the curve and you can then draw on top of it.
+
+## XY Pad
+
+A two-dimensional drag surface, used by the **XY 4** controller.
+Drag the dot anywhere on the pad; the X axis sends one CC, the Y
+axis sends another. Each axis has independent MIDI Learn.
+
+XY pads optionally **spring** back to a home position (centre or
+bottom-left) when released. Spring force is configurable per cell.
+The spring is the difference between an XY pad and two faders that
+happen to share a surface: with spring on, the XY pad fires a CC
+event when released *back* to home as well as when dragged away
+from it.
+
+## Scope
+
+A live waveform display showing plugin output over time. The **CC
+LFO** uses one to show what the LFO is generating; the **CC
+Smoother** uses two (in / out) to show the smoothing effect on a
+noisy input.
+
+Scopes scroll right-to-left with a fixed time window (typically
+two seconds). The browser renders the trace at its natural frame
+rate while the plugin pushes new values in real time.
+
+## Meter
+
+A segmented level / beat indicator. The **Master Clock** uses one
+to show the current beat within the bar (four segments, the active
+one lit). Generic level meters scale 0--127 across the segments.
+
+Meters are simpler than scopes -- no history, no scroll -- and
+cheaper to render at high update rates.
+
+## Button
+
+A rubber push-button with a coloured LED on its face. Most buttons
+are latching (one tap on, next tap off); some are momentary
+"trigger" buttons that fire an action and self-reset. Colour is a
+visual cue -- green for normal actions, red for destructive.
+
+The **Panic Button** plugin's surface is a single red trigger
+button; each tap sends All Notes Off and All Sound Off on every
+MIDI channel.
+
+## Note Select
+
+A wheel specialised for MIDI notes. Renders note names (`C-2` to
+`G8`) instead of raw 0--127 integers. Used wherever a parameter is
+*a* note -- the **Hold** plugin's release-note Learn, the **Note
+Splitter** split point.
+
+## Channel Select
+
+A wheel specialised for MIDI channels. Renders 1--16 (one-based),
+even though the underlying value is 0--15 (zero-based). Used
+wherever a parameter selects a MIDI channel.
+
+## Group
+
+Not really a control -- a labelled section that visually groups
+related parameters in the config panel. The **Arpeggiator** uses a
+"Timing" group to bundle sync, BPM, and rate; an "Output" group
+bundles the gate, velocity, and channel parameters. Groups affect
+layout only.
+
+## MIDI Learn
+
+The universal capture flow. Every parameter that takes a *MIDI
+source* (a mapping's source CC, a drop button's trigger note, an
+XY axis CC, a controller cell's CC) has a Learn button. Tap it
+once -- the button changes to **Listening...** -- then play a note
+or move a knob on hardware. The first recognised event fills in
+the source fields and Learn turns off.
+
+If you want to cancel, tap the Learn button a second time. The
+Learn state does not time out on its own; it stays armed until
+either an event arrives or you turn it off.
+
+## CC Automation Feedback
+
+When a hardware CC drives a plugin parameter (either through a
+**CC → CC** mapping or because the plugin accepts that CC
+directly), turning the hardware knob animates the on-screen
+control in real time. A wheel spins, a fader slides, a knob
+rotates. No polling, no flicker.
+
+The control source is unambiguous: the *hardware* is moving the
+*UI*. Touching the UI while the hardware is also active produces
+exactly one resolved value, with no fight between sources.
+
+## The Four Ways an Overlay Closes
+
+Every modal overlay in the UI accepts the same four dismiss
+gestures:
+
+1. **Swipe down** on the overlay header.
+2. **Tap the dark overlay** outside the panel.
+3. **Press `ESC`** if a physical keyboard is connected.
+4. **Tap the `X`** button at the top of the overlay.
+
+There is no fifth way. Knowing all four means you can always close
+something without hunting for the close button.
+
+## Tick / Haptic Feedback
+
+The wheel and fader controls produce a small click sound on each
+integer step. The sound is optional and lives behind the **knob /
+wheel tick sounds** toggle in **Settings → Display**.
+
