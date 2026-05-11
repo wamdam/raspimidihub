@@ -1,0 +1,26 @@
+#!/bin/sh
+# RaspiMIDIHub first-boot LED state indicator.
+# Drives only the green ACT LED (the only LED present on every supported Pi
+# including the Zero 2 W).
+#
+# Usage: firstboot-led <wait|download|install|activate|fail|off>
+
+LED=/sys/class/leds/ACT
+[ -d "$LED" ] || LED=/sys/class/leds/led0
+[ -d "$LED" ] || exit 0  # no controllable LED — silently skip
+
+set_timer() {
+    echo timer > "$LED/trigger" 2>/dev/null || return 0
+    echo "$1" > "$LED/delay_on"  2>/dev/null
+    echo "$2" > "$LED/delay_off" 2>/dev/null
+}
+
+case "$1" in
+    wait)     echo heartbeat > "$LED/trigger" ;;             # lub-dub: starting up, waiting for network
+    download) set_timer 200 200 ;;                            # medium blink: fetching installer
+    install)  set_timer 100 100 ;;                            # fast blink: apt install running
+    activate) echo none > "$LED/trigger"; echo 1 > "$LED/brightness" ;;  # solid: done, rebooting shortly
+    fail)     set_timer 50 950 ;;                             # one short flash per second: install failed
+    off)      echo none > "$LED/trigger"; echo 0 > "$LED/brightness" ;;
+    *)        echo "usage: firstboot-led <wait|download|install|activate|fail|off>" >&2; exit 1 ;;
+esac

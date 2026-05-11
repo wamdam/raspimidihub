@@ -1,0 +1,40 @@
+#!/bin/bash
+# RaspiMIDIHub first-boot bootstrap.
+# Fetches and runs the latest release's install.sh, then reboots.
+# Idempotent — refuses to re-run once /var/lib/raspimidihub/bootstrap-done exists.
+
+set -e
+
+LED=/usr/local/sbin/firstboot-led
+DONE_MARKER=/var/lib/raspimidihub/bootstrap-done
+CACHE=/var/cache/raspimidihub
+INSTALL_URL="https://github.com/wamdam/raspimidihub/releases/latest/download/install.sh"
+
+trap '"$LED" fail; echo "[bootstrap] FAILED — see journalctl -u raspimidihub-bootstrap" >&2' ERR
+
+if [ -f "$DONE_MARKER" ]; then
+    echo "[bootstrap] already done — skipping"
+    exit 0
+fi
+
+# Wait for actual internet (network-online.target can fire before DNS is usable).
+for i in $(seq 1 60); do
+    if curl -fsSI -m 3 https://github.com >/dev/null 2>&1; then
+        break
+    fi
+    [ "$i" = 60 ] && { echo "[bootstrap] no internet after 60s" >&2; false; }
+    sleep 1
+done
+
+"$LED" download
+mkdir -p "$CACHE"
+curl -fsSL -o "$CACHE/install.sh" "$INSTALL_URL"
+
+"$LED" install
+bash "$CACHE/install.sh"
+
+"$LED" activate
+mkdir -p "$(dirname "$DONE_MARKER")"
+touch "$DONE_MARKER"
+sleep 2
+systemctl reboot

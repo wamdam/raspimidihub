@@ -1,0 +1,17 @@
+[Unit]
+Description=RaspiMIDIHub first-boot bootstrap (downloads + installs latest release)
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=!/var/lib/raspimidihub/bootstrap-done
+
+[Service]
+Type=oneshot
+RemainAfterExit=no
+ExecStartPre=/usr/local/sbin/firstboot-led wait
+ExecStart=/usr/local/sbin/raspimidihub-bootstrap-run
+StandardOutput=journal
+StandardError=journal
+TimeoutStartSec=900
+
+[Install]
+WantedBy=multi-user.target
