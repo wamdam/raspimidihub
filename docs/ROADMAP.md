@@ -489,13 +489,29 @@ longer exists, the command is dropped from history with a toast.
 
 ---
 
-## 4. Preset switch smoothness
+## 4. Routing graph smoothness ✓ Partly done (2026-04-30)
+
+> **The presets feature was removed entirely 2026-05-09.** The
+> original section title was "Preset switch smoothness"; renamed
+> because the surviving consumers of the graph-swap path are
+> manual "Load Config" + hot-plug today (and any future graph-swap
+> mechanism — Preset Trigger is now stale, see Pending design).
+>
+> What shipped (2026-04-30):
+> - `apply_edge_diff(target_edges)` — diff + apply in
+>   `midi_engine.py`; used by `api_load_config` and friends.
+> - Per-edge note refcount (`MidiEngine._active_notes`) — note-on
+>   increments, note-off decrements, edge removal flushes the right
+>   note-offs.
+>
+> What's still pending: the **soft vs hard panic split** + panic
+> state machine below. The Panic button today still does the full
+> hard CC 123 + CC 120 + plugin `panic()` blast on every tap.
 
 ### Goal
 
-Loading a preset (matrix preset, future Preset Trigger plugin, manual
-"Load Config" button — anything that swaps the routing graph) currently
-rips down every subscription and rebuilds. That causes:
+Loading a config (or any future feature that swaps the routing
+graph) used to rip down every subscription and rebuild. That caused:
 
 1. **Hung notes** on destinations whose only inbound edge was removed
    (their note-offs never arrive).
@@ -769,10 +785,15 @@ dependencies.
    ≥3 patterns per instrument per genre.
 2. Rhythm Sequencer genre expansion — full 21 genres, same coverage
    floor.
-3. Tracker MVP — plugin + `TrackerGrid`, steps, play, record, overdub,
-   clear.
-4. Tracker polish — copy/paste bars, transpose, paginator, live
-   pass-through toggle.
+3. ✓ **Tracker MVP** (2026-05-11) — plugin + `TrackerGrid`, steps,
+   play, record-while-playing, clear. Shipped with more than the
+   original MVP: per-track output channels, Cut/Copy/Paste with
+   sub-cell selection, keyboard typing, audible note preview,
+   forward-clock toggle, Play/Stop button + Space toggle.
+4. Tracker polish — copy/paste bars ✓, paginator ✓ (page-prefix
+   row labels + Add/Del/Copy/Paste in header), transpose
+   (pending), live pass-through toggle (pending; current behaviour
+   is always pass-through during recording).
 
 **Workflow track** (independent of the sequencer track, can slot in
 first if preferred)
@@ -796,10 +817,10 @@ first if preferred)
 6. Preview mode — ghost indicators on cells.
 
 **Engine track** (new; can slot in any time)
-1. Per-edge note refcount table.
-2. Edge-diff `apply_edge_diff(target_edges)` replacing
+1. ✓ Per-edge note refcount table (`MidiEngine._active_notes`).
+2. ✓ Edge-diff `apply_edge_diff(target_edges)` replacing
    teardown-and-rebuild in `api_load_config`.
-3. Soft vs hard panic split (long-press = hard).
+3. Soft vs hard panic split (long-press = hard) — still pending.
 
 **Modulator track** (new)
 1. CurveEditor extensions — `wrap` flag, `shapes` pulldown
@@ -837,14 +858,20 @@ users will use Arp + Hold for sequencing while these mature.
    Hip-Hop, Trap), ≥5 presets per genre, ≥3 pattern variants per
    instrument per genre. Patterns + presets ship as `.grv` text
    files under `plugins/rhythm_sequencer/templates/`.
-2. **Tracker MVP** (§2).
+2. ✓ **Tracker MVP** (§2) — shipped 2026-05-11.
 3. **Generalize step grid**. Pull common code out of `DrumGrid` /
-   `TrackerGrid` into a reusable component.
+   `TrackerGrid` into a reusable component. Worth revisiting once
+   Rhythm Sequencer is in flight — the actual shared surface area
+   between drum grid (boolean per cell × N tracks) and tracker
+   (rich voice cell × N tracks) is narrower than it first looked.
 4. **CC Sequencer** (pending design — finalise spec just before
-   this step). Uses the generalised step grid + CC observatory.
+   this step). The Tracker already covers per-step CC writes via
+   the cc-num/cc-val columns, so a separate CC Sequencer may now
+   only be worthwhile if the use case wants live CC recording
+   into a denser per-step grid that isn't paired with notes.
 5. **Rhythm Sequencer genre expansion**. Round out to 21 genres.
-6. **Tracker polish**. Copy/paste bars, transpose, paginator, live
-   pass-through toggle.
+6. **Tracker polish** — transpose + live-monitor toggle remain.
+   Copy/paste bars and paginator already shipped with the MVP.
 
 ### Phase 9 — Undo / Redo (≈ 0.5–1 sprint)
 
@@ -1030,7 +1057,12 @@ before implementation.
   TBD.
 - **TODO: CC Sequencer** — step-based plugin emitting up to 4
   `(channel, cc, value)` per step, with arm-and-record from the CC
-  observatory. Step grid UI shared with the Tracker.
+  observatory. Step grid UI shared with the Tracker. Note: the
+  shipped Tracker already covers per-step CC writes (cc-num /
+  cc-val columns, per-track channel routing, live recording of
+  CCs). The remaining differentiator for a separate plugin would
+  be a denser CC-only grid + multiple CC streams per step without
+  the note-side overhead.
 - **TODO: CC Pickup / Relative plugin** — single virtual instrument
   with `mode = pickup | relative`, re-introducing the classic synth
   pickup/scale modes. Depends on the Phase-4 destination-keyed CC
@@ -1082,11 +1114,14 @@ before implementation.
   first-touch time and pick the unique destination; fall back to
   "no reference, suppress until external write" when ambiguous
   (multiple destinations) or disconnected.
-- **TODO: Preset Trigger** plugin — `(channel, note) → preset_name`.
-  Calls the matrix preset-load API on note-on. Behaviour around hung
-  notes during the swap is now mostly handled by the Engine track's
-  edge-diff work; the remaining question is whether a dedicated
-  panic-before-load toggle is still needed.
+- **TODO (obsolete?): Preset Trigger** plugin — used to be
+  `(channel, note) → preset_name` calling the matrix preset-load
+  API on note-on. **The Presets feature was removed entirely
+  2026-05-09** (page, API, persistence), so the original premise
+  is gone. If a graph-swap-on-MIDI-note trigger is still wanted,
+  the design needs a replacement target — e.g. swapping between
+  saved snapshots of `config.json` or some other persisted form.
+  Park until the need re-emerges.
 - ✓ **SysEx Sender** plugin — Done 2026-05-01. Shipped as a
   parameter-less plugin with a custom file-input UI in the
   device-detail panel. Browser POSTs raw bytes to
