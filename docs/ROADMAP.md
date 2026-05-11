@@ -12,7 +12,14 @@ Items listed are **proposals**, not commitments.
 
 ---
 
-## 1. Rhythm Sequencer plugin ("Drum Groover")
+## 1. Rhythm Sequencer plugin ("Drum Groover") — parked
+
+> **Parked 2026-05-11.** The Tracker (§2 ✓ Done) covers
+> step-sequencing needs in practice. A dedicated drum-grid +
+> genre-template plugin is content-heavy work (5×5 patterns × 5
+> genres minimum, prose-shaped JSON, randomize tables) that the
+> user isn't reaching for right now. Spec preserved below for
+> if / when the demand re-emerges.
 
 ### Goal
 
@@ -489,24 +496,24 @@ longer exists, the command is dropped from history with a toast.
 
 ---
 
-## 4. Routing graph smoothness ✓ Partly done (2026-04-30)
+## 4. Routing graph smoothness ✓ Done (2026-04-30)
 
 > **The presets feature was removed entirely 2026-05-09.** The
 > original section title was "Preset switch smoothness"; renamed
-> because the surviving consumers of the graph-swap path are
-> manual "Load Config" + hot-plug today (and any future graph-swap
-> mechanism — Preset Trigger is now stale, see Pending design).
+> because the surviving consumer of the graph-swap path is the
+> manual "Load Config" button in Settings (via
+> `api.api_load_config` → `engine.apply_edge_diff`).
 >
-> What shipped (2026-04-30):
+> What shipped:
 > - `apply_edge_diff(target_edges)` — diff + apply in
->   `midi_engine.py`; used by `api_load_config` and friends.
+>   `midi_engine.py`; still used by `api_load_config` (and any
+>   future graph-swap caller). Worth keeping even though Presets
+>   are gone — the Load Config button alone justifies it.
 > - Per-edge note refcount (`MidiEngine._active_notes`) — note-on
 >   increments, note-off decrements, edge removal flushes the right
 >   note-offs.
->
-> What's still pending: the **soft vs hard panic split** + panic
-> state machine below. The Panic button today still does the full
-> hard CC 123 + CC 120 + plugin `panic()` blast on every tap.
+> - Soft / hard panic split: `MidiEngine.panic(hard: bool=False)`,
+>   `POST /api/panic` accepts `{"hard": bool}`. Default soft.
 
 ### Goal
 
@@ -779,21 +786,15 @@ StepEditor / CurveEditor convention). No schema change.
 Features ship independently — these are proposed orderings, not
 dependencies.
 
-**Sequencer track**
-1. Rhythm Sequencer MVP — plugin + `DrumGrid` + `GenreTemplatePicker`,
-   5 genres (Techno, House, DnB, Hip-Hop, Trap) × ≥5 presets each ×
-   ≥3 patterns per instrument per genre.
-2. Rhythm Sequencer genre expansion — full 21 genres, same coverage
-   floor.
-3. ✓ **Tracker MVP** (2026-05-11) — plugin + `TrackerGrid`, steps,
-   play, record-while-playing, clear. Shipped with more than the
-   original MVP: per-track output channels, Cut/Copy/Paste with
-   sub-cell selection, keyboard typing, audible note preview,
-   forward-clock toggle, Play/Stop button + Space toggle.
-4. Tracker polish — copy/paste bars ✓, paginator ✓ (page-prefix
-   row labels + Add/Del/Copy/Paste in header), transpose
-   (pending), live pass-through toggle (pending; current behaviour
-   is always pass-through during recording).
+**Sequencer track** (closed via Tracker — 2026-05-11)
+
+✓ **Tracker MVP** shipped — plugin + `TrackerGrid`, steps, play,
+record-while-playing, clear. Shipped with more than the original
+MVP: per-track output channels, Cut/Copy/Paste with sub-cell
+selection, keyboard typing, audible note preview, forward-clock
+toggle, Play/Stop + Space toggle. The CC Sequencer plan is
+absorbed (the Tracker has per-step CC columns). The Rhythm
+Sequencer is parked — see §1.
 
 **Workflow track** (independent of the sequencer track, can slot in
 first if preferred)
@@ -816,11 +817,12 @@ first if preferred)
 5. Autodrop — bar-quantized fire scheduling.
 6. Preview mode — ghost indicators on cells.
 
-**Engine track** (new; can slot in any time)
+**Engine track** (all shipped)
 1. ✓ Per-edge note refcount table (`MidiEngine._active_notes`).
 2. ✓ Edge-diff `apply_edge_diff(target_edges)` replacing
    teardown-and-rebuild in `api_load_config`.
-3. Soft vs hard panic split (long-press = hard) — still pending.
+3. ✓ Soft vs hard panic split — `panic(hard=False)`, API takes
+   `{"hard": bool}`.
 
 **Modulator track** (new)
 1. CurveEditor extensions — `wrap` flag, `shapes` pulldown
@@ -849,29 +851,26 @@ Creative, niche, no other dependencies.
    for free.
 2. **Drawable LFO** (`CC Curve LFO`, §5).
 
-### Phase 8 — Sequencers (≈ 3 sprints)
+### Phase 8 — Sequencers ✓ Done (2026-05-11)
 
-The biggest pieces but the lowest live-performance urgency. Most
-users will use Arp + Hold for sequencing while these mature.
+Closed out via the Tracker; what remains is parked or moved to
+"not planned right now":
 
-1. **Rhythm Sequencer MVP** (§1). 5 genres (Techno, House, DnB,
-   Hip-Hop, Trap), ≥5 presets per genre, ≥3 pattern variants per
-   instrument per genre. Patterns + presets ship as `.grv` text
-   files under `plugins/rhythm_sequencer/templates/`.
-2. ✓ **Tracker MVP** (§2) — shipped 2026-05-11.
-3. **Generalize step grid**. Pull common code out of `DrumGrid` /
-   `TrackerGrid` into a reusable component. Worth revisiting once
-   Rhythm Sequencer is in flight — the actual shared surface area
-   between drum grid (boolean per cell × N tracks) and tracker
-   (rich voice cell × N tracks) is narrower than it first looked.
-4. **CC Sequencer** (pending design — finalise spec just before
-   this step). The Tracker already covers per-step CC writes via
-   the cc-num/cc-val columns, so a separate CC Sequencer may now
-   only be worthwhile if the use case wants live CC recording
-   into a denser per-step grid that isn't paired with notes.
-5. **Rhythm Sequencer genre expansion**. Round out to 21 genres.
-6. **Tracker polish** — transpose + live-monitor toggle remain.
-   Copy/paste bars and paginator already shipped with the MVP.
+1. ✓ **Tracker MVP** (§2) — shipped 2026-05-11. Closed Phase 8.
+2. ✓ **CC Sequencer** covered by the Tracker's per-step CC
+   columns (cc-num + cc-val per voice, per-track channel, live
+   recording). A standalone CC Sequencer plugin isn't being
+   pursued — see the note in §1.
+3. **Rhythm Sequencer** (§1) — parked. The Tracker covers most
+   step-sequencing needs; a drum-grid-with-genre-templates
+   plugin is interesting but not on the active path right now.
+   Spec preserved in §1 for if/when the need re-emerges.
+4. **Generalize step grid** — irrelevant once Rhythm Sequencer
+   is parked; the Tracker is fine standalone.
+5. **Tracker polish** — copy/paste, paginator, sub-cell
+   selection, keyboard typing, audible note preview, per-track
+   channels all shipped with the MVP. Transpose + a record-vs-
+   live-monitor toggle remain as small follow-ups when needed.
 
 ### Phase 9 — Undo / Redo (≈ 0.5–1 sprint)
 
@@ -888,9 +887,9 @@ finalised before we commit to wrapping them.
 
 ### Risk callouts
 
-- **Phase 8 (Sequencers)** has the highest sunk-time risk —
-  templates and genre profiles are content work. Time-box at 5×5
-  if interest fades.
+(Phase 8 closed via the Tracker — the content-heavy Rhythm
+Sequencer with genre templates is parked, so the original
+sunk-time risk no longer applies.)
 
 ---
 
@@ -1114,14 +1113,6 @@ before implementation.
   first-touch time and pick the unique destination; fall back to
   "no reference, suppress until external write" when ambiguous
   (multiple destinations) or disconnected.
-- **TODO (obsolete?): Preset Trigger** plugin — used to be
-  `(channel, note) → preset_name` calling the matrix preset-load
-  API on note-on. **The Presets feature was removed entirely
-  2026-05-09** (page, API, persistence), so the original premise
-  is gone. If a graph-swap-on-MIDI-note trigger is still wanted,
-  the design needs a replacement target — e.g. swapping between
-  saved snapshots of `config.json` or some other persisted form.
-  Park until the need re-emerges.
 - ✓ **SysEx Sender** plugin — Done 2026-05-01. Shipped as a
   parameter-less plugin with a custom file-input UI in the
   device-detail panel. Browser POSTs raw bytes to
