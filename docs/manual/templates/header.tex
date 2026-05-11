@@ -113,6 +113,18 @@
   {#1}
 
 % ------------------------------------------------------------------
+% Table of contents: widen the number boxes so two-digit section /
+% subsection numbers (5.10, 8.18, ...) don't collide with the title.
+% The defaults in `report.cls` are 2.3em for sections and 3.2em for
+% subsections, which fit "1.1" / "1.1.1" only.
+% ------------------------------------------------------------------
+\makeatletter
+\renewcommand*\l@section{\@dottedtocline{1}{1.5em}{3.2em}}
+\renewcommand*\l@subsection{\@dottedtocline{2}{4.7em}{3.9em}}
+\renewcommand*\l@subsubsection{\@dottedtocline{3}{8.6em}{4.6em}}
+\makeatother
+
+% ------------------------------------------------------------------
 % Page style: running header with chapter/section names, page number
 % in the outer corner. Chapter-opening pages keep the plain style.
 % ------------------------------------------------------------------
