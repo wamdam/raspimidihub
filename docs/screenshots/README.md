@@ -35,7 +35,9 @@ not touched; press **Load Config** in Settings to restore it.
 | `25-controller-fx-6-config.png` | FX 6 device-detail config panel |
 | `26-controller-performance-16-config.png` | Performance 16 device-detail config panel |
 | `27-plugin-sysex-sender.png` | SysEx Sender (file picker, no params) |
+| `28-plugin-tracker-config.png` | Tracker device-detail config panel (per-track channels + send-clock toggle; the grid itself is play-only) |
 | `controller-mixer-8.png` | Mixer 8 fullscreen play surface |
 | `controller-xy-4.png` | XY 4 fullscreen play surface |
 | `controller-fx-6.png` | FX 6 fullscreen play surface |
 | `controller-performance-16.png` | Performance 16 fullscreen play surface |
+| `tracker.png` | Tracker step sequencer on the Play panel (grid + keypad + cursor cluster) |

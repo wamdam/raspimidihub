@@ -205,7 +205,15 @@ to know which instrument library to pick from on next load.
 
 ---
 
-## 2. Tracker Sequencer plugin ("Tracker")
+## 2. Tracker Sequencer plugin ("Tracker") ✓ Done (2026-05-11)
+
+Shipped. The plugin grew per-track output channels, manual
+Play/Stop + Space-bar toggle, live recording during playback (notes
+land on the playhead row instead of the cursor row), Cut/Copy/Paste
+with sub-cell selection, keyboard note entry (QWERTY+QWERTZ via
+event.code), audible note preview, and forward-clock toggle on top
+of the spec below. Screenshots: `docs/screenshots/tracker.png` +
+`docs/screenshots/28-plugin-tracker-config.png`.
 
 ### Goal
 

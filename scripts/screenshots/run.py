@@ -52,6 +52,7 @@ DEMO_PLUGINS = [
     ("panic", "Panic"),
     ("scale_remapper", "Scale Remapper"),
     ("sysex_sender", "SysEx Sender"),
+    ("tracker", "Tracker"),
     ("velocity_curve", "Velocity Curve"),
     ("velocity_equalizer", "Velocity Equalizer"),
     ("controller_mixer_8", "Mixer 8"),
@@ -165,7 +166,6 @@ def build_scenes(target: str, instances: dict[str, dict]) -> list[dict]:
     just created."""
     scenes: list[dict] = [
         {"name": "01-routing", "path": "/routing"},
-        {"name": "02-presets", "path": "/presets"},
         {"name": "04-settings", "path": "/settings"},
     ]
     # Controller play-surface scenes. One per controller template,
@@ -183,6 +183,9 @@ def build_scenes(target: str, instances: dict[str, dict]) -> list[dict]:
             continue
         scenes.append({"name": scene_name,
                        "path": f"/controller/{inst['id']}"})
+    # Tracker play-surface lives under /play.
+    if (tracker := instances.get("tracker")) is not None:
+        scenes.append({"name": "tracker", "path": f"/play/{tracker['id']}"})
     # 05/07/08 need a real connection in the matrix so there is an
     # 'on' cell to click. We wire a transient one between two demo
     # plugins; setup_demo_plugins already wiped the live state and
@@ -223,6 +226,7 @@ def build_scenes(target: str, instances: dict[str, dict]) -> list[dict]:
         "clock_divider": "21-plugin-clock-divider",
         "hold": "22-plugin-hold",
         "sysex_sender": "27-plugin-sysex-sender",
+        "tracker": "28-plugin-tracker-config",
         "controller_mixer_8": "23-controller-mixer-8-config",
         "controller_xy_4": "24-controller-xy-4-config",
         "controller_fx_6": "25-controller-fx-6-config",

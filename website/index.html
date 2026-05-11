@@ -122,7 +122,7 @@
 
     <div class="feature-row">
       <div class="feature-text">
-        <h3>15 Built-in Plugins</h3>
+        <h3>16 Built-in Plugins</h3>
         <p>Virtual instruments and effects that appear as real MIDI devices in the routing matrix. Each plugin has its own custom interface with wheels, faders, toggles, step sequencers, and live scopes.</p>
         <ul class="feature-list">
           <li>Arpeggiator with step sequencer and accents</li>
@@ -140,6 +140,26 @@
     </div>
 
     <div class="feature-row reverse">
+      <div class="feature-text">
+        <h3>Tracker — 8-Voice Step Sequencer</h3>
+        <p>Hex-numbered tracker grid on a dedicated "Play" panel. Each of the eight voices has its own output channel, so a single Tracker drives eight different synths from one pattern. Notes, velocity and CC are entered per cell; the keyboard's q-row + 2/3/5/6/7 type chromatically. Hit Play (or Space) and the playhead walks the rows in time with your master clock.</p>
+        <ul class="feature-list">
+          <li>Up to 16 pages chained, looping back to page 0</li>
+          <li>Per-voice Note + Velocity + CC# + CC Val; End marker ends the page early on any voice</li>
+          <li>Live recording — play notes while the pattern runs, they land on the currently-sounding row</li>
+          <li>Cut / Copy / Paste with Shift-held sub-cell rectangle selection</li>
+          <li>Optional clock-out forwarding to slave external gear</li>
+        </ul>
+      </div>
+      <div class="feature-phone">
+        <div class="phone">
+          <div class="phone-notch"></div>
+          <img src="screenshots/tracker.png" alt="Tracker step sequencer" loading="lazy">
+        </div>
+      </div>
+    </div>
+
+    <div class="feature-row">
       <div class="feature-text">
         <h3>Controllers — Tap-to-Play Surfaces</h3>
         <p>Fullscreen play surfaces (Mixer 8, FX 6, Performance 16, XY 4) that send CCs over MIDI in real time. Each cell is renameable, MIDI-Learnable, and themable. Four drop buttons per controller capture and replay snapshots, quantised to bar boundaries.</p>
@@ -162,7 +182,7 @@
       </div>
     </div>
 
-    <div class="feature-row">
+    <div class="feature-row reverse">
       <div class="feature-text">
         <h3>Test & Monitor</h3>
         <p>Every device gets a detail panel with a scrollable piano keyboard, CC slider, and live MIDI monitor. Test your setup without touching your gear.</p>
@@ -170,7 +190,7 @@
           <li>Multitouch piano with adjustable octaves</li>
           <li>CC test sender with channel selection</li>
           <li>Real-time MIDI monitor per device</li>
-          <li>Save & load presets including all plugin configurations</li>
+          <li>Live note rate per device + per-port colour-coded hotplug status</li>
         </ul>
       </div>
       <div class="feature-phone">
@@ -181,7 +201,7 @@
       </div>
     </div>
 
-    <div class="feature-row reverse">
+    <div class="feature-row">
       <div class="feature-text">
         <h3>Master Clock & Tight Timing</h3>
         <p>Internal BPM clock with start/stop transport drives every synced plugin and external synth from one place. Clock ticks are pre-scheduled through the kernel-side ALSA queue for sub-millisecond jitter even under heavy CPU load.</p>
@@ -200,7 +220,7 @@
       </div>
     </div>
 
-    <div class="feature-row">
+    <div class="feature-row reverse">
       <div class="feature-text">
         <h3>Velocity Curve Editor</h3>
         <p>Draw a custom 128-point velocity response curve to match your playing style or your hardware's quirks. Pick from preset shapes or freehand-draw your own — soft pads, hard drums, S-curves, anything in between.</p>
@@ -286,6 +306,10 @@
       <div class="plugin-card">
         <h4>Panic Button</h4>
         <p>All Notes Off + All Sound Off on all 16 channels. The emergency stop you always need on stage.</p>
+      </div>
+      <div class="plugin-card">
+        <h4>Tracker</h4>
+        <p>8-voice step sequencer on a dedicated Play panel. Per-track channels, live recording, keyboard note entry, Cut/Copy/Paste with sub-cell selection.</p>
       </div>
     </div>
   </div>
