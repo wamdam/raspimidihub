@@ -364,6 +364,14 @@ class TrackerGrid:
     cmd_stop_param: str | None = None  # bool, frontend → backend trigger
     send_clock_param: str | None = None  # bool, latching toggle
     note_preview_param: str | None = None  # int (MIDI note), frontend → backend trigger
+    # Pattern bank -- 8 stored grids per Tracker instance, with one
+    # currently selected + (optionally) one queued for the next
+    # boundary. See TrackerBase / PatternRow for the full flow.
+    selected_pattern_param: str | None = None       # int 0..N-1
+    queued_pattern_param: str | None = None         # int 0..N-1 or -1 (none)
+    pattern_status_param: str | None = None         # list[bool]: has-content per slot
+    cmd_pattern_select_param: str | None = None     # dict {pattern, mode}, frontend → backend
+    pattern_count: int = 8
 
     def to_dict(self) -> dict:
         d = {
@@ -378,13 +386,16 @@ class TrackerGrid:
             "track_count": self.track_count,
             "max_pages": self.max_pages,
             "max_rows": self.max_rows,
+            "pattern_count": self.pattern_count,
         }
         for attr in ("pages_param", "current_page_param", "cursor_row_param",
                      "cursor_track_param", "cursor_half_param",
                      "octave_param", "rate_param", "playhead_param",
                      "track_channels_param", "cmd_play_param",
                      "cmd_stop_param", "send_clock_param",
-                     "note_preview_param"):
+                     "note_preview_param",
+                     "selected_pattern_param", "queued_pattern_param",
+                     "pattern_status_param", "cmd_pattern_select_param"):
             v = getattr(self, attr)
             if v:
                 d[attr] = v

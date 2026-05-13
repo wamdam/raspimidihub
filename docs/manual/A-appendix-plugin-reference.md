@@ -276,7 +276,8 @@ metadata:
 | Description | 8-voice step sequencer, single channel, paged |
 | Voices | 8 (T1..T8) |
 | Rows per page | 16 (hex 0..F) |
-| Pages per instance | up to 16, chained linearly, loops back to page 0 |
+| Pages per pattern | up to 16, chained linearly, loops back to page 0 |
+| Patterns per instance | 8 numbered slots; see chapter 13 |
 
 Configuration parameters (from the device-detail panel):
 

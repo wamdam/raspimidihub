@@ -163,6 +163,70 @@ After the last page the Tracker loops back to page 0. `End` in a
 note cell ends the page early and jumps to the next page; useful
 for variable-length patterns.
 
+## Patterns
+
+Each Tracker instance stores **8 numbered patterns**. A pattern is
+a full grid (pages + cells). The currently-selected pattern is the
+one on screen and the one playback runs against; tapping a
+different slot switches between them.
+
+The Pattern row sits below the action row (Shift / Cut / Copy /
+Paste), eight slots labelled 1--8. Visually:
+
+- **Outline** -- empty slot (a single default page with no events).
+- **Dim fill** -- has content, idle.
+- **Accent fill** -- the selected pattern.
+- **Coral fill** -- the selected pattern *and* the playhead is
+  running.
+- **Blinking** -- a tap has queued a switch; the slot will become
+  selected at the next pattern boundary.
+
+### Tap
+
+- **Stopped** -- tapping a slot loads it immediately. The view
+  switches to that pattern's grid; the cursor jumps to page 0,
+  row 0.
+- **Playing** -- tapping a slot *queues* the switch. The tapped
+  slot blinks. At the next time the playhead wraps from the last
+  row of the last page back to page 0 row 0, the swap happens in
+  one step: the view changes and the new pattern starts playing
+  from row 0 of page 0. Tapping the currently-playing slot
+  cancels a pending queue.
+
+### Shift + Tap
+
+Switches immediately while playing -- no queue, no waiting for
+the boundary. The playhead tries to land on the **same (page,
+row)** position in the new pattern. If the new pattern is shorter
+and that page doesn't exist, the playhead falls back to **page 0
+at the same row index**, keeping the beat-grid alignment. The
+cursor stays where you had it.
+
+While stopped, Shift + Tap behaves the same as Tap (cursor
+resets to page 0 row 0).
+
+### Long-press
+
+Long-press a slot to open its context menu:
+
+- **Overwrite from selected** -- copies the currently-selected
+  pattern into the long-pressed slot. The selection / view does
+  not change. Useful for cloning a working pattern as a starting
+  point for a variation.
+- **Clear pattern** -- empties the slot back to a single default
+  page. If the cleared slot is the currently-selected one, the
+  view updates and the cursor jumps to page 0 row 0.
+
+Right-click on a slot also opens the menu.
+
+### What each pattern stores
+
+Only the **grid** (pages + cells). The per-track output channels,
+the BPM, and the **Send Clock + Transport** toggle stay on the
+Tracker instance and apply to whichever pattern is playing. So
+the eight patterns share routing and tempo; they differ only in
+what they sequence.
+
 ## The Configuration Panel
 
 Open the Tracker's row or column header in the matrix to access

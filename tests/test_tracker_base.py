@@ -126,6 +126,7 @@ def test_on_start_seeds_one_blank_page():
     assert t.transient_params == {
         "cursor_row", "cursor_track", "cursor_half", "octave",
         "playhead", "cmd_play", "cmd_stop", "note_preview",
+        "queued_pattern", "pattern_status", "cmd_pattern_select",
     }
 
 
@@ -869,3 +870,204 @@ def test_send_clock_on_forwards_clock_and_transport():
     t.on_clock_stop()
     forwarded = [e[0] for e in s.events if e[0] in ("clk", "start", "stop", "cont")]
     assert forwarded == ["clk", "start", "cont", "stop"]
+
+
+# =========================================================================
+# Pattern bank — 8 stored grids per Tracker, switch on tap (queued at
+# the next page-0 row-0 boundary while playing) or Shift+Tap (immediate
+# with a play-row preserving fallback).
+# =========================================================================
+
+
+def _filled_voice(note="C-4", vel=90):
+    return {"note": note, "vel": vel, "cc_num": ".", "cc_val": "--"}
+
+
+def _filled_page(track_count=4):
+    rows = []
+    for i in range(16):
+        rows.append({"voices": [_filled_voice() if i == 0 else empty_voice()
+                                for _ in range(track_count)]})
+    return {"rows": rows}
+
+
+def test_on_start_seeds_eight_empty_patterns():
+    t = _started()
+    pats = t._param_values["patterns"]
+    assert len(pats) == 8
+    # Slot 0 is empty (matches a single fresh page). Slots 1..7 same.
+    for p in pats:
+        assert t._is_empty_pattern(p)
+    assert t._param_values["selected_pattern"] == 0
+    assert t._param_values["queued_pattern"] == -1
+    assert t._param_values["pattern_status"] == [False] * 8
+
+
+def test_on_start_migrates_legacy_pages_into_pattern_0():
+    """A config saved before patterns existed has only `pages`.
+    Migration lifts that into slot 0 and seeds slots 1..7 empty."""
+    class _T(TrackerBase):
+        NAME = "T"
+        TRACK_COUNT = 4
+
+    t = _T()
+    # Pre-set legacy state as if config-restore had just run.
+    legacy = [_filled_page(track_count=4)]
+    t._param_values["pages"] = legacy
+    t.on_start()
+    # patterns[0] is the legacy grid; slots 1..7 are empty.
+    assert t._param_values["patterns"][0] is legacy or \
+        t._param_values["patterns"][0] == legacy
+    for i in range(1, 8):
+        assert t._is_empty_pattern(t._param_values["patterns"][i])
+    # Selection lands on slot 0 (the migrated content).
+    assert t._param_values["selected_pattern"] == 0
+    # Pattern status reflects: slot 0 has content, rest are empty.
+    assert t._param_values["pattern_status"] == [True] + [False] * 7
+
+
+def test_pages_edit_mirrors_into_selected_pattern():
+    """Editing the live grid (set_param 'pages') must write through
+    to patterns[selected_pattern] so the slot keeps its content."""
+    t = _started()
+    new_pages = [_filled_page(track_count=4)]
+    t.on_param_change("pages", new_pages)
+    assert t._param_values["patterns"][0] == new_pages
+    # Status flips empty → non-empty for slot 0 only.
+    assert t._param_values["pattern_status"][0] is True
+    assert all(s is False for s in t._param_values["pattern_status"][1:])
+
+
+def test_tap_while_stopped_switches_immediately_and_resets_cursor():
+    t = _started()
+    # Seed two distinct patterns to make the switch observable.
+    t._param_values["patterns"][1] = [_filled_page(track_count=4)]
+    t._refresh_pattern_status_slot(1)
+    # User moved the cursor before tapping.
+    t._param_values["current_page"] = 3
+    t._param_values["cursor_row"] = 7
+    t.on_param_change("cmd_pattern_select", {"pattern": 1, "mode": "tap"})
+    assert t._param_values["selected_pattern"] == 1
+    assert t._param_values["pages"] == t._param_values["patterns"][1]
+    assert t._param_values["current_page"] == 0
+    assert t._param_values["cursor_row"] == 0
+
+
+def test_tap_while_playing_queues_until_next_boundary():
+    t = _started()
+    # Two patterns: A (selected, currently playing) has 2 pages so
+    # the wrap is reachable in one row's worth of ticks. B is the
+    # target.
+    page_a0 = empty_page(t.TRACK_COUNT, t.MAX_ROWS_PER_PAGE)
+    # Put a fireable note on page 1 row 0 so we exit the End-loop.
+    page_a1 = empty_page(t.TRACK_COUNT, t.MAX_ROWS_PER_PAGE)
+    page_a1["rows"][0]["voices"][0] = _filled_voice("D-4")
+    t._param_values["patterns"][0] = [page_a0, page_a1]
+    t._param_values["pages"] = t._param_values["patterns"][0]
+    t._param_values["patterns"][1] = [_filled_page(track_count=t.TRACK_COUNT)]
+    t._refresh_pattern_status_slot(0)
+    t._refresh_pattern_status_slot(1)
+    t._param_values["rate"] = "1/16"
+    t.on_transport_start()
+    # Queue pattern 1.
+    t.on_param_change("cmd_pattern_select", {"pattern": 1, "mode": "tap"})
+    assert t._param_values["queued_pattern"] == 1
+    # Still selected 0 -- switch only fires on the next wrap.
+    assert t._param_values["selected_pattern"] == 0
+    # Drive ticks until the wrap consumes the queue. 2 pages × 16
+    # rows = 32 steps; on_transport_start already fired row 0, so
+    # 31 more ticks lands on the wrap.
+    for _ in range(31):
+        t.on_tick("1/16")
+    # The wrap consumed the queue: selected swapped to 1, queue
+    # cleared, pages mirrors the new pattern.
+    assert t._param_values["selected_pattern"] == 1
+    assert t._param_values["queued_pattern"] == -1
+    assert t._param_values["pages"] == t._param_values["patterns"][1]
+
+
+def test_tap_playing_slot_while_playing_cancels_queue():
+    t = _started()
+    t._param_values["patterns"][1] = [_filled_page(track_count=t.TRACK_COUNT)]
+    t._refresh_pattern_status_slot(1)
+    t.on_transport_start()
+    # Queue something, then tap the currently-playing slot -> cancel.
+    t.on_param_change("cmd_pattern_select", {"pattern": 1, "mode": "tap"})
+    assert t._param_values["queued_pattern"] == 1
+    t.on_param_change("cmd_pattern_select", {"pattern": 0, "mode": "tap"})
+    assert t._param_values["queued_pattern"] == -1
+    assert t._param_values["selected_pattern"] == 0
+
+
+def test_shift_tap_while_playing_switches_immediately_same_page_row():
+    t = _started()
+    # Both patterns have ≥ 4 pages so the page index stays valid.
+    multi_page = [empty_page(t.TRACK_COUNT, t.MAX_ROWS_PER_PAGE)
+                  for _ in range(4)]
+    t._param_values["patterns"][0] = multi_page
+    t._param_values["patterns"][1] = [_filled_page(track_count=t.TRACK_COUNT)
+                                       for _ in range(4)]
+    t._param_values["pages"] = t._param_values["patterns"][0]
+    t._refresh_pattern_status_slot(1)
+    # Position the playhead mid-pattern.
+    t._param_values["rate"] = "1/16"
+    t.on_transport_start()
+    t._play_page = 2
+    t._play_row = 7
+    t.on_param_change("cmd_pattern_select", {"pattern": 1, "mode": "shift"})
+    # Immediate switch -- view followed, playhead preserved.
+    assert t._param_values["selected_pattern"] == 1
+    assert t._play_page == 2
+    assert t._play_row == 7
+
+
+def test_shift_tap_falls_back_to_page_0_when_target_shorter():
+    t = _started()
+    # A: 4 pages, B: 1 page. Playhead on page 2 row 7 of A.
+    t._param_values["patterns"][0] = [
+        empty_page(t.TRACK_COUNT, t.MAX_ROWS_PER_PAGE) for _ in range(4)
+    ]
+    t._param_values["patterns"][1] = [_filled_page(track_count=t.TRACK_COUNT)]
+    t._param_values["pages"] = t._param_values["patterns"][0]
+    t._refresh_pattern_status_slot(1)
+    t._param_values["rate"] = "1/16"
+    t.on_transport_start()
+    t._play_page = 2
+    t._play_row = 7
+    t.on_param_change("cmd_pattern_select", {"pattern": 1, "mode": "shift"})
+    # Fallback: page 0, row preserved.
+    assert t._param_values["selected_pattern"] == 1
+    assert t._play_page == 0
+    assert t._play_row == 7
+
+
+def test_clone_copies_selected_pattern_into_target():
+    t = _started()
+    # Edit slot 0, then clone into slot 3.
+    pages_a = [_filled_page(track_count=t.TRACK_COUNT)]
+    t.on_param_change("pages", pages_a)
+    t.on_param_change("cmd_pattern_select", {"pattern": 3, "mode": "clone"})
+    assert t._param_values["patterns"][3] == pages_a
+    # Slot 0 (source) still has content; slot 3 (dest) too.
+    assert t._param_values["pattern_status"][0] is True
+    assert t._param_values["pattern_status"][3] is True
+    # Mutating one slot's content shouldn't bleed into the other
+    # (deepcopy guarantee).
+    t._param_values["patterns"][3][0]["rows"][1]["voices"][0]["note"] = "E-4"
+    assert t._param_values["patterns"][0][0]["rows"][1]["voices"][0]["note"] \
+        != "E-4"
+    # Selection / view unchanged by clone.
+    assert t._param_values["selected_pattern"] == 0
+
+
+def test_clear_empties_target_pattern():
+    t = _started()
+    # Fill slots 0 and 2.
+    t.on_param_change("pages", [_filled_page(track_count=t.TRACK_COUNT)])
+    t.on_param_change("cmd_pattern_select", {"pattern": 2, "mode": "clone"})
+    assert t._param_values["pattern_status"][2] is True
+    t.on_param_change("cmd_pattern_select", {"pattern": 2, "mode": "clear"})
+    assert t._is_empty_pattern(t._param_values["patterns"][2])
+    assert t._param_values["pattern_status"][2] is False
+    # Slot 0 untouched.
+    assert t._param_values["pattern_status"][0] is True

@@ -4,6 +4,22 @@ User-visible changes. Short tagged one-liners, no code or commit
 hashes. Tags: Added, Improved, Fix, Changed, Removed.
 
 
+Unreleased
+
+- Added: Tracker patterns — 8 numbered pattern slots below the
+  action row. Each pattern stores a full grid (pages + cells); the
+  per-track channels, BPM, and Send Clock + Transport toggle stay
+  on the Tracker instance. Tap a slot to switch: stopped = load
+  immediately (cursor to page 0 row 0); playing = queue the switch
+  for the next page-0 row-0 boundary, with the queued slot
+  blinking until it fires. Shift+Tap switches immediately while
+  playing, preserving the playhead with a page-0 fallback when
+  the new pattern is shorter. Long-press (or right-click) opens
+  a slot context menu: Overwrite-from-selected and Clear pattern.
+  Existing Tracker instances migrate their current grid into
+  slot 1 on first start; slots 2..8 begin empty.
+
+
 2026-05-11 — Version 3.1.0
 
 - Added: User Manual — a full 100+ page PDF reference shipped with

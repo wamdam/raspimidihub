@@ -22,6 +22,7 @@ import { html } from '../ui/common.js';
 import { useCallback, useEffect, useRef, useState } from '../lib/hooks.module.js';
 import { PluginWheel } from './wheel.js';
 import { PluginKnob } from './knob.js';
+import { PluginPatternRow } from './patternrow.js';
 
 const HEX = '0123456789ABCDEF';
 const HOLD = '---';
@@ -1079,12 +1080,39 @@ export function PluginTrackerGrid({ param, values, onChange }) {
         </div>
     </div>`;
 
-    // Two-row keypad: top = controls + cursor cluster; bottom =
-    // action row spanning the full width. The action row's position
-    // is fixed by the keypad's column-flex layout, so it never moves
-    // when the user switches between note half (3 cols) and cc half
-    // (2 cols) — the half-controls scale to fill but the action
-    // row stays planted below them.
+    // Pattern bank -- 8 stored grids per Tracker instance. The
+    // currently-selected one is what the surface above edits; tap to
+    // switch (queue when playing), Shift+Tap to switch immediately,
+    // long-press for the copy/clear menu. See PluginPatternRow.
+    const patternCount = param.pattern_count || 8;
+    const selectedPattern = clamp(
+        values[param.selected_pattern_param] ?? 0, 0, patternCount - 1,
+    );
+    const queuedPattern = (() => {
+        const q = values[param.queued_pattern_param];
+        return (typeof q === 'number' && q >= 0 && q < patternCount) ? q : -1;
+    })();
+    const patternStatus = values[param.pattern_status_param] || [];
+    const onPatternCommand = useCallback((payload) => {
+        // payload: {pattern, mode}
+        if (!param.cmd_pattern_select_param) return;
+        onChange(param.cmd_pattern_select_param, payload);
+    }, [onChange, param]);
+    const patternRow = html`<${PluginPatternRow}
+        count=${patternCount}
+        selected=${selectedPattern}
+        queued=${queuedPattern}
+        status=${patternStatus}
+        playing=${isPlaying}
+        shiftEngagedRef=${shiftEngagedRef}
+        onChange=${onPatternCommand} />`;
+
+    // Three-row keypad: top = controls + cursor cluster; middle =
+    // action row spanning the full width; bottom = pattern bank.
+    // The action row's position is fixed by the keypad's column-flex
+    // layout, so it never moves when the user switches between note
+    // half (3 cols) and cc half (2 cols) — the half-controls scale
+    // to fill but the action row + pattern row stay planted below.
     const keypad = html`<div class="tracker-keypad">
         <div class="tracker-keypad-top">
             ${cursorHalf === 'note' ? noteHalfControls : ccHalfControls}
@@ -1094,6 +1122,7 @@ export function PluginTrackerGrid({ param, values, onChange }) {
             </div>
         </div>
         ${actionRow}
+        ${patternRow}
     </div>`;
 
     return html`<div class="trackergrid">

@@ -134,6 +134,7 @@ class TrackerBase(PluginBase):
     TRACK_COUNT = 8
     MAX_PAGES = 16
     MAX_ROWS_PER_PAGE = 16
+    PATTERN_COUNT = 8
 
     inputs = [
         "Notes (recorded into focused row at the cursor track + neighbours)",
@@ -176,6 +177,7 @@ class TrackerBase(PluginBase):
                 track_count=cls.TRACK_COUNT,
                 max_pages=cls.MAX_PAGES,
                 max_rows=cls.MAX_ROWS_PER_PAGE,
+                pattern_count=cls.PATTERN_COUNT,
                 pages_param="pages",
                 current_page_param="current_page",
                 cursor_row_param="cursor_row",
@@ -189,6 +191,10 @@ class TrackerBase(PluginBase):
                 cmd_stop_param="cmd_stop",
                 send_clock_param="send_clock",
                 note_preview_param="note_preview",
+                selected_pattern_param="selected_pattern",
+                queued_pattern_param="queued_pattern",
+                pattern_status_param="pattern_status",
+                cmd_pattern_select_param="cmd_pattern_select",
             ),
             Group("Track Channels", [
                 ChannelSelect(f"track_ch_{i}", f"T{i + 1}",
@@ -203,10 +209,35 @@ class TrackerBase(PluginBase):
     def on_start(self) -> None:
         """Initialise the persistent state with one blank page, plus
         playback / recording bookkeeping that lives only at runtime."""
-        self._param_values.setdefault(
-            "pages",
-            [empty_page(self.TRACK_COUNT, self.MAX_ROWS_PER_PAGE)],
+        # Pattern bank. New installs get N empty patterns. Configs
+        # saved before patterns existed have just `pages` -- migrate
+        # them into patterns[0], with slots 1..N-1 empty.
+        if "patterns" not in self._param_values:
+            legacy_pages = self._param_values.get("pages")
+            slot0 = legacy_pages if legacy_pages else [
+                empty_page(self.TRACK_COUNT, self.MAX_ROWS_PER_PAGE),
+            ]
+            self._param_values["patterns"] = [slot0] + [
+                [empty_page(self.TRACK_COUNT, self.MAX_ROWS_PER_PAGE)]
+                for _ in range(self.PATTERN_COUNT - 1)
+            ]
+        self._param_values.setdefault("selected_pattern", 0)
+        # `queued_pattern`: -1 = no queue; otherwise index of pattern
+        # to swap into on the next page-0 row-0 boundary.
+        self._param_values.setdefault("queued_pattern", -1)
+        self._param_values["cmd_pattern_select"] = None
+
+        # `pages` is always a mirror of patterns[selected_pattern].
+        # Edits write to `pages`; on_param_change keeps the patterns
+        # array in sync.
+        sel = int(self._param_values.get("selected_pattern", 0))
+        sel = max(0, min(self.PATTERN_COUNT - 1, sel))
+        self._param_values["selected_pattern"] = sel
+        self._param_values["pages"] = list(
+            self._param_values["patterns"][sel],
         )
+        self._param_values["pattern_status"] = self._compute_pattern_status()
+
         self._param_values.setdefault("current_page", 0)
         self._param_values.setdefault("cursor_row", 0)
         self._param_values.setdefault("cursor_track", 0)
@@ -240,9 +271,14 @@ class TrackerBase(PluginBase):
 
         # Cursor + octave + playhead + cmd signals are live-play
         # state — moving them shouldn't mark the routing config dirty.
+        # queued_pattern / pattern_status / cmd_pattern_select are
+        # transient too: queued is a runtime intent (cleared on the
+        # next boundary), status is derived from `patterns`, and
+        # cmd_* is a one-shot trigger.
         self.transient_params = {
             "cursor_row", "cursor_track", "cursor_half", "octave",
             "playhead", "cmd_play", "cmd_stop", "note_preview",
+            "queued_pattern", "pattern_status", "cmd_pattern_select",
         }
 
         # Note-preview state: a single sounding preview note (replaces
@@ -274,6 +310,11 @@ class TrackerBase(PluginBase):
         self._play_row = 0
         self._record_page = 0
         self._record_row = 0
+        # Set true whenever the play position transitions to page 0
+        # row 0 by wrapping (last-row-of-last-page, or End-on-last-
+        # page). Used to consume `queued_pattern` exactly at the
+        # natural pattern boundary. Cleared after the consume.
+        self._just_wrapped = False
         # Currently-sounding MIDI note per voice — used to fire the
         # implicit note-off when the next non-`---` cell rolls in.
         self._sounding: list[int | None] = [None] * self.TRACK_COUNT
@@ -462,7 +503,10 @@ class TrackerBase(PluginBase):
                     if is_end_row:
                         # End row — skip without firing. Jump to next
                         # page row 0 and re-evaluate.
-                        self._play_page = (self._play_page + 1) % len(pages)
+                        new_page = (self._play_page + 1) % len(pages)
+                        if new_page == 0:
+                            self._just_wrapped = True
+                        self._play_page = new_page
                         self._play_row = 0
                         continue
 
@@ -508,7 +552,10 @@ class TrackerBase(PluginBase):
 
                 # Advance for next call.
                 if self._play_row + 1 >= self.MAX_ROWS_PER_PAGE:
-                    self._play_page = (self._play_page + 1) % len(pages)
+                    new_page = (self._play_page + 1) % len(pages)
+                    if new_page == 0:
+                        self._just_wrapped = True
+                    self._play_page = new_page
                     self._play_row = 0
                 else:
                     self._play_row += 1
@@ -520,6 +567,16 @@ class TrackerBase(PluginBase):
                 # stop the playhead instead of burning CPU on it.
                 self._playing = False
                 published = (self._play_page, self._play_row, False)
+
+            # Consume any queued pattern switch -- we only swap on a
+            # natural pattern boundary (page 0 row 0 reached by wrap).
+            # The next on_tick will fire row 0 of the new pattern.
+            if self._just_wrapped and self._queued_pattern_idx() >= 0:
+                target = self._queued_pattern_idx()
+                self._switch_pattern(target,
+                                     reset_cursor=True, reset_playhead=False)
+                self._set_queued_pattern(-1)
+            self._just_wrapped = False
 
         # Outside the lock — set_param flows to the SSE writer.
         self.set_param("playhead", {
@@ -745,6 +802,237 @@ class TrackerBase(PluginBase):
         elif name == "note_preview" and isinstance(value, int) and 0 <= value <= 127:
             self._preview_fire(value)
             self.set_param("note_preview", -1)
+        elif name == "pages":
+            # Edits to the live grid mirror through to the storage
+            # array, so the selected pattern keeps its content. Don't
+            # set_param("patterns", ...) -- patterns is persisted but
+            # not broadcast (the UI reads `pages` for the current
+            # pattern's grid). Refresh status in case the slot
+            # flipped empty <-> non-empty.
+            sel = int(self._param_values.get("selected_pattern", 0))
+            patterns = list(self._param_values.get("patterns") or [])
+            if 0 <= sel < len(patterns):
+                patterns[sel] = value
+                self._param_values["patterns"] = patterns
+                self._refresh_pattern_status_slot(sel)
+        elif name == "cmd_pattern_select" and isinstance(value, dict):
+            self._handle_pattern_command(value)
+            # Reset the trigger so a re-tap of the same slot fires.
+            self.set_param("cmd_pattern_select", None)
+
+    # ================================================================
+    # Pattern bank -- 8 stored grids per Tracker, with one selected
+    # (= what `pages` mirrors) and (optionally) one queued for the
+    # next page-0 row-0 boundary.
+    # ================================================================
+
+    def _queued_pattern_idx(self) -> int:
+        v = self._param_values.get("queued_pattern", -1)
+        try:
+            return int(v)
+        except (TypeError, ValueError):
+            return -1
+
+    def _set_queued_pattern(self, idx: int) -> None:
+        self.set_param("queued_pattern", int(idx))
+
+    def _empty_pages(self) -> list:
+        return [empty_page(self.TRACK_COUNT, self.MAX_ROWS_PER_PAGE)]
+
+    def _is_empty_pattern(self, pages: list) -> bool:
+        """A pattern is 'empty' iff it's exactly one default page with
+        every voice cell at default values. Multi-page or any non-
+        default cell means non-empty."""
+        if not isinstance(pages, list) or len(pages) != 1:
+            return False
+        page = pages[0]
+        if not isinstance(page, dict):
+            return False
+        rows = page.get("rows") or []
+        if len(rows) != self.MAX_ROWS_PER_PAGE:
+            return False
+        empty_v = empty_voice()
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            voices = row.get("voices") or []
+            for v in voices:
+                if not isinstance(v, dict):
+                    continue
+                for key, default in empty_v.items():
+                    if v.get(key, default) != default:
+                        return False
+        return True
+
+    def _compute_pattern_status(self) -> list:
+        patterns = self._param_values.get("patterns") or []
+        return [not self._is_empty_pattern(p) for p in patterns]
+
+    def _refresh_pattern_status_slot(self, idx: int) -> None:
+        """Recompute pattern_status[idx] and broadcast if it changed.
+        Cheaper than recomputing all 8 on every cell edit."""
+        patterns = self._param_values.get("patterns") or []
+        if not (0 <= idx < len(patterns)):
+            return
+        status = list(self._param_values.get("pattern_status") or [])
+        # Pad if status is shorter than patterns (defensive).
+        while len(status) < len(patterns):
+            status.append(False)
+        new = not self._is_empty_pattern(patterns[idx])
+        if status[idx] != new:
+            status[idx] = new
+            self.set_param("pattern_status", status)
+
+    def _switch_pattern(self, idx: int,
+                        reset_cursor: bool, reset_playhead: bool) -> None:
+        """Load pattern `idx` into the live view.
+
+        `reset_cursor` -- send cursor to (0, 0). Used by stopped+tap
+            and queued (playing+tap-on-boundary) switches.
+        `reset_playhead` -- send the playhead to (0, 0). Used by
+            stopped+tap. NOT used by a queued switch (the playhead is
+            already at (0, 0) by virtue of the wrap that triggered the
+            consume). NOT used by Shift+Tap (the caller positions the
+            playhead with the fallback rule).
+        """
+        idx = max(0, min(self.PATTERN_COUNT - 1, int(idx)))
+        patterns = list(self._param_values.get("patterns") or [])
+        if not (0 <= idx < len(patterns)):
+            return
+        # Deep-ish copy: a new list of references to the page dicts is
+        # enough -- edits go through _record_voice_field_at which
+        # always replaces the rows / voices on the way down, never
+        # mutates in place.
+        new_pages = list(patterns[idx])
+        self.set_param("selected_pattern", idx)
+        # set_param("pages", ...) will trigger our own on_param_change
+        # mirror-back, but `patterns[idx]` is already what we're
+        # writing, so the mirror is a no-op other than a status
+        # refresh -- which is also a no-op. Safe.
+        self.set_param("pages", new_pages)
+        if reset_cursor:
+            self.set_param("current_page", 0)
+            self.set_param("cursor_row", 0)
+        if reset_playhead:
+            with self._lock:
+                self._play_page = 0
+                self._play_row = 0
+                self._record_page = 0
+                self._record_row = 0
+
+    def _clone_pattern(self, src: int, dst: int) -> None:
+        """Copy patterns[src] into patterns[dst]. Pages are duplicated
+        by value (rows + voices) so subsequent edits on either slot
+        don't bleed into the other."""
+        src = max(0, min(self.PATTERN_COUNT - 1, int(src)))
+        dst = max(0, min(self.PATTERN_COUNT - 1, int(dst)))
+        if src == dst:
+            return
+        patterns = list(self._param_values.get("patterns") or [])
+        if not (0 <= src < len(patterns) and 0 <= dst < len(patterns)):
+            return
+        import copy
+        patterns[dst] = copy.deepcopy(patterns[src])
+        self._param_values["patterns"] = patterns
+        # If we just cloned into the currently-selected slot, refresh
+        # the live `pages` mirror too.
+        if dst == int(self._param_values.get("selected_pattern", 0)):
+            self.set_param("pages", list(patterns[dst]))
+        self._refresh_pattern_status_slot(dst)
+
+    def _clear_pattern(self, idx: int) -> None:
+        idx = max(0, min(self.PATTERN_COUNT - 1, int(idx)))
+        patterns = list(self._param_values.get("patterns") or [])
+        if not (0 <= idx < len(patterns)):
+            return
+        patterns[idx] = self._empty_pages()
+        self._param_values["patterns"] = patterns
+        if idx == int(self._param_values.get("selected_pattern", 0)):
+            self.set_param("pages", list(patterns[idx]))
+            self.set_param("current_page", 0)
+            self.set_param("cursor_row", 0)
+        self._refresh_pattern_status_slot(idx)
+
+    def _handle_pattern_command(self, cmd: dict) -> None:
+        """Dispatch a pattern-row interaction from the UI.
+
+        cmd shape: {"pattern": int 0..N-1, "mode": str}
+        modes:
+          - "tap"   -- stopped: switch + cursor to (0,0); playing: queue
+          - "shift" -- switch immediately, preserve playhead with the
+                       page-0 row-current+1 fallback
+          - "clone" -- copy currently-selected pattern into target
+          - "clear" -- empty the target pattern
+        """
+        try:
+            idx = int(cmd.get("pattern"))
+        except (TypeError, ValueError):
+            return
+        mode = cmd.get("mode")
+        if not (0 <= idx < self.PATTERN_COUNT):
+            return
+
+        if mode == "clone":
+            sel = int(self._param_values.get("selected_pattern", 0))
+            self._clone_pattern(sel, idx)
+            return
+        if mode == "clear":
+            self._clear_pattern(idx)
+            return
+
+        sel = int(self._param_values.get("selected_pattern", 0))
+        if mode == "tap":
+            if not self._playing:
+                # Stopped + tap: switch view immediately, cursor +
+                # playhead both reset to (0, 0). Tapping the already-
+                # selected slot is a no-op other than the cursor jump
+                # -- which is the documented "cursor → (0,0) when
+                # stopped + tap" behaviour.
+                self._switch_pattern(idx, reset_cursor=True,
+                                     reset_playhead=True)
+                # Cancel any prior queue (it's meaningless now).
+                self._set_queued_pattern(-1)
+            else:
+                # Playing + tap: queue. The switch fires on the next
+                # natural page-0 row-0 boundary. Tapping the playing
+                # slot cancels the queue (lets the user undo a
+                # mistaken queue).
+                if idx == sel:
+                    self._set_queued_pattern(-1)
+                else:
+                    self._set_queued_pattern(idx)
+        elif mode == "shift":
+            # Shift+Tap: immediate switch.
+            patterns = self._param_values.get("patterns") or []
+            if not (0 <= idx < len(patterns)):
+                return
+            target_pages = patterns[idx]
+            if not self._playing:
+                # Stopped variant -- same as plain tap.
+                self._switch_pattern(idx, reset_cursor=True,
+                                     reset_playhead=True)
+                self._set_queued_pattern(-1)
+                return
+            # Decide the new playhead position before switching.
+            with self._lock:
+                cur_page = self._play_page
+                cur_row = self._play_row
+                if cur_page < len(target_pages):
+                    # Target has this page; keep (page, row).
+                    new_page, new_row = cur_page, cur_row
+                else:
+                    # Target is shorter -- jump to page 0, same row
+                    # index (the row that would have fired next).
+                    new_page, new_row = 0, cur_row % self.MAX_ROWS_PER_PAGE
+            # Switch view (no cursor reset, no playhead reset --
+            # we'll position it manually below).
+            self._switch_pattern(idx, reset_cursor=False,
+                                 reset_playhead=False)
+            with self._lock:
+                self._play_page = new_page
+                self._play_row = new_row
+            self._set_queued_pattern(-1)
+            self._publish_playhead()
 
     # ---- Note preview (wheel / keyboard typing → audible OUT) ----
     def _preview_fire(self, midi: int) -> None:
