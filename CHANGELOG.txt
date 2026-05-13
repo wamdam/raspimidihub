@@ -4,6 +4,30 @@ User-visible changes. Short tagged one-liners, no code or commit
 hashes. Tags: Added, Improved, Fix, Changed, Removed.
 
 
+Unreleased
+
+- Changed: Tracker's combined `Send Clock + Transport` toggle is
+  split in two -- **Send Clock** and **Send Transport** -- with a
+  **BPM** wheel that appears next to Send Clock when it's on.
+  Send Clock now makes the Tracker a *clock master*: it runs an
+  internal 24-PPQ generator at the configured BPM, emits clock to
+  OUT (so downstream gear slaves off the Tracker), and drives its
+  own playhead from that generator -- no upstream clock source
+  needed. Send Transport stays a forwarder/emitter for
+  START / STOP / CONTINUE in both directions. External clock is
+  ignored while Send Clock is on (option-1 "Send Clock wins"), so
+  downstream gear never sees two competing clock sources.
+  Existing configs with the old `send_clock=True` migrate to
+  *both* new flags on, preserving the pre-split behaviour.
+- Added: Tracker `BPM` wheel (40--300, default 120) in the config
+  panel, visible only while Send Clock is on.
+- Fix: Tracker correctly emits its own START / STOP / CONTINUE to
+  OUT when the on-screen Play / Stop buttons fire (gated by Send
+  Transport). Previously only forwarded *incoming* transport, so
+  downstream slaves wouldn't bar-align when the Tracker started
+  itself.
+
+
 2026-05-13 — Version 3.1.1
 
 - Added: Tracker patterns — 8 numbered pattern slots below the

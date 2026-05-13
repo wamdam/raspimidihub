@@ -93,13 +93,14 @@ def test_schema_param_keys_collects_tracker_aux():
     keys = schema_param_keys(_DemoTracker.params)
     for name in ("pages", "current_page", "cursor_row", "cursor_track",
                  "cursor_half", "octave", "rate", "playhead",
-                 "cmd_play", "cmd_stop", "send_clock", "note_preview"):
+                 "cmd_play", "cmd_stop", "send_clock", "send_transport",
+                 "bpm", "note_preview"):
         assert name in keys, f"missing aux key {name!r}"
     # Per-track channels (one per voice). _DemoTracker has TRACK_COUNT=4.
     for i in range(4):
         assert f"track_ch_{i}" in keys
-    # Single global `channel` etc were removed once tracks went per-channel.
-    for removed in ("channel", "sync_mode", "bpm", "show_tracks"):
+    # Pre-split-toggle params that no longer exist.
+    for removed in ("channel", "sync_mode", "show_tracks"):
         assert removed not in keys, f"stale key {removed!r} still present"
 
 
@@ -846,30 +847,90 @@ class _ForwardSender(_Sender):
         plugin._send_continue = lambda: self.events.append(("cont",))
 
 
-def test_send_clock_off_swallows_clock_messages():
+def test_clock_in_never_forwarded_after_split():
+    """on_clock is a pure consumer now -- clock to OUT is the
+    generator thread's job, gated by send_clock. Forwarding raw
+    incoming clock through would double-emit when both toggles
+    are on, so it's always dropped."""
     t = _started()
     s = _ForwardSender()
     s.attach(t)
-    t._param_values["send_clock"] = False
-    t.on_clock()
+    for flag in (False, True):
+        t._param_values["send_clock"] = flag
+        s.events.clear()
+        t.on_clock()
+        assert not any(e[0] == "clk" for e in s.events)
+
+
+def test_send_transport_off_swallows_incoming_transport():
+    t = _started()
+    s = _ForwardSender()
+    s.attach(t)
+    t._param_values["send_transport"] = False
     t.on_clock_start()
-    t.on_clock_stop()
     t.on_clock_continue()
-    # No clock-family events forwarded — send_clock is off.
-    assert not any(e[0] in ("clk", "start", "stop", "cont") for e in s.events)
+    t.on_clock_stop()
+    assert not any(e[0] in ("start", "cont", "stop") for e in s.events)
 
 
-def test_send_clock_on_forwards_clock_and_transport():
+def test_send_transport_on_forwards_incoming_transport():
     t = _started()
     s = _ForwardSender()
     s.attach(t)
+    t._param_values["send_transport"] = True
+    t.on_clock_start()
+    t.on_clock_continue()
+    t.on_clock_stop()
+    forwarded = [e[0] for e in s.events if e[0] in ("start", "cont", "stop")]
+    assert forwarded == ["start", "cont", "stop"]
+
+
+def test_send_transport_on_emits_for_play_button():
+    """The on-screen Play / Stop buttons emit START / STOP to OUT
+    when send_transport is on, so downstream slaves bar-align with
+    the Tracker even when the Tracker is clock-master."""
+    t = _started()
+    s = _ForwardSender()
+    s.attach(t)
+    t._param_values["send_transport"] = True
+    t.on_transport_start()   # = on-screen Play
+    t.on_transport_stop()    # = on-screen Stop
+    forwarded = [e[0] for e in s.events if e[0] in ("start", "stop")]
+    assert forwarded == ["start", "stop"]
+
+
+def test_send_transport_off_does_not_emit_for_play_button():
+    t = _started()
+    s = _ForwardSender()
+    s.attach(t)
+    t._param_values["send_transport"] = False
+    t.on_transport_start()
+    t.on_transport_stop()
+    assert not any(e[0] in ("start", "stop") for e in s.events)
+
+
+def test_legacy_send_clock_migrates_to_both_flags():
+    """A config saved with the old combined `send_clock=True` toggle
+    used to mean 'forward clock + start/stop/continue.' After the
+    split, that intent migrates to send_clock=True (generate own
+    clock) AND send_transport=True (forward transport)."""
+    class _T(TrackerBase):
+        NAME = "T"
+        TRACK_COUNT = 4
+
+    t = _T()
+    # Pre-seed legacy field as if config-restore had just run.
     t._param_values["send_clock"] = True
-    t.on_clock()
-    t.on_clock_start()
-    t.on_clock_continue()
-    t.on_clock_stop()
-    forwarded = [e[0] for e in s.events if e[0] in ("clk", "start", "stop", "cont")]
-    assert forwarded == ["clk", "start", "cont", "stop"]
+    t.on_start()
+    assert t._param_values["send_clock"] is True
+    assert t._param_values["send_transport"] is True
+    # New install (neither key present) defaults both off.
+    u = _T()
+    u.on_start()
+    assert u._param_values["send_clock"] is False
+    assert u._param_values["send_transport"] is False
+    # Stop the generator threads on_start may have started.
+    t._stop_clock_generator()
 
 
 # =========================================================================

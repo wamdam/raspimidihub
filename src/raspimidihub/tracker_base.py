@@ -14,7 +14,15 @@ Persistent state lives in `_param_values`:
   - octave         : int                   — sticky keypad octave
   - rate           : str                   — Arp-style rate (config-only)
   - track_ch_0..N  : int                   — per-track output channel (1..16)
-  - send_clock     : bool                  — forward CLOCK + transport to OUT
+  - send_clock     : bool                  — Tracker = clock master: emit
+                                              24 PPQ at the internal BPM and
+                                              drive own playhead from it
+  - send_transport : bool                  — forward incoming START/STOP/
+                                              CONTINUE to OUT, and emit own
+                                              START/STOP when the on-screen
+                                              Play / Stop button fires
+  - bpm            : int                   — internal BPM (40..300) used when
+                                              send_clock is on
   - cmd_play / cmd_stop : bool             — manual transport signals from
                                               the play-page header buttons
 
@@ -23,10 +31,13 @@ config card on the device-detail panel lets the user remap any track
 to a different channel. Multi-channel chords + per-track CC routing
 work just by setting different channels per track.
 
-Transport is always external (clock + Start/Stop) OR via the on-screen
-Play / Stop buttons. The send_clock toggle, when on, makes this plugin
-forward incoming CLOCK / START / STOP / CONTINUE through to its OUT
-port so downstream gear can slave off this tracker instance.
+Clock-master mode. With `send_clock` on, the Tracker schedules its
+own 24-PPQ clock burst via send_clock_at(), the host's ClockBus
+loops that back as on_tick at the configured rate, and downstream
+gear sees the same clock on the OUT port. External clock on the bus
+is ignored while Send Clock is on (option-1 "Send Clock wins").
+With Send Clock off, on_tick is driven by whatever external clock
+is wired in — no Send Clock, no clock source = no playback.
 
 Playback fires note-on / note-off / CC for each voice on every tick
 of the configured rate. Auto-learn writes incoming notes / CCs into
@@ -43,6 +54,7 @@ from raspimidihub.plugin_api import (
     Group,
     PluginBase,
     TrackerGrid,
+    Wheel,
 )
 
 # Pitch order matches the Note wheel on the frontend. MIDI 12 = C-0,
@@ -129,12 +141,23 @@ class TrackerBase(PluginBase):
     """Common params + state plumbing for sequencer surfaces."""
 
     SURFACE_KIND = "play"
+    # When the Tracker's own send_clock toggle is on, its emitted
+    # 24-PPQ clock should loop back through the host ClockBus to
+    # drive on_tick. The class-level flag is True; the runtime
+    # generator thread is what actually emits (only while the
+    # `send_clock` param is on), so this opt-in is harmless when
+    # the toggle is off.
+    feeds_clock_bus = True
 
     # Subclass overrides; the base ships an 8-voice default.
     TRACK_COUNT = 8
     MAX_PAGES = 16
     MAX_ROWS_PER_PAGE = 16
     PATTERN_COUNT = 8
+
+    # Internal clock generator (used in clock-master mode).
+    _CLOCK_TAG = 0xC10C  # tag for cancel_scheduled
+    _CLOCK_LOOKAHEAD_S = 0.5  # how far ahead we pre-schedule ticks
 
     inputs = [
         "Notes (recorded into focused row at the cursor track + neighbours)",
@@ -202,7 +225,14 @@ class TrackerBase(PluginBase):
                               default=1, config_only=True)
                 for i in range(cls.TRACK_COUNT)
             ], config_only=True),
-            Button("send_clock", "Send Clock + Transport",
+            Button("send_clock", "Send Clock",
+                   default=False, color="green", config_only=True),
+            # BPM is only meaningful when send_clock is on. The
+            # frontend hides it via `visible_when` so the config
+            # panel doesn't show a dead wheel.
+            Wheel("bpm", "BPM", min=40, max=300, default=120,
+                  config_only=True, visible_when=("send_clock", True)),
+            Button("send_transport", "Send Transport",
                    default=False, color="green", config_only=True),
         ]
         return params
@@ -260,7 +290,19 @@ class TrackerBase(PluginBase):
         # Frontend sets to True; on_param_change resets to False.
         self._param_values.setdefault("cmd_play", False)
         self._param_values.setdefault("cmd_stop", False)
+        # Clock master + transport-forwarding toggles. Old configs
+        # carry a single `send_clock` that meant "forward CLOCK +
+        # START / STOP / CONTINUE". Migration: old True → BOTH
+        # send_clock (now: generate own clock) AND send_transport
+        # are on. Old False → both off. New installs start both off.
+        # `send_transport` may not exist in old configs; setdefault
+        # only mirrors the legacy meaning when send_clock is True.
+        if "send_transport" not in self._param_values:
+            self._param_values["send_transport"] = bool(
+                self._param_values.get("send_clock"),
+            )
         self._param_values.setdefault("send_clock", False)
+        self._param_values.setdefault("bpm", 120)
         # Note-preview signal: frontend writes a MIDI note number when
         # the user picks a pitch on the Note wheel or types one on
         # the keyboard; the plugin fires send_note_on (with auto-
@@ -330,7 +372,17 @@ class TrackerBase(PluginBase):
         self._chord_page = 0
         self._chord_row = 0
 
+        # Clock-master generator bookkeeping. Thread spawns on
+        # demand the first time send_clock turns on (or on_start
+        # if a restored config already had it set).
+        self._gen_running = False
+        self._gen_thread: threading.Thread | None = None
+        self._gen_next_tick_monotonic: float | None = None
+        if self._param_values.get("send_clock"):
+            self._start_clock_generator()
+
     def on_stop(self) -> None:
+        self._stop_clock_generator()
         self._silence_all()
 
     def panic(self) -> None:
@@ -404,17 +456,37 @@ class TrackerBase(PluginBase):
         # row 0 here closes that gap; subsequent on_tick callbacks
         # walk through rows 1, 2, … on time.
         self._advance_step()
+        # Emit our own MIDI Start to OUT so downstream slaves
+        # bar-align with the Tracker. Honoured by both clock-master
+        # mode (send_clock on) and pure-forward mode (send_transport
+        # on without send_clock). Hardware-driven Starts route in via
+        # on_clock_start and are forwarded there.
+        if self._param_values.get("send_transport"):
+            try:
+                self.send_start()
+            except Exception:
+                pass
 
     def on_transport_stop(self) -> None:
         with self._lock:
             self._silence_all()
             self._playing = False
         self._publish_playhead()
+        if self._param_values.get("send_transport"):
+            try:
+                self.send_stop()
+            except Exception:
+                pass
 
     def on_transport_continue(self) -> None:
         with self._lock:
             self._playing = True
         self._publish_playhead()
+        if self._param_values.get("send_transport"):
+            try:
+                self.send_continue()
+            except Exception:
+                pass
 
     # ================================================================
     # Tick → step advance
@@ -743,39 +815,99 @@ class TrackerBase(PluginBase):
             })
 
     # ================================================================
-    # Clock + transport forwarding (when send_clock is on)
+    # Clock + transport routing
+    #
+    # Two independent toggles:
+    #   - send_clock     : Tracker = clock master. Internal generator
+    #                       (started in _start_clock_generator) emits
+    #                       24-PPQ clock at the configured BPM via
+    #                       send_clock_at(); the host's ClockBus
+    #                       loops that back as on_tick to drive the
+    #                       playhead. Incoming clock is dropped
+    #                       below (option-1: "Send Clock wins").
+    #   - send_transport : Forward incoming START / STOP / CONTINUE
+    #                       to OUT, and emit own START / STOP /
+    #                       CONTINUE when the on-screen Play / Stop
+    #                       button fires (see on_transport_*).
     # ================================================================
 
-    def _forward_clock_enabled(self) -> bool:
-        return bool(self._param_values.get("send_clock"))
-
     def on_clock(self) -> None:
-        if self._forward_clock_enabled():
-            try:
-                self.send_clock()
-            except Exception:
-                pass
+        # In clock-master mode we generate our own clock; suppressing
+        # incoming clock here avoids double-emitting when an external
+        # source is also wired in. Otherwise plain drop -- send_clock
+        # is the only way to emit clock to OUT now.
+        return
 
     def on_clock_start(self) -> None:
-        if self._forward_clock_enabled():
+        if self._param_values.get("send_transport"):
             try:
                 self.send_start()
             except Exception:
                 pass
 
     def on_clock_stop(self) -> None:
-        if self._forward_clock_enabled():
+        if self._param_values.get("send_transport"):
             try:
                 self.send_stop()
             except Exception:
                 pass
 
     def on_clock_continue(self) -> None:
-        if self._forward_clock_enabled():
+        if self._param_values.get("send_transport"):
             try:
                 self.send_continue()
             except Exception:
                 pass
+
+    # ---- Clock-master generator thread ----
+    def _start_clock_generator(self) -> None:
+        if self._gen_running:
+            return
+        self._gen_running = True
+        self._gen_next_tick_monotonic = None
+        self._gen_thread = threading.Thread(
+            target=self._clock_refill_loop, daemon=True,
+        )
+        self._gen_thread.start()
+
+    def _stop_clock_generator(self) -> None:
+        if not self._gen_running:
+            return
+        self._gen_running = False
+        try:
+            self.cancel_scheduled(self._CLOCK_TAG)
+        except Exception:
+            pass
+        self._gen_next_tick_monotonic = None
+
+    def _clock_refill_loop(self) -> None:
+        """Schedule 24-PPQ clock ticks `LOOKAHEAD_S` ahead of wall-
+        clock time when send_clock is on. Mirrors the Master Clock
+        plugin's refill loop -- send_clock_at() drops the tick into
+        the ALSA queue with sub-millisecond jitter; the Python
+        sleep here only governs how often the queue is topped up."""
+        while self._gen_running:
+            bpm = self._param_values.get("bpm")
+            try:
+                bpm = max(40, min(300, int(bpm or 120)))
+            except (TypeError, ValueError):
+                bpm = 120
+            interval = 60.0 / bpm / 24.0
+            now = time.monotonic()
+            if (self._gen_next_tick_monotonic is None
+                    or self._gen_next_tick_monotonic < now):
+                self._gen_next_tick_monotonic = now + 0.001
+            target = now + self._CLOCK_LOOKAHEAD_S
+            while (self._gen_running
+                   and self._gen_next_tick_monotonic < target):
+                try:
+                    self.send_clock_at(
+                        self._gen_next_tick_monotonic, self._CLOCK_TAG,
+                    )
+                except Exception:
+                    pass
+                self._gen_next_tick_monotonic += interval
+            time.sleep(self._CLOCK_LOOKAHEAD_S * 0.5)
 
     # ================================================================
     # Manual transport — Play / Stop buttons in the play-page header
@@ -814,6 +946,23 @@ class TrackerBase(PluginBase):
             self._handle_pattern_command(value)
             # Reset the trigger so a re-tap of the same slot fires.
             self.set_param("cmd_pattern_select", None)
+        elif name == "send_clock":
+            # Spin the internal generator up / down. The generator
+            # thread is the only thing that calls send_clock_at, so
+            # toggling here cleanly starts / stops the OUT emission
+            # AND the loopback that drives our own playhead.
+            if value:
+                self._start_clock_generator()
+            else:
+                self._stop_clock_generator()
+        elif name == "bpm" and self._gen_running:
+            # Drop the rest of the pre-scheduled burst and re-anchor
+            # at the new tempo; the refill loop picks up from now.
+            try:
+                self.cancel_scheduled(self._CLOCK_TAG)
+            except Exception:
+                pass
+            self._gen_next_tick_monotonic = None
 
     # ================================================================
     # Pattern bank -- 8 stored grids per Tracker, with one selected

@@ -57,14 +57,30 @@ playback; the `Space` key does the same. When stopped, the cursor
 stays where you left it; when started, the cursor advances at the
 clock rate and the page-end-of-page wraps to the next page.
 
-The Tracker honours external MIDI Clock when one is routed in. With
-no external clock, the Play button starts an internal clock at the
-configured BPM. The configuration panel shows which mode is in use.
+The configuration panel has two independent clock toggles:
 
-A **Send Clock + Transport** toggle in the config panel makes the
-Tracker forward incoming `CLOCK / START / STOP / CONTINUE` through
-to OUT, so downstream gear can slave off the Tracker even if the
-Tracker is itself slaving off something upstream.
+- **Send Clock** -- when on, the Tracker becomes a clock *master*.
+  It runs an internal 24-PPQ generator at the configured **BPM**
+  and emits clock to OUT, so any downstream gear sees the same
+  clock. The Tracker drives its own playhead from this generator,
+  too -- no external clock source is needed. When this toggle is
+  off, the Tracker listens for external MIDI Clock instead; with
+  no external clock routed in, the playhead is silent. A **BPM**
+  wheel (40--300, default 120) appears in the panel only when
+  Send Clock is on.
+- **Send Transport** -- when on, the Tracker forwards incoming
+  START / STOP / CONTINUE to OUT, *and* emits its own START /
+  STOP / CONTINUE when the on-screen Play / Stop buttons fire, so
+  downstream slaves bar-align with the Tracker whether the
+  transport originated upstream or inside the Tracker itself.
+
+The two toggles are independent: the Tracker can generate clock
+without forwarding transport (rare), forward transport without
+generating clock (when an upstream source already provides the
+clock), or both (the common live-rig case where the Tracker is
+the master). External clock is ignored while Send Clock is on --
+the Tracker's own clock takes priority so downstream gear never
+sees two competing sources.
 
 ## Editing
 
@@ -222,9 +238,9 @@ Right-click on a slot also opens the menu.
 ### What each pattern stores
 
 Only the **grid** (pages + cells). The per-track output channels,
-the BPM, and the **Send Clock + Transport** toggle stay on the
-Tracker instance and apply to whichever pattern is playing. So
-the eight patterns share routing and tempo; they differ only in
+the BPM, and the **Send Clock** / **Send Transport** toggles stay
+on the Tracker instance and apply to whichever pattern is playing.
+So the eight patterns share routing and tempo; they differ only in
 what they sequence.
 
 ## The Configuration Panel
@@ -234,9 +250,9 @@ its plugin-config panel:
 
 - **Per-track channel mapping** -- eight ChannelSelect wheels, one
   per track.
-- **Internal BPM** -- used when no external clock is routed in.
-- **Send Clock + Transport** -- the forwarding toggle described in
-  13.4.
+- **Send Clock** + **BPM** -- clock-master mode; see 13.5.
+- **Send Transport** -- forward START / STOP / CONTINUE in either
+  direction; see 13.5.
 - **Help button** -- the standard `?` HELP text.
 
 ## Saving Tracker State
