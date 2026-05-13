@@ -26,12 +26,6 @@ Unreleased
   Transport). Previously only forwarded *incoming* transport, so
   downstream slaves wouldn't bar-align when the Tracker started
   itself.
-- Fix: Tracker no longer ping-pongs transport with downstream
-  slaves. When a transport message we just emitted (or forwarded)
-  comes back round through the routing matrix within 250 ms, it's
-  recognised as our own echo and dropped instead of re-forwarded.
-  Tracked per message kind so legitimate upstream Start → Continue
-  → Stop bursts still pass through untouched.
 
 
 2026-05-13 — Version 3.1.1
