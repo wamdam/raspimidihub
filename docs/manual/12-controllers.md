@@ -181,15 +181,33 @@ to the fullscreen Controller tab.
 ## Routing a Controller
 
 In the routing matrix, a controller is a **row** (it sends MIDI)
-but is **not** typically a destination column -- it does not
-*receive* MIDI in the conventional sense. The exception is
-MIDI-Learn capture and drop-button trigger notes; those require
-the relevant source to be routed *to* the controller for the
-note/CC to reach it.
+*and* a useful destination column. Route its row to the device
+you want to drive (a hardware synth, the DAW, a plugin like the
+**CC Smoother**); route a source *into* the controller when you
+want any of the following:
 
-For most setups, route the controller's row to the destination
-device (a hardware synth, the DAW, a plugin like the **CC
-Smoother**) and that is all.
+- **MIDI-Learn capture.** Cell-level Learn (chapter 10) listens on
+  the controller's IN port -- the source you want to learn from
+  must be routed to the controller for the next CC to reach the
+  learn logic.
+- **Drop-button trigger notes.** Trigger notes (12.3.5) arrive on
+  the controller's IN port; route the keyboard or pad that fires
+  them to the controller.
+- **Hardware-to-on-screen feedback (mirroring).** Route a hardware
+  controller (e.g. a Launch Control XL) to the matching software
+  controller and the on-screen faders / knobs / pads will follow
+  the hardware in real time. For every cell whose (channel, CC#)
+  binding matches the incoming CC the cell's stored value is
+  updated silently -- nothing is re-emitted to OUT, so there's no
+  routing loop. This is the standard pattern for keeping a
+  physical control surface and its software twin in lock-step,
+  and is what makes snapshot capture, drop fades, and theme-level
+  visual feedback reflect the real hardware state.
+
+For the common live setup the recipe is therefore: route the
+hardware controller to the software controller (mirroring), and
+route the software controller to the destination device(s) (the
+actual MIDI work).
 
 ## Saving Controller State
 
