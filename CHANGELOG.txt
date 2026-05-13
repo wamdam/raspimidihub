@@ -4,32 +4,30 @@ User-visible changes. Short tagged one-liners, no code or commit
 hashes. Tags: Added, Improved, Fix, Changed, Removed.
 
 
-Unreleased
+2026-05-13 — Version 3.1.2
 
-- Changed: Tracker's combined `Send Clock + Transport` toggle is
-  split in two -- **Send Clock** and **Send Transport** -- with a
-  **BPM** wheel that appears next to Send Clock when it's on.
-  Send Clock now makes the Tracker a *clock master*: it runs an
-  internal 24-PPQ generator at the configured BPM, emits clock to
-  OUT (so downstream gear slaves off the Tracker), and drives its
-  own playhead from that generator -- no upstream clock source
-  needed. Send Transport stays a forwarder/emitter for
-  START / STOP / CONTINUE in both directions. External clock is
-  ignored while Send Clock is on (option-1 "Send Clock wins"), so
-  downstream gear never sees two competing clock sources.
-  Existing configs with the old `send_clock=True` migrate to
-  *both* new flags on, preserving the pre-split behaviour.
-- Added: Tracker `BPM` wheel (40--300, default 120) in the config
-  panel, visible only while Send Clock is on.
-- Fix: Tracker correctly emits its own START / STOP / CONTINUE to
-  OUT when the on-screen Play / Stop buttons fire (gated by Send
-  Transport). Previously only forwarded *incoming* transport, so
-  downstream slaves wouldn't bar-align when the Tracker started
-  itself.
-- Added: Tracker's Plugin Config panel now has the same maximize
-  (double-arrow) shortcut that controllers have — one tap jumps to
-  the fullscreen Play tab. Mirrors the existing pencil shortcut on
-  the Play bar that jumps back to the Plugin Config.
+The Tracker grows up into a clock master. The single "Send Clock +
+Transport" toggle is split into two independent ones — **Send
+Clock** and **Send Transport** — and Send Clock now runs an
+internal 24-PPQ generator at the configured **BPM** (40--300, new
+wheel visible while Send Clock is on). The Tracker drives its own
+playhead from that generator, emits clock to OUT, and ignores
+external clock while it's the master, so downstream gear never
+sees two competing sources. Send Transport stays a forwarder of
+START / STOP / CONTINUE in both directions; either toggle works
+alone or together. Configs saved with the legacy `send_clock=True`
+migrate to both new flags on, preserving the old behaviour.
+
+The on-screen Play / Stop buttons now correctly emit their own
+START / STOP / CONTINUE to OUT (gated by Send Transport), so
+downstream slaves bar-align with the Tracker whether the
+transport originated upstream or inside the Tracker.
+
+Small UI quality-of-life: the Tracker's Plugin Config panel gets
+the same maximize (double-arrow) shortcut that controllers have —
+one tap jumps straight to the fullscreen Play tab. Mirrors the
+existing pencil shortcut on the Play bar that jumps back into the
+Plugin Config.
 
 
 2026-05-13 — Version 3.1.1
