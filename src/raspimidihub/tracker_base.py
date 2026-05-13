@@ -159,6 +159,15 @@ class TrackerBase(PluginBase):
     _CLOCK_TAG = 0xC10C  # tag for cancel_scheduled
     _CLOCK_LOOKAHEAD_S = 0.5  # how far ahead we pre-schedule ticks
 
+    # Echo-loop guard: incoming transport messages arriving within
+    # this window after our own emission are assumed to be echoes
+    # of what we just sent (round-trip through whatever downstream
+    # synth is wired back to our IN) and are dropped. Long enough
+    # to cover a USB MIDI loop + a synth's internal latency; short
+    # enough that a user's MANUAL re-Start a moment later still
+    # registers.
+    _TRANSPORT_ECHO_WINDOW_S = 0.25
+
     inputs = [
         "Notes (recorded into focused row at the cursor track + neighbours)",
         "CC (recorded into focused track only)",
@@ -358,6 +367,18 @@ class TrackerBase(PluginBase):
         # page). Used to consume `queued_pattern` exactly at the
         # natural pattern boundary. Cleared after the consume.
         self._just_wrapped = False
+        # Echo-loop guard. When send_transport is on, a START / STOP /
+        # CONTINUE we emit can travel through the matrix to a
+        # downstream synth and back to our own IN via whatever route
+        # the user wired. Without this, on_clock_start would
+        # re-forward what we just sent and the loop never stops. We
+        # stamp the moment we emit and ignore incoming transport for
+        # _TRANSPORT_ECHO_WINDOW_S after. Tracked per message kind so
+        # a legitimate upstream Start → Continue → Stop run is not
+        # mistaken for echoes of each other.
+        self._transport_emit_ts: dict[str, float] = {
+            "start": 0.0, "stop": 0.0, "cont": 0.0,
+        }
         # Currently-sounding MIDI note per voice — used to fire the
         # implicit note-off when the next non-`---` cell rolls in.
         self._sounding: list[int | None] = [None] * self.TRACK_COUNT
@@ -462,10 +483,7 @@ class TrackerBase(PluginBase):
         # on without send_clock). Hardware-driven Starts route in via
         # on_clock_start and are forwarded there.
         if self._param_values.get("send_transport"):
-            try:
-                self.send_start()
-            except Exception:
-                pass
+            self._emit_transport("start", self.send_start)
 
     def on_transport_stop(self) -> None:
         with self._lock:
@@ -473,20 +491,36 @@ class TrackerBase(PluginBase):
             self._playing = False
         self._publish_playhead()
         if self._param_values.get("send_transport"):
-            try:
-                self.send_stop()
-            except Exception:
-                pass
+            self._emit_transport("stop", self.send_stop)
 
     def on_transport_continue(self) -> None:
         with self._lock:
             self._playing = True
         self._publish_playhead()
         if self._param_values.get("send_transport"):
-            try:
-                self.send_continue()
-            except Exception:
-                pass
+            self._emit_transport("cont", self.send_continue)
+
+    def _emit_transport(self, kind: str, fn) -> None:
+        """Fire a transport message AND stamp the kind's emit time so
+        the next on_clock_{start,stop,continue} of that same kind can
+        recognise it as our own echo and drop it. Per-kind tracking
+        means a legitimate upstream Start → Continue burst is not
+        mistaken for a self-echo."""
+        self._transport_emit_ts[kind] = time.monotonic()
+        try:
+            fn()
+        except Exception:
+            pass
+
+    def _is_echoed_transport(self, kind: str) -> bool:
+        """True iff we're inside the echo-suppression window after
+        our own emission of `kind`. Used by on_clock_{start,stop,
+        continue} to drop the round-trip of a transport message we
+        just sent."""
+        ts = self._transport_emit_ts.get(kind, 0.0)
+        if ts == 0.0:
+            return False
+        return (time.monotonic() - ts) < self._TRANSPORT_ECHO_WINDOW_S
 
     # ================================================================
     # Tick → step advance
@@ -839,25 +873,22 @@ class TrackerBase(PluginBase):
         return
 
     def on_clock_start(self) -> None:
+        if self._is_echoed_transport("start"):
+            return
         if self._param_values.get("send_transport"):
-            try:
-                self.send_start()
-            except Exception:
-                pass
+            self._emit_transport("start", self.send_start)
 
     def on_clock_stop(self) -> None:
+        if self._is_echoed_transport("stop"):
+            return
         if self._param_values.get("send_transport"):
-            try:
-                self.send_stop()
-            except Exception:
-                pass
+            self._emit_transport("stop", self.send_stop)
 
     def on_clock_continue(self) -> None:
+        if self._is_echoed_transport("cont"):
+            return
         if self._param_values.get("send_transport"):
-            try:
-                self.send_continue()
-            except Exception:
-                pass
+            self._emit_transport("cont", self.send_continue)
 
     # ---- Clock-master generator thread ----
     def _start_clock_generator(self) -> None:

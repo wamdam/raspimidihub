@@ -909,6 +909,43 @@ def test_send_transport_off_does_not_emit_for_play_button():
     assert not any(e[0] in ("start", "stop") for e in s.events)
 
 
+def test_play_button_emit_is_not_echoed_back():
+    """When the Tracker emits its own START (on-screen Play with
+    send_transport on), and a downstream slave loops that START back
+    to the Tracker's clock-in, the loopback must be dropped — not
+    re-forwarded. Otherwise the Tracker and the slave would ping-pong
+    transport messages indefinitely."""
+    t = _started()
+    s = _ForwardSender()
+    s.attach(t)
+    t._param_values["send_transport"] = True
+    t.on_transport_start()           # on-screen Play emits START
+    starts_after_play = [e for e in s.events if e[0] == "start"]
+    assert len(starts_after_play) == 1
+    # Slave loops our START back to us right away.
+    t.on_clock_start()
+    starts_after_echo = [e for e in s.events if e[0] == "start"]
+    # No second START — the echo was suppressed.
+    assert len(starts_after_echo) == 1
+
+
+def test_forwarded_transport_is_not_re_echoed():
+    """When the Tracker forwards an upstream START (send_transport on,
+    send_clock off), downstream gear that mirrors the forwarded START
+    back must not cause a second forward."""
+    t = _started()
+    s = _ForwardSender()
+    s.attach(t)
+    t._param_values["send_clock"] = False
+    t._param_values["send_transport"] = True
+    t.on_clock_start()               # upstream START → forwarded
+    starts_after_fwd = [e for e in s.events if e[0] == "start"]
+    assert len(starts_after_fwd) == 1
+    t.on_clock_start()               # the loopback of our forward
+    starts_after_echo = [e for e in s.events if e[0] == "start"]
+    assert len(starts_after_echo) == 1
+
+
 def test_legacy_send_clock_migrates_to_both_flags():
     """A config saved with the old combined `send_clock=True` toggle
     used to mean 'forward clock + start/stop/continue.' After the
