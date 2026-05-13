@@ -72,8 +72,12 @@ The panel header carries three universal controls:
 - **`X` close button** -- standard dismiss.
 
 The **MIDI Monitor** and **MIDI Test Sender** sections that appear
-for USB devices are *not* present on plugins. Plugins use scopes
-and meters instead.
+on USB-device panels are also available on plugins -- the monitor
+streams every event the plugin sends or receives on its virtual
+ALSA ports, and the test sender fires notes or CCs straight into
+the plugin's input. Useful for verifying routing without touching
+hardware. Plugins additionally get live scopes and meters (see
+section 11.8) where the plugin author has wired them up.
 
 ## MIDI Clock and Sync
 
