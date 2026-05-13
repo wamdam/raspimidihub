@@ -414,7 +414,8 @@ function App() {
             pluginDisplays=${pluginDisplays}
             clipboard=${clipboard} setClipboard=${setClipboard}
             showContextMenu=${showContextMenu}
-            onJumpToController=${(instanceId) => navigate({ tab: 'controller', controllerId: instanceId })} />`}
+            onJumpToController=${(instanceId) => navigate({ tab: 'controller', controllerId: instanceId })}
+            onJumpToPlay=${(instanceId) => navigate({ tab: 'play', playId: instanceId })} />`}
         <${Toast} message=${toast} />
         <${ContextMenu} menu=${contextMenu} onClose=${closeContextMenu} />
     `;

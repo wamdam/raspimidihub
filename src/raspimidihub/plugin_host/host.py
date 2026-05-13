@@ -664,6 +664,7 @@ class PluginHost:
         return {
             "id": instance.id,
             "type": instance.plugin_type,
+            "kind": getattr(cls, "SURFACE_KIND", "plugin"),
             "name": instance.name,
             "status": "crashed" if instance.crashed else ("running" if instance.running else "stopped"),
             "crash_error": instance.crash_error,

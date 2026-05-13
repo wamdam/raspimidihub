@@ -26,6 +26,10 @@ Unreleased
   Transport). Previously only forwarded *incoming* transport, so
   downstream slaves wouldn't bar-align when the Tracker started
   itself.
+- Added: Tracker's Plugin Config panel now has the same maximize
+  (double-arrow) shortcut that controllers have — one tap jumps to
+  the fullscreen Play tab. Mirrors the existing pencil shortcut on
+  the Play bar that jumps back to the Plugin Config.
 
 
 2026-05-13 — Version 3.1.1

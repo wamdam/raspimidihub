@@ -63,9 +63,13 @@ plugin's choice, declared in its `params` list.
 
 The panel header carries three universal controls:
 
-- **Pencil** -- opens the plugin in its dedicated tab if it has one
-  (Tracker, controllers); a no-op for plugins without a fullscreen
-  surface.
+- **Maximize (double-arrow) icon** -- opens the plugin in its
+  dedicated fullscreen tab if it has one: controllers jump to the
+  **Controller** tab, the Tracker jumps to the **Play** tab. Only
+  shown for plugins with a fullscreen surface. The reverse direction
+  -- jumping from the fullscreen surface back into this Plugin
+  Config panel -- is the **pencil** icon on the Controller / Play
+  top bar.
 - **`?` help button** -- shows the plugin's extended `HELP` text:
   a longer explanation of what the plugin does and an example or
   two.

@@ -184,7 +184,7 @@ export function ScrollablePiano({ heldNotes, onNoteDown, onNoteUp, pianoKeys }) 
     </div>`;
 }
 
-export function DeviceDetailPanel({ device, onClose, showToast, refresh, pluginDisplays, onJumpToController }) {
+export function DeviceDetailPanel({ device, onClose, showToast, refresh, pluginDisplays, onJumpToController, onJumpToPlay }) {
     // While the panel is open we want plugin-param + plugin-display
     // events for THIS device's plugin instance (if it's a plugin) so
     // the inline param controls and meters / scopes update live.
@@ -417,10 +417,14 @@ export function DeviceDetailPanel({ device, onClose, showToast, refresh, pluginD
                         <div style="display:flex;align-items:center;justify-content:space-between;padding-bottom:5px;margin-bottom:8px">
                             <h3 style="margin:0;line-height:1">Plugin Config</h3>
                             <div style="display:flex;align-items:center;gap:6px">
-                                ${pluginData.type && pluginData.type.startsWith('controller_') && onJumpToController && html`<button
+                                ${pluginData.kind === 'controller' && onJumpToController && html`<button
                                     style="width:20px;height:20px;border-radius:50%;border:1px solid var(--text-dim);background:none;color:var(--text-dim);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;flex:0 0 auto"
                                     title="Open in fullscreen Controller view"
                                     onclick=${() => onJumpToController(device.plugin_instance_id)}>${IconMaximize}</button>`}
+                                ${pluginData.kind === 'play' && onJumpToPlay && html`<button
+                                    style="width:20px;height:20px;border-radius:50%;border:1px solid var(--text-dim);background:none;color:var(--text-dim);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;flex:0 0 auto"
+                                    title="Open in fullscreen Play view"
+                                    onclick=${() => onJumpToPlay(device.plugin_instance_id)}>${IconMaximize}</button>`}
                                 ${(pluginData.help || (pluginData.inputs && pluginData.inputs.length)) && html`<button style="width:20px;height:20px;border-radius:50%;border:1px solid var(--text-dim);background:none;color:var(--text-dim);font-size:12px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;flex:0 0 auto"
                                     onclick=${() => setShowHelp(h => !h)}>?</button>`}
                             </div>
