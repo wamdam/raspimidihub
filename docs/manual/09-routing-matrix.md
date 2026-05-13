@@ -20,7 +20,7 @@ Cells are in one of four visual states:
 | Appearance | Meaning |
 |------------|---------|
 | Empty (unlit) | No connection between this source and destination |
-| Lit (blue) | Connection active, no filter or mapping applied |
+| Lit (red) | Connection active, no filter or mapping applied |
 | Lit (purple) | Connection active, with an active filter or mapping |
 | Dimmed | Connection saved but at least one side is offline |
 
@@ -126,15 +126,25 @@ Paste on the matrix, and renaming the duplicate.
 ## The Add Menu
 
 The **Add** button at the bottom of the matrix opens an overlay
-with three sections:
+with four sections, each grouping addable instances by what they
+do:
 
-1. **Plugins** -- the 16 built-in plugins (chapter 11) plus any
-   user-supplied plugins discovered under `plugins/`. Tapping a
-   plugin entry creates a new instance and adds it to the matrix.
-2. **Controllers** -- the four templates (Mixer 8, FX 6,
-   Performance 16, XY 4). Each tap creates a new instance.
-3. **Bluetooth MIDI** -- a Scan button and a list of paired
+1. **Plugins** -- routing-graph plugins that consume / transform /
+   produce MIDI events: Arpeggiator, CC LFO, CC Smoother, Chord
+   Generator, Clock Divider, Hold, Master Clock, MIDI Delay, Note
+   Splitter, Note Transpose, Panic Button, Scale Remapper, SysEx
+   Sender, Velocity Curve, Velocity Equalizer (chapter 11). Tapping
+   an entry creates a new instance and adds it to the matrix.
+2. **Controllers** -- the four play-surface templates (Mixer 8,
+   FX 6, Performance 16, XY 4) that live on the **Controller** tab.
+   See chapter 12.
+3. **Play** -- step-sequencer surfaces that live on the **Play**
+   tab. The Tracker (chapter 13) is the only built-in entry today.
+4. **Bluetooth MIDI** -- a Scan button and a list of paired
    peripherals. See chapter 14 for the pairing flow.
+
+User-supplied plugins discovered at startup appear in the
+appropriate section based on their declared surface kind.
 
 ## The Bottom Bar -- Save, Load, Export, Import
 
@@ -178,7 +188,7 @@ directly in the ALSA kernel sequencer -- effectively zero added
 latency, no userspace involvement after setup. Connections with any
 filter or mapping go through the userspace filter/mapper, adding
 roughly 1--3 ms. Most of the time this distinction does not matter
-in practice, but it is the reason the matrix differentiates blue
+in practice, but it is the reason the matrix differentiates red
 (direct) from purple (filtered/mapped) cells: the colour also
 hints at the latency profile.
 

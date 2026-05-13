@@ -168,7 +168,7 @@ gives a fresh instance with default parameters. Use the
 **Copy → Paste-as-new** flow on the plugin header instead if you
 want a duplicate with cloned state.
 
-## The 16 Built-In Plugins
+## The 15 Built-In Plugins
 
 One-line summaries. The detailed reference for each lives in
 **Appendix A** with parameter tables, ranges, and defaults.
@@ -188,9 +188,12 @@ One-line summaries. The detailed reference for each lives in
 | **Panic Button** | All Notes Off; second tap upgrades to All Sound Off |
 | **Scale Remapper** | Quantizes notes to a scale (major / minor / pentatonic / blues / ...) with labelled root selector |
 | **SysEx Sender** | Upload a `.syx` file in the panel; bytes stream to the destination (256-byte chunks, ~5 ms gap; nothing saved) |
-| **Tracker** | 8-voice step sequencer on its own **Play** panel; chapter 13 |
 | **Velocity Curve** | Drawable 128-point velocity response curve with shape presets |
 | **Velocity Equalizer** | Normalise velocity to a fixed value or compress the range |
+
+The **Tracker** is a separate kind of plugin -- it ships as a
+*play surface* rather than a routing-graph plugin. Find it under
+**Add → Play** and read about it in chapter 13.
 
 ## User-Supplied Plugins
 

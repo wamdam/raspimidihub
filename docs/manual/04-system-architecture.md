@@ -28,7 +28,7 @@ Every MIDI event takes one of two paths through the appliance:
   event is received, transformed, and re-emitted. Added latency
   is roughly 1--3 ms.
 
-The routing matrix shows the difference visually: a *blue* cell
+The routing matrix shows the difference visually: a *red* cell
 is the direct path; a *purple* cell is the filtered path. Most
 of the time the latency difference does not matter, but the rule
 is worth knowing: filters and mappings have a cost; toggling a

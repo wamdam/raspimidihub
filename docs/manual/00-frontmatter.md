@@ -1,7 +1,7 @@
 # Front Matter {.unnumbered}
 
 **RaspiMIDIHub User Manual.** This manual covers RaspiMIDIHub Version
-3.1.0 and was last updated 2026-05-11. Information in this document is
+3.1.1 and was last updated 2026-05-13. Information in this document is
 subject to change as the software evolves; check the project's
 `CHANGELOG.txt` for release-by-release deltas.
 

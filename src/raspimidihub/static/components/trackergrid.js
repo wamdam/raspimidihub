@@ -289,6 +289,16 @@ function pitchOctaveToMidi(pitch, octave) {
     return (m >= 12 && m <= 127) ? m : null;
 }
 
+const MIDI_TO_PITCH = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+
+function midiToNote(m) {
+    if (m < 12 || m > 127) return null;
+    const octave = Math.floor((m - 12) / 12);
+    if (octave < 0 || octave > 9) return null;
+    const pitch = MIDI_TO_PITCH[(m - 12) % 12];
+    return composeNote(pitch, octave);
+}
+
 // ------------------------------------------------------------------
 // Main component
 // ------------------------------------------------------------------
@@ -365,6 +375,10 @@ export function PluginTrackerGrid({ param, values, onChange }) {
 
     const cursorSub = subOf(cursorTrack, cursorHalf);
     const selectionRect = makeSelectionRect(anchor, currentPage, cursorRow, cursorSub);
+    // Multi-cell selection (≥ 2 cells) swaps the keypad's note-half
+    // controls for a Transpose wheel that shifts all real-pitch
+    // notes within the selection by ±N semitones.
+    const isMultiSelection = !!selectionRect && !rectIsSingleCell(selectionRect);
 
     // First Shift engage captures the anchor at the current cursor.
     // Subsequent moves with shift held just extend; releasing Shift
@@ -507,13 +521,30 @@ export function PluginTrackerGrid({ param, values, onChange }) {
     }, [pages, currentPage, onChange, param]);
 
     // ---- Help row (live-value while a control is touched). ----
-    // Reverts to the static four-column key after 2 s of inactivity.
+    // Reverts to the static four-column key after a short window.
+    //
+    // Two flavours of message:
+    //   - Regular (wheel/knob feedback) -- 2 s timer, overridable
+    //     by anything else firing showHelp.
+    //   - Sticky (Cut / Copy / Paste / Clear confirmations) -- 2 s
+    //     lock during which subsequent *regular* showHelp calls are
+    //     suppressed. Stops the "Copied page" toast getting blasted
+    //     off-screen by an accidental note-wheel touch right after.
+    //     A second sticky message replaces an existing sticky.
     const [liveHelp, setLiveHelp] = useState(null);
     const helpTimerRef = useRef(null);
-    const showHelp = useCallback((text) => {
+    const helpStickyUntilRef = useRef(0);
+    const showHelp = useCallback((text, sticky = false) => {
+        const now = Date.now();
+        if (!sticky && now < helpStickyUntilRef.current) return;
         setLiveHelp(text);
         if (helpTimerRef.current) clearTimeout(helpTimerRef.current);
-        helpTimerRef.current = setTimeout(() => setLiveHelp(null), 2000);
+        const duration = sticky ? 2500 : 2000;
+        if (sticky) helpStickyUntilRef.current = now + duration;
+        helpTimerRef.current = setTimeout(() => {
+            setLiveHelp(null);
+            helpStickyUntilRef.current = 0;
+        }, duration);
     }, []);
     useEffect(() => () => {
         if (helpTimerRef.current) clearTimeout(helpTimerRef.current);
@@ -575,6 +606,65 @@ export function PluginTrackerGrid({ param, values, onChange }) {
         const midi = pitchOctaveToMidi(pitch, oct);
         if (midi != null) onChange(param.note_preview_param, midi);
     }, [onChange, param]);
+
+    // Transpose wheel state — visible while a multi-cell selection
+    // is active. The wheel position represents the cumulative shift
+    // applied since the selection became active; each tick applies
+    // a delta (new - prev) to every real-pitch note inside the
+    // rectangle. Resets to 0 when the selection clears or its
+    // bounds change so a fresh selection always starts at 0.
+    const [transposeOffset, setTransposeOffset] = useState(0);
+    const lastTransposeRef = useRef(0);
+    // Identity key for the current selection so we know when to
+    // reset the transpose tracker -- bounds change, anchor moves,
+    // or selection disappears.
+    const selectionKey = selectionRect
+        ? `${currentPage}|${selectionRect.minRow},${selectionRect.maxRow}|${selectionRect.minSub},${selectionRect.maxSub}`
+        : '';
+    useEffect(() => {
+        setTransposeOffset(0);
+        lastTransposeRef.current = 0;
+    }, [selectionKey]);
+
+    const onTransposeWheel = useCallback((_, newVal) => {
+        if (!selectionRect) return;
+        const delta = newVal - lastTransposeRef.current;
+        if (delta === 0) return;
+        lastTransposeRef.current = newVal;
+        setTransposeOffset(newVal);
+        const newPages = [...pages];
+        const pg = { ...newPages[currentPage] };
+        const newRows = [...(pg.rows || [])];
+        let touched = 0;
+        for (let r = selectionRect.minRow; r <= selectionRect.maxRow; r++) {
+            const row = { ...(newRows[r] || emptyRow(trackCount)) };
+            const voices = [...(row.voices || [])];
+            for (let s = selectionRect.minSub; s <= selectionRect.maxSub; s++) {
+                if (halfOfSub(s) !== 'note') continue;
+                const t = trackOfSub(s);
+                const v = { ...(voices[t] || emptyVoice()) };
+                const pitch = getPitchPart(v.note);
+                const oct = getOctavePart(v.note);
+                if (pitch == null || oct == null) continue;
+                const midi = pitchOctaveToMidi(pitch, oct);
+                if (midi == null) continue;
+                const newMidi = Math.max(12, Math.min(127, midi + delta));
+                const newNote = midiToNote(newMidi);
+                if (newNote && newNote !== v.note) {
+                    v.note = newNote;
+                    voices[t] = v;
+                    touched++;
+                }
+            }
+            row.voices = voices;
+            newRows[r] = row;
+        }
+        pg.rows = newRows;
+        newPages[currentPage] = pg;
+        onChange(param.pages_param, newPages);
+        const sign = newVal > 0 ? '+' : '';
+        showHelp(`Transpose  ${sign}${newVal}  (${touched} note${touched === 1 ? '' : 's'})`);
+    }, [pages, currentPage, selectionRect, trackCount, onChange, param, showHelp]);
 
     // Note + Vel travel together — picking a real pitch also writes
     // the current sticky velocity so the cell isn't left with `--`
@@ -664,15 +754,15 @@ export function PluginTrackerGrid({ param, values, onChange }) {
                 rect, trackCount,
             );
             onChange(param.pages_param, newPages);
-            showHelp(`Cleared selection (${rect.maxRow - rect.minRow + 1} × ${rect.maxSub - rect.minSub + 1})`);
+            showHelp(`Cleared selection (${rect.maxRow - rect.minRow + 1} × ${rect.maxSub - rect.minSub + 1})`, true);
         } else {
             const half = cursorHalfRef.current;
             if (half === 'note') {
                 setVoiceFields({ note: HOLD, vel: CC_HOLD });
-                showHelp('Cleared Note + Vel');
+                showHelp('Cleared Note + Vel', true);
             } else {
                 setVoiceFields({ cc_num: CC_NONE, cc_val: CC_HOLD });
-                showHelp('Cleared CC# + CC Val');
+                showHelp('Cleared CC# + CC Val', true);
             }
         }
     }, [pages, currentPage, trackCount, maxRows, onChange, param, setVoiceFields, showHelp]);
@@ -687,7 +777,7 @@ export function PluginTrackerGrid({ param, values, onChange }) {
         const page = pages[currentPage] || emptyPage(trackCount, maxRows);
         if (wholePage) {
             window.__trackerClipboard = { type: 'page', page: clonePage(page) };
-            showHelp('Copied page');
+            showHelp('Copied page', true);
             return;
         }
         const rect = makeSelectionRect(anchorRef.current, currentPageRef.current,
@@ -695,7 +785,7 @@ export function PluginTrackerGrid({ param, values, onChange }) {
                                        subOf(cursorTrackRef.current, cursorHalfRef.current));
         if (rect && !rectIsSingleCell(rect)) {
             window.__trackerClipboard = captureArea(page, rect, trackCount);
-            showHelp(`Copied selection (${rect.maxRow - rect.minRow + 1} × ${rect.maxSub - rect.minSub + 1})`);
+            showHelp(`Copied selection (${rect.maxRow - rect.minRow + 1} × ${rect.maxSub - rect.minSub + 1})`, true);
             return;
         }
         // No selection — capture just the focused sub-cell as a 1×1 area.
@@ -705,27 +795,27 @@ export function PluginTrackerGrid({ param, values, onChange }) {
             minSub: sub, maxSub: sub,
         };
         window.__trackerClipboard = captureArea(page, single, trackCount);
-        showHelp('Copied cell');
+        showHelp('Copied cell', true);
     }, [pages, currentPage, trackCount, maxRows, showHelp]);
 
     const onPaste = useCallback(() => {
         const clip = window.__trackerClipboard;
         if (!clip) {
-            showHelp('Clipboard empty');
+            showHelp('Clipboard empty', true);
             return;
         }
         if (clip.type === 'page') {
             const next = pages.slice();
             next[currentPage] = clonePage(clip.page);
             onChange(param.pages_param, next);
-            showHelp('Pasted page');
+            showHelp('Pasted page', true);
             return;
         }
         // Area clip — half-compatibility check before walking cells.
         const at = subOf(cursorTrackRef.current, cursorHalfRef.current);
         const cursorHalfNow = halfOfSub(at);
         if (clip.firstHalf !== cursorHalfNow) {
-            showHelp(`Can't paste — clipboard starts on ${clip.firstHalf} column`);
+            showHelp(`Can't paste — clipboard starts on ${clip.firstHalf} column`, true);
             return;
         }
         const newPages = pages.slice();
@@ -735,7 +825,7 @@ export function PluginTrackerGrid({ param, values, onChange }) {
             trackCount, maxRows,
         );
         onChange(param.pages_param, newPages);
-        showHelp(`Pasted selection (${clip.height} × ${clip.width})`);
+        showHelp(`Pasted selection (${clip.height} × ${clip.width})`, true);
     }, [pages, currentPage, trackCount, maxRows, onChange, param, showHelp]);
 
     // Cut = Copy + Del in one shot. Mirrors text-editor convention:
@@ -757,13 +847,13 @@ export function PluginTrackerGrid({ param, values, onChange }) {
             const next = pages.slice();
             next[currentPage] = blankPage;
             onChange(param.pages_param, next);
-            showHelp('Cut page');
+            showHelp('Cut page', true);
         } else {
             onDel();
             if (rect && !rectIsSingleCell(rect)) {
-                showHelp(`Cut selection (${rect.maxRow - rect.minRow + 1} × ${rect.maxSub - rect.minSub + 1})`);
+                showHelp(`Cut selection (${rect.maxRow - rect.minRow + 1} × ${rect.maxSub - rect.minSub + 1})`, true);
             } else {
-                showHelp('Cut cell');
+                showHelp('Cut cell', true);
             }
         }
     }, [onCopy, onDel, pages, currentPage, trackCount, maxRows, onChange, param, showHelp]);
@@ -791,6 +881,26 @@ export function PluginTrackerGrid({ param, values, onChange }) {
         if (nextPage !== cp) onChange(param.current_page_param, nextPage);
         showHelp(`Note  ${note}`);
     }, [octave, focusedCell.vel, setVoiceFields, firePreview, maxRows, pageCount, onChange, param, showHelp]);
+
+    // `o` on the keyboard writes an explicit Note-Off into the
+    // focused cell and auto-advances the cursor, mirroring the
+    // pitch-typing flow. Velocity is cleared to `--` because Off
+    // doesn't carry a velocity (and a stale velocity in an Off
+    // cell would be misleading in the cell view).
+    const writeTypedOff = useCallback(() => {
+        setVoiceFields({ note: 'Off', vel: CC_HOLD });
+        const cr = cursorRowRef.current;
+        const cp = currentPageRef.current;
+        let nextRow = cr + 1;
+        let nextPage = cp;
+        if (nextRow >= maxRows) {
+            nextRow = 0;
+            nextPage = (cp + 1) % pageCount;
+        }
+        if (nextRow !== cr) onChange(param.cursor_row_param, nextRow);
+        if (nextPage !== cp) onChange(param.current_page_param, nextPage);
+        showHelp('Note  Off');
+    }, [setVoiceFields, maxRows, pageCount, onChange, param, showHelp]);
 
     // ---- Keyboard support (window-level). ----
     // Active only while this component is mounted. Skips when an
@@ -857,6 +967,14 @@ export function PluginTrackerGrid({ param, values, onChange }) {
             if (pitch) {
                 writeTypedNote(pitch);
                 e.preventDefault();
+                return;
+            }
+            // `o` (KeyO) -- explicit Note-Off, auto-advances like a
+            // typed pitch. Sits naturally on the home row, doesn't
+            // conflict with any other shortcut.
+            if (e.code === 'KeyO') {
+                writeTypedOff();
+                e.preventDefault();
             }
         };
         const onKeyUp = (e) => {
@@ -869,7 +987,7 @@ export function PluginTrackerGrid({ param, values, onChange }) {
             window.removeEventListener('keyup', onKeyUp);
         };
     }, [moveRow, moveColumn, movePage, cursorMove, engageShift,
-        onDel, onCopy, onCut, onPaste, writeTypedNote, togglePlay,
+        onDel, onCopy, onCut, onPaste, writeTypedNote, writeTypedOff, togglePlay,
         octave, onOctave]);
 
     // Tick label for the Note wheel — sentinels then 12 pitches with
@@ -1080,6 +1198,27 @@ export function PluginTrackerGrid({ param, values, onChange }) {
         </div>
     </div>`;
 
+    // While a multi-cell selection is active the keypad's note/cc
+    // controls are useless (a wheel can only edit one focused cell);
+    // swap them for a Transpose wheel that operates on every real-
+    // pitch note inside the rectangle. CC cells in the selection
+    // are ignored.
+    const transposeTickLabel = useCallback((v) => {
+        const n = Number(v);
+        if (n === 0) return '0';
+        return n > 0 ? `+${n}` : `${n}`;
+    }, []);
+    const selectionHalfControls = html`<div class="tracker-keypad-controls">
+        <div class="tracker-keypad-col">
+            <div class="tracker-keypad-label">TRANSPOSE</div>
+            <${PluginWheel} name="transpose_wheel" label=""
+                min=${-24} max=${24}
+                value=${transposeOffset}
+                onChange=${onTransposeWheel}
+                tickLabel=${transposeTickLabel} />
+        </div>
+    </div>`;
+
     // Pattern bank -- 8 stored grids per Tracker instance. The
     // currently-selected one is what the surface above edits; tap to
     // switch (queue when playing), Shift+Tap to switch immediately,
@@ -1115,7 +1254,8 @@ export function PluginTrackerGrid({ param, values, onChange }) {
     // to fill but the action row + pattern row stay planted below.
     const keypad = html`<div class="tracker-keypad">
         <div class="tracker-keypad-top">
-            ${cursorHalf === 'note' ? noteHalfControls : ccHalfControls}
+            ${isMultiSelection ? selectionHalfControls
+                : (cursorHalf === 'note' ? noteHalfControls : ccHalfControls)}
             <div class="tracker-keypad-col tracker-keypad-cursor-col">
                 <div class="tracker-keypad-label">CURSOR</div>
                 ${cursor}

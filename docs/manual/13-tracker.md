@@ -1,11 +1,11 @@
 # The Tracker
 
 The **Tracker** is an 8-voice step sequencer on its own **Play** tab.
-It is implemented as a plugin internally, but its workflow is
-involved enough to warrant its own chapter. Routing-matrix
-appearance, instance lifecycle, and config-panel mechanics all
-follow chapter 11; this chapter is the surface-and-workflow
-reference.
+It lives in the routing matrix like any other addable instance --
+add it from **Add → Play** -- but its surface is rich enough to
+warrant its own chapter. Routing-matrix appearance, instance
+lifecycle, and config-panel mechanics all follow chapter 11; this
+chapter is the surface-and-workflow reference.
 
 ![The Tracker play surface: 8 voice columns (T1..T8), 16 hex-numbered rows per page, up to 16 pages.](../screenshots/tracker.png){width=42%}
 

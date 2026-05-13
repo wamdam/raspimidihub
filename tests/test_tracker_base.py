@@ -1071,3 +1071,23 @@ def test_clear_empties_target_pattern():
     assert t._param_values["pattern_status"][2] is False
     # Slot 0 untouched.
     assert t._param_values["pattern_status"][0] is True
+
+
+def test_live_record_mirrors_into_selected_pattern():
+    """Live-recorded edits go through _record_voice_field_at which
+    uses set_param internally -- that bypasses on_param_change.
+    Without explicit mirroring, the patterns[] storage drifts out of
+    sync with `pages` and a pattern switch + back loses the edit."""
+    t = _started()
+    # Live-record into voice 0 at row 0 of page 0 of the current
+    # (selected) pattern.
+    t._record_voice_field_at(0, 0, 0, {"note": "G-4", "vel": 100})
+    # Pages reflects the edit.
+    assert t._param_values["pages"][0]["rows"][0]["voices"][0]["note"] == "G-4"
+    # patterns[selected] should mirror.
+    sel = t._param_values["selected_pattern"]
+    assert t._param_values["patterns"][sel][0]["rows"][0]["voices"][0]["note"] == "G-4"
+    # Switch + switch-back round-trip preserves the recorded note.
+    t.on_param_change("cmd_pattern_select", {"pattern": 1, "mode": "tap"})
+    t.on_param_change("cmd_pattern_select", {"pattern": sel, "mode": "tap"})
+    assert t._param_values["pages"][0]["rows"][0]["voices"][0]["note"] == "G-4"

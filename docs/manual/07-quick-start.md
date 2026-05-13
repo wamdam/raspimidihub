@@ -62,8 +62,9 @@ items there cover the most common "no MIDI" cases.
 ## Add a Plugin
 
 Tap **Add** at the bottom of the matrix. The Add overlay opens with a
-list of available plugins (chapter 11), controllers (chapter 12), and
-the Bluetooth scan section (chapter 14). Pick **Arpeggiator**. A new
+list of available plugins (chapter 11), controllers (chapter 12),
+play surfaces (chapter 13), and the Bluetooth scan section
+(chapter 14). Pick **Arpeggiator**. A new
 row and column appear in the matrix for the new plugin instance.
 
 Plugins start *unconnected* by design (see chapter 11 for why). Tap

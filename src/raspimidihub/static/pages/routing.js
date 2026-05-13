@@ -508,17 +508,44 @@ export function RoutingPage({ devices, connections, refresh, showToast, clockSou
                         <h3>Add Device</h3>
                         <button class="panel-close" onclick=${() => setShowAddPlugin(false)}>\u2715</button>
                     </div>
-                    <div style="font-size:11px;text-transform:uppercase;color:var(--text-dim);letter-spacing:1px;margin:12px 0 8px;font-weight:600">Virtual Instruments</div>
-                    ${Object.entries(pluginTypes).filter(([t]) => !t.startsWith('_')).map(([type, info]) => html`
-                        <div class="device" style="cursor:pointer;padding:12px 0;display:flex;align-items:center;gap:10px" onclick=${() => addPlugin(type)}>
-                            <${PluginIcon} type=${type} />
-                            <div style="flex:1">
-                                <div style="font-weight:600;margin-bottom:2px;color:#4dd9c0">${info.name}</div>
-                                <div style="font-size:12px;color:var(--text-dim)">${info.description}</div>
-                            </div>
-                            <span style="color:var(--accent);font-size:13px;font-weight:600">Add</span>
-                        </div>
-                    `)}
+                    ${(() => {
+                        // Group addable types by SURFACE_KIND so the
+                        // panel matches the runtime taxonomy: Plugins
+                        // (routing-graph), Controllers (play-surface),
+                        // Play (step-sequencer surfaces), Bluetooth
+                        // (live scan, rendered below the grouped list).
+                        // ui_demo and other underscore-prefixed types
+                        // are dev-only and stay hidden.
+                        const sections = [
+                            { key: 'plugin',     label: 'Plugins' },
+                            { key: 'controller', label: 'Controllers' },
+                            { key: 'play',       label: 'Play' },
+                        ];
+                        const entries = Object.entries(pluginTypes)
+                            .filter(([t]) => !t.startsWith('_'));
+                        const renderRow = ([type, info]) => html`
+                            <div class="device" style="cursor:pointer;padding:12px 0;display:flex;align-items:center;gap:10px" onclick=${() => addPlugin(type)}>
+                                <${PluginIcon} type=${type} />
+                                <div style="flex:1">
+                                    <div style="font-weight:600;margin-bottom:2px;color:#4dd9c0">${info.name}</div>
+                                    <div style="font-size:12px;color:var(--text-dim)">${info.description}</div>
+                                </div>
+                                <span style="color:var(--accent);font-size:13px;font-weight:600">Add</span>
+                            </div>`;
+                        return sections.map((sec, i) => {
+                            const rows = entries.filter(
+                                ([, info]) => (info.kind || 'plugin') === sec.key,
+                            );
+                            if (rows.length === 0) return null;
+                            const margin = i === 0
+                                ? 'margin:12px 0 8px'
+                                : 'margin:20px 0 8px;border-top:1px solid var(--surface2);padding-top:16px';
+                            return html`
+                                <div style="font-size:11px;text-transform:uppercase;color:var(--text-dim);letter-spacing:1px;${margin};font-weight:600">${sec.label}</div>
+                                ${rows.map(renderRow)}
+                            `;
+                        });
+                    })()}
                     ${!btAvailable && btReason === 'dbus-next-missing' && html`
                         <div style="margin-top:20px;padding:12px;background:var(--bg);border:1px solid var(--surface2);border-radius:6px;font-size:12px;color:var(--text-dim);line-height:1.5">
                             <div style="font-weight:600;color:var(--text);margin-bottom:6px">Bluetooth MIDI unavailable</div>

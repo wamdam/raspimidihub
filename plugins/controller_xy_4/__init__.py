@@ -26,7 +26,7 @@ class ControllerXY4(ControllerBase):
     """Performance controller: 2 XY pads, 8 knobs, 4 buttons."""
 
     NAME = "Controller — XY 4"
-    DESCRIPTION = "Performance: 2 XY pads / 8 knobs / 4 buttons (defaults CC 16-31 ch 1)"
+    DESCRIPTION = "Performance: 2 XY pads / 8 knobs / 4 buttons"
     AUTHOR = "RaspiMIDIHub"
     VERSION = "1.0"
     HELP = """\

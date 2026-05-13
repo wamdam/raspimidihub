@@ -1,5 +1,5 @@
 PACKAGE = raspimidihub
-VERSION = 3.1.0
+VERSION = 3.1.1
 DEB_NAME = $(PACKAGE)_$(VERSION)-1_all
 BUILD_DIR = build/$(DEB_NAME)
 DEB_FILE = dist/$(DEB_NAME).deb
@@ -196,20 +196,24 @@ uninstall-rosetup:
 deploy-src:
 	rsync -av --delete --exclude='__pycache__' src/raspimidihub/ $(PI_HOST):/tmp/raspimidihub/
 
+# The dev / test toolchain lives in .venv. We don't install the
+# package itself (no `pip install -e .`) -- src/ is on PYTHONPATH at
+# run time, so the venv only carries pytest / ruff / playwright.
+# pyproject.toml isn't shipped; config lives in pytest.ini + ruff.toml.
 test:
-	@if [ ! -d .venv ]; then python3 -m venv .venv && .venv/bin/pip install -e ".[test]"; fi
-	RASPIMIDIHUB_TEST_MODE=1 .venv/bin/pytest tests/ plugins/ -v -m "not alsa and not e2e"
+	@if [ ! -x .venv/bin/pytest ]; then python3 -m venv .venv && .venv/bin/pip install pytest pytest-asyncio; fi
+	RASPIMIDIHUB_TEST_MODE=1 PYTHONPATH=src .venv/bin/pytest tests/ plugins/ -v -m "not alsa and not e2e"
 
 lint:
-	@if [ ! -x .venv/bin/ruff ]; then python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"; fi
+	@if [ ! -x .venv/bin/ruff ]; then python3 -m venv .venv && .venv/bin/pip install ruff; fi
 	.venv/bin/ruff check src plugins
 
 fmt-check:
-	@if [ ! -x .venv/bin/ruff ]; then python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"; fi
+	@if [ ! -x .venv/bin/ruff ]; then python3 -m venv .venv && .venv/bin/pip install ruff; fi
 	.venv/bin/ruff format --check src plugins
 
 fmt:
-	@if [ ! -x .venv/bin/ruff ]; then python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"; fi
+	@if [ ! -x .venv/bin/ruff ]; then python3 -m venv .venv && .venv/bin/pip install ruff; fi
 	.venv/bin/ruff format src plugins
 	.venv/bin/ruff check src plugins --fix
 
@@ -247,7 +251,7 @@ TARGET ?= http://10.1.1.2
 screenshots:
 	@if [ ! -x .venv/bin/playwright ]; then \
 		python3 -m venv .venv && \
-		.venv/bin/pip install -e ".[screenshots]" && \
+		.venv/bin/pip install playwright && \
 		.venv/bin/playwright install chromium; \
 	fi
 	.venv/bin/python scripts/screenshots/run.py --target=$(TARGET)

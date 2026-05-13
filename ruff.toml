@@ -1,0 +1,22 @@
+line-length = 100
+target-version = "py39"
+extend-exclude = [".venv", "build", "dist"]
+
+[lint]
+# E/W = pycodestyle, F = pyflakes, I = isort, UP = pyupgrade,
+# B = flake8-bugbear, SIM = flake8-simplify
+select = ["E", "W", "F", "I", "UP", "B", "SIM"]
+ignore = [
+    "E501",   # long lines — formatter handles this
+    "E741",   # ambiguous variable name (we use `l`/`I` in MIDI maths)
+    "B008",   # function call in default arg (intentional in dataclasses)
+    "SIM102", # collapsible if (sometimes clearer with two)
+    "SIM103", # needless bool (early-return form is fine)
+    "SIM105", # try/except/pass — contextlib.suppress is noisier here
+    "SIM108", # ternary-instead-of-if (often less readable here)
+    "E731",   # lambda-assignment (one-liner lambdas are fine)
+]
+
+[format]
+quote-style = "double"
+indent-style = "space"

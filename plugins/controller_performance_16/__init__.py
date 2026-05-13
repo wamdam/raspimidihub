@@ -24,7 +24,7 @@ class ControllerPerformance16(ControllerBase):
     """4-wide performance controller: 16 macro knobs + 4 scene buttons."""
 
     NAME = "Controller — Performance 16"
-    DESCRIPTION = "4-wide performance: 16 macros + 4 scene buttons (defaults CC 16-35 ch 1)"
+    DESCRIPTION = "4-wide performance: 16 macros + 4 scene buttons"
     AUTHOR = "RaspiMIDIHub"
     VERSION = "1.0"
     HELP = """\

@@ -24,7 +24,7 @@ class ControllerMixer8(ControllerBase):
     """8-wide mixer-strip controller: 8 knobs / 8 faders / 8 mutes."""
 
     NAME = "Controller — Mixer 8"
-    DESCRIPTION = "8-wide mixer: 24 knobs / 8 faders / 16 buttons (defaults CC 16-63 ch 1)"
+    DESCRIPTION = "8-wide mixer: 24 knobs / 8 faders / 16 buttons"
     AUTHOR = "RaspiMIDIHub"
     VERSION = "1.3"
     HELP = """\

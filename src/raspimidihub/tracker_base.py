@@ -191,6 +191,7 @@ class TrackerBase(PluginBase):
                 cmd_stop_param="cmd_stop",
                 send_clock_param="send_clock",
                 note_preview_param="note_preview",
+                patterns_param="patterns",
                 selected_pattern_param="selected_pattern",
                 queued_pattern_param="queued_pattern",
                 pattern_status_param="pattern_status",
@@ -804,17 +805,11 @@ class TrackerBase(PluginBase):
             self.set_param("note_preview", -1)
         elif name == "pages":
             # Edits to the live grid mirror through to the storage
-            # array, so the selected pattern keeps its content. Don't
-            # set_param("patterns", ...) -- patterns is persisted but
-            # not broadcast (the UI reads `pages` for the current
-            # pattern's grid). Refresh status in case the slot
-            # flipped empty <-> non-empty.
-            sel = int(self._param_values.get("selected_pattern", 0))
-            patterns = list(self._param_values.get("patterns") or [])
-            if 0 <= sel < len(patterns):
-                patterns[sel] = value
-                self._param_values["patterns"] = patterns
-                self._refresh_pattern_status_slot(sel)
+            # array, so the selected pattern keeps its content. The
+            # helper also refreshes pattern_status in case the slot
+            # flipped empty <-> non-empty. (Internal pages mutations
+            # in live-record paths call the helper directly.)
+            self._mirror_pages_to_selected_pattern(value)
         elif name == "cmd_pattern_select" and isinstance(value, dict):
             self._handle_pattern_command(value)
             # Reset the trigger so a re-tap of the same slot fires.
@@ -825,6 +820,19 @@ class TrackerBase(PluginBase):
     # (= what `pages` mirrors) and (optionally) one queued for the
     # next page-0 row-0 boundary.
     # ================================================================
+
+    def _mirror_pages_to_selected_pattern(self, pages: list) -> None:
+        """Write the live `pages` value into patterns[selected]. The
+        on_param_change("pages", ...) mirror only catches external
+        (API) writes; internal mutations (live recording, chord
+        spread) call self.set_param("pages", ...) which doesn't
+        fire on_param_change, so we need to mirror manually."""
+        sel = int(self._param_values.get("selected_pattern", 0))
+        patterns = list(self._param_values.get("patterns") or [])
+        if 0 <= sel < len(patterns):
+            patterns[sel] = pages
+            self._param_values["patterns"] = patterns
+            self._refresh_pattern_status_slot(sel)
 
     def _queued_pattern_idx(self) -> int:
         v = self._param_values.get("queued_pattern", -1)
@@ -1117,3 +1125,8 @@ class TrackerBase(PluginBase):
             page["rows"] = rows
             pages[page_idx] = page
             self.set_param("pages", pages)
+            # Live-recorded edits don't go through on_param_change
+            # (set_param is internal-only), so the patterns[] mirror
+            # would miss them. Sync explicitly so a pattern switch +
+            # switch-back preserves what was just recorded.
+            self._mirror_pages_to_selected_pattern(pages)

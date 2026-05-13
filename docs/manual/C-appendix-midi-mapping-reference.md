@@ -105,7 +105,7 @@ row/column header menu.
 
 Adding even one channel exclusion or one mapping pushes the
 connection from the *direct* path to the *filtered* path. The
-matrix renders this as the cell colour: blue is direct, purple
+matrix renders this as the cell colour: red is direct, purple
 is filtered.
 
 ## Bidirectional pairs

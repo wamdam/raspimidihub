@@ -4,7 +4,7 @@ User-visible changes. Short tagged one-liners, no code or commit
 hashes. Tags: Added, Improved, Fix, Changed, Removed.
 
 
-Unreleased
+2026-05-13 — Version 3.1.1
 
 - Added: Tracker patterns — 8 numbered pattern slots below the
   action row. Each pattern stores a full grid (pages + cells); the
@@ -18,6 +18,48 @@ Unreleased
   a slot context menu: Overwrite-from-selected and Clear pattern.
   Existing Tracker instances migrate their current grid into
   slot 1 on first start; slots 2..8 begin empty.
+- Added: Tracker multi-cell selection → Transpose wheel. While a
+  Shift-extended selection is active the keypad's note / cc
+  controls swap for a single TRANSPOSE wheel (-24..+24). Each tick
+  shifts every real-pitch note inside the selection by N semitones;
+  CC cells are left untouched. The wheel resets to 0 when the
+  selection changes or clears, and the panel returns to the
+  note / cc keypad as soon as the selection collapses to a single
+  cell.
+- Added: Tracker `o` key writes an explicit Note-Off into the
+  focused cell and auto-advances the cursor, mirroring the
+  pitch-typing flow.
+- Added: Add Device panel now groups types into four sections --
+  Plugins / Controllers / Play / Bluetooth -- matching the runtime
+  taxonomy and the manual chapter 9.7. Controller descriptions
+  drop the cosmetic "(defaults CC ...)" suffix.
+- Improved: Cut / Copy / Paste / Clear confirmations in the Tracker
+  help line are now sticky for 2 seconds -- a noisy stream of
+  wheel-feedback messages won't drown the "Copied page" toast
+  before the user has a chance to read it.
+- Fix: Pattern slot data is now mirrored from live edits via the
+  live-record path too (was: only the API edit path updated the
+  slot, so a switch-away + switch-back lost notes played in during
+  recording).
+- Fix: TrackerGrid schema now declares the `patterns` storage
+  array as a recognised param key, so the host's stranded-param
+  tidy doesn't strip it on plugin (re)start. Was the reason the
+  first 3.1.0+patterns deploy looked like "switching does nothing"
+  -- the patterns array was being deleted between deploys.
+- Fix: Direct-vs-filtered cell colour wording in the manual --
+  direct cells render in the brand red, not "blue" as the manual
+  said. Filtered/mapped cells remain purple. Affects chapters 4,
+  9, and the mapping-reference appendix.
+- Changed: Manual chapter 9.7 (Add Menu) reflects the new four-way
+  grouping; chapter 11.10 drops the Tracker from the 16-plugin
+  count (now 15, with the Tracker promoted to its own chapter via
+  the Play tab). Chapter 7.5 (Quick Start → Add a Plugin) mentions
+  the Play section.
+- Removed: pyproject.toml. The package isn't published; the .deb
+  build doesn't use it; the dev .venv works fine with pytest.ini
+  + ruff.toml + PYTHONPATH=src. `make test`, `make lint`,
+  `make fmt`, `make screenshots` no longer pip-install the package
+  into the venv.
 
 
 2026-05-11 — Version 3.1.0

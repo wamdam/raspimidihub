@@ -20,7 +20,7 @@ class ControllerFx6(ControllerBase):
     """6-wide FX controller: 18 knobs / 6 faders / 6 buttons."""
 
     NAME = "Controller — FX 6"
-    DESCRIPTION = "6-wide FX: 18 knobs / 6 faders / 6 buttons (defaults CC 16-45 ch 1)"
+    DESCRIPTION = "6-wide FX: 18 knobs / 6 faders / 6 buttons"
     AUTHOR = "RaspiMIDIHub"
     VERSION = "1.1"
     HELP = """\

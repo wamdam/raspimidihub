@@ -367,6 +367,7 @@ class TrackerGrid:
     # Pattern bank -- 8 stored grids per Tracker instance, with one
     # currently selected + (optionally) one queued for the next
     # boundary. See TrackerBase / PatternRow for the full flow.
+    patterns_param: str | None = None               # list[list[Page]]: stored grids
     selected_pattern_param: str | None = None       # int 0..N-1
     queued_pattern_param: str | None = None         # int 0..N-1 or -1 (none)
     pattern_status_param: str | None = None         # list[bool]: has-content per slot
@@ -393,7 +394,7 @@ class TrackerGrid:
                      "octave_param", "rate_param", "playhead_param",
                      "track_channels_param", "cmd_play_param",
                      "cmd_stop_param", "send_clock_param",
-                     "note_preview_param",
+                     "note_preview_param", "patterns_param",
                      "selected_pattern_param", "queued_pattern_param",
                      "pattern_status_param", "cmd_pattern_select_param"):
             v = getattr(self, attr)

@@ -150,6 +150,11 @@ class PluginHost:
                 "description": cls.DESCRIPTION,
                 "author": cls.AUTHOR,
                 "version": cls.VERSION,
+                # Surface kind drives the Add Device panel grouping:
+                # "plugin" = routing-graph plugin, "controller" =
+                # play-surface controller, "play" = step-sequencer
+                # surface (Tracker).
+                "kind": getattr(cls, "SURFACE_KIND", "plugin"),
             }
         return result
 
