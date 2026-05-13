@@ -114,8 +114,8 @@ snapshot).
 | Per-button parameter | Type | Values |
 |----------------------|------|--------|
 | **Mode** | Radio | Now / Bar / 2-Bar / 4-Bar / 8-Bar / 16-Bar |
-| **Sync to bars** | Toggle | on / off |
-| **Fade on fire** | Toggle | on / off |
+| **Sync to bars** | Button (latching) | on / off |
+| **Fade on fire** | Button (latching) | on / off |
 | **Trg. Note** | NoteSelect + Learn | The MIDI note that triggers a fire |
 
 **Behaviour table:**

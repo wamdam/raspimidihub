@@ -57,16 +57,6 @@ Tap to switch. No scrolling, no submenus.
 Radios are preferred over dropdowns wherever the option count is
 five or fewer.
 
-## Toggle
-
-A metal switch with a coloured LED dot: on or off, nothing in
-between. The LED dot is green by default; some toggles use yellow
-or red where the colour has semantic meaning (a "destructive" red
-on a panic button, for example).
-
-Toggles flip on a single tap. There is no long-press behaviour;
-the same tap that toggles to on toggles to off.
-
 ## Step Editor
 
 A step-sequencer grid: a row of cells, each with an on/off dot, an
@@ -124,14 +114,21 @@ cheaper to render at high update rates.
 
 ## Button
 
-A rubber push-button with a coloured LED on its face. Most buttons
-are latching (one tap on, next tap off); some are momentary
-"trigger" buttons that fire an action and self-reset. Colour is a
-visual cue -- green for normal actions, red for destructive.
+A rubber push-button with a coloured LED on its face. Buttons come
+in two flavours:
 
-The **Panic Button** plugin's surface is a single red trigger
-button; each tap sends All Notes Off and All Sound Off on every
-MIDI channel.
+- **Latching** (the default). One tap toggles on, the next tap
+  toggles off. The LED follows the value. This is the on/off
+  switch used for **Sync to Clock** on the **Arpeggiator** and
+  **CC LFO**, **Play** on the **Master Clock**, **Send Clock +
+  Transport** on the **Tracker**, and so on.
+- **Trigger** (momentary). Each tap fires an action and the LED
+  flashes briefly; the value self-resets back to off. This is the
+  red **Panic!** button on the **Panic Button** plugin, and the
+  drop-button captures on the controller surfaces.
+
+Colour is a visual cue -- green for normal actions, yellow for
+"are you sure?", red for destructive.
 
 ## Note Select
 
