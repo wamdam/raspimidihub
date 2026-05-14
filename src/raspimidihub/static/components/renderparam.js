@@ -110,11 +110,9 @@ export function renderParam(param, values, onChange, allValues, displayCtx) {
                 onChange=${onChange} displayCtx=${displayCtx}
                 renderParam=${renderParam} />`;
         case 'trackergrid':
-            // play_only — never render in the device-detail (config)
-            // panel; only on the /play surface where playOnly is true.
-            // The config card carries the per-track channel selectors
-            // + send-clock toggle; the grid itself isn't useful there.
-            if (param.play_only && !(displayCtx && displayCtx.playOnly)) return null;
+            // play_only filtering now happens generically in
+            // renderParamList / renderParamGroup; per-type opt-in
+            // is no longer needed here.
             return html`<${PluginTrackerGrid} param=${param} values=${values}
                 onChange=${onChange} displayCtx=${displayCtx} />`;
         default:
@@ -149,7 +147,11 @@ export function renderParamGroup(items, values, onChange, displayCtx, cols) {
         // config_only params (e.g. background colour picker) live in
         // the device-detail panel (which is now always in flat-config
         // mode for Controllers) and are hidden on play surfaces.
+        // play_only is the mirror — performance controls that already
+        // appear on the fullscreen Play surface, hidden from the
+        // device-detail panel so they don't render twice.
         if (p.config_only && playOnly) continue;
+        if (p.play_only && !playOnly) continue;
         const rendered = renderParam(p, values, onChange, values, displayCtx);
         if (!rendered) continue;
         if (INLINE_TYPES.has(p.type)) inlineRun.push(applySpan(rendered, p.span));
@@ -165,6 +167,7 @@ export function renderParamList(params, values, onChange, displayCtx) {
     const expanded = [];
     for (const p of params) {
         if (p.config_only && playOnly) continue;
+        if (p.play_only && !playOnly) continue;
         if (p.visible_when) {
             const cur = values[p.visible_when.param];
             const cv = p.visible_when.value;

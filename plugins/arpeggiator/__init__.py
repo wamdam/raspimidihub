@@ -109,22 +109,25 @@ flips Rate, never plays."""
         # Play-surface controls. Pattern + Rate are wide wheels in the
         # top row (span=2 each → 4-col grid filled). The four shapers
         # auto-pack into the next row as inline wheels/knob. The Step
-        # Editor below spans the full row.
+        # Editor below spans the full row. All marked play_only so the
+        # device-detail panel doesn't duplicate them — power users
+        # still see them on the Play tab, the config card stays
+        # focused on the wiring choices.
         Wheel("pattern", "Pattern",
               min=0, max=len(_PATTERN_OPTIONS) - 1,
               labels=_PATTERN_OPTIONS, default=0,
-              wide=True, span=2),
+              wide=True, span=2, play_only=True),
         Wheel("rate", "Rate",
               min=0, max=len(_RATE_OPTIONS) - 1,
               labels=_RATE_OPTIONS, default=_DEFAULT_RATE_IDX,
-              wide=True, span=2),
-        Wheel("step_count", "Steps", min=1, max=32, default=8),
-        Knob("accent_vel", "Accent Vel.", min=0, max=127, default=30),
-        Wheel("gate", "Gate %", min=10, max=100, default=80),
-        Wheel("octaves", "Octaves", min=1, max=4, default=1),
+              wide=True, span=2, play_only=True),
+        Wheel("step_count", "Steps", min=1, max=32, default=8, play_only=True),
+        Knob("accent_vel", "Accent Vel.", min=0, max=127, default=30, play_only=True),
+        Wheel("gate", "Gate %", min=10, max=100, default=80, play_only=True),
+        Wheel("octaves", "Octaves", min=1, max=4, default=1, play_only=True),
         StepEditor("steps", "Step Pattern", length_param="step_count",
                    default_length=8, default_on=True, span=4,
-                   slot_notes_param="step_slot_notes"),
+                   slot_notes_param="step_slot_notes", play_only=True),
         # Config-only setup. Channel filters, rate-trigger plumbing
         # and the sync-mode + BPM live here — touched on initial
         # wiring, never during a set.

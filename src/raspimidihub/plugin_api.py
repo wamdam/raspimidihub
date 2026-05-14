@@ -48,6 +48,12 @@ class Param:
     # (Routing tab) and hidden on play surfaces (Controller fullscreen
     # page). Used for instance-level meta config like background colour.
     config_only: bool = field(default=False, kw_only=True)
+    # Inverse of `config_only` — if True, this param renders only on
+    # the /play surface (where displayCtx.playOnly is set) and is
+    # hidden from the device-detail config panel. Used for performance
+    # controls that would duplicate / crowd the same params already
+    # visible in fullscreen.
+    play_only: bool = field(default=False, kw_only=True)
 
     def to_dict(self) -> dict:
         d = {"type": self.__class__.__name__.lower(), "name": self.name, "label": self.label}
@@ -57,6 +63,8 @@ class Param:
             d["span"] = self.span
         if self.config_only:
             d["config_only"] = True
+        if self.play_only:
+            d["play_only"] = True
         return d
 
 
@@ -251,6 +259,7 @@ class Group:
     children: list = field(default_factory=list)
     cols: int | None = None  # override default 4-col grid for this group's inline row
     config_only: bool = False
+    play_only: bool = False  # mirror of config_only — hide the whole group from device-detail
     # Same shape as Param.visible_when — (param_name, value_or_list).
     # When set, the whole group (title + children) hides if the named
     # param's current value doesn't match.
@@ -266,6 +275,8 @@ class Group:
             d["cols"] = self.cols
         if self.config_only:
             d["config_only"] = True
+        if self.play_only:
+            d["play_only"] = True
         if self.visible_when:
             d["visible_when"] = {"param": self.visible_when[0], "value": self.visible_when[1]}
         return d
