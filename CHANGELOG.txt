@@ -6,6 +6,19 @@ hashes. Tags: Added, Improved, Fix, Changed, Removed.
 
 Unreleased
 
+- Improved: Tracker on-screen **Shift** button is now a tap-toggle
+  instead of press-and-hold. One tap engages selection mode and
+  keeps it engaged across cursor moves; a second tap releases it.
+  The keyboard `Shift` key still works as press-and-hold (natural
+  for hardware modifiers). Removes the multi-touch flakiness where
+  a small finger drift while holding Shift on screen would fire
+  pointerleave and silently drop the selection mid-edit.
+- Fix: Tracker selection no longer breaks when the cursor crosses
+  the row-0 / row-F boundary. While Shift is engaged, Up/Down wrap
+  inside the current page instead of paging — so the cursor and
+  the selection anchor stay on the same page and the selection
+  rectangle survives. Without Shift, cursor wrap still steps to
+  the previous/next page as before.
 - Fix: Tracker `End` on row 0 no longer stops playback. A page
   whose first row is `End` is treated as fully muted -- the
   playhead keeps ticking silently so a user can drop a note

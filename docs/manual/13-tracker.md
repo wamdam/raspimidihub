@@ -156,10 +156,20 @@ of the routed track.
 
 ### Selection
 
-Holding `Shift` while moving the cursor extends a sub-cell
-selection rectangle. The selection can span multiple voices and
-multiple rows. The action row shows the cell count on the right
-when a selection is active.
+On the keyboard, hold `Shift` while moving the cursor to extend a
+sub-cell selection rectangle. On the on-screen action row, tap
+**Shift** once to toggle selection mode on (it stays engaged
+across multiple cursor moves), tap it again to release. The
+on-screen button is a *toggle* rather than press-and-hold so
+multi-touch finger-drift can't accidentally drop it mid-select.
+
+While selection mode is engaged, the cursor wraps within the
+current page at the row-0 / row-F boundary instead of stepping
+to the previous / next page -- otherwise the cursor and the
+anchor would land on different pages and the selection rectangle
+would disappear. The selection can span multiple voices and
+multiple rows on the visible page. The action row shows the cell
+count on the right when a selection is active.
 
 ### Cut / Copy / Paste
 

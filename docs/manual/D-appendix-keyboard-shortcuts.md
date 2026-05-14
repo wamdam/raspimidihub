@@ -55,7 +55,7 @@ chapter 13.
 | Shortcut | Action |
 |----------|--------|
 | Arrow keys | Move cursor by one cell |
-| `Shift` + arrows | Extend the selection rectangle by one cell |
+| `Shift` + arrows | Extend the selection rectangle by one cell. Up/Down wrap within the current page while Shift is held |
 | `Delete` | Cut (copy the selection to the paste buffer, clear it from the grid) |
 
 The action row buttons on the Tracker surface (**Shift / Cut /

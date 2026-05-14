@@ -415,21 +415,29 @@ export function PluginTrackerGrid({ param, values, onChange }) {
     }, [engageShift, clearAnchor]);
 
     // ---- Cursor moves with page-boundary wrap on row ↑/↓. ----
-    // Wrapping rules:
+    // Default wrapping rules:
     //   ↓ on row F  → next page, row 0 (wraps to page 0 from last page)
     //   ↑ on row 0  → previous page, row F (wraps to last page from page 0)
     //   →/← wrap within trackCount (T8 → T1 on right; T1 → T8 on left).
+    //
+    // While Shift is engaged (selection mode), wrapping stays on the
+    // CURRENT page instead of changing page — otherwise the cursor
+    // would land on a different page from the anchor and
+    // makeSelectionRect would drop the rectangle entirely. Keeping
+    // both endpoints on the same page lets the user extend selection
+    // across the row-F→row-0 boundary without breaking it.
     const moveRow = useCallback((d) => {
         const cr = cursorRowRef.current;
         const cp = currentPageRef.current;
+        const extending = shiftEngagedRef.current;
         let nextRow = cr + d;
         let nextPage = cp;
         if (nextRow >= maxRows) {
             nextRow = 0;
-            nextPage = (cp + 1) % pageCount;
+            if (!extending) nextPage = (cp + 1) % pageCount;
         } else if (nextRow < 0) {
             nextRow = maxRows - 1;
-            nextPage = (cp - 1 + pageCount) % pageCount;
+            if (!extending) nextPage = (cp - 1 + pageCount) % pageCount;
         }
         if (nextRow !== cr) onChange(param.cursor_row_param, nextRow);
         if (nextPage !== cp) onChange(param.current_page_param, nextPage);
@@ -1133,18 +1141,28 @@ export function PluginTrackerGrid({ param, values, onChange }) {
         title=${title}
         oncontextmenu=${(e) => e.preventDefault()}
         onclick=${onClick}>${label}</button>`;
+    // Tap to toggle Shift — press once to engage selection mode,
+    // press again to release. Used to be press-and-hold, but on
+    // touch hardware the multi-touch sequence (hold Shift, tap
+    // arrow) often disengaged Shift mid-press because pointerleave
+    // fired on tiny finger drifts and pointercancel fired on some
+    // multi-touch transitions. Toggle removes the timing fragility.
+    // Keyboard Shift (the physical key) stays press-and-hold via
+    // setKeyboardShift in the key handler — that's the natural way
+    // hardware modifiers behave.
     const shiftBtn = html`<button
         class="tracker-keypad-action-btn ${buttonShift ? 'active' : ''}"
-        title="Hold to extend selection (or hold keyboard Shift)"
+        title="Tap to toggle selection mode (tap again to release)"
         oncontextmenu=${(e) => e.preventDefault()}
         onpointerdown=${(e) => {
             e.preventDefault();
-            setButtonShift(true);
-            engageShift();
-        }}
-        onpointerup=${() => setButtonShift(false)}
-        onpointerleave=${() => setButtonShift(false)}
-        onpointercancel=${() => setButtonShift(false)}>Shift</button>`;
+            if (buttonShift) {
+                setButtonShift(false);
+            } else {
+                setButtonShift(true);
+                engageShift();
+            }
+        }}>Shift</button>`;
     const actionRow = html`<div class="tracker-keypad-actions">
         ${shiftBtn}
         ${actionBtn('Cut',
