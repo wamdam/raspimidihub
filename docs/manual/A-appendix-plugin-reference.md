@@ -245,20 +245,16 @@ triggers a panic.
 
 ![Panic Button config panel.](../screenshots/17-plugin-panic.png){width=35%}
 
+\clearpage
+
 ## Pitch CC
 
-Turns a keyboard into a chromatic player for synths and samplers
-whose pitch is controlled by a Control Change rather than by note
-number. Built for the Korg Volca Sample (CC 49 = sample playback
-rate), but works for any device with a "pitch is a CC" model.
-
-For every Note On, the plugin first emits a CC change whose value
-is `Base CC Value + (played_note - Base Note)`, clamped to
-0--127. Then it forwards the Note On itself, velocity preserved.
-Note Off forwards without a CC; the synth holds the last pitch
-until the next trigger overwrites it. The CC always goes out
-*before* the Note On -- reversed order would play every first
-note at the previously latched pitch.
+Turns a keyboard into a chromatic player for synths that pitch
+via a CC rather than the MIDI note number (Korg Volca Sample,
+CC 49 = sample playback rate). Each Note On emits a pitch CC --
+value `Base CC Value + (played_note - Base Note)`, clamped to
+0--127 -- *before* forwarding the Note On. Note Off forwards
+without a CC.
 
 | Parameter | Type | Range | Default |
 |-----------|------|-------|---------|
@@ -270,6 +266,8 @@ note at the previously latched pitch.
 **Output.** CC (pitch) + Notes on the same channel; other events
 pass through.
 **Clock.** None.
+
+![Pitch CC config panel.](../screenshots/29-plugin-pitch-cc.png){width=35%}
 
 ## Scale Remapper
 
