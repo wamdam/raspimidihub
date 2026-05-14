@@ -6,6 +6,12 @@ hashes. Tags: Added, Improved, Fix, Changed, Removed.
 
 Unreleased
 
+- Added: Settings → Display → **Layout density** dropdown with
+  **Default** and **Small screen (tighter)**. Small mode trims the
+  header, bottom-nav, page padding, controller bar and tracker
+  keypad so the UI fits a 360-px phone without clipping. Per-device
+  (stored in the browser, not the saved config) — a tablet and a
+  phone hitting the same hub can pick different densities.
 - Improved: Tracker on-screen **Shift** button is now a tap-toggle
   instead of press-and-hold. One tap engages selection mode and
   keeps it engaged across cursor moves; a second tap releases it.

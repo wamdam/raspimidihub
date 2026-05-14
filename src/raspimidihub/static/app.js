@@ -12,6 +12,7 @@
 import { render } from './lib/preact.module.js';
 import { useState, useEffect, useRef, useCallback } from './lib/hooks.module.js';
 import { html, api, useSSE, Toast, MidiBar, hardReload } from './ui/common.js';
+import { applyLayoutDensity, getLayoutDensity } from './components/common.js';
 import { ContextMenu } from './ui/contextmenu.js';
 import { setSSEConnectionId, useSSESubscription } from './ui/sse-subscriptions.js';
 import { IconRouting, IconController, IconPlay, IconSettings, IconFullscreen, IconFullscreenExit } from './ui/icons.js';
@@ -424,5 +425,10 @@ function App() {
 // Hygiene: prune stale per-device localStorage entries on app startup
 // so the per-origin store doesn't grow unboundedly across sessions.
 runStorageCleanup();
+
+// Apply the persisted layout-density preference before first render
+// so the tightened (or default) chrome is in effect from frame zero —
+// avoids a flash of the wrong spacing on app boot.
+applyLayoutDensity(getLayoutDensity());
 
 render(html`<${App} />`, document.getElementById('app'));

@@ -36,6 +36,16 @@ from pathlib import Path
 # panels render their full grid without cramming.
 VIEWPORT = {"width": 480, "height": 960}
 
+# Alternative viewport presets selectable via --viewport=<name>.
+# 'phone' targets a typical small Android (e.g. Pixel 5 / Galaxy S
+# class) at 360 CSS px wide with DPR=3 — what a user holding a
+# pocket-sized device actually sees. Used for tuning small-screen
+# layout, not for shipping doc screenshots.
+VIEWPORT_PRESETS = {
+    "desktop": {"viewport": {"width": 480, "height": 960}, "dpr": 2},
+    "phone":   {"viewport": {"width": 360, "height": 640}, "dpr": 3},
+}
+
 # The curated plugin set we recreate before screenshotting. Order
 # determines (alphabetical) where instances land in the matrix.
 DEMO_PLUGINS = [
@@ -248,13 +258,25 @@ def build_scenes(target: str, instances: dict[str, dict]) -> list[dict]:
 
 
 def screenshot_scenes(target: str, scenes: list[dict], out_dir: Path,
-                      headless: bool) -> None:
+                      headless: bool, preset: str = "desktop") -> None:
     from playwright.sync_api import sync_playwright
 
+    cfg = VIEWPORT_PRESETS[preset]
     out_dir.mkdir(parents=True, exist_ok=True)
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=headless)
-        ctx = browser.new_context(viewport=VIEWPORT, device_scale_factor=2)
+        ctx = browser.new_context(viewport=cfg["viewport"],
+                                  device_scale_factor=cfg["dpr"])
+        # On the phone preset, pre-set the layout-density preference to
+        # 'small' in localStorage so every page renders with the
+        # tightened chrome from the first paint. add_init_script runs
+        # before page scripts so app boot reads the flag and applies
+        # the class without a flash of the default-spaced UI.
+        if preset == "phone":
+            ctx.add_init_script(
+                "try { localStorage.setItem('raspimidihub:layoutDensity', 'small'); }"
+                " catch (e) {}"
+            )
         page = ctx.new_page()
         for scene in scenes:
             url = target + scene["path"]
@@ -294,6 +316,10 @@ def main() -> int:
                          help="Only run scenes whose name contains this substring")
     parser.add_argument("--skip-setup", action="store_true",
                          help="Use whatever plugins are currently live (no demo set)")
+    parser.add_argument("--viewport", default="desktop",
+                         choices=sorted(VIEWPORT_PRESETS),
+                         help="Viewport preset (default desktop = 480x960 @ DPR2; "
+                              "phone = 360x640 @ DPR3, matches a typical small Android)")
     args = parser.parse_args()
 
     target = args.target.rstrip("/")
@@ -320,8 +346,12 @@ def main() -> int:
         print("error: no scenes matched", file=sys.stderr)
         return 1
 
-    print(f"taking {len(scenes)} screenshot(s) → {out_dir}")
-    screenshot_scenes(target, scenes, out_dir, headless=not args.headed)
+    cfg = VIEWPORT_PRESETS[args.viewport]
+    print(f"taking {len(scenes)} screenshot(s) → {out_dir} "
+          f"({args.viewport}: {cfg['viewport']['width']}x{cfg['viewport']['height']} "
+          f"@ DPR{cfg['dpr']})")
+    screenshot_scenes(target, scenes, out_dir, headless=not args.headed,
+                      preset=args.viewport)
 
     print()
     print("done. The Pi is now running the demo plugin set.")

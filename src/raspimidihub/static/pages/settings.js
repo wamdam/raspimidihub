@@ -6,7 +6,8 @@
 import { useState, useEffect } from '../lib/hooks.module.js';
 import { html, api, hardReload } from '../ui/common.js';
 import { UPDATE_LABELS } from '../state/constants.js';
-import { getSoundsEnabled, setSoundsEnabled } from '../components/common.js';
+import { getSoundsEnabled, setSoundsEnabled,
+         getLayoutDensity, setLayoutDensity, DENSITY_OPTIONS } from '../components/common.js';
 
 function NetworkCard({ iface, showToast }) {
     const [method, setMethod] = useState(iface.method || 'auto');
@@ -733,6 +734,7 @@ export function SettingsPage({ showToast, showMidiBar, toggleMidiBar }) {
     const [defaultRouting, setDefaultRouting] = useState('all');
     const [isUpgrading, setIsUpgrading] = useState(false);
     const [soundsOn, setSoundsOn] = useState(getSoundsEnabled());
+    const [density, setDensity] = useState(getLayoutDensity());
     useEffect(() => { api('/network').then(setIfaces).catch(() => {}); }, []);
     useEffect(() => {
         let cancelled = false;
@@ -842,6 +844,14 @@ export function SettingsPage({ showToast, showMidiBar, toggleMidiBar }) {
                     onchange=${e => { setSoundsEnabled(e.target.checked); setSoundsOn(e.target.checked); }} />
                 <span>Knob / wheel tick sounds</span>
             </label>
+            <div class="form-group" style="margin-top:10px;margin-bottom:0">
+                <label>Layout density <span style="color:var(--text-dim);font-size:11px;font-weight:400">(this device only)</span></label>
+                <select data-testid="layout-density"
+                    value=${density}
+                    onChange=${e => { setLayoutDensity(e.target.value); setDensity(e.target.value); }}>
+                    ${DENSITY_OPTIONS.map(o => html`<option value=${o.value}>${o.label}</option>`)}
+                </select>
+            </div>
         </div>
         <${VersionsCard} showToast=${showToast} onUpdatingChange=${setIsUpgrading} />
         <div class="card">

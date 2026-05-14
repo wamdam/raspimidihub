@@ -784,6 +784,100 @@ body {
     .stat-grid { grid-template-columns: repeat(4, 1fr); }
 }
 
+/* --- Layout density: "Small screen" -------------------------------
+   Picked via Settings → Display → Layout density (default | small).
+   The selector lives on <html> as `.density-small`; future tablet
+   mode would slot in as `.density-tablet` alongside, no checkbox
+   churn. Goal at this density: reclaim ~25-35 px of vertical and ~8
+   px each side on pocket-sized devices (≤ ~380 CSS px wide) without
+   changing any layout topology. Anything that flows through
+   `var(--gap)` (notably `.main` padding and `.controller-page`
+   margin bleed) follows automatically; everything else is tuned by
+   direct overrides below. */
+:root.density-small { --gap: 8px; }
+:root.density-small .header { padding: 4px 10px; }
+:root.density-small .header h1 { font-size: 14px; }
+:root.density-small .main { padding-bottom: 56px; }
+:root.density-small .main.with-midi-bar { padding-bottom: 78px; }
+:root.density-small .bottom-nav button {
+    padding: 5px 0;
+    min-height: 40px;
+    font-size: 10px;
+}
+:root.density-small .bottom-nav button svg { width: 20px; height: 20px; }
+/* Asterisk badge is anchored to the icon; bring it in proportionally
+   so the smaller icon doesn't strand the dot in mid-air. */
+:root.density-small .dirty-asterisk { top: -6px; right: -8px; font-size: 18px; }
+/* Controller page cancels .main's padding with negative margins;
+   when --gap shrinks, that cancellation stays correct, but the
+   bottom margin override (-72px) was sized for the full nav and
+   needs to follow the smaller nav. Tighten the inner padding too so
+   the play surface itself gets visibly more room. */
+:root.density-small .controller-page {
+    padding: 4px 8px 8px;
+    margin-bottom: -56px;
+    padding-bottom: 56px;
+}
+/* When the MIDI activity bar is visible, .main grows its padding to
+   reserve room for the bar above the nav. The controller-page must
+   match — its negative-margin bleed has to span the same distance,
+   and its inner padding-bottom must hold content above BOTH the bar
+   and the nav. Otherwise the bar paints over the play surface (most
+   visibly: the Tracker pattern row at the bottom of its keypad). */
+:root.density-small .main.with-midi-bar > .controller-page {
+    margin-bottom: -78px;
+    padding-bottom: 86px;
+}
+/* MIDI bar's default `bottom: 56px` was tuned for the 48 px nav; the
+   small-mode nav is 40 px, so the bar would float 8 px too high and
+   leave a stripe of page bleeding through underneath. Snap it back
+   to ~the small nav's top edge. */
+:root.density-small .midi-bar { bottom: 41px; }
+/* The bar above every Controller / Play surface (instance picker
+   plus edit-config button) eats ~50 px of vertical with default
+   spacing. Halve the chrome around it so the bar is shorter, the
+   arrows / select / gear stay tappable but no longer dominate. */
+:root.density-small .controller-bar {
+    padding: 3px 6px;
+    margin-bottom: 6px;
+    gap: 6px;
+}
+:root.density-small .controller-arrow {
+    width: 26px; height: 26px;
+    font-size: 15px;
+}
+:root.density-small .controller-select {
+    font-size: 13px;
+    padding: 4px 6px;
+}
+/* Tracker keypad block — header, grid-area and pattern row are all
+ * fixed-size or flex:1; the keypad is what crowds out the pattern
+ * row on a 360x640 screen. Tighten the keypad's own padding/gaps and
+ * the pattern-row spacing so all eight slots are reliably visible
+ * above the bottom nav, without shrinking the wheels (which would
+ * hurt touch ergonomics). */
+:root.density-small .tracker-keypad { padding: 4px; gap: 4px; }
+:root.density-small .tracker-keypad-top { gap: 6px; }
+:root.density-small .tracker-keypad-col { gap: 2px; }
+:root.density-small .tracker-keypad-action-btn { padding: 3px 10px; font-size: 11px; }
+:root.density-small .tracker-pattern-row { margin-top: 2px; }
+:root.density-small .tracker-pattern-slot { height: 24px; font-size: 11px; }
+/* `.trackergrid { height: 100% }` resolves against an indeterminate
+ * parent height when controller-page uses min-height: 100% — the
+ * browser ends up sizing it just shy of the controller-page content
+ * box, so the keypad's bottom edge lands right where the MIDI bar
+ * paints. Cap the trackergrid against the viewport instead, so its
+ * flex children (header + flex-1 grid-area + help + keypad) get
+ * laid out inside the actually-available space and the pattern row
+ * lifts clear of the bar. The constants here = header(~31) + nav(41)
+ * + midi-bar(33) + safety(15). */
+:root.density-small .main.with-midi-bar .trackergrid {
+    max-height: calc(100vh - 165px);
+}
+:root.density-small .main:not(.with-midi-bar) .trackergrid {
+    max-height: calc(100vh - 130px);
+}
+
 /* === Plugin Control Styles === */
 
 /* Wheel */

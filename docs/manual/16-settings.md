@@ -98,14 +98,23 @@ connections regardless of the **MIDI Routing** choice.
 
 ## Display
 
-Two toggles:
+Two toggles and a layout selector:
 
 - **MIDI activity bar** -- shows or hides the persistent
   two-source activity bar above the bottom navigation.
 - **Knob / wheel tick sounds** -- enables a small click on each
   integer step of a wheel or fader drag.
+- **Layout density** -- a dropdown with **Default** and **Small
+  screen (tighter)**. Small mode shrinks the header, bottom
+  navigation, page padding, and the per-plugin controller bar so
+  more content fits on a 360-px-wide phone. The selection is
+  per-device (stored in the browser, not the saved config) -- the
+  same hub can render in Default on a tablet and Small on a
+  phone without one overriding the other.
 
-Both apply instantly. Both feed the dirty-state model.
+The two toggles feed the dirty-state model and ride with **Save
+Config**. The Layout density dropdown does not; it is a viewing
+preference local to the device.
 
 ## Stats
 
