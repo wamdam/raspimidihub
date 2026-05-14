@@ -64,8 +64,10 @@ items there cover the most common "no MIDI" cases.
 Tap **Add** at the bottom of the matrix. The Add overlay opens with a
 list of available plugins (chapter 11), controllers (chapter 12),
 play surfaces (chapter 13), and the Bluetooth scan section
-(chapter 14). Pick **Arpeggiator**. A new
-row and column appear in the matrix for the new plugin instance.
+(chapter 14). Pick **Arpeggiator** under the **Play** section
+(the Arpeggiator and the Tracker both render fullscreen play
+surfaces; see chapter 11). A new row and column appear in the
+matrix for the new plugin instance.
 
 Plugins start *unconnected* by design (see chapter 11 for why). Tap
 the cell where the keyboard row meets the Arpeggiator column to route
@@ -74,12 +76,15 @@ Arpeggiator row meets the synth column to route the arpeggiator
 *out* to the synth. Now hold a chord on the keyboard -- the
 arpeggiator runs it.
 
-Tap the Arpeggiator's row or column label to open its config panel
-and play with **PATTERN**, **RATE**, and **GATE**. Changes take
-effect immediately. Appendix A is the full parameter reference for
-every plugin.
+Tap the **Play** tab in the bottom navigation. The Arpeggiator's
+play surface opens fullscreen with **Pattern**, **Rate** and the
+four shapers laid out for one-finger live use. The slide-up
+device-detail panel from the matrix still works for the same
+plus the **Setup** group (channel filters, sync mode), but the
+Play tab is the home for in-set tweaks. Appendix A is the full
+parameter reference.
 
-![The Arpeggiator's config panel opens inline. Tap any control to edit; CC-automated parameters animate live.](../screenshots/09-plugin-arpeggiator.png){width=42%}
+![The Arpeggiator play surface: Pattern + Rate wide wheels above the four shapers and the step grid.](../screenshots/arpeggiator-play.png){width=42%}
 
 ## Add a Controller
 

@@ -130,16 +130,17 @@ with four sections, each grouping addable instances by what they
 do:
 
 1. **Plugins** -- routing-graph plugins that consume / transform /
-   produce MIDI events: Arpeggiator, CC LFO, CC Smoother, Chord
-   Generator, Clock Divider, Hold, Master Clock, MIDI Delay, Note
-   Splitter, Note Transpose, Panic Button, Scale Remapper, SysEx
-   Sender, Velocity Curve, Velocity Equalizer (chapter 11). Tapping
-   an entry creates a new instance and adds it to the matrix.
+   produce MIDI events: CC LFO, CC Smoother, Chord Generator, Clock
+   Divider, Hold, Master Clock, MIDI Delay, Note Splitter, Note
+   Transpose, Panic Button, Pitch CC, Scale Remapper, SysEx Sender,
+   Velocity Curve, Velocity Equalizer (chapter 11). Tapping an
+   entry creates a new instance and adds it to the matrix.
 2. **Controllers** -- the four play-surface templates (Mixer 8,
    FX 6, Performance 16, XY 4) that live on the **Controller** tab.
    See chapter 12.
-3. **Play** -- step-sequencer surfaces that live on the **Play**
-   tab. The Tracker (chapter 13) is the only built-in entry today.
+3. **Play** -- fullscreen play surfaces that live on the **Play**
+   tab. Currently the Tracker (chapter 13) and the Arpeggiator
+   (Appendix A.1).
 4. **Bluetooth MIDI** -- a Scan button and a list of paired
    peripherals. See chapter 14 for the pairing flow.
 

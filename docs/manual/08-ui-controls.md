@@ -119,9 +119,10 @@ in two flavours:
 
 - **Latching** (the default). One tap toggles on, the next tap
   toggles off. The LED follows the value. This is the on/off
-  switch used for **Sync to Clock** on the **Arpeggiator** and
-  **CC LFO**, **Play** on the **Master Clock**, **Send Clock +
-  Transport** on the **Tracker**, and so on.
+  switch used for **Trigger Note** on the **Arpeggiator**,
+  **Sync to Clock** on the **CC LFO**, **Play** on the **Master
+  Clock**, **Send Clock** / **Send Transport** on the **Tracker**,
+  and so on.
 - **Trigger** (momentary). Each tap fires an action and the LED
   flashes briefly; the value self-resets back to off. This is the
   red **Panic!** button on the **Panic Button** plugin, and the
@@ -146,9 +147,11 @@ wherever a parameter selects a MIDI channel.
 ## Group
 
 Not really a control -- a labelled section that visually groups
-related parameters in the config panel. The **Arpeggiator** uses a
-"Timing" group to bundle sync, BPM, and rate; an "Output" group
-bundles the gate, velocity, and channel parameters. Groups affect
+related parameters in the config panel. The **Arpeggiator** uses
+a `Setup` group (config-only) to bundle channel filters,
+trigger-note plumbing and sync mode out of the way of the live
+**Play** surface; the **Tracker** uses **Track Channels**,
+**Pattern Notes** and so on for the same purpose. Groups affect
 layout only.
 
 ## MIDI Learn

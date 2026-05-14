@@ -18,7 +18,7 @@ A full walkthrough of the routing matrix, MIDI mapping, and virtual instruments 
 
 <p align="center">
   <img src="docs/screenshots/01-routing.png" width="200" alt="Routing Matrix" />
-  <img src="docs/screenshots/09-plugin-arpeggiator.png" width="200" alt="Arpeggiator with Step Sequencer" />
+  <img src="docs/screenshots/arpeggiator-play.png" width="200" alt="Arpeggiator Play Surface" />
   <img src="docs/screenshots/10-plugin-cc-lfo.png" width="200" alt="CC LFO with Scope" />
 </p>
 <p align="center">
@@ -220,8 +220,8 @@ See [docs/screenshots/](docs/screenshots/) for the full set. Highlights:
 |---|---|---|
 | ![Routing](docs/screenshots/01-routing.png) | ![Settings](docs/screenshots/04-settings.png) | ![Filter](docs/screenshots/05-filter-panel.png) |
 | Routing Matrix | Settings | Filter Panel |
-| ![Mapping](docs/screenshots/07-mapping-note-to-cc.png) | ![Device](docs/screenshots/06-device-detail.png) | ![Arp](docs/screenshots/09-plugin-arpeggiator.png) |
-| Mapping (Note to CC) | Device Detail | Arpeggiator |
+| ![Mapping](docs/screenshots/07-mapping-note-to-cc.png) | ![Device](docs/screenshots/06-device-detail.png) | ![Arp](docs/screenshots/arpeggiator-play.png) |
+| Mapping (Note to CC) | Device Detail | Arpeggiator play surface |
 | ![LFO](docs/screenshots/10-plugin-cc-lfo.png) | ![Curve](docs/screenshots/19-plugin-velocity-curve.png) | ![Splitter](docs/screenshots/15-plugin-note-splitter.png) |
 | CC LFO with Scope | Velocity Curve | Note Splitter |
 | ![Delay](docs/screenshots/14-plugin-midi-delay.png) | ![Chord](docs/screenshots/12-plugin-chord-generator.png) | ![Smoother](docs/screenshots/11-plugin-cc-smoother.png) |

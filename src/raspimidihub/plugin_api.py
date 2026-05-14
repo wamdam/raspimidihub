@@ -70,6 +70,7 @@ class Wheel(Param):
     unit: str = ""  # suffix shown after value (e.g. "Hz", "%")
     labels: list[str] = field(default_factory=list)  # if set, show labels[value-min] instead of number
     mini: bool = False  # half-height variant for dense edit panels
+    wide: bool = False  # wider face (120 px vs 80 px) for long label strings
 
     def to_dict(self) -> dict:
         d = super().to_dict()
@@ -82,6 +83,8 @@ class Wheel(Param):
             d["unit"] = self.unit
         if self.mini:
             d["mini"] = True
+        if self.wide:
+            d["wide"] = True
         return d
 
 

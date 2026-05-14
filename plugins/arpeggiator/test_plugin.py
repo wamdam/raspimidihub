@@ -21,7 +21,7 @@ class TestArpeggiator:
 
     def test_sorted_notes_up(self):
         p, h = make_plugin(Arpeggiator)
-        p._param_values["pattern"] = "up"
+        p._param_values["pattern"] = 0  # "up"
         p.on_note_on(0, 67, 100)
         p.on_note_on(0, 60, 80)
         p.on_note_on(0, 64, 90)
@@ -40,7 +40,7 @@ class TestRateTrigger:
         p._param_values["rate_base"] = 24
         p.on_note_on(0, 24, 100)  # would be a trigger if enabled
         assert len(p._held_notes) == 1
-        assert p.get_param("rate") == "1/8"  # default unchanged
+        assert p._rate_str() == "1/8"  # default unchanged
 
     def test_trigger_on_consumes_and_sets_rate(self):
         p, _ = make_plugin(Arpeggiator)
@@ -49,10 +49,10 @@ class TestRateTrigger:
         # Base = first rate ("4/1")
         p.on_note_on(0, 24, 100)
         assert p._held_notes == [], "trigger note must not be arpeggiated"
-        assert p.get_param("rate") == "4/1"
+        assert p._rate_str() == "4/1"
         # +5 semitones → index 5 in _RATE_OPTIONS = "1/1T"
         p.on_note_on(0, 29, 100)
-        assert p.get_param("rate") == "1/1T"
+        assert p._rate_str() == "1/1T"
         # Note-off in trigger range is also consumed
         p.on_note_off(0, 24)
         assert p._held_notes == []
@@ -64,11 +64,11 @@ class TestRateTrigger:
         # Base+15 = first note OUTSIDE the trigger range
         p.on_note_on(0, 39, 100)
         assert len(p._held_notes) == 1
-        assert p.get_param("rate") == "1/8"
+        assert p._rate_str() == "1/8"
         # And below base
         p.on_note_on(0, 23, 100)
         assert len(p._held_notes) == 2
-        assert p.get_param("rate") == "1/8"
+        assert p._rate_str() == "1/8"
 
 
 class TestChannelFilters:
@@ -115,10 +115,10 @@ class TestChannelFilters:
         # Same note 60 on both channels:
         p.on_note_on(0, 60, 100)   # ch1, in trigger range BUT not on ctrl ch → arpeggiates
         assert len(p._held_notes) == 1
-        assert p.get_param("rate") == "1/8"  # unchanged
+        assert p._rate_str() == "1/8"  # unchanged
         p.on_note_on(15, 60, 100)  # ch16, in trigger range, on ctrl ch → flips Rate
         assert len(p._held_notes) == 1, "ctrl-ch trigger must not also arpeggiate"
-        assert p.get_param("rate") == "4/1"
+        assert p._rate_str() == "4/1"
 
     def test_control_channel_any_with_arp_channel_set(self):
         # Ctrl=Any (default) + arp filtered: trigger notes work on
@@ -130,7 +130,7 @@ class TestChannelFilters:
         p._param_values["rate_base"] = 60
         p.on_note_on(7, 62, 100)  # off arp ch + in trigger range → flips Rate, no arp
         assert len(p._held_notes) == 0
-        assert p.get_param("rate") == "2/1"
+        assert p._rate_str() == "2/1"
 
 
 class TestSustainPedal:
@@ -195,7 +195,7 @@ class TestFeature2NewNotePlaysNext:
 
     def test_up_seeks_to_new_note(self):
         p, _ = make_plugin(Arpeggiator)
-        p._param_values["pattern"] = "up"
+        p._param_values["pattern"] = 0  # "up"
         p.on_note_on(0, 60, 100)
         p.on_note_on(0, 64, 100)
         p.on_note_on(0, 67, 100)
@@ -207,7 +207,7 @@ class TestFeature2NewNotePlaysNext:
 
     def test_down_seeks_to_new_note(self):
         p, _ = make_plugin(Arpeggiator)
-        p._param_values["pattern"] = "down"
+        p._param_values["pattern"] = 1  # "down"
         p._param_values["octaves"] = 1
         p.on_note_on(0, 60, 100)
         p.on_note_on(0, 64, 100)
@@ -218,7 +218,7 @@ class TestFeature2NewNotePlaysNext:
 
     def test_as_played_seeks_to_appended(self):
         p, _ = make_plugin(Arpeggiator)
-        p._param_values["pattern"] = "as-played"
+        p._param_values["pattern"] = 4  # "as-played"
         p.on_note_on(0, 60, 100)
         p.on_note_on(0, 64, 100)
         p.on_note_on(0, 62, 100)  # appended last
@@ -231,7 +231,7 @@ class TestProgrammedMode:
 
     def _setup_programmed(self, step_count=4):
         p, _ = make_plugin(Arpeggiator)
-        p._param_values["pattern"] = "programmed"
+        p._param_values["pattern"] = 5  # "programmed"
         p._param_values["step_count"] = step_count
         p._ensure_slots()
         return p

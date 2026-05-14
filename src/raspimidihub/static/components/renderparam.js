@@ -46,7 +46,8 @@ export function renderParam(param, values, onChange, allValues, displayCtx) {
                 : param.unit ? (v) => `${v}${param.unit}` : null;
             return html`<${PluginWheel} name=${param.name} label=${param.label}
                 min=${param.min} max=${param.max} value=${val != null ? val : param.default}
-                onChange=${onChange} tickLabel=${tl} mini=${param.mini} />`;
+                onChange=${onChange} tickLabel=${tl}
+                mini=${param.mini} wide=${param.wide} />`;
         }
         case 'knob':
             return html`<${PluginKnob} name=${param.name} label=${param.label}
@@ -190,7 +191,11 @@ export function renderParamList(params, values, onChange, displayCtx) {
         } else {
             const rendered = renderParam(p, values, onChange, values, displayCtx);
             if (!rendered) continue;
-            if (INLINE_TYPES.has(p.type)) inlineRun.push(rendered);
+            // Apply span here too — renderParamGroup already does this
+            // for grouped params, but top-level inline params (e.g. the
+            // Arpeggiator's Pattern + Rate wheels) need the same path
+            // so `span=2` actually widens the grid cell.
+            if (INLINE_TYPES.has(p.type)) inlineRun.push(applySpan(rendered, p.span));
             else { flushInline(); result.push(rendered); }
         }
     }

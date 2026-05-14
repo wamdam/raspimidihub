@@ -15,30 +15,64 @@ automation work -- is in chapter 11.
 
 ## Arpeggiator
 
-Plays the held notes as a pattern with an optional step sequencer
-on top. Supports clock sync at rates from 4 bars down to 1/16
-triplet, with separate **Pattern** and **Rate** controls, a per-
-step accent grid, configurable gate length, and a trigger-note
-input for ratcheting / hold.
+Plays the held notes as a pattern with a step sequencer on top.
+Lives on the **Play** tab alongside the Tracker (`SURFACE_KIND =
+"play"`), and is also routable in the matrix like any other plugin
+-- add it from **Add → Play** rather than **Add → Plugin**.
 
-| Group | Parameter | Type | Range | Default |
-|-------|-----------|------|-------|---------|
-| Pattern | **Pattern** | Radio | up / down / up-down / random / as-played | up |
-| Pattern | **Steps** | StepEditor | 1--16 cells, accent flag per step | -- |
-| Output | **Arp Ch** | ChannelSelect | 1--16 or any | any |
-| Output | **Gate** | Wheel | 10--100 % | 80 |
-| Controls | **Ctrl Ch** | ChannelSelect | 1--16 or any | any |
-| Controls | **Trigger Note** | Button + NoteSelect | momentary trigger via MIDI note | C1 (24) |
-| Timing | **Sync to Clock** | Button | on / off | on |
-| Timing | **Rate** | Radio | 4 / 2 / 1 / 1/2 / 1/4 / 1/4T / 1/8 / 1/8T / 1/16 / 1/16T | 1/8 |
+The **Play** surface puts the live controls in one fullscreen
+panel: **Pattern** and **Rate** are wide wheels at the top so a
+finger flick on stage moves them; the four shapers
+(**Steps / Accent Vel. / Gate % / Octaves**) sit in one row above
+the step grid; the **Step Pattern** editor fills the bottom for
+per-step on/off, offset and accent. The setup-only parameters
+(channel filters, trigger-note plumbing, sync mode + BPM) live in
+the device-detail panel under the **Setup** group -- touched on
+initial wiring, never during a set.
 
-**Input.** Notes (forms the held-note buffer), CC (for `Trigger
-Note` Learn).
-**Output.** Notes (the arpeggiated stream).
-**Clock.** Consumes external clock when **Sync to Clock** is on;
-runs free at the **Rate** when off.
+| Surface | Parameter | Type | Range | Default |
+|---------|-----------|------|-------|---------|
+| Play    | **Pattern** | Wheel (wide) | up / down / up-down / random / as-played / programmed | up |
+| Play    | **Rate** | Wheel (wide) | 4/1 / 4/1T / 2/1 / ... / 1/16T / 1/32 (15 values) | 1/8 |
+| Play    | **Steps** | Wheel | 1--32 | 8 |
+| Play    | **Accent Vel.** | Knob | 0--127 (added to step velocity) | 30 |
+| Play    | **Gate %** | Wheel | 10--100 | 80 |
+| Play    | **Octaves** | Wheel | 1--4 | 1 |
+| Play    | **Step Pattern** | StepEditor | per-step on/off + offset + accent | all-on, offset 0 |
+| Setup   | **Arp Ch** | ChannelSelect | 1--16 or any | any |
+| Setup   | **Ctrl Ch** | ChannelSelect | 1--16 or any | any |
+| Setup   | **Trigger Note** | Button | enable rate-trigger range | off |
+| Setup   | **Base** (visible when Trigger Note is on) | NoteSelect | first note of a 15-semitone rate-trigger range | C1 (24) |
+| Setup   | **Sync** | Radio | free / tempo / transport | transport |
+| Setup   | **BPM** (visible when Sync = free) | Wheel | 40--300 | 120 |
 
-![Arpeggiator config panel.](../screenshots/09-plugin-arpeggiator.png){width=35%}
+**Pattern modes.** `up` / `down` / `up-down` / `random` /
+`as-played` are the standard held-note arpeggiator behaviours.
+`programmed` is the live step-sequencer mode added in v3.0.5: each
+keypress writes the next-to-fire step slot; multiple presses
+between ticks fan into consecutive slots (chord-spread); slots
+persist while any key or the sustain pedal is held.
+
+**CC automation.** CC 74 maps to **Rate** (the integer index into
+the rate options); CC 75 maps to **Gate %**. Useful for keyboard
+controllers with assignable knobs.
+
+**Input.** Notes (held-note buffer), CC 64 (temporary Hold via
+sustain pedal -- released keys keep arping until pedal lift),
+CC 74 / CC 75 (Rate / Gate automation), Clock + Transport (when
+**Sync** is `tempo` or `transport`). Notes in the trigger range
+when **Trigger Note** is on are consumed (set the Rate without
+arpeggiating).
+**Output.** Notes (the arpeggiated stream). Aftertouch and Pitch
+Bend pass through unchanged.
+**Clock.** Consumes external clock when **Sync** is `tempo` (free-
+running advance per tick) or `transport` (advance only while
+external START..STOP is asserted); free-runs at **BPM** when
+**Sync** is `free`.
+
+![Arpeggiator play surface: Pattern + Rate wide wheels, four shapers, Step Pattern grid.](../screenshots/arpeggiator-play.png){width=42%}
+
+![Arpeggiator device-detail panel: same play controls plus the Setup group.](../screenshots/09-plugin-arpeggiator.png){width=35%}
 
 ## CC LFO
 

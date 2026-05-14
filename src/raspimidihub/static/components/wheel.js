@@ -8,7 +8,7 @@ import { useEffect, useRef } from '../lib/hooks.module.js';
 // =======================================================================
 // WHEEL — scrollable drum wheel (pixel-offset based, matching controls-demo.html)
 // =======================================================================
-export function PluginWheel({ name, label, min, max, value, onChange, suffix, tickLabel, mini }) {
+export function PluginWheel({ name, label, min, max, value, onChange, suffix, tickLabel, mini, wide }) {
     const containerRef = useRef(null);
     const innerRef = useRef(null);
     const onChangeRef = useRef(onChange);
@@ -198,9 +198,15 @@ export function PluginWheel({ name, label, min, max, value, onChange, suffix, ti
         ticks.push(html`<div class="wheel-tick" key=${i}>${tickLabel ? tickLabel(i) : suffix ? i + suffix : i}</div>`);
     }
 
-    return html`<div class=${mini ? 'wheel-group mini' : 'wheel-group'}>
+    // Compose class names from the mini / wide flags. They're
+    // independent: mini = half-height, wide = wider face for long
+    // string labels (e.g. "programmed" / "1/16T"). Either flag can be
+    // present alone; both together would be unusual but valid.
+    const groupCls = `wheel-group${mini ? ' mini' : ''}${wide ? ' wide' : ''}`;
+    const containerCls = `wheel-container${mini ? ' mini' : ''}${wide ? ' wide' : ''}`;
+    return html`<div class=${groupCls}>
         ${label ? html`<span class="wheel-label">${label}</span>` : null}
-        <div class=${mini ? 'wheel-container mini' : 'wheel-container'} ref=${containerRef}>
+        <div class=${containerCls} ref=${containerRef}>
             <div class="wheel-inner" ref=${innerRef}>${ticks}</div>
         </div>
     </div>`;

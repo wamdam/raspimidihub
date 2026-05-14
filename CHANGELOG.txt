@@ -7,6 +7,9 @@ prose narrative behind larger changes, see CHANGELOG_EXTENSIVE.txt.
 
 Unreleased
 
+- Added: Arpeggiator is now a play-surface plugin — Pattern + Rate are wide wheels above four shapers and the step grid on the Play tab, alongside the Tracker. Add via Add → Play. Setup group (Arp Ch / Ctrl Ch / Trigger Note / Sync / BPM) stays in the device-detail panel.
+- Added: Wheel `wide` variant — 120 px face for long string labels ("programmed", "1/16T") that clip the 80 px default.
+- Changed: Arpeggiator Pattern and Rate stored as integer indices into _PATTERN_OPTIONS / _RATE_OPTIONS (was strings). Legacy string configs migrate on plugin start.
 - Added: Settings → Display → Layout density dropdown (Default / Small screen). Tightens chrome on a 360 px phone; per-device, stored in the browser.
 - Improved: Tracker on-screen Shift is a tap-toggle. Hardware Shift stays press-and-hold.
 - Fix: Tracker selection survives row-0 / row-F wrap (Up/Down wraps inside the current page while Shift is engaged).

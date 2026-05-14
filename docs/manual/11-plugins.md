@@ -176,14 +176,13 @@ gives a fresh instance with default parameters. Use the
 **Copy → Paste-as-new** flow on the plugin header instead if you
 want a duplicate with cloned state.
 
-## The 15 Built-In Plugins
+## The Built-In Plugins
 
 One-line summaries. The detailed reference for each lives in
 **Appendix A** with parameter tables, ranges, and defaults.
 
 | Plugin | Function |
 |--------|----------|
-| **Arpeggiator** | Pattern player with step sequencer, accents, gate, clock sync; rates 4 bars down to 1/16T |
 | **CC LFO** | CC waveforms (sine/triangle/square/saw/sample-and-hold); free or clock-sync up to 8 bars; live scope |
 | **CC Smoother** | Removes jitter from noisy CC inputs with configurable smoothing; dual scopes (in / out) |
 | **Chord Generator** | Input note triggers a chord (major / minor / 7th / custom intervals) with inversions |
@@ -200,9 +199,13 @@ One-line summaries. The detailed reference for each lives in
 | **Velocity Curve** | Drawable 128-point velocity response curve with shape presets |
 | **Velocity Equalizer** | Normalise velocity to a fixed value or compress the range |
 
-The **Tracker** is a separate kind of plugin -- it ships as a
-*play surface* rather than a routing-graph plugin. Find it under
-**Add → Play** and read about it in chapter 13.
+The **Tracker** and the **Arpeggiator** are *play-surface*
+plugins -- they live in the routing matrix like every other
+plugin but additionally render a fullscreen play surface on the
+**Play** tab in the bottom navigation. Find them under
+**Add → Play**. The Tracker has its own chapter (13); the
+Arpeggiator's surface and parameter reference live in
+**Appendix A.1**.
 
 ## User-Supplied Plugins
 

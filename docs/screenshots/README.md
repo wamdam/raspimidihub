@@ -16,7 +16,7 @@ not touched; press **Load Config** in Settings to restore it.
 | `06-device-detail.png` | USB device detail panel |
 | `07-mapping-note-to-cc.png` | Add Mapping: Note to CC |
 | `08-mapping-cc-to-cc.png` | Add Mapping: CC to CC |
-| `09-plugin-arpeggiator.png` | Arpeggiator with step sequencer |
+| `09-plugin-arpeggiator.png` | Arpeggiator device-detail panel (play controls + Setup group) |
 | `10-plugin-cc-lfo.png` | CC LFO with oscilloscope |
 | `11-plugin-cc-smoother.png` | CC Smoother with dual scopes |
 | `12-plugin-chord-generator.png` | Chord Generator |
@@ -41,3 +41,4 @@ not touched; press **Load Config** in Settings to restore it.
 | `controller-fx-6.png` | FX 6 fullscreen play surface |
 | `controller-performance-16.png` | Performance 16 fullscreen play surface |
 | `tracker.png` | Tracker step sequencer on the Play panel (grid + keypad + cursor cluster) |
+| `arpeggiator-play.png` | Arpeggiator play surface (Pattern + Rate wide wheels, four shapers, step grid) |

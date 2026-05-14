@@ -197,6 +197,10 @@ def build_scenes(target: str, instances: dict[str, dict]) -> list[dict]:
     # Tracker play-surface lives under /play.
     if (tracker := instances.get("tracker")) is not None:
         scenes.append({"name": "tracker", "path": f"/play/{tracker['id']}"})
+    # Arpeggiator play-surface — same /play tab as the Tracker, since
+    # the Arp is also SURFACE_KIND="play". Path is the instance id.
+    if (arp := instances.get("arpeggiator")) is not None:
+        scenes.append({"name": "arpeggiator-play", "path": f"/play/{arp['id']}"})
     # 05/07/08 need a real connection in the matrix so there is an
     # 'on' cell to click. We wire a transient one between two demo
     # plugins; setup_demo_plugins already wiped the live state and

@@ -5,6 +5,14 @@ immediately when the step fires, but its note-off is scheduled at
 `note_on_time + gate_duration` via send_note_off_at, so the gate %
 is honored with sub-ms accuracy regardless of Python jitter. Without
 this, gate was effectively 100% (cut by the next step's note_off).
+
+Surface: kind="play" — appears in the Play tab carousel next to the
+Tracker. Pattern, Rate, Steps, Accent, Gate, Octaves and the step
+grid render on the play surface; channel filters / Trigger Note +
+Base / Sync + BPM are config_only and live in the device-detail
+panel. Pattern and Rate are wide integer-indexed Wheels (storage
+is the index into _PATTERN_OPTIONS / _RATE_OPTIONS); on_start
+migrates legacy string-stored configs.
 """
 
 import random
@@ -48,10 +56,12 @@ _ARP_TAG = 1
 class Arpeggiator(PluginBase):
     """Plays held notes back as a rhythmic pattern through a step sequencer."""
 
+    SURFACE_KIND = "play"
+
     NAME = "Arpeggiator"
     DESCRIPTION = "Plays held notes as a pattern with step sequencer"
     AUTHOR = "RaspiMIDIHub"
-    VERSION = "1.0"
+    VERSION = "1.1"
     HELP = """\
 Combines arpeggiator patterns with a step sequencer. Hold notes and
 the arp cycles through them in the selected pattern (up/down/etc).
@@ -76,55 +86,72 @@ accept any channel (current behaviour). Set Arp Ch = 1 + Ctrl Ch
 = 16 to wire a separate keyboard / footswitch on ch16 that only
 flips Rate, never plays."""
 
-    # Single source of truth for the rate Radio's options AND the
+    # Single source of truth for the pattern Wheel's tick labels AND
+    # the runtime conditional logic (`as-played`, `programmed`, …).
+    # Stored value is the integer index into this list; _pattern_str()
+    # converts back to the label string for comparisons.
+    _PATTERN_OPTIONS = [
+        "up", "down", "up-down", "random", "as-played", "programmed",
+    ]
+
+    # Single source of truth for the rate Wheel's tick labels AND the
     # rate-trigger note→rate mapping. Index N in this list is the rate
-    # selected when (note - rate_base) == N.
+    # selected when (note - rate_base) == N. Same idea as _PATTERN_OPTIONS
+    # — the param stores the index, _rate_str() returns the label.
     _RATE_OPTIONS = [
         "4/1", "4/1T", "2/1", "2/1T", "1/1", "1/1T",
         "1/2", "1/2T", "1/4", "1/4T", "1/8", "1/8T",
         "1/16", "1/16T", "1/32",
     ]
+    _DEFAULT_RATE_IDX = _RATE_OPTIONS.index("1/8")  # 10
 
     params = [
-        Group("Pattern", [
-            Radio("pattern", "Pattern",
-                  ["up", "down", "up-down", "random", "as-played", "programmed"],
-                  default="up"),
-            # Channel filters. 0 = Any (default, current behaviour);
-            # 1-16 restricts which incoming notes count as arpeggiate
-            # input vs rate-trigger input. Useful when one keyboard
-            # plays melodies on ch1 and a footswitch / aux key sends
-            # rate-trigger notes on ch16 — set arp_channel=1,
-            # control_channel=16 and the same note range no longer
-            # has to be split between the two functions.
+        # Play-surface controls. Pattern + Rate are wide wheels in the
+        # top row (span=2 each → 4-col grid filled). The four shapers
+        # auto-pack into the next row as inline wheels/knob. The Step
+        # Editor below spans the full row.
+        Wheel("pattern", "Pattern",
+              min=0, max=len(_PATTERN_OPTIONS) - 1,
+              labels=_PATTERN_OPTIONS, default=0,
+              wide=True, span=2),
+        Wheel("rate", "Rate",
+              min=0, max=len(_RATE_OPTIONS) - 1,
+              labels=_RATE_OPTIONS, default=_DEFAULT_RATE_IDX,
+              wide=True, span=2),
+        Wheel("step_count", "Steps", min=1, max=32, default=8),
+        Knob("accent_vel", "Accent Vel.", min=0, max=127, default=30),
+        Wheel("gate", "Gate %", min=10, max=100, default=80),
+        Wheel("octaves", "Octaves", min=1, max=4, default=1),
+        StepEditor("steps", "Step Pattern", length_param="step_count",
+                   default_length=8, default_on=True, span=4,
+                   slot_notes_param="step_slot_notes"),
+        # Config-only setup. Channel filters, rate-trigger plumbing
+        # and the sync-mode + BPM live here — touched on initial
+        # wiring, never during a set.
+        Group("Setup", [
+            # Channel filters. 0 = Any (default); 1-16 restricts which
+            # incoming notes count as arpeggiate input vs rate-trigger
+            # input. Useful when one keyboard plays melodies on ch1
+            # and a footswitch / aux key sends rate-trigger notes on
+            # ch16 — set arp_channel=1, control_channel=16 and the
+            # same note range no longer has to be split between the
+            # two functions.
             ChannelSelect("arp_channel", "Arp Ch", default=0, allow_any=True),
             ChannelSelect("control_channel", "Ctrl Ch", default=0, allow_any=True),
             # Live-rate trigger: when enabled, a MIDI note in the
             # [rate_base, rate_base + len(_RATE_OPTIONS)) range sets
-            # the Rate radio without being arpeggiated. Hit MIDI Learn
+            # the Rate wheel without being arpeggiated. Hit MIDI Learn
             # on the Base wheel and play the lowest rate-trigger key
             # to capture; the next 14 semitones cover the remaining
-            # rates in the order they appear in the radio below.
+            # rates in the order they appear in _RATE_OPTIONS.
             Button("rate_trigger", "Trigger Note", default=False, color="green"),
-            NoteSelect("rate_base", "Base", default=24,  # C1 — well below
-                       visible_when=("rate_trigger", True)),  # most playing ranges
-            Radio("rate", "Rate", _RATE_OPTIONS, default="1/8"),
-        ]),
-        Group("Controls", [
-            # Inline run: step_count + accent_vel + gate + octaves
-            # auto-pack into a single 4-col row (renderParamGroup
-            # groups consecutive inline params), and the StepEditor
-            # below breaks the row because it's not inline.
-            Wheel("step_count", "Steps", min=1, max=32, default=8),
-            Knob("accent_vel", "Accent Vel.", min=0, max=127, default=30),
-            Wheel("gate", "Gate %", min=10, max=100, default=80),
-            Wheel("octaves", "Octaves", min=1, max=4, default=1),
-            StepEditor("steps", "Pattern", length_param="step_count",
-                       default_length=8, default_on=True, span=4,
-                       slot_notes_param="step_slot_notes"),
-            Radio("sync_mode", "Sync", ["free", "tempo", "transport"], default="transport"),
-            Wheel("bpm", "BPM", min=40, max=300, default=120, visible_when=("sync_mode", "free")),
-        ]),
+            NoteSelect("rate_base", "Base", default=24,  # C1 — below most
+                       visible_when=("rate_trigger", True)),  # playing ranges
+            Radio("sync_mode", "Sync",
+                  ["free", "tempo", "transport"], default="transport"),
+            Wheel("bpm", "BPM", min=40, max=300, default=120,
+                  visible_when=("sync_mode", "free")),
+        ], config_only=True),
     ]
 
     cc_inputs = {74: "rate", 75: "gate"}
@@ -143,6 +170,23 @@ flips Rate, never plays."""
     ]
 
     def on_start(self):
+        # Migrate legacy string-stored pattern / rate to integer index.
+        # Old configs saved before the Wheel switch carry strings;
+        # _PATTERN_OPTIONS / _RATE_OPTIONS define the canonical order.
+        # Any value already an int (or missing) flows through unchanged.
+        legacy_pattern = self._param_values.get("pattern")
+        if isinstance(legacy_pattern, str):
+            try:
+                self._param_values["pattern"] = self._PATTERN_OPTIONS.index(legacy_pattern)
+            except ValueError:
+                self._param_values["pattern"] = 0  # "up"
+        legacy_rate = self._param_values.get("rate")
+        if isinstance(legacy_rate, str):
+            try:
+                self._param_values["rate"] = self._RATE_OPTIONS.index(legacy_rate)
+            except ValueError:
+                self._param_values["rate"] = self._DEFAULT_RATE_IDX
+
         self._held_notes = []
         self._sorted_notes = []
         self._arp_step = 0       # position in the arp note sequence
@@ -227,12 +271,36 @@ flips Rate, never plays."""
                 return idx
         return start % total
 
+    def _pattern_str(self) -> str:
+        """Return the string label for the currently-selected pattern.
+        Stored value is an int index into _PATTERN_OPTIONS; this is
+        the helper that callers use when they need to compare against
+        a literal ("programmed", "as-played", …)."""
+        idx = self.get_param("pattern")
+        if idx is None:
+            return "up"
+        try:
+            return self._PATTERN_OPTIONS[int(idx)]
+        except (ValueError, IndexError, TypeError):
+            return "up"
+
+    def _rate_str(self) -> str:
+        """Return the string label for the currently-selected rate.
+        See _pattern_str() — same idea, index into _RATE_OPTIONS."""
+        idx = self.get_param("rate")
+        if idx is None:
+            return "1/8"
+        try:
+            return self._RATE_OPTIONS[int(idx)]
+        except (ValueError, IndexError, TypeError):
+            return "1/8"
+
     def _has_input(self) -> bool:
         """True if the arp has anything to play. Pattern-aware so the
         free runner doesn't spin forever after the user releases the
         last key (held-pattern modes) or clears every slot
         (programmed)."""
-        if (self.get_param("pattern") or "up") == "programmed":
+        if self._pattern_str() == "programmed":
             return any(s is not None for s in self._step_slots)
         return bool(self._held_notes)
 
@@ -242,7 +310,7 @@ flips Rate, never plays."""
         existing modular index logic in _advance then maps the seeded
         _arp_step to whichever index in the eventual `notes` list
         produces new_note."""
-        pattern = self.get_param("pattern") or "up"
+        pattern = self._pattern_str()
         if pattern == "random":
             return  # random plays randomly, no seek meaningful
         if pattern == "as-played":
@@ -312,7 +380,7 @@ flips Rate, never plays."""
         # to the UI via SSE so the user sees the radio flip live.
         idx = self._rate_trigger_index(channel, note)
         if idx is not None:
-            self.set_param("rate", self._RATE_OPTIONS[idx])
+            self.set_param("rate", idx)
             return
         # Arp channel filter: notes on a non-matching channel pass
         # through without joining the held-notes set, so they don't
@@ -323,7 +391,7 @@ flips Rate, never plays."""
         # Track the physical state regardless of pattern, so the
         # sustain pedal (CC 64) release path can drop unheld notes.
         self._physically_pressed[(channel, note)] = velocity
-        pattern = self.get_param("pattern") or "up"
+        pattern = self._pattern_str()
         with self._lock:
             if pattern == "programmed":
                 self._ensure_slots()
@@ -375,7 +443,7 @@ flips Rate, never plays."""
         if not self._channel_match(channel, "arp_channel"):
             return
         self._physically_pressed.pop((channel, note), None)
-        pattern = self.get_param("pattern") or "up"
+        pattern = self._pattern_str()
         cleared_programmed = False
         with self._lock:
             if pattern == "programmed":
@@ -437,7 +505,7 @@ flips Rate, never plays."""
 
     def _on_sustain_release(self) -> None:
         """Drop notes whose source key is no longer physically held."""
-        pattern = self.get_param("pattern") or "up"
+        pattern = self._pattern_str()
         with self._lock:
             if pattern == "programmed":
                 changed = False
@@ -477,7 +545,7 @@ flips Rate, never plays."""
             self._seq_step = 0
             self._direction = 1
 
-        rate = self.get_param("rate") or "1/8"
+        rate = self._rate_str()
         if division != rate:
             return
         self._advance()
@@ -498,8 +566,15 @@ flips Rate, never plays."""
                 self._ensure_slots()
             return
         if name == "pattern":
+            # Value here is the int index (post-migration). Look up the
+            # label so the "programmed → seed slots" branch keeps its
+            # semantic check by name rather than position.
+            try:
+                label = self._PATTERN_OPTIONS[int(value)]
+            except (ValueError, IndexError, TypeError):
+                label = "up"
             with self._lock:
-                if value == "programmed":
+                if label == "programmed":
                     self._ensure_slots()
                     self._next_slot_to_play = 0
                     self._write_slot = 0
@@ -510,7 +585,7 @@ flips Rate, never plays."""
         def _run():
             while self._free_running:
                 bpm = self.get_param("bpm") or 120
-                rate = self.get_param("rate") or "1/8"
+                rate = self._rate_str()
                 beats_per_sec = bpm / 60.0
                 rate_map = {
                     "4/1": 16, "2/1": 8, "1/1": 4, "1/2": 2,
@@ -526,7 +601,7 @@ flips Rate, never plays."""
 
     def _advance(self):
         with self._lock:
-            pattern = self.get_param("pattern") or "up"
+            pattern = self._pattern_str()
             octaves = self.get_param("octaves") or 1
             gate = (self.get_param("gate") or 80) / 100.0
             steps = self.get_param("steps") or []
@@ -695,7 +770,7 @@ flips Rate, never plays."""
         """Seconds per arp step at the current rate + sync mode. Used
         for gate timing. Returns 0 if neither the master clock nor a
         free-mode BPM is available."""
-        rate = self.get_param("rate") or "1/8"
+        rate = self._rate_str()
         mode = self.get_param("sync_mode") or "tempo"
         if mode == "free":
             bpm = self.get_param("bpm") or 120
