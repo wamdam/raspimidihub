@@ -282,7 +282,13 @@ metadata:
 Configuration parameters (from the device-detail panel):
 
 - **Per-track channel** (T1..T8) -- 8 × ChannelSelect, default 1
-  each.
+  each. Doubles as the input matcher for direct channel routing
+  during live recording.
+- **Auto Ch.** -- Wheel, range `Off` / 1..16, default `Off`.
+  Incoming notes/CCs on this channel use the historic
+  cursor-relative recording (chord-spread from `cursor_track`
+  across consecutive tracks). All other channels route by matching
+  the per-track channel; unmatched channels are silently dropped.
 - **Internal BPM** -- used when no external clock is routed in.
 - **Send Clock + Transport** -- Button toggle; when on, forwards
   incoming CLOCK / START / STOP / CONTINUE to OUT.
@@ -291,8 +297,8 @@ The grid data is part of the plugin instance state and is
 captured by **Save Config** and **Export Config** along with the
 parameters above.
 
-**Input.** Notes, CC (live recording), Clock, Start, Stop,
-Continue.
+**Input.** Notes, CC (live recording, channel-routed -- see
+chapter 13 §Routing), Clock, Start, Stop, Continue.
 **Output.** Notes, CC (from the grid), optionally Clock /
 Start / Stop / Continue (when **Send Clock + Transport** is on).
 **Clock.** Consumes and optionally re-emits.

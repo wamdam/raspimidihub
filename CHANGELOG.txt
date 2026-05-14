@@ -4,6 +4,39 @@ User-visible changes. Short tagged one-liners, no code or commit
 hashes. Tags: Added, Improved, Fix, Changed, Removed.
 
 
+2026-05-14 — Version 3.1.3
+
+Live recording on the Tracker becomes channel-aware. A new
+**Auto Ch.** wheel on the Tracker config (Off / 1..16, default
+**Off**) designates one MIDI channel that keeps the historic
+cursor-relative recording — notes on it land on the cursor
+track and chord-spread across consecutive tracks up to T8.
+Every other incoming channel now routes by channel match:
+notes on channel *N* land on whichever track is configured
+for *N* (T1..T8 in the Track Channels group). When two or
+more tracks share a channel, a polyphonic chord on that
+channel fills them in T1→T8 order. Channels that match
+neither Auto Ch. nor any configured track are silently
+dropped — no recording, no pass-through — so you can pick a
+track just by switching channels on the keyboard, with "wrong
+channel" giving instant silent feedback.
+
+Chord detection moves from a fixed 10 ms window to a held-note
+gate. A chord stays open as long as **any** played key is
+still held; the next chord only opens (and the cursor only
+auto-advances) when every key has been released and a new
+note-on arrives. Slow-played chords no longer collapse into
+sequences, and a fast arpeggio still records as a sequence
+because each note's note-off closes the chord. A ~2-second
+stale-timeout recovers automatically if a note-off goes
+missing.
+
+Manual Play now pre-rolls by ~50 ms before the first row
+sounds, so the first row plays its full length even on a cold
+ALSA output queue. External MIDI Start is unaffected — that
+path is already aligned to upstream timing.
+
+
 2026-05-13 — Version 3.1.2
 
 The Tracker grows up into a clock master. The single "Send Clock +

@@ -94,7 +94,7 @@ def test_schema_param_keys_collects_tracker_aux():
     for name in ("pages", "current_page", "cursor_row", "cursor_track",
                  "cursor_half", "octave", "rate", "playhead",
                  "cmd_play", "cmd_stop", "send_clock", "send_transport",
-                 "bpm", "note_preview"):
+                 "bpm", "note_preview", "auto_ch"):
         assert name in keys, f"missing aux key {name!r}"
     # Per-track channels (one per voice). _DemoTracker has TRACK_COUNT=4.
     for i in range(4):
@@ -209,8 +209,16 @@ class _Sender:
         plugin._send_cc = lambda ch, cc, val: self.events.append(("cc", ch, cc, val))
 
 
-def _started(track_count=4):
-    """Tracker subclass instance with the engine wired up."""
+def _started(track_count=4, auto_ch=3):
+    """Tracker subclass instance with the engine wired up.
+
+    Default `auto_ch=3` matches the channel=2 (0-based MIDI ch 3)
+    that the recording tests below use — keeps them on the
+    historic cursor-relative recording path. Pass `auto_ch=0`
+    (Off) to exercise the new channel-driven routing where notes
+    land on whichever track is configured for the incoming
+    channel.
+    """
 
     class _T(TrackerBase):
         NAME = "T"
@@ -218,6 +226,7 @@ def _started(track_count=4):
 
     t = _T()
     t.on_start()
+    t._param_values["auto_ch"] = auto_ch
     return t
 
 
@@ -480,11 +489,14 @@ def test_on_param_change_ignored_before_initialization():
     s.attach(t)
     t.on_param_change("cmd_play", True)
     assert s.events == []                  # nothing fired
-    # After on_start completes, the same call works.
+    # After on_start completes, the same call works — but cmd_play
+    # schedules a pre-roll timer, so we wait for it to fire.
     t.on_start()
     t._param_values["pages"] = [{"rows": [empty_row(4) for _ in range(16)]}]
     s.events.clear()
     t.on_param_change("cmd_play", True)
+    if t._preroll_timer is not None:
+        t._preroll_timer.join()
     assert t._playing is True
 
 
@@ -683,6 +695,352 @@ def test_panic_silences_all_voices_and_stops_playback():
 
 
 # ---------------------------------------------------------------------------
+# Channel-driven recording (Auto Ch. + direct routing)
+# ---------------------------------------------------------------------------
+
+def test_resolve_targets_auto_ch_off_drops_unmatched():
+    t = _started(auto_ch=0)
+    # Defaults: all 4 tracks on MIDI ch 1 (0-based 0). Incoming on
+    # channel 2 (0-based ch 3) matches no track → empty list.
+    targets, is_auto = t._resolve_targets(channel=2)
+    assert targets == []
+    assert is_auto is False
+
+
+def test_resolve_targets_auto_ch_match_returns_cursor_spread():
+    t = _started(auto_ch=3)
+    t._param_values["cursor_track"] = 1
+    # channel=2 is 0-based MIDI ch 3 → matches auto_ch=3.
+    targets, is_auto = t._resolve_targets(channel=2)
+    assert is_auto is True
+    # Cursor-spread starts at cursor_track and runs to TRACK_COUNT-1.
+    assert targets == [1, 2, 3]
+
+
+def test_resolve_targets_direct_first_match_only():
+    t = _started(auto_ch=0)
+    t._param_values["track_ch_2"] = 5      # T3 → MIDI ch 5 (0-based 4)
+    targets, is_auto = t._resolve_targets(channel=4)
+    assert is_auto is False
+    assert targets == [2]
+
+
+def test_resolve_targets_direct_multi_match_in_T_order():
+    t = _started(auto_ch=0)
+    t._param_values["track_ch_0"] = 5
+    t._param_values["track_ch_2"] = 5
+    t._param_values["track_ch_3"] = 5
+    targets, _ = t._resolve_targets(channel=4)
+    # T1, T3, T4 (indices 0, 2, 3) — ascending, not the order
+    # they were assigned in.
+    assert targets == [0, 2, 3]
+
+
+def test_resolve_targets_auto_ch_wins_over_track_match():
+    # Auto Ch.=3 and T1 is also configured to ch 3. Auto Ch. takes
+    # priority — the chord-spread path is preferred when a single
+    # channel double-matches.
+    t = _started(auto_ch=3)
+    t._param_values["cursor_track"] = 1
+    t._param_values["track_ch_0"] = 3
+    targets, is_auto = t._resolve_targets(channel=2)
+    assert is_auto is True
+    assert targets[0] == 1            # cursor_track, not T1
+
+
+def test_unmatched_channel_drops_record_and_pass_through():
+    t = _started(auto_ch=0)
+    s = _Sender()
+    s.attach(t)
+    t._param_values["cursor_row"] = 3
+    t._param_values["cursor_track"] = 0
+    # No track is on incoming ch 3 (0-based 2) and Auto Ch. = Off.
+    t.on_note_on(channel=2, note=60, velocity=100)
+    assert s.events == []
+    assert t._param_values["pages"][0]["rows"][3]["voices"][0]["note"] == NOTE_HOLD
+    # Cursor didn't move either — nothing was recorded.
+    assert t._param_values["cursor_row"] == 3
+
+
+def test_direct_routing_single_match_records_to_matched_track():
+    t = _started(auto_ch=0)
+    s = _Sender()
+    s.attach(t)
+    t._param_values["track_ch_2"] = 5      # T3 → MIDI ch 5
+    t._param_values["cursor_row"] = 4
+    t._param_values["cursor_track"] = 0    # cursor is on T1 — irrelevant
+    t.on_note_on(channel=4, note=60, velocity=100)
+    # Pass-through goes out on the matched track's channel (= incoming).
+    assert ("on", 4, 60, 100) in s.events
+    # Note landed on T3 at the cursor row, not on T1 (where the cursor is).
+    cell = t._param_values["pages"][0]["rows"][4]["voices"][2]
+    assert cell["note"] == "C-4"
+    assert cell["vel"] == 100
+    # Cursor still auto-advances in stopped mode.
+    assert t._param_values["cursor_row"] == 5
+
+
+def test_direct_routing_multi_match_chord_spreads_across_matches():
+    t = _started(auto_ch=0)
+    t._param_values["track_ch_0"] = 5
+    t._param_values["track_ch_2"] = 5      # gaps in the matching set
+    t._param_values["track_ch_3"] = 5
+    t._param_values["cursor_row"] = 0
+    t.on_note_on(channel=4, note=60, velocity=100)
+    t.on_note_on(channel=4, note=64, velocity=100)
+    t.on_note_on(channel=4, note=67, velocity=100)
+    voices = t._param_values["pages"][0]["rows"][0]["voices"]
+    # Filled in T-ascending order: T1, T3, T4.
+    assert voices[0]["note"] == "C-4"
+    assert voices[1]["note"] == NOTE_HOLD   # T2 doesn't match — untouched
+    assert voices[2]["note"] == "E-4"
+    assert voices[3]["note"] == "G-4"
+
+
+def test_direct_routing_excess_polyphony_drops():
+    t = _started(auto_ch=0)
+    t._param_values["track_ch_0"] = 5      # one matching track
+    t._param_values["cursor_row"] = 0
+    t.on_note_on(channel=4, note=60, velocity=100)
+    t.on_note_on(channel=4, note=64, velocity=100)
+    # Single matching track: first note lands on T1, subsequent
+    # chord-window notes on the same channel are dropped (the
+    # per-channel offset has run past `len(targets)`). This mirrors
+    # the Auto-Ch chord-spread behaviour where the first note is
+    # the anchor and excess notes silently drop.
+    voices = t._param_values["pages"][0]["rows"][0]["voices"]
+    assert voices[0]["note"] == "C-4"
+
+
+def test_chord_across_two_channels_advances_cursor_only_once():
+    t = _started(auto_ch=0)
+    t._param_values["track_ch_0"] = 3      # T1 → ch 3
+    t._param_values["track_ch_1"] = 5      # T2 → ch 5
+    t._param_values["cursor_row"] = 0
+    t.on_note_on(channel=2, note=60, velocity=100)   # → T1
+    t.on_note_on(channel=4, note=64, velocity=100)   # → T2, same window
+    voices = t._param_values["pages"][0]["rows"][0]["voices"]
+    assert voices[0]["note"] == "C-4"
+    assert voices[1]["note"] == "E-4"
+    # Cursor advanced exactly once, even though two channels fired.
+    assert t._param_values["cursor_row"] == 1
+
+
+def test_direct_routing_note_off_pass_through_only_on_match():
+    t = _started(auto_ch=0)
+    s = _Sender()
+    s.attach(t)
+    t._param_values["track_ch_2"] = 5
+    t.on_note_off(channel=4, note=60)
+    assert s.events == [("off", 4, 60)]    # matched T3, out on ch 5
+    # Unmatched channel: nothing emitted.
+    s.events.clear()
+    t.on_note_off(channel=7, note=60)
+    assert s.events == []
+
+
+def test_direct_routing_cc_records_to_first_match_no_spread():
+    t = _started(auto_ch=0)
+    s = _Sender()
+    s.attach(t)
+    t._param_values["track_ch_1"] = 5
+    t._param_values["track_ch_3"] = 5      # two tracks share ch 5
+    t._param_values["cursor_row"] = 2
+    t._param_values["cursor_track"] = 0    # cursor on T1 — irrelevant
+    t.on_cc(channel=4, cc=7, value=100)
+    # CC went to the FIRST matching track (T2), not to all matches.
+    cell_t2 = t._param_values["pages"][0]["rows"][2]["voices"][1]
+    assert cell_t2["cc_num"] == 7
+    assert cell_t2["cc_val"] == 100
+    cell_t4 = t._param_values["pages"][0]["rows"][2]["voices"][3]
+    assert cell_t4["cc_num"] == "."        # T4 untouched
+    # CCs don't advance the cursor.
+    assert t._param_values["cursor_row"] == 2
+    assert ("cc", 4, 7, 100) in s.events
+
+
+def test_direct_routing_cc_drops_when_unmatched():
+    t = _started(auto_ch=0)
+    s = _Sender()
+    s.attach(t)
+    t._param_values["cursor_row"] = 2
+    # No track matches incoming ch 5 (0-based 4) and Auto Ch.=Off.
+    t.on_cc(channel=4, cc=7, value=100)
+    assert s.events == []
+    cell = t._param_values["pages"][0]["rows"][2]["voices"][0]
+    assert cell["cc_num"] == "."
+
+
+def test_live_record_direct_routing_uses_playhead_row():
+    t = _started(auto_ch=0)
+    s = _Sender()
+    s.attach(t)
+    t._param_values["pages"] = [{"rows": [empty_row(4) for _ in range(16)]}]
+    t._param_values["track_ch_2"] = 5      # T3 → ch 5
+    t._param_values["cursor_row"] = 7      # cursor far from playhead
+    t._param_values["cursor_track"] = 0
+    t._param_values["rate"] = "1/16"
+    t.on_transport_start()                 # row 0
+    t.on_tick("1/16")                      # row 1 → _record_row = 1
+    t.on_note_on(channel=4, note=60, velocity=100)
+    # Recorded on T3 (matched), at the now-playing row.
+    voices = t._param_values["pages"][0]["rows"][1]["voices"]
+    assert voices[2]["note"] == "C-4"
+    # Cursor untouched while playing.
+    assert t._param_values["cursor_row"] == 7
+
+
+# ---------------------------------------------------------------------------
+# Chord-gate (held-note window for record-as-you-play)
+# ---------------------------------------------------------------------------
+
+def test_chord_stays_open_while_any_note_held_across_channels():
+    # Press C on ch1, then E on ch2 (held), then release C, then
+    # press G on ch1 (E still held). All three notes belong to ONE
+    # chord — same target row, cursor advances exactly once.
+    t = _started(auto_ch=0)
+    t._param_values["track_ch_0"] = 1      # T1 → ch 1
+    t._param_values["track_ch_1"] = 2      # T2 → ch 2
+    t._param_values["cursor_row"] = 0
+    t.on_note_on(channel=0, note=60, velocity=100)   # C on ch 1
+    t.on_note_on(channel=1, note=64, velocity=100)   # E on ch 2 (held)
+    t.on_note_off(channel=0, note=60)                # release C
+    t.on_note_on(channel=0, note=67, velocity=100)   # G on ch 1 — still in chord
+    voices = t._param_values["pages"][0]["rows"][0]["voices"]
+    assert voices[0]["note"] == "C-4"      # G was offset=1 on ch1 → dropped (only T1 matches)
+    assert voices[1]["note"] == "E-4"
+    # Cursor only advanced ONCE (chord opened on the first note-on).
+    assert t._param_values["cursor_row"] == 1
+
+
+def test_new_chord_starts_after_all_notes_released():
+    # Press C, release C, press E → two chords. Cursor advances twice.
+    t = _started(auto_ch=0)
+    t._param_values["track_ch_0"] = 1
+    t._param_values["cursor_row"] = 0
+    t.on_note_on(channel=0, note=60, velocity=100)
+    t.on_note_off(channel=0, note=60)
+    t.on_note_on(channel=0, note=64, velocity=100)
+    # Both notes land on row 0 and row 1 — two chord-starts.
+    voices_r0 = t._param_values["pages"][0]["rows"][0]["voices"]
+    voices_r1 = t._param_values["pages"][0]["rows"][1]["voices"]
+    assert voices_r0[0]["note"] == "C-4"
+    assert voices_r1[0]["note"] == "E-4"
+    assert t._param_values["cursor_row"] == 2
+
+
+def test_velocity_zero_note_on_closes_chord():
+    # Some keyboards send note-on with velocity=0 instead of an
+    # explicit note-off. The chord must still close so the next
+    # note-on opens a fresh chord (and advances the cursor).
+    t = _started(auto_ch=0)
+    t._param_values["track_ch_0"] = 1
+    t._param_values["cursor_row"] = 0
+    t.on_note_on(channel=0, note=60, velocity=100)
+    t.on_note_on(channel=0, note=60, velocity=0)     # = note-off in MIDI
+    t.on_note_on(channel=0, note=64, velocity=100)
+    voices_r0 = t._param_values["pages"][0]["rows"][0]["voices"]
+    voices_r1 = t._param_values["pages"][0]["rows"][1]["voices"]
+    assert voices_r0[0]["note"] == "C-4"
+    assert voices_r1[0]["note"] == "E-4"
+
+
+def test_stale_chord_resets_after_timeout():
+    # If a note-off goes missing the held set never empties, which
+    # would silently freeze the chord on one row forever. After
+    # _CHORD_STALE_TIMEOUT_S of inactivity the next note-on must
+    # force-clear the set and start a fresh chord.
+    from raspimidihub.tracker_base import _CHORD_STALE_TIMEOUT_S
+    t = _started(auto_ch=0)
+    t._param_values["track_ch_0"] = 1
+    t._param_values["cursor_row"] = 0
+    t.on_note_on(channel=0, note=60, velocity=100)
+    # Simulate a lost note-off by NOT calling on_note_off, then
+    # backdate the last-event clock past the stale threshold.
+    t._chord_last_event_t -= _CHORD_STALE_TIMEOUT_S + 0.1
+    t.on_note_on(channel=0, note=64, velocity=100)
+    voices_r0 = t._param_values["pages"][0]["rows"][0]["voices"]
+    voices_r1 = t._param_values["pages"][0]["rows"][1]["voices"]
+    assert voices_r0[0]["note"] == "C-4"
+    assert voices_r1[0]["note"] == "E-4"       # treated as new chord
+
+
+def test_transport_stop_clears_held_chord():
+    # Pressing Play / Stop after a stuck chord must always recover —
+    # transport-cycle is the universal "I know it's broken, reset" gesture.
+    t = _started(auto_ch=0)
+    t._param_values["track_ch_0"] = 1
+    t.on_note_on(channel=0, note=60, velocity=100)
+    assert t._held_recording_keys
+    t.on_transport_stop()
+    assert not t._held_recording_keys
+    assert t._chord_offset_by_ch == {}
+
+
+# ---------------------------------------------------------------------------
+# Play pre-roll (manual cmd_play vs external Start)
+# ---------------------------------------------------------------------------
+
+def test_cmd_play_schedules_preroll_does_not_fire_synchronously():
+    # cmd_play returns immediately and queues a Timer that will fire
+    # on_transport_start. The synth doesn't see anything until the
+    # pre-roll elapses.
+    t = _started()
+    s = _Sender()
+    s.attach(t)
+    t._param_values["pages"] = [{"rows": [
+        {"voices": [{"note": "C-4", "vel": 90, "cc_num": ".", "cc_val": "--"},
+                    empty_voice(), empty_voice(), empty_voice()]},
+    ] + [empty_row(4) for _ in range(15)]}]
+    t.on_param_change("cmd_play", True)
+    assert t._preroll_timer is not None
+    assert t._playing is False              # not yet
+    assert s.events == []                    # no notes leaked
+    t._preroll_timer.join()
+    assert t._playing is True
+    assert ("on", 0, 60, 90) in s.events
+
+
+def test_cmd_stop_during_preroll_cancels_start():
+    # User taps Play then immediately Stop. The pre-roll timer must
+    # be cancelled so no delayed start fires after the user gave up.
+    t = _started()
+    s = _Sender()
+    s.attach(t)
+    t._param_values["pages"] = [{"rows": [
+        {"voices": [{"note": "C-4", "vel": 90, "cc_num": ".", "cc_val": "--"},
+                    empty_voice(), empty_voice(), empty_voice()]},
+    ] + [empty_row(4) for _ in range(15)]}]
+    t.on_param_change("cmd_play", True)
+    pre = t._preroll_timer
+    assert pre is not None
+    t.on_param_change("cmd_stop", True)
+    assert t._preroll_timer is None
+    # Wait past where the pre-roll would have fired; _playing must
+    # stay False because the timer was cancelled before firing.
+    pre.join()
+    assert t._playing is False
+    assert not any(e[0] == "on" for e in s.events)
+
+
+def test_external_start_bypasses_preroll():
+    # An upstream MIDI Start arrives directly at on_transport_start
+    # (not via cmd_play). Engine must respond immediately — adding a
+    # pre-roll would desync from the upstream clock.
+    t = _started()
+    s = _Sender()
+    s.attach(t)
+    t._param_values["pages"] = [{"rows": [
+        {"voices": [{"note": "C-4", "vel": 90, "cc_num": ".", "cc_val": "--"},
+                    empty_voice(), empty_voice(), empty_voice()]},
+    ] + [empty_row(4) for _ in range(15)]}]
+    t.on_transport_start()
+    assert t._playing is True
+    assert ("on", 0, 60, 90) in s.events
+    assert t._preroll_timer is None
+
+
+# ---------------------------------------------------------------------------
 # Per-track channel routing
 # ---------------------------------------------------------------------------
 
@@ -742,13 +1100,16 @@ def test_cmd_play_starts_transport_and_resets_signal():
         {"voices": [{"note": "C-4", "vel": 90, "cc_num": ".", "cc_val": "--"},
                     empty_voice(), empty_voice(), empty_voice()]},
     ] + [empty_row(4) for _ in range(15)]}]
-    # Frontend writes cmd_play=True; on_param_change fires
-    # on_transport_start (which fires row 0 immediately) and resets
-    # the signal back to False.
+    # Frontend writes cmd_play=True; on_param_change schedules a
+    # pre-roll timer that fires on_transport_start ~50 ms later.
+    # The cmd_play signal resets to False immediately so a re-tap
+    # always queues a fresh start.
     t.on_param_change("cmd_play", True)
+    assert t._param_values["cmd_play"] is False
+    assert t._preroll_timer is not None
+    t._preroll_timer.join()
     assert t._playing is True
     assert ("on", 0, 60, 90) in s.events
-    assert t._param_values["cmd_play"] is False
 
 
 def test_cmd_stop_halts_transport_and_resets_signal():

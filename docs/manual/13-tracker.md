@@ -88,17 +88,58 @@ The cursor is a moving caret on one cell. Move it with the arrow
 keys. The right side of the action row has cursor controls
 (Up / Down / Left / Right) for touch-only operation.
 
+### Routing incoming MIDI to tracks
+
+Incoming notes and CCs are routed by their MIDI channel. There
+are two modes that can run side by side:
+
+- **Auto Ch.** -- one designated channel (set via the **Auto Ch.**
+  wheel on the Tracker's config card; values `Off` / 1..16,
+  default `Off`). Notes arriving on this channel land on the
+  **cursor track** and a held chord spreads from the cursor
+  rightwards across consecutive tracks up to T8. This is the
+  historic "I'll point at the track, you record what I play"
+  workflow.
+- **Direct routing** -- every other channel is matched against
+  the per-track output channels in the **Track Channels** group
+  (T1..T8). A note on channel *N* lands on the lowest-numbered
+  track configured for *N*. If several tracks share *N*, a
+  chord on *N* fills those tracks in T1 → T8 order (one note per
+  matching track; extra notes drop). This lets you live-record
+  without watching the screen -- just change channel on the
+  keyboard to pick a track.
+
+If an incoming channel matches neither **Auto Ch.** nor any
+configured track, the event is silently dropped: nothing is
+recorded and nothing is forwarded to OUT. When you set
+**Auto Ch.** to `Off` and don't configure track channels for
+anything you actually play on, the Tracker won't react. This is
+intentional -- it makes "wrong channel = silence" the feedback
+that you changed channel by accident.
+
 ### Step-record (stopped)
 
 When the Tracker is stopped, playing a note from a routed MIDI
 keyboard (or from the on-screen keyboard, or from QWERTY keyboard
-entry; see 13.6) writes the note into the current cell and advances
-the cursor by one row. Held notes record their length: pressing
-`C` and holding for three rows writes `C-3`, `---`, `---`, then
-`Off` on the next.
+entry; see 13.6) writes the note into the **cursor row** of the
+routed track and advances the cursor by one row. Held notes
+record their length: pressing `C` and holding for three rows
+writes `C-3`, `---`, `---`, then `Off` on the next.
 
-CCs touched while stopped write into the CC field of the current
-cell.
+The cursor auto-advances once per chord, no matter how many
+notes the chord contains or how many channels they span. A chord
+stays open as long as **any** played key is still held; the next
+chord starts only when every key is released and a new note
+arrives. This means a slowly-played chord still records as a
+chord and a fast arpeggio still records as a sequence -- the
+gate is held-notes, not a fixed millisecond window. (If a
+note-off goes missing the gate self-recovers after about two
+seconds of inactivity, so a stuck chord won't pin recording to
+one row indefinitely.)
+
+CCs touched while stopped write into the CC field at the cursor
+row of the routed track. CCs never auto-advance the cursor and
+never spread (only the first matching track receives them).
 
 ### Live recording (playing)
 
@@ -106,9 +147,12 @@ When the Tracker is playing, MIDI events that arrive land on the
 row whose events are *currently sounding* -- not the row the
 cursor is on. The cursor stays where you left it. This means you
 can play in a part during a loop and have the part stick to the
-beat it was played on.
+beat it was played on. Routing (cursor track via Auto Ch., or a
+specific matched track via the incoming channel) works the same
+way as in step-record.
 
-CCs touched during play also land on the currently-sounding row.
+CCs touched during play also land on the currently-sounding row
+of the routed track.
 
 ### Selection
 

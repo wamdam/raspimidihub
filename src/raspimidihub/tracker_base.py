@@ -61,10 +61,21 @@ from raspimidihub.plugin_api import (
 # MIDI 119 = B-9 — same range the 3-char note string can express.
 PITCH_NAMES = ('C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B')
 
-# Notes arriving within this window of each other count as one chord
-# and are spread across consecutive tracks during recording. ~10 ms
-# tolerates wired-keyboard jitter without merging deliberate runs.
-_CHORD_WINDOW_S = 0.010
+# Chord recording is gated by held notes, not by a time window: the
+# chord stays open while any recorded note is still held. This stale
+# timeout is only the safety net for a missed note-off — after this
+# much idle time the next note-on starts a fresh chord regardless of
+# what the held set claims, so recording recovers from drift without
+# a transport cycle.
+_CHORD_STALE_TIMEOUT_S = 2.0
+
+# Pre-roll on the manual Play button: defers the actual transport
+# start by this many seconds so the first row's note-ons clear ALSA's
+# output queue before the next clock tick silences them. Without it,
+# row 0 audibly plays shorter than subsequent rows (cold-queue
+# effect). External Start (e.g. from a wired clock master) bypasses
+# the pre-roll — that path is already aligned to upstream timing.
+_PLAY_PREROLL_S = 0.050
 
 # How long a wheel/keyboard preview note rings before auto-releasing.
 # Long enough to be audibly identifiable, short enough that scrolling
@@ -225,6 +236,15 @@ class TrackerBase(PluginBase):
                               default=1, config_only=True)
                 for i in range(cls.TRACK_COUNT)
             ], config_only=True),
+            # Auto Ch.: which incoming MIDI channel keeps the historic
+            # cursor-relative recording (chord notes spread across
+            # consecutive tracks from the cursor). Other channels route
+            # by track-channel match. 0 = Off (everything routes by
+            # match; unmatched channels are dropped).
+            Wheel("auto_ch", "Auto Ch.",
+                  min=0, max=16, default=0,
+                  labels=["Off"] + [str(i) for i in range(1, 17)],
+                  config_only=True),
             Button("send_clock", "Send Clock",
                    default=False, color="green", config_only=True),
             # BPM is only meaningful when send_clock is on. The
@@ -361,14 +381,34 @@ class TrackerBase(PluginBase):
         # Currently-sounding MIDI note per voice — used to fire the
         # implicit note-off when the next non-`---` cell rolls in.
         self._sounding: list[int | None] = [None] * self.TRACK_COUNT
-        # Chord-detection state for record-as-you-play. Notes arriving
-        # within _CHORD_WINDOW_S spread across consecutive tracks
-        # starting at the focused track. `_chord_page` / `_chord_row`
-        # snapshot the cursor at chord-start so all chord notes land
-        # on the same row even though the cursor advances right away
-        # to the next row (so the next chord goes one step down).
-        self._chord_window_start = 0.0
-        self._chord_offset = 0
+        # Chord-detection state for record-as-you-play. The chord
+        # window is gated by held notes, NOT by a time window: a chord
+        # stays open as long as ANY recorded note is still held, and a
+        # new chord only starts when all keys are released and the
+        # next note-on arrives. This matches the natural musical model
+        # (chord = simultaneous-ish notes) far better than a fixed
+        # millisecond window — a slow-played chord still records as a
+        # chord, and a fast arpeggio still records as a sequence.
+        #
+        # `_held_recording_keys` is the SET of (channel, note) pairs
+        # currently held that were accepted for recording. Empty set
+        # = next note-on opens a new chord. Same row/page snapshot is
+        # reused across the chord so the user can advance the cursor
+        # one step on chord-start and have all in-flight chord notes
+        # still land on the original row. The per-channel offset dict
+        # tracks polyphonic spread within one chord across multiple
+        # matching tracks or in Auto-Ch cursor-spread mode.
+        #
+        # `_chord_last_event_t` + `_CHORD_STALE_TIMEOUT_S` are a
+        # safety net: if a note-off goes missing (USB hiccup,
+        # keyboard quirk), the held set could stay non-empty
+        # forever. After `_CHORD_STALE_TIMEOUT_S` seconds of total
+        # silence on note-on/off the set is force-cleared on the
+        # next note-on so recording can recover without a transport
+        # cycle.
+        self._held_recording_keys: set[tuple[int, int]] = set()
+        self._chord_offset_by_ch: dict[int, int] = {}
+        self._chord_last_event_t = 0.0
         self._chord_page = 0
         self._chord_row = 0
 
@@ -381,9 +421,18 @@ class TrackerBase(PluginBase):
         if self._param_values.get("send_clock"):
             self._start_clock_generator()
 
+        # Manual-Play pre-roll timer (see _PLAY_PREROLL_S). Holds the
+        # threading.Timer that will fire on_transport_start ~50 ms
+        # after the user taps Play; cleared when the start fires or
+        # when Stop / panic / unload cancels it first.
+        self._preroll_timer: threading.Timer | None = None
+
     def on_stop(self) -> None:
         self._stop_clock_generator()
+        self._cancel_play_preroll()
         self._silence_all()
+        self._held_recording_keys.clear()
+        self._chord_offset_by_ch.clear()
 
     def panic(self) -> None:
         """All notes off across every per-track channel + stop the
@@ -400,6 +449,9 @@ class TrackerBase(PluginBase):
                         self.send_note_off(ch, note)
                     except Exception:
                         pass
+        self._cancel_play_preroll()
+        self._held_recording_keys.clear()
+        self._chord_offset_by_ch.clear()
         self._publish_playhead()
 
     # ---- Per-track output channel ----
@@ -441,7 +493,37 @@ class TrackerBase(PluginBase):
     # Transport — global ClockBus events
     # ================================================================
 
+    def _schedule_play_preroll(self) -> None:
+        """Manual-Play entry point. Defers on_transport_start by
+        _PLAY_PREROLL_S so the first row's note-ons leave ALSA's
+        output queue before the next clock tick. Without it, the
+        very first MIDI byte after a cold queue takes longer to
+        flush than subsequent bytes — the audible duration of row 0
+        is then shorter than later rows because its note-off arrives
+        on time while its note-on was delayed.
+
+        External Start (e.g. an upstream sequencer) bypasses this and
+        goes straight into on_transport_start — that path is already
+        aligned to the upstream clock and adding a pre-roll would
+        introduce desync."""
+        self._cancel_play_preroll()
+        timer = threading.Timer(_PLAY_PREROLL_S, self.on_transport_start)
+        timer.daemon = True
+        self._preroll_timer = timer
+        timer.start()
+
+    def _cancel_play_preroll(self) -> None:
+        if self._preroll_timer is not None:
+            try:
+                self._preroll_timer.cancel()
+            except Exception:
+                pass
+            self._preroll_timer = None
+
     def on_transport_start(self) -> None:
+        # Any in-flight pre-roll has just fired (or this was reached
+        # by an external Start) — either way drop the reference.
+        self._preroll_timer = None
         with self._lock:
             self._silence_all()
             self._play_page = 0
@@ -468,9 +550,14 @@ class TrackerBase(PluginBase):
                 pass
 
     def on_transport_stop(self) -> None:
+        # Cancel any in-flight Play pre-roll so a fast Play→Stop tap
+        # doesn't leak a delayed start through the timer.
+        self._cancel_play_preroll()
         with self._lock:
             self._silence_all()
             self._playing = False
+        self._held_recording_keys.clear()
+        self._chord_offset_by_ch.clear()
         self._publish_playhead()
         if self._param_values.get("send_transport"):
             try:
@@ -699,39 +786,83 @@ class TrackerBase(PluginBase):
     # Recording (auto-learn) + pass-through
     # ================================================================
 
+    def _resolve_targets(self, channel: int) -> tuple[list[int], bool]:
+        """Return (target_tracks, is_auto) for an incoming MIDI byte
+        on `channel` (0-based, matching what on_note_on receives).
+
+        - is_auto=True: the channel matches `auto_ch` — the historic
+          cursor-relative recording applies, spreading from
+          `cursor_track` across consecutive tracks up to T8.
+        - is_auto=False: direct routing — every track whose configured
+          `track_ch_i` matches the incoming channel, in T1→T8 order.
+          A chord on this channel fills these tracks in order; only
+          one match means subsequent chord-window notes overwrite the
+          same cell (last-wins, no special case).
+
+        Empty list = no recording, no pass-through.
+        """
+        auto_ch = int(self._param_values.get("auto_ch") or 0)
+        if auto_ch != 0 and (channel + 1) == auto_ch:
+            cur_track = int(self._param_values.get("cursor_track") or 0)
+            return list(range(cur_track, self.TRACK_COUNT)), True
+        matched = [
+            i for i in range(self.TRACK_COUNT)
+            if self._track_channel(i) == channel
+        ]
+        return matched, False
+
     def on_note_on(self, channel: int, note: int, velocity: int) -> None:
-        # Pass through to OUT on the FOCUSED track's channel — i.e.
-        # the channel the recording will play back on. Lets the user
-        # monitor on the right voice's destination synth as they
-        # record. Velocity 0 = note-off; just forward and let
-        # on_note_off handle the symmetric cleanup.
-        cur_track = int(self._param_values.get("cursor_track") or 0)
-        out_ch = self._track_channel(cur_track)
+        # Channel-driven routing. Auto Ch. → cursor-spread (historic
+        # behaviour). Other channels → matching tracks. Unmatched
+        # → drop both recording AND pass-through, so the tracker is
+        # silent on channels the user hasn't bound to anything.
+        targets, _is_auto = self._resolve_targets(channel)
+        if not targets:
+            return
+
+        # Pass through to OUT on the first target's configured channel.
+        # In Auto Ch. mode this is `cursor_track`'s channel — keeps
+        # the historic "monitor on the focused voice's destination"
+        # behaviour. In direct-routing mode the first target's
+        # channel equals the incoming channel, so pass-through is
+        # transparent.
+        out_ch = self._track_channel(targets[0])
         try:
             self.send_note_on(out_ch, note, max(1, min(127, int(velocity))))
         except Exception:
             pass
+        # MIDI: note-on with velocity 0 is a note-off. Discard the
+        # key from the held set so a keyboard that uses this idiom
+        # (no real note-off byte) doesn't leave the chord open.
+        now = time.monotonic()
         if velocity <= 0:
+            self._held_recording_keys.discard((channel, note))
+            self._chord_last_event_t = now
             return
 
-        # Chord boundary detection. The first note of a chord
-        # captures the current target row + page and (when not
-        # playing) advances the cursor one step so the next chord
-        # lands on the next row.
+        # Stale-set recovery: if too much time has passed since the
+        # last note-on/off, treat the held set as drift and clear it.
+        # Without this guard a missing note-off (USB hiccup, keyboard
+        # quirk) would keep the chord open forever and every later
+        # recording would land on the same anchored row.
+        if (self._held_recording_keys
+                and now - self._chord_last_event_t > _CHORD_STALE_TIMEOUT_S):
+            self._held_recording_keys.clear()
+            self._chord_offset_by_ch.clear()
+        self._chord_last_event_t = now
+
+        # New chord = nothing held. Capture the target row + page
+        # (one row per chord across ALL channels), reset per-channel
+        # offsets, and — when stopped — step the cursor one row so
+        # the next chord lands on the next row.
         #
-        # Two recording modes:
-        #   - PLAYING: live record. Target row = the row whose
-        #     events are currently sounding (_record_row). Cursor
-        #     stays put — playback owns the position. Notes the
-        #     user plays in time with the music attach to the row
-        #     they're hearing.
-        #   - STOPPED: step record (original behaviour). Target row
-        #     = cursor row. Cursor auto-advances one step so the
-        #     next chord lands on the next row.
-        now = time.monotonic()
-        if now - self._chord_window_start > _CHORD_WINDOW_S:
-            self._chord_window_start = now
-            self._chord_offset = 0
+        # Two recording modes for the row/page snapshot:
+        #   - PLAYING: row = currently-sounding row (_record_row).
+        #     Cursor doesn't move; live-record snaps to the beat.
+        #   - STOPPED: row = cursor row. Cursor auto-advances once
+        #     per chord (step record).
+        if not self._held_recording_keys:
+            self._chord_offset_by_ch.clear()
             with self._lock:
                 if self._playing:
                     self._chord_page = self._record_page
@@ -741,14 +872,15 @@ class TrackerBase(PluginBase):
                     self._chord_row = int(self._param_values.get("cursor_row") or 0)
             if not self._playing:
                 self._auto_advance_cursor()
-        else:
-            self._chord_offset += 1
 
-        cur_track = int(self._param_values.get("cursor_track") or 0)
-        target = cur_track + self._chord_offset
-        if target >= self.TRACK_COUNT:
-            return  # excess chord notes drop silently
+        self._held_recording_keys.add((channel, note))
 
+        offset = self._chord_offset_by_ch.get(channel, 0)
+        self._chord_offset_by_ch[channel] = offset + 1
+        if offset >= len(targets):
+            return  # polyphony deeper than matching tracks: drop
+
+        target = targets[offset]
         note_str = midi_to_note_str(note)
         if note_str is None:
             return
@@ -777,42 +909,54 @@ class TrackerBase(PluginBase):
             self.set_param("current_page", next_page)
 
     def on_note_off(self, channel: int, note: int) -> None:
-        # Pass-through on the focused track's channel (matches what
-        # on_note_on emits). Playback emits its own note-offs from
-        # the next non-`---` cell or `Off` cell — recording the
-        # release would just clutter the row with `Off` entries the
-        # user didn't ask for.
-        cur_track = int(self._param_values.get("cursor_track") or 0)
+        # Symmetric with on_note_on: pass-through on the first
+        # routing target's channel. Recording doesn't write
+        # release events (playback emits note-offs from the next
+        # non-`---` cell or an explicit `Off`).
+        targets, _ = self._resolve_targets(channel)
+        # Drop the key from the held set even on unmatched channels:
+        # if the routing config changed between note-on and note-off
+        # (e.g. user re-targeted a track mid-press), we still want
+        # the chord to close properly when all keys are released.
+        self._held_recording_keys.discard((channel, note))
+        self._chord_last_event_t = time.monotonic()
+        if not targets:
+            return
         try:
-            self.send_note_off(self._track_channel(cur_track), note)
+            self.send_note_off(self._track_channel(targets[0]), note)
         except Exception:
             pass
 
     def on_cc(self, channel: int, cc: int, value: int) -> None:
-        cur_track = int(self._param_values.get("cursor_track") or 0)
-        out_ch = self._track_channel(cur_track)
+        # Routing mirrors on_note_on but CCs never spread — they
+        # always land on the first matching track. Auto Ch. → that's
+        # cursor_track; direct routing → first track configured for
+        # this channel; unmatched → drop record + pass-through.
+        targets, _ = self._resolve_targets(channel)
+        if not targets:
+            return
+        target = targets[0]
+        out_ch = self._track_channel(target)
         try:
             self.send_cc(out_ch, max(0, min(127, int(cc))),
                          max(0, min(127, int(value))))
         except Exception:
             pass
-        if cur_track >= self.TRACK_COUNT:
-            return
+        payload = {
+            "cc_num": max(0, min(127, int(cc))),
+            "cc_val": max(0, min(127, int(value))),
+        }
         # Live record while playing — write to the now-sounding row.
-        # When stopped, fall back to step record at the cursor.
+        # When stopped, write to the cursor row (no auto-advance for
+        # CCs — they're streamed and would walk the cursor away).
         if self._playing:
             with self._lock:
                 page_idx = self._record_page
                 row_idx = self._record_row
-            self._record_voice_field_at(page_idx, row_idx, cur_track, {
-                "cc_num": max(0, min(127, int(cc))),
-                "cc_val": max(0, min(127, int(value))),
-            })
         else:
-            self._record_voice_field(cur_track, {
-                "cc_num": max(0, min(127, int(cc))),
-                "cc_val": max(0, min(127, int(value))),
-            })
+            page_idx = int(self._param_values.get("current_page") or 0)
+            row_idx = int(self._param_values.get("cursor_row") or 0)
+        self._record_voice_field_at(page_idx, row_idx, target, payload)
 
     # ================================================================
     # Clock + transport routing
@@ -927,7 +1071,7 @@ class TrackerBase(PluginBase):
         # onChange. We fire the local transport handler then reset
         # the bool to False (broadcasts back to all clients).
         if name == "cmd_play" and value:
-            self.on_transport_start()
+            self._schedule_play_preroll()
             self.set_param("cmd_play", False)
         elif name == "cmd_stop" and value:
             self.on_transport_stop()
