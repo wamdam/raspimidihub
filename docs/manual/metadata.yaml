@@ -22,9 +22,11 @@ sansfont: "DejaVu Sans"
 monofont: "DejaVu Sans Mono"
 monofontoptions:
   - Scale=0.9
-# Anchor figures where they appear in the source instead of letting
-# LaTeX float them to the top/bottom of a page. Requires the `float`
-# package, loaded in templates/header.tex.
-fig-pos: "H"
+# Place figures at the top/bottom of a page, or on a dedicated
+# float page. NO `h` (here) — lowercase `h` was too loose and let
+# tall portrait screenshots overflow off the page bottom. `tbp` plus
+# the section-level FloatBarrier (placeins, loaded in header.tex)
+# keeps figures inside their section without ever clipping.
+fig-pos: "tbp"
 # Layout customisations live in templates/header.tex.
 ---

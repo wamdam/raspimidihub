@@ -743,10 +743,15 @@ class TrackerBase(PluginBase):
                 published = (played_page, played_row, True)
                 break
             else:
-                # Cycled every page without fireable content —
-                # stop the playhead instead of burning CPU on it.
-                self._playing = False
-                published = (self._play_page, self._play_row, False)
+                # Cycled every page without fireable content (e.g. a
+                # single page with End on row 0, used as a "muted"
+                # placeholder during live edits). Keep the playhead
+                # alive — emit nothing this tick, leave _playing on so
+                # the user can drop a note into a cell and have it pick
+                # up on the next clock without re-pressing Play. Queued
+                # pattern switches still fire because _just_wrapped was
+                # set inside the End-skip loop.
+                published = (self._play_page, self._play_row, True)
 
             # Consume any queued pattern switch -- we only swap on a
             # natural pattern boundary (page 0 row 0 reached by wrap).

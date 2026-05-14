@@ -245,8 +245,6 @@ triggers a panic.
 
 ![Panic Button config panel.](../screenshots/17-plugin-panic.png){width=35%}
 
-\clearpage
-
 ## Pitch CC
 
 Turns a keyboard into a chromatic player for synths that pitch

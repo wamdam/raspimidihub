@@ -500,7 +500,11 @@ def test_on_param_change_ignored_before_initialization():
     assert t._playing is True
 
 
-def test_all_pages_end_stops_playback():
+def test_all_pages_end_keep_playing_silently():
+    """Every page with End on row 0 is a 'fully muted' pattern. Playback
+    must keep ticking silently rather than stopping — otherwise a user
+    can't add content live without re-pressing Play, and a queued
+    pattern switch (which lives on _just_wrapped) couldn't fire."""
     t = _started()
     end_row = [{"note": "End", "vel": "--", "cc_num": ".", "cc_val": "--"},
                empty_voice(), empty_voice(), empty_voice()]
@@ -509,10 +513,77 @@ def test_all_pages_end_stops_playback():
         for _ in range(3)
     ]
     t._param_values["rate"] = "1/16"
+    s = _Sender()
+    s.attach(t)
     t.on_transport_start()
-    # Cycled every page without finding a fireable row → stop.
-    assert t._playing is False
-    assert t._param_values["playhead"]["playing"] is False
+    assert t._playing is True
+    assert t._param_values["playhead"]["playing"] is True
+    assert s.events == []  # silent
+    t.on_tick("1/16")
+    assert t._playing is True
+    assert s.events == []  # still silent
+    # Now drop content into page 1 row 0; the next tick must fire it
+    # without the user re-pressing Play.
+    t._param_values["pages"][1]["rows"][0]["voices"][0] = {
+        "note": "C-4", "vel": 90, "cc_num": ".", "cc_val": "--",
+    }
+    t.on_tick("1/16")
+    assert ("on", 0, 60, 90) in s.events
+
+
+def test_single_page_end_on_row_0_keeps_playing():
+    """The minimal regression: one page, End on row 0, Play. Playback
+    must stay alive (silent) instead of immediately stopping."""
+    t = _started()
+    end_row = [{"note": "End", "vel": "--", "cc_num": ".", "cc_val": "--"},
+               empty_voice(), empty_voice(), empty_voice()]
+    t._param_values["pages"] = [
+        {"rows": [{"voices": end_row}] + [empty_row(4) for _ in range(15)]},
+    ]
+    t._param_values["rate"] = "1/16"
+    s = _Sender()
+    s.attach(t)
+    t.on_transport_start()
+    assert t._playing is True
+    assert s.events == []
+    # Tick a few more times — still alive, still silent.
+    for _ in range(4):
+        t.on_tick("1/16")
+    assert t._playing is True
+    assert s.events == []
+
+
+def test_queued_pattern_switch_fires_from_silent_pattern():
+    """A pattern that is fully muted (End on row 0) must still let a
+    queued pattern switch fire on the wrap — otherwise a user who
+    queues a switch while listening to a silent pattern would be stuck
+    until they reload."""
+    t = _started()
+    end_row = [{"note": "End", "vel": "--", "cc_num": ".", "cc_val": "--"},
+               empty_voice(), empty_voice(), empty_voice()]
+    # Slot 0 is fully muted; slot 1 has a C-4 on row 0.
+    t._param_values["patterns"] = [
+        [{"rows": [{"voices": end_row}] + [empty_row(4) for _ in range(15)]}],
+        [{"rows": [{"voices": [
+            {"note": "C-4", "vel": 90, "cc_num": ".", "cc_val": "--"},
+            empty_voice(), empty_voice(), empty_voice(),
+        ]}] + [empty_row(4) for _ in range(15)]}],
+    ] + [[{"rows": [empty_row(4) for _ in range(16)]}]
+         for _ in range(t.PATTERN_COUNT - 2)]
+    t._param_values["selected_pattern"] = 0
+    t._param_values["pages"] = list(t._param_values["patterns"][0])
+    t._param_values["rate"] = "1/16"
+    s = _Sender()
+    s.attach(t)
+    t.on_transport_start()
+    assert s.events == []
+    # Queue slot 1 while playing the silent slot 0.
+    t._set_queued_pattern(1)
+    t.on_tick("1/16")
+    # The all-End scan triggers _just_wrapped on every iteration, so the
+    # switch fires this tick. Next tick must play slot 1's C-4.
+    t.on_tick("1/16")
+    assert ("on", 0, 60, 90) in s.events
 
 
 def test_last_page_loops_back_to_zero():

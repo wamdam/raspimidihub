@@ -174,10 +174,30 @@
 }
 
 % ------------------------------------------------------------------
-% Figure placement: anchor in source position (fig-pos=H requires
-% the float package). Captions in sans-serif, accent-coloured label.
+% Figure placement. The plugin-reference appendix is wall-to-wall
+% portrait phone screenshots (1:2 aspect), which at width=35% end up
+% ~10.5 cm tall. Pandoc 3.x emits `\begin{figure}` with no placement
+% specifier and metadata fig-pos is ignored. With LaTeX's default
+% [tbp] policy, `b` (bottom) gets selected for these figures even
+% when the remaining bottom space is too small — they then run past
+% the page bottom and clip.
+%
+% Fix:
+%   1. Force figures to TOP or own-page only (\floatplacement{}{tp}).
+%      Bottom placement is what was producing the clipping.
+%   2. Raise \topfraction so a ~10.5 cm figure (~43% of \textheight)
+%      is allowed at the top — the LaTeX default of 0.7 is too tight
+%      once the appendix header plus body text are accounted for.
+%   3. Same for \floatpagefraction: lower it so a figure that takes
+%      40 %+ of a page is still eligible for its own float page
+%      instead of being held over indefinitely.
+%
+% Captions stay sans-serif, accent-coloured label.
 % ------------------------------------------------------------------
 \usepackage{float}
+\floatplacement{figure}{tp}
+\renewcommand{\topfraction}{0.9}
+\renewcommand{\floatpagefraction}{0.5}
 \usepackage[font=small,labelfont={sf,bf,color=accentColour},
             textfont=sf, justification=centering]{caption}
 

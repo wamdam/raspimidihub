@@ -4,6 +4,26 @@ User-visible changes. Short tagged one-liners, no code or commit
 hashes. Tags: Added, Improved, Fix, Changed, Removed.
 
 
+Unreleased
+
+- Fix: Tracker `End` on row 0 no longer stops playback. A page
+  whose first row is `End` is treated as fully muted -- the
+  playhead keeps ticking silently so a user can drop a note
+  into a cell live and have it pick up on the next clock,
+  without re-pressing Play. Queued pattern switches still fire
+  on the wrap, so a "muted" pattern can still hand off to the
+  next slot at the boundary.
+- Fix: Manual PDF no longer clips plugin screenshots. The
+  appendix is dense with tall portrait phone screenshots; the
+  previous figure-placement policy forced them to render at
+  their source position even when there wasn't room, cutting
+  off the bottom of the panel (and sometimes the next section
+  heading). Figures now float to the top of the closest page
+  that fits them, or to a dedicated float page when they're
+  too tall to share with text. Captions intact, no more
+  cropping; some figures land one page after their section.
+
+
 2026-05-14 — Version 3.1.5
 
 The Tracker grows a hands-free pattern switcher. A new
