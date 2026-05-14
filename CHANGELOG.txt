@@ -5,16 +5,19 @@ hashes. Tags: Added, Improved, Fix, Changed, Removed. For the
 prose narrative behind larger changes, see CHANGELOG_EXTENSIVE.txt.
 
 
-Unreleased
+2026-05-14 — Version 3.1.6
 
 - Added: Arpeggiator is now a play-surface plugin — Pattern + Rate are wide wheels above four shapers and the step grid on the Play tab, alongside the Tracker. Add via Add → Play. Setup group (Arp Ch / Ctrl Ch / Trigger Note / Sync / BPM) stays in the device-detail panel.
-- Added: Wheel `wide` variant — 120 px face for long string labels ("programmed", "1/16T") that clip the 80 px default.
-- Changed: Arpeggiator Pattern and Rate stored as integer indices into _PATTERN_OPTIONS / _RATE_OPTIONS (was strings). Legacy string configs migrate on plugin start.
 - Added: Settings → Display → Layout density dropdown (Default / Small screen). Tightens chrome on a 360 px phone; per-device, stored in the browser.
+- Added: Wheel `wide` variant — 120 px face for long string labels ("programmed", "1/16T") that clip the 80 px default.
+- Added: Param `play_only` flag — symmetric with `config_only`, hides performance controls from the device-detail panel so they don't duplicate the play surface.
 - Improved: Tracker on-screen Shift is a tap-toggle. Hardware Shift stays press-and-hold.
+- Fix: Tracker pattern-slot highlight survives Load Config — non-empty slots 2..8 used to render dashed-empty after restore because pattern_status was seeded before patterns were loaded.
 - Fix: Tracker selection survives row-0 / row-F wrap (Up/Down wraps inside the current page while Shift is engaged).
 - Fix: Tracker End on row 0 keeps the playhead ticking instead of stopping; queued pattern switches still fire on the wrap.
 - Fix: Manual PDF figures float to the next-fitting page instead of clipping at the bottom of a packed page.
+- Changed: Arpeggiator Pattern and Rate stored as integer indices into _PATTERN_OPTIONS / _RATE_OPTIONS (was strings). Legacy string configs migrate on plugin start.
+- Changed: CHANGELOG.txt rewritten to terse one-liner format; longer prose narrative for past releases preserved in CHANGELOG_EXTENSIVE.txt.
 
 
 2026-05-14 — Version 3.1.5
