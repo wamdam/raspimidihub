@@ -46,6 +46,7 @@ the focused (row, voice) and passes them through to OUT.
 
 import threading
 import time
+from dataclasses import dataclass
 from typing import Any
 
 from raspimidihub.plugin_api import (
@@ -54,9 +55,87 @@ from raspimidihub.plugin_api import (
     Group,
     NoteSelect,
     PluginBase,
-    TrackerGrid,
+    StructuralParam,
     Wheel,
 )
+
+
+@dataclass
+class TrackerGrid(StructuralParam):
+    """Tracker-style sequencer grid: 16 hex-numbered step rows × 1..8
+    voice columns, paged up to 16 pages, with an always-visible
+    data-entry keypad below.
+
+    Structural element (no value of its own) — actual sequencer state
+    lives in sibling auxiliary params named here. Lives next to
+    TrackerBase rather than in plugin_api.py because every field is
+    specific to this one plugin's UI shape; plugin_api.py exposes the
+    `StructuralParam` base so it can walk this generically without
+    naming the plugin.
+
+    `pages_param`: list of page dicts. Each page is
+      `{"rows": [{"voices": [VoiceCell × N]}, ...]}`
+      where VoiceCell is
+      `{"note": str, "vel": int|str, "cc_num": int|str, "cc_val": int|str}`.
+    `current_page_param`: int (0..MAX_PAGES-1) — visible page.
+    `cursor_row_param`, `cursor_track_param`: ints — edit-cursor focus.
+    `octave_param`: int (0..9) — sticky octave on the keypad.
+    """
+    name: str
+    label: str
+    track_count: int = 8
+    max_pages: int = 16
+    max_rows: int = 16
+    pages_param: str | None = None
+    current_page_param: str | None = None
+    cursor_row_param: str | None = None
+    cursor_track_param: str | None = None
+    cursor_half_param: str | None = None
+    octave_param: str | None = None
+    rate_param: str | None = None
+    playhead_param: str | None = None  # {page, row, playing} broadcast per step
+    track_channels_param: str | None = None  # base name; per-track lookup as <name>_<idx>
+    cmd_play_param: str | None = None  # bool, frontend → backend trigger
+    cmd_stop_param: str | None = None  # bool, frontend → backend trigger
+    send_clock_param: str | None = None  # bool, latching toggle
+    note_preview_param: str | None = None  # int (MIDI note), frontend → backend trigger
+    # Pattern bank -- 8 stored grids per Tracker instance, with one
+    # currently selected + (optionally) one queued for the next
+    # boundary. See TrackerBase / PatternRow for the full flow.
+    patterns_param: str | None = None               # list[list[Page]]: stored grids
+    selected_pattern_param: str | None = None       # int 0..N-1
+    queued_pattern_param: str | None = None         # int 0..N-1 or -1 (none)
+    pattern_status_param: str | None = None         # list[bool]: has-content per slot
+    cmd_pattern_select_param: str | None = None     # dict {pattern, mode}, frontend → backend
+    pattern_count: int = 8
+
+    def to_dict(self) -> dict:
+        d = {
+            "type": "trackergrid",
+            # `play_only` is a hint to the renderparam dispatcher: the
+            # tracker grid + keypad only make sense on the play
+            # surface (not the device-detail config card), so the
+            # frontend skips it when displayCtx.playOnly is false.
+            "play_only": True,
+            "name": self.name,
+            "label": self.label,
+            "track_count": self.track_count,
+            "max_pages": self.max_pages,
+            "max_rows": self.max_rows,
+            "pattern_count": self.pattern_count,
+        }
+        for attr in ("pages_param", "current_page_param", "cursor_row_param",
+                     "cursor_track_param", "cursor_half_param",
+                     "octave_param", "rate_param", "playhead_param",
+                     "track_channels_param", "cmd_play_param",
+                     "cmd_stop_param", "send_clock_param",
+                     "note_preview_param", "patterns_param",
+                     "selected_pattern_param", "queued_pattern_param",
+                     "pattern_status_param", "cmd_pattern_select_param"):
+            v = getattr(self, attr)
+            if v:
+                d[attr] = v
+        return d
 
 # Pitch order matches the Note wheel on the frontend. MIDI 12 = C-0,
 # MIDI 119 = B-9 — same range the 3-char note string can express.

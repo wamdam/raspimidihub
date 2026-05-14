@@ -53,7 +53,9 @@ $(DEB_FILE): src/raspimidihub/*.py src/raspimidihub/plugin_host/*.py src/raspimi
 	@for d in plugins/*/; do \
 		pname=$$(basename "$$d"); \
 		mkdir -p "$(BUILD_DIR)/usr/lib/python3/dist-packages/raspimidihub/plugins/$$pname"; \
-		cp "$$d"__init__.py "$(BUILD_DIR)/usr/lib/python3/dist-packages/raspimidihub/plugins/$$pname/"; \
+		for py in "$$d"*.py; do \
+			[ "$$(basename $$py)" != "test_plugin.py" ] && cp "$$py" "$(BUILD_DIR)/usr/lib/python3/dist-packages/raspimidihub/plugins/$$pname/" || true; \
+		done; \
 		test -f "$$d"icon.svg && cp "$$d"icon.svg "$(BUILD_DIR)/usr/lib/python3/dist-packages/raspimidihub/plugins/$$pname/" || true; \
 	done
 	cp systemd/raspimidihub.service $(BUILD_DIR)/lib/systemd/system/

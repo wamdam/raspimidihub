@@ -120,7 +120,17 @@ class PluginHost:
         catches them and logs "Failed to load plugin X".
         """
         module_name = f"raspimidihub_plugin_{type_name}"
-        spec = importlib.util.spec_from_file_location(module_name, init_file)
+        # `submodule_search_locations` makes Python treat the plugin
+        # dir as a package, so a plugin's `__init__.py` can do e.g.
+        # `from .tracker_base import TrackerBase` and pick up sibling
+        # files from its own directory. Without this, plugins are
+        # forced into a single-file shape no matter how large they
+        # grow — the Tracker is the first plugin big enough to split
+        # itself into multiple files.
+        spec = importlib.util.spec_from_file_location(
+            module_name, init_file,
+            submodule_search_locations=[str(init_file.parent)],
+        )
         if spec is None or spec.loader is None:
             return None
 
@@ -152,8 +162,8 @@ class PluginHost:
                 "version": cls.VERSION,
                 # Surface kind drives the Add Device panel grouping:
                 # "plugin" = routing-graph plugin, "controller" =
-                # play-surface controller, "play" = step-sequencer
-                # surface (Tracker).
+                # play-surface controller, "play" = fullscreen play
+                # surface (sequencers, step-programmable arpeggiators).
                 "kind": getattr(cls, "SURFACE_KIND", "plugin"),
             }
         return result

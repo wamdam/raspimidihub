@@ -348,82 +348,6 @@ class XYPad(Param):
 
 
 @dataclass
-class TrackerGrid:
-    """Tracker-style sequencer grid: 16 hex-numbered step rows × 1..8
-    voice columns, paged up to 16 pages, with an always-visible
-    data-entry keypad below.
-
-    Used by the §6 Tracker plugin (and any future sequencer surface
-    sharing the same UI). Like LayoutGrid, this is a structural element
-    rather than a value-holding Param — actual sequencer state lives
-    in sibling auxiliary params named here.
-
-    `pages_param`: list of page dicts. Each page is
-      `{"rows": [{"voices": [VoiceCell × N]}, ...]}`
-      where VoiceCell is
-      `{"note": str, "vel": int|str, "cc_num": int|str, "cc_val": int|str}`.
-    `current_page_param`: int (0..MAX_PAGES-1) — visible page.
-    `cursor_row_param`, `cursor_track_param`: ints — edit-cursor focus.
-    `octave_param`: int (0..9) — sticky octave on the keypad.
-    """
-    name: str
-    label: str
-    track_count: int = 8
-    max_pages: int = 16
-    max_rows: int = 16
-    pages_param: str | None = None
-    current_page_param: str | None = None
-    cursor_row_param: str | None = None
-    cursor_track_param: str | None = None
-    cursor_half_param: str | None = None
-    octave_param: str | None = None
-    rate_param: str | None = None
-    playhead_param: str | None = None  # {page, row, playing} broadcast per step
-    track_channels_param: str | None = None  # base name; per-track lookup as <name>_<idx>
-    cmd_play_param: str | None = None  # bool, frontend → backend trigger
-    cmd_stop_param: str | None = None  # bool, frontend → backend trigger
-    send_clock_param: str | None = None  # bool, latching toggle
-    note_preview_param: str | None = None  # int (MIDI note), frontend → backend trigger
-    # Pattern bank -- 8 stored grids per Tracker instance, with one
-    # currently selected + (optionally) one queued for the next
-    # boundary. See TrackerBase / PatternRow for the full flow.
-    patterns_param: str | None = None               # list[list[Page]]: stored grids
-    selected_pattern_param: str | None = None       # int 0..N-1
-    queued_pattern_param: str | None = None         # int 0..N-1 or -1 (none)
-    pattern_status_param: str | None = None         # list[bool]: has-content per slot
-    cmd_pattern_select_param: str | None = None     # dict {pattern, mode}, frontend → backend
-    pattern_count: int = 8
-
-    def to_dict(self) -> dict:
-        d = {
-            "type": "trackergrid",
-            # `play_only` is a hint to the renderparam dispatcher: the
-            # tracker grid + keypad only make sense on the play
-            # surface (not the device-detail config card), so the
-            # frontend skips it when displayCtx.playOnly is false.
-            "play_only": True,
-            "name": self.name,
-            "label": self.label,
-            "track_count": self.track_count,
-            "max_pages": self.max_pages,
-            "max_rows": self.max_rows,
-            "pattern_count": self.pattern_count,
-        }
-        for attr in ("pages_param", "current_page_param", "cursor_row_param",
-                     "cursor_track_param", "cursor_half_param",
-                     "octave_param", "rate_param", "playhead_param",
-                     "track_channels_param", "cmd_play_param",
-                     "cmd_stop_param", "send_clock_param",
-                     "note_preview_param", "patterns_param",
-                     "selected_pattern_param", "queued_pattern_param",
-                     "pattern_status_param", "cmd_pattern_select_param"):
-            v = getattr(self, attr)
-            if v:
-                d[attr] = v
-        return d
-
-
-@dataclass
 class LayoutCell:
     """One positioned cell in a LayoutGrid: a Param + (col, row, span).
 
@@ -454,8 +378,34 @@ class LayoutCell:
     spring_home: str = "bottom_left"  # XY-pad-only: "bottom_left" or "center"
 
 
+class StructuralParam:
+    """Marker base for "structural" param entries — items that appear
+    in a plugin's `params` list but do NOT carry a value of their own.
+    Their `name` is not tracked in `_param_values`; the data they
+    govern lives in sibling auxiliary params they point to via
+    `*_param` attributes.
+
+    Subclasses override `inner_params()` to expose any nested real
+    Params they hold (e.g. LayoutGrid's cell params), and ship a
+    `to_dict()` matching their `type` discriminator on the wire.
+
+    Plugin authors can subclass StructuralParam in their own plugin
+    file when they need a custom container shape — `plugin_api.py`
+    walks every structural param generically through `inner_params()`
+    + the `*_param` attribute sweep in `schema_param_keys`, so no
+    central registry is needed.
+    """
+
+    def inner_params(self) -> list["Param"]:
+        """Return any inner Params this container holds. Default empty
+        — value-less wrappers whose data lives entirely in sibling
+        `*_param` entries return [] here. LayoutGrid overrides to
+        return its cells' params."""
+        return []
+
+
 @dataclass
-class LayoutGrid:
+class LayoutGrid(StructuralParam):
     """Fixed-position grid of cells (Knob / Fader / Button / XYPad).
 
     Used by the §5 Controller plugin templates. Each cell declares its
@@ -509,6 +459,9 @@ class LayoutGrid:
             d["learn_param"] = self.learn_param
         return d
 
+    def inner_params(self) -> list[Param]:
+        return [c.param for c in self.cells]
+
 
 # ---------------------------------------------------------------------------
 # Param serialization helpers
@@ -520,17 +473,19 @@ def params_to_dicts(params: list) -> list[dict]:
 
 
 def get_all_params(params: list) -> list[Param]:
-    """Flatten params list, extracting Params from Groups and LayoutGrids."""
+    """Flatten params list, extracting leaf Params from Groups and
+    StructuralParam containers (LayoutGrid + any plugin-specific
+    container shapes registered via StructuralParam)."""
     result = []
     for p in params:
         if isinstance(p, Group):
             result.extend(get_all_params(p.children))
-        elif isinstance(p, LayoutGrid):
-            result.extend(get_all_params([c.param for c in p.cells]))
-        elif isinstance(p, TrackerGrid):
-            # No cells to flatten — TrackerGrid's data is in sibling
-            # params declared elsewhere in the plugin's params list.
-            continue
+        elif isinstance(p, StructuralParam):
+            # Inner_params() returns [] for value-less structural
+            # wrappers whose data lives in sibling *_param entries;
+            # those are picked up by schema_param_keys' aux sweep,
+            # not here.
+            result.extend(get_all_params(p.inner_params()))
         elif isinstance(p, Param):
             result.append(p)
     return result
@@ -538,23 +493,24 @@ def get_all_params(params: list) -> list[Param]:
 
 def schema_param_keys(params: list) -> set[str]:
     """Return every key the schema declares as a valid `_param_values`
-    entry. Used by `PluginBase._tidy_param_values()` to drop strandeed
+    entry. Used by `PluginBase._tidy_param_values()` to drop stranded
     keys carried over from older plugin versions.
 
     Collects:
-      - Every `Param.name` (top-level + Group children + LayoutGrid cells)
+      - Every `Param.name` (top-level + Group children + inside any
+        StructuralParam container).
       - Every auxiliary-pointer attribute (any string attr ending in
         `_param`, e.g. `labels_param`, `bindings_param`, `learn_param`,
         `states_param`, `snapshots_param`, `modes_param`,
         `schedule_param`, `length_param`, …) — these point at sibling
         param names like `cell_labels`, `drop_states`, etc.
-      - Recursively into Group.children / LayoutGrid.cells.
+      - Recursively into Group.children / StructuralParam.inner_params().
     The generic `*_param` walk means new auxiliary patterns added on
     future Param subclasses are picked up automatically without needing
     to update this list."""
     keys: set[str] = set()
 
-    def collect_aux(p: Param) -> None:
+    def collect_aux(p) -> None:
         for attr_name in dir(p):
             if not attr_name.endswith("_param") or attr_name.startswith("_"):
                 continue
@@ -570,16 +526,12 @@ def schema_param_keys(params: list) -> set[str]:
             if isinstance(p, Group):
                 walk(p.children)
                 continue
-            if isinstance(p, LayoutGrid):
-                # The grid itself doesn't have a single name to track,
-                # but its cells' params and its auxiliary pointers do.
+            if isinstance(p, StructuralParam):
+                # Container — `name` is not value-bearing; data lives
+                # in the *_param siblings (picked up by collect_aux)
+                # and / or in inner_params (recursed into).
                 collect_aux(p)
-                walk([cell.param for cell in p.cells])
-                continue
-            if isinstance(p, TrackerGrid):
-                # Structural — its data lives in the sibling *_param
-                # entries declared on the TrackerGrid itself.
-                collect_aux(p)
+                walk(p.inner_params())
                 continue
             if isinstance(p, Param):
                 if p.name:

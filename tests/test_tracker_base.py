@@ -5,14 +5,15 @@ ALSA-scheduling refactor can land later without breaking semantics."""
 
 import pytest
 
-from raspimidihub.plugin_api import TrackerGrid, schema_param_keys
-from raspimidihub.tracker_base import (
+from raspimidihub.plugin_api import schema_param_keys
+from tracker.tracker_base import (
     CC_HOLD,
     CC_NONE,
     NOTE_END,
     NOTE_HOLD,
     NOTE_OFF,
     TrackerBase,
+    TrackerGrid,
     empty_page,
     empty_row,
     empty_voice,
@@ -1021,7 +1022,7 @@ def test_stale_chord_resets_after_timeout():
     # would silently freeze the chord on one row forever. After
     # _CHORD_STALE_TIMEOUT_S of inactivity the next note-on must
     # force-clear the set and start a fresh chord.
-    from raspimidihub.tracker_base import _CHORD_STALE_TIMEOUT_S
+    from tracker.tracker_base import _CHORD_STALE_TIMEOUT_S
     t = _started(auto_ch=0)
     t._param_values["track_ch_0"] = 1
     t._param_values["cursor_row"] = 0

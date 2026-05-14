@@ -8,7 +8,7 @@ the plugin appears in the Play carousel; playback engine and
 auto-learn recording land in subsequent commits.
 """
 
-from raspimidihub.tracker_base import TrackerBase
+from .tracker_base import TrackerBase
 
 
 class Tracker(TrackerBase):
