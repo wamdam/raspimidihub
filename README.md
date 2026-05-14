@@ -45,7 +45,7 @@ See all screenshots in [docs/screenshots/](docs/screenshots/). The full **[User 
 - **Loop prevention** and **multi-port devices** fully supported
 
 ### Virtual Instruments and Plugins
-- **16 built-in plugins** that appear as routable MIDI devices
+- **15 built-in routing plugins** that appear as MIDI devices in the matrix, plus **2 play-surface plugins** (Arpeggiator and Tracker) on the fullscreen Play tab
 - **Plugins start unconnected** -- route them manually for precise control
 - **Custom UI controls** -- wheels, faders, knobs, XY pads, toggles, step editors, curve editors, scopes, meters
 - **MIDI clock sync** -- plugins can sync to external clock or generate their own
@@ -56,22 +56,23 @@ See all screenshots in [docs/screenshots/](docs/screenshots/). The full **[User 
 
 ### Built-in Plugins
 
+15 routing-graph plugins -- add them under **Add → Plugin**. The Arpeggiator and Tracker live under **Add → Play** instead and are documented in the **Play Surfaces** section below.
+
 | Plugin | Description |
 |--------|-------------|
-| Arpeggiator | Pattern player with step sequencer, accents, gate, clock sync; rates from 4 bars down to 1/16 with triplets |
 | CC LFO | CC waveforms (sine, triangle, square, saw, sample-and-hold); free or clock-sync up to 8 bars; live scope |
 | CC Smoother | Removes jitter from noisy knobs with configurable smoothing; dual scopes (in / out) |
 | Chord Generator | Input note triggers a chord (major, minor, 7th, custom intervals) with inversions |
 | Clock Divider | Emit one MIDI Clock for every N received (2..32) |
-| Hold | Latch notes without a sustain pedal; MIDI-Learn the release note |
+| Hold | Latch notes without a sustain pedal; chord-latch or per-note toggle; MIDI-Learn the release note |
 | Master Clock | Internal BPM clock with start/stop/continue, beat meter, bar counter |
 | MIDI Delay | Pre-scheduled echoes with feedback repeats and velocity decay; sync rate or free ms |
 | Note Splitter | Splits keyboard at a configurable note into two channels with per-zone transpose |
 | Note Transpose | Shifts all notes up or down by semitones |
 | Panic Button | Momentary trigger -- All Notes Off; second tap upgrades to All Sound Off |
+| Pitch CC | Emits a pitch CC before each Note On (base value ± semitones from a base note); turns a keyboard into a chromatic player for synths like the Volca Sample whose pitch is a CC |
 | Scale Remapper | Quantizes notes to a scale (major, minor, pentatonic, blues, ...) with labeled root selector |
 | SysEx Sender | Upload a .syx file in the panel; bytes stream straight to the destination (256-byte chunks, ~5 ms gap; nothing saved) |
-| Tracker | 8-voice step sequencer on its own Play panel. 16 hex-numbered rows × 16 pages; per-voice Note + Velocity + CC# + CC Val; per-track output channel; Play / Stop transport + send-clock toggle; live recording while playing + keyboard note entry |
 | Velocity Curve | Drawable 128-point velocity response curve with shape presets |
 | Velocity Equalizer | Normalize velocity to a fixed value or compress the range |
 
@@ -92,14 +93,26 @@ Fullscreen play surfaces that send CCs over MIDI. Each cell is renameable, MIDI-
 - **8 dark themes** per controller (Default / Navy / Forest / Wine / Plum / Teal / Sienna / Slate)
 - **Top nav** -- swipe / arrow / dropdown to switch between instances; last-viewed remembered
 
-### Tracker / Play Surface
-- **8-voice step sequencer** on a new "Play" bottom-nav entry (alongside Controllers)
-- **16 hex-numbered rows × up to 16 pages** chained linearly, loops back to page 0
+### Play Surfaces
+
+Plugins on the **Play** bottom-nav tab (alongside Controllers). They route in the matrix like any other plugin but additionally render a fullscreen play surface for live performance. Add them under **Add → Play**.
+
+**Arpeggiator**
+- **Pattern + Rate** as wide wheels at the top of the play surface for one-finger live tweaks; **Steps / Accent Vel. / Gate % / Octaves** as a row of shapers; **Step Pattern** grid below for per-step on/off + offset + accent
+- **Six pattern modes** -- up / down / up-down / random / as-played / `programmed` (live step-sequencer: keypresses write the next-to-fire slot, chord-spread on simultaneous presses, slots persist while keys / pedal are held)
+- **Sustain pedal (CC 64)** acts as temporary Hold -- released keys keep arping until pedal lift
+- **Trigger Note** range (Base..Base+15) sets the Rate live without arpeggiating, so a hardware aux key flips tempo divisions
+- **CC automation** -- CC 74 → Rate, CC 75 → Gate %
+- **Setup group** (config-only) -- Arp Ch / Ctrl Ch / Trigger Note + Base / Sync (free / tempo / transport) + BPM, in the slide-up device-detail panel
+
+**Tracker**
+- **8-voice step sequencer**, **16 hex-numbered rows × up to 16 pages** chained linearly, loops back to page 0
 - **Per voice cell** -- Note (3-char pitch / Off / End / hold), Velocity (hex), CC# (hex or `.`), CC Val (hex). Note and CC events fire independently
 - **Per-track output channel** -- T1..T8 each route to their own MIDI channel (defaults all 1, remappable in the device-detail panel)
+- **8 pattern slots** -- tap to switch (queued to the next page-0 boundary while playing); Shift+Tap switches immediately
 - **Live recording** -- play notes / move CCs in time with playback and they land on the currently-sounding row. Cursor stays put while playing; step-record at cursor when stopped
 - **Keyboard entry** -- q..u for white keys + 2/3/5/6/7 for black keys (QWERTY and QWERTZ both work via physical-key code); Space toggles play; Shift held + cursor extends a sub-cell selection; Cut / Copy / Paste with half-compatibility check
-- **Send clock + transport** -- optional toggle forwards CLOCK / START / STOP / CONTINUE through to OUT so downstream gear can slave off the Tracker instance
+- **Clock master** -- Send Clock generates an internal 24-PPQ at the configured BPM; Send Transport forwards START / STOP / CONTINUE; Pattern Ctrl Ch reserves a MIDI channel for hands-free pattern switching
 
 ### Bluetooth MIDI (BLE-MIDI)
 - **Pair, connect, disconnect, forget** any BLE-MIDI peripheral from the matrix UI -- Add Device → Bluetooth → Scan
@@ -311,7 +324,7 @@ This creates a Python venv, installs test dependencies, and runs ~290 unit and i
 
 - **MIDI filter logic** -- channel masks, message type filtering, serialization
 - **Mapping pipeline** -- CC-to-CC scaling, Note-to-CC, toggle, channel remap (incl. fan-out), pass-through
-- **All 14 plugins + 4 controllers** -- end-to-end behaviour, parameter wiring, clock sync, drop-button scheduling
+- **All 15 plugins + 2 play surfaces + 4 controllers** -- end-to-end behaviour, parameter wiring, clock sync, drop-button scheduling
 - **Filter engine** -- end-to-end mapping with captured output verification
 - **Plugin host** -- hotplug restore, instance lifecycle, ALSA queue scheduling
 
