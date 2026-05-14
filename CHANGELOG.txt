@@ -1,8 +1,7 @@
 RaspiMIDIHub Changelog
 
 User-visible changes. Short tagged one-liners, no code or commit
-hashes. Tags: Added, Improved, Fix, Changed, Removed. For the
-prose narrative behind larger changes, see CHANGELOG_EXTENSIVE.txt.
+hashes. Tags: Added, Improved, Fix, Changed, Removed.
 
 
 2026-05-14 — Version 3.1.6
@@ -17,7 +16,7 @@ prose narrative behind larger changes, see CHANGELOG_EXTENSIVE.txt.
 - Fix: Tracker End on row 0 keeps the playhead ticking instead of stopping; queued pattern switches still fire on the wrap.
 - Fix: Manual PDF figures float to the next-fitting page instead of clipping at the bottom of a packed page.
 - Changed: Arpeggiator Pattern and Rate stored as integer indices into _PATTERN_OPTIONS / _RATE_OPTIONS (was strings). Legacy string configs migrate on plugin start.
-- Changed: CHANGELOG.txt rewritten to terse one-liner format; longer prose narrative for past releases preserved in CHANGELOG_EXTENSIVE.txt.
+- Changed: CHANGELOG.txt rewritten to terse one-liner format (matches the older 1.x / 2.x style).
 
 
 2026-05-14 — Version 3.1.5
@@ -124,8 +123,9 @@ Major release. Bluetooth MIDI, Controllers (Mixer 8 / FX 6 /
 Performance 16 / XY 4), drop buttons with bar-quantised fire,
 ALSA queue scheduling, USB tethering, in-app updates with
 apt-resolved dependencies, per-device clock vetoes, hostapd via
-systemd, SysEx Sender plugin. (Numbered 3.0.1 to clear the
-3.0.0a2 alpha trailer — see CHANGELOG_EXTENSIVE.txt.)
+systemd, SysEx Sender plugin. (Numbered 3.0.1 to clear apt's
+3.0.0a2 alpha trailer — Debian's comparator treats `3.0.0a2-1`
+as newer than `3.0.0-1`.)
 
 Bluetooth MIDI
 - Added: BLE-MIDI bridge — paired devices appear in the matrix with a

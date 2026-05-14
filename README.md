@@ -335,7 +335,7 @@ Tests run without ALSA hardware (`RASPIMIDIHUB_TEST_MODE=1`). No Raspberry Pi re
 - **[User Manual (PDF)](https://github.com/wamdam/raspimidihub/releases/latest/download/raspimidihub-manual.pdf)** -- the canonical user-facing reference; covers every screen, plugin, controller, and setup flow. Markdown source under [docs/manual/](docs/manual/).
 - [Plugin Developer Guide](plugins/README.md) -- creating custom plugins
 - [Building from Source](docs/BUILDING.md) -- how to build the `.deb` packages
-- [Changelog](CHANGELOG.txt) -- release history (one-liners). [Extensive notes](CHANGELOG_EXTENSIVE.txt) for the prose narrative behind larger releases.
+- [Changelog](CHANGELOG.txt) -- release history
 - [Roadmap](docs/ROADMAP.md) -- living design doc for upcoming work
 
 ---
