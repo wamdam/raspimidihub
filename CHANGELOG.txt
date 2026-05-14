@@ -4,6 +4,52 @@ User-visible changes. Short tagged one-liners, no code or commit
 hashes. Tags: Added, Improved, Fix, Changed, Removed.
 
 
+2026-05-14 — Version 3.1.4
+
+A fifth mapping type, **Note → Note**, lands on the filter
+panel. Pick a source note + channel and a destination note +
+channel; every matching Note On / Note Off is rewritten to the
+new note on the new channel, with velocity passed through
+unchanged. The use case is pad controllers that emit a different
+note per pad on one MIDI channel, feeding a sampler that expects
+the same trigger note (typically C-3 = 60) on a different
+channel per voice — one mapping per pad rewires the whole
+controller. Fan-out works like the other types: two mappings
+with the same source but different destinations layer one pad
+onto two voices. MIDI Learn stays on the type the user already
+picked instead of yanking back to Note → CC, so capturing a
+source note for a Note → Note row works on the first try.
+
+The **Hold plugin** grows a second latch mode. A new
+**Toggle notes** button at the top of its config card switches
+from the existing chord-latch behaviour into per-note toggle:
+the first press of a note latches it on, the next press of the
+same note releases it, and the keyboard's own note-offs are
+ignored. The Release Note keeps working as an "all off" trigger
+across every latched note. Flipping the mode mid-session releases
+everything currently sounding so the new mode starts clean. The
+chord-latch default is unchanged — existing Hold instances keep
+their behaviour.
+
+First-time setup gets a **pre-built RaspiMIDIHub OS image**.
+Flash the image with Raspberry Pi Imager, fill in WiFi / username
+/ SSH key in the wizard, boot the Pi, and the first-boot
+installer pulls the latest `install.sh` and brings the hub up
+unattended — typically inside five minutes. The image stays valid
+across many code releases because it only carries the bootstrap;
+each first boot fetches whatever is current. A custom-repository
+manifest at `image/os-list.json` makes "RaspiMIDIHub OS" appear
+in the Pi Imager OS picker. An `apply-wifi-country` first-boot
+oneshot works around an RPi OS Trixie + NetworkManager bug where
+the Imager's WiFi country in `cmdline.txt` doesn't actually
+unblock the radio, so WiFi-only setups come up on their own. The
+ACT LED reports install progress (heartbeat → blink → solid →
+reboot, with a one-flash-per-second SOS for failure) so a user
+without a screen knows what's happening. `make image` and
+`make image-release IMAGE_TAG=image-YYYY-MM-DD` build and publish
+the bootstrap image from the build host.
+
+
 2026-05-14 — Version 3.1.3
 
 Live recording on the Tracker becomes channel-aware. A new

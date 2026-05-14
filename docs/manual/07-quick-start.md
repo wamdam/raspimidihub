@@ -120,7 +120,8 @@ will momentarily drop and reconnect with the new credentials. Done.
 - **Chapter 9** for the routing matrix gestures (single-tap context
   menu, copy/paste between cells, multi-port devices, offline rows).
 - **Chapter 10** for filtering MIDI channels and message types,
-  and for the four mapping types (Note → CC, CC → CC, ...).
+  and for the five mapping types (Note → CC, Note → Note,
+  CC → CC, ...).
 - **Chapter 11** for the full plugin model, and chapter 12 for
   controllers.
 - **Chapter 17** when it comes time to update the software.

@@ -29,6 +29,7 @@ ALL_MSG_TYPES = {"note", "cc", "pc", "pitchbend", "aftertouch", "sysex", "clock"
 class MappingType(str, Enum):
     NOTE_TO_CC = "note_to_cc"            # Note on/off → CC value A / B
     NOTE_TO_CC_TOGGLE = "note_to_cc_toggle"  # Note on toggles CC between A / B
+    NOTE_TO_NOTE = "note_to_note"        # Remap one note number + channel to another
     CC_TO_CC = "cc_to_cc"                # Remap CC number, optional range transform
     CHANNEL_MAP = "channel_map"          # Route events from one channel to another
 
@@ -44,6 +45,8 @@ class MidiMapping:
     dst_cc: int | None = None        # CC number to output
     cc_on_value: int = 127           # CC value when note on
     cc_off_value: int = 0            # CC value when note off
+    # Note→Note fields (shares src_note + src_channel + dst_channel)
+    dst_note: int | None = None      # Note number to output
     # CC→CC fields
     src_cc: int | None = None        # CC number to match
     dst_cc_num: int | None = None    # Output CC number (None = same as src)
@@ -69,6 +72,9 @@ class MidiMapping:
             d["dst_cc"] = self.dst_cc
             d["cc_on_value"] = self.cc_on_value
             d["cc_off_value"] = self.cc_off_value
+        elif self.type == MappingType.NOTE_TO_NOTE:
+            d["src_note"] = self.src_note
+            d["dst_note"] = self.dst_note
         elif self.type == MappingType.CC_TO_CC:
             d["src_cc"] = self.src_cc
             d["dst_cc_num"] = self.dst_cc_num
@@ -90,6 +96,9 @@ class MidiMapping:
             m.dst_cc = data.get("dst_cc")
             m.cc_on_value = data.get("cc_on_value", 127)
             m.cc_off_value = data.get("cc_off_value", 0)
+        elif mtype == MappingType.NOTE_TO_NOTE:
+            m.src_note = data.get("src_note")
+            m.dst_note = data.get("dst_note")
         elif mtype == MappingType.CC_TO_CC:
             m.src_cc = data.get("src_cc")
             m.dst_cc_num = data.get("dst_cc_num")
@@ -139,6 +148,11 @@ def validate_new_mapping(existing: list["MidiMapping"],
         if new.src_channel is not None and new.src_channel == new.dst_channel:
             return "Channel remap to the same channel — mapping has no effect"
 
+    if new.type == MappingType.NOTE_TO_NOTE:
+        eff_dst_ch = new.dst_channel if new.dst_channel is not None else new.src_channel
+        if new.src_channel == eff_dst_ch and new.src_note == new.dst_note:
+            return "Same channel, same note — mapping has no effect"
+
     # --- Duplicate check against each existing mapping ---
     for exist in existing:
         if exist.type != new.type:
@@ -175,6 +189,9 @@ def _mappings_equivalent(a: "MidiMapping", b: "MidiMapping") -> bool:
                 and a.cc_on_value == b.cc_on_value
                 and a.cc_off_value == b.cc_off_value)
 
+    if a.type == MappingType.NOTE_TO_NOTE:
+        return a.src_note == b.src_note and a.dst_note == b.dst_note
+
     if a.type == MappingType.CC_TO_CC:
         def eff_dst_cc(m):
             return m.dst_cc_num if m.dst_cc_num is not None else m.src_cc
@@ -197,6 +214,8 @@ def _duplicate_error_message(new: "MidiMapping") -> str:
         return f"A CC mapping for CC{new.src_cc} -> CC{dst_cc} already exists with the same settings"
     if new.type in (MappingType.NOTE_TO_CC, MappingType.NOTE_TO_CC_TOGGLE):
         return f"A note mapping for note {new.src_note} -> CC{new.dst_cc} already exists with the same settings"
+    if new.type == MappingType.NOTE_TO_NOTE:
+        return f"A note remap for note {new.src_note} -> note {new.dst_note} already exists with the same settings"
     if new.type == MappingType.CHANNEL_MAP:
         return "A channel remap with the same settings already exists"
     return "Duplicate mapping"
@@ -521,6 +540,18 @@ class FilterEngine:
                     elif is_note_off:
                         if not mapping.pass_through:
                             consumed = True
+
+            elif mapping.type == MappingType.NOTE_TO_NOTE:
+                if ev_type in (MidiEventType.NOTEON, MidiEventType.NOTEOFF) and \
+                   mapping.src_note is not None and ev.data.note.note == mapping.src_note and \
+                   mapping.dst_note is not None:
+                    new_ev = SndSeqEvent.from_buffer_copy(ev)
+                    new_ev.data.note.note = mapping.dst_note
+                    if mapping.dst_channel is not None:
+                        new_ev.data.note.channel = mapping.dst_channel
+                    self._forward_event(new_ev, fc)
+                    if not mapping.pass_through:
+                        consumed = True
 
             elif mapping.type == MappingType.CC_TO_CC:
                 if ev_type == MidiEventType.CONTROLLER and \

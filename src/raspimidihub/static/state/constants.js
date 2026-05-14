@@ -8,6 +8,7 @@ export const MSG_LABELS = { note: 'Notes', cc: 'CC', pc: 'Program', pitchbend: '
 export const MAPPING_TYPES = [
     { value: 'note_to_cc', label: 'Note \u2192 CC' },
     { value: 'note_to_cc_toggle', label: 'Note \u2192 CC (toggle)' },
+    { value: 'note_to_note', label: 'Note \u2192 Note' },
     { value: 'cc_to_cc', label: 'CC \u2192 CC' },
     { value: 'channel_map', label: 'Channel Remap' },
 ];

@@ -1,0 +1,14 @@
+[Unit]
+Description=Apply WiFi regulatory country (Pi Imager + Trixie workaround)
+After=NetworkManager.service
+Before=network-online.target
+Wants=NetworkManager.service
+ConditionKernelCommandLine=cfg80211.ieee80211_regdom
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/raspimidihub-apply-wifi-country
+
+[Install]
+WantedBy=multi-user.target

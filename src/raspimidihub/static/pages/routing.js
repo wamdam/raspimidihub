@@ -371,6 +371,11 @@ export function RoutingPage({ devices, connections, refresh, showToast, clockSou
             for (let off = 1; off < 128; off++) {
                 yield { ...mapping, dst_cc: (start + off) % 128 };
             }
+        } else if (t === 'note_to_note') {
+            const start = mapping.dst_note != null ? mapping.dst_note : 60;
+            for (let off = 1; off < 128; off++) {
+                yield { ...mapping, dst_note: (start + off) % 128 };
+            }
         } else if (t === 'channel_map') {
             const start = mapping.dst_channel != null ? mapping.dst_channel : 0;
             for (let off = 1; off < 16; off++) {

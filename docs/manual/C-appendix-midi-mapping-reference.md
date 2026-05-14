@@ -10,27 +10,29 @@ chapter 10; this appendix is the lookup.
 |------|--------------|-----------------|
 | **Note → CC** | Note On / Note Off | One of two CC values |
 | **Note → CC (toggle)** | Note On (alternating presses) | Two CC values, alternating each press |
+| **Note → Note** | Note On / Note Off | Same event with rewritten note number and channel; velocity preserved |
 | **CC → CC** | Control Change | Control Change (number / range remap, optional inversion) |
 | **Channel Remap** | Any event | Same event on different channel(s); fan-out supported |
 
 ## Form parameters per mapping type
 
-| Parameter | Range | Note → CC | Note → CC (toggle) | CC → CC | Channel Remap |
-|-----------|-------|-----------|--------------------|---------|---------------|
-| Src Ch | 1--16 or any | yes | yes | yes | yes |
-| Dst Ch | 1--16 | yes | yes | yes | yes (multi-select) |
-| Note | 0--127 | yes | yes | --- | --- |
-| CC# (source) | 0--127 | --- | --- | yes | --- |
-| CC# (output) | 0--127 | yes | yes | yes | --- |
-| On value | 0--127 | yes | --- | --- | --- |
-| Off value | 0--127 | yes | --- | --- | --- |
-| Toggle A | 0--127 | --- | yes | --- | --- |
-| Toggle B | 0--127 | --- | yes | --- | --- |
-| In Min | 0--127 | --- | --- | yes | --- |
-| In Max | 0--127 | --- | --- | yes | --- |
-| Out Min | 0--127 | --- | --- | yes | --- |
-| Out Max | 0--127 | --- | --- | yes | --- |
-| Pass through original event | bool | yes | yes | yes | yes |
+| Parameter | Range | Note → CC | Note → CC (toggle) | Note → Note | CC → CC | Channel Remap |
+|-----------|-------|-----------|--------------------|-------------|---------|---------------|
+| Src Ch | 1--16 or any | yes | yes | yes | yes | yes |
+| Dst Ch | 1--16 | yes | yes | yes | yes | yes (multi-select) |
+| Src note | 0--127 | yes | yes | yes | --- | --- |
+| Dst note | 0--127 | --- | --- | yes | --- | --- |
+| CC# (source) | 0--127 | --- | --- | --- | yes | --- |
+| CC# (output) | 0--127 | yes | yes | --- | yes | --- |
+| On value | 0--127 | yes | --- | --- | --- | --- |
+| Off value | 0--127 | yes | --- | --- | --- | --- |
+| Toggle A | 0--127 | --- | yes | --- | --- | --- |
+| Toggle B | 0--127 | --- | yes | --- | --- | --- |
+| In Min | 0--127 | --- | --- | --- | yes | --- |
+| In Max | 0--127 | --- | --- | --- | yes | --- |
+| Out Min | 0--127 | --- | --- | --- | yes | --- |
+| Out Max | 0--127 | --- | --- | --- | yes | --- |
+| Pass through original event | bool | yes | yes | yes | yes | yes |
 
 ## Channel filter mask
 

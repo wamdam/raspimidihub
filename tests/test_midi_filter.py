@@ -179,6 +179,22 @@ class TestMappingSerialization:
         assert m2.type == MappingType.NOTE_TO_CC_TOGGLE
         assert m2.src_note == 36
 
+    def test_note_to_note_roundtrip(self):
+        m = MidiMapping(
+            type=MappingType.NOTE_TO_NOTE,
+            src_channel=0, src_note=36,
+            dst_channel=2, dst_note=60,
+            pass_through=True,
+        )
+        d = m.to_dict()
+        m2 = MidiMapping.from_dict(d)
+        assert m2.type == MappingType.NOTE_TO_NOTE
+        assert m2.src_channel == 0
+        assert m2.src_note == 36
+        assert m2.dst_channel == 2
+        assert m2.dst_note == 60
+        assert m2.pass_through is True
+
 
 # ---------------------------------------------------------------------------
 # MidiFilter serialization round-trip

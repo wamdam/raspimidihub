@@ -119,12 +119,28 @@ Continue through.
 
 ## Hold
 
-Latches incoming notes so they keep sounding after release. The
-release note (default `C8`, high enough to be out of normal play
-range) acts like a sustain pedal release.
+Latches incoming notes so they keep sounding after release.
+Two latch modes, chosen with **Toggle notes**:
+
+- **off (default) -- chord-latch.** While any key is physically
+  down, further presses extend the held chord; once every key is
+  released the chord stays sounding. Pressing the Release Note
+  (default `C8`, high enough to be out of normal play range)
+  silences the chord; pressing any other note after a full
+  release replaces the held chord with a new one starting on
+  that note.
+- **on -- per-note toggle.** Each note latches independently.
+  The first press of a note plays and holds it; the next press
+  of the same note releases it. The keyboard's own note-off
+  events are ignored. The Release Note still works as an
+  "all off" trigger across every latched note.
+
+Flipping Toggle notes mid-session releases everything currently
+sounding so the new mode starts from a clean slate.
 
 | Group | Parameter | Type | Range | Default |
 |-------|-----------|------|-------|---------|
+| -- | **Toggle notes** | Button | on / off | off |
 | Release Note | **Enabled** | Button | on / off | on |
 | Release Note | **Note** | NoteSelect | 0--127 | C8 (108) |
 

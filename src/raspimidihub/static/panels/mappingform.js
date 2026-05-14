@@ -13,6 +13,7 @@ export function mappingDesc(m) {
     const pt = m.pass_through ? ' +thru' : '';
     if (m.type === 'note_to_cc') return `${sch}${noteName(m.src_note)} \u2192 ${dch}CC${m.dst_cc} (${m.cc_on_value}/${m.cc_off_value})${pt}`;
     if (m.type === 'note_to_cc_toggle') return `${sch}${noteName(m.src_note)} \u2192 ${dch}CC${m.dst_cc} toggle (${m.cc_on_value}/${m.cc_off_value})${pt}`;
+    if (m.type === 'note_to_note') return `${sch}${noteName(m.src_note)} \u2192 ${dch}${noteName(m.dst_note)}${pt}`;
     if (m.type === 'cc_to_cc') return `${sch}CC${m.src_cc} (${m.in_range_min}-${m.in_range_max}) \u2192 ${dch}CC${m.dst_cc_num} (${m.out_range_min}-${m.out_range_max})${pt}`;
     if (m.type === 'channel_map') return `${sch || 'CH* '}\u2192 CH${m.dst_channel + 1}`;
     return m.type;
@@ -24,6 +25,7 @@ export function MappingFormOverlay({ onSubmit, onClose, editing, srcClientId }) 
     const [type, setType] = useState(editing ? editing.type : 'note_to_cc');
     const [srcChannel, setSrcChannel] = useState(editing && editing.src_channel != null ? String(editing.src_channel) : '');
     const [srcNote, setSrcNote] = useState(editing ? (editing.src_note || 60) : 60);
+    const [dstNote, setDstNote] = useState(editing ? (editing.dst_note != null ? editing.dst_note : 60) : 60);
     const [dstCc, setDstCc] = useState(editing ? (editing.dst_cc || 1) : 1);
     const [ccOnVal, setCcOnVal] = useState(editing ? (editing.cc_on_value != null ? editing.cc_on_value : 127) : 127);
     const [ccOffVal, setCcOffVal] = useState(editing ? (editing.cc_off_value != null ? editing.cc_off_value : 0) : 0);
@@ -66,10 +68,16 @@ export function MappingFormOverlay({ onSubmit, onClose, editing, srcClientId }) 
                 const data = JSON.parse(e.data);
                 if (data.src_client === srcClientId && (data.note != null || data.cc != null)) {
                     if (data.note != null) {
-                        setType('note_to_cc'); setSrcNote(data.note);
+                        // Stay on a note-source type if the user already picked one;
+                        // otherwise default to note_to_cc.
+                        if (type !== 'note_to_cc' && type !== 'note_to_cc_toggle' && type !== 'note_to_note') {
+                            setType('note_to_cc');
+                        }
+                        setSrcNote(data.note);
                         if (data.channel != null) { setSrcChannel(String(data.channel - 1)); setDstChannel(data.channel - 1); }
                     } else if (data.cc != null) {
-                        setType('cc_to_cc'); setSrcCc(data.cc);
+                        if (type !== 'cc_to_cc') setType('cc_to_cc');
+                        setSrcCc(data.cc);
                         if (data.channel != null) { setSrcChannel(String(data.channel - 1)); setDstChannel(data.channel - 1); }
                     }
                     setLearning(false);
@@ -96,6 +104,8 @@ export function MappingFormOverlay({ onSubmit, onClose, editing, srcClientId }) 
         if (type === 'note_to_cc' || type === 'note_to_cc_toggle') {
             m.src_note = +srcNote; m.dst_cc = +dstCc;
             m.cc_on_value = +ccOnVal; m.cc_off_value = +ccOffVal;
+        } else if (type === 'note_to_note') {
+            m.src_note = +srcNote; m.dst_note = +dstNote;
         } else if (type === 'cc_to_cc') {
             m.src_cc = +srcCc; m.dst_cc_num = +dstCcNum;
             m.in_range_min = +inMin; m.in_range_max = +inMax;
@@ -120,14 +130,16 @@ export function MappingFormOverlay({ onSubmit, onClose, editing, srcClientId }) 
                     options=${MAPPING_TYPES.map(t => t.label)}
                     value=${MAPPING_TYPES.find(t => t.value === type)?.label || type}
                     onChange=${(_, label) => { const t = MAPPING_TYPES.find(m => m.label === label); if (t) setType(t.value); }} />
-                <div style="display:flex;gap:12px;flex-wrap:wrap">
-                    <${PluginWheel} name="srcCh" label="Src Ch" min=${0} max=${16}
-                        value=${srcChannel === '' ? 0 : +srcChannel + 1}
-                        tickLabel=${(v) => v === 0 ? 'Any' : v}
-                        onChange=${(_, v) => { if (v === 0) setSrcChannel(''); else setSrcChannel(String(v - 1)); }} />
-                    <${PluginWheel} name="dstCh" label="Dst Ch" min=${1} max=${16}
-                        value=${dstChannel + 1} onChange=${(_, v) => setDstChannel(v - 1)} />
-                </div>
+                ${type !== 'note_to_note' && html`
+                    <div style="display:flex;gap:12px;flex-wrap:wrap">
+                        <${PluginWheel} name="srcCh" label="Src Ch" min=${0} max=${16}
+                            value=${srcChannel === '' ? 0 : +srcChannel + 1}
+                            tickLabel=${(v) => v === 0 ? 'Any' : v}
+                            onChange=${(_, v) => { if (v === 0) setSrcChannel(''); else setSrcChannel(String(v - 1)); }} />
+                        <${PluginWheel} name="dstCh" label="Dst Ch" min=${1} max=${16}
+                            value=${dstChannel + 1} onChange=${(_, v) => setDstChannel(v - 1)} />
+                    </div>
+                `}
                 ${(type === 'note_to_cc' || type === 'note_to_cc_toggle') && html`
                     <div style="display:flex;gap:12px;flex-wrap:wrap">
                         <${PluginNoteSelect} name="srcNote" label="Src Note"
@@ -140,6 +152,22 @@ export function MappingFormOverlay({ onSubmit, onClose, editing, srcClientId }) 
                             value=${ccOnVal} onChange=${w(setCcOnVal)} />
                         <${PluginWheel} name="offVal" label="Off Val" min=${0} max=${127}
                             value=${ccOffVal} onChange=${w(setCcOffVal)} />
+                    </div>
+                `}
+                ${type === 'note_to_note' && html`
+                    <div style="display:flex;gap:12px;flex-wrap:wrap">
+                        <${PluginWheel} name="srcCh" label="Src Ch" min=${0} max=${16}
+                            value=${srcChannel === '' ? 0 : +srcChannel + 1}
+                            tickLabel=${(v) => v === 0 ? 'Any' : v}
+                            onChange=${(_, v) => { if (v === 0) setSrcChannel(''); else setSrcChannel(String(v - 1)); }} />
+                        <${PluginNoteSelect} name="srcNote" label="Src Note"
+                            value=${srcNote} onChange=${w(setSrcNote)} />
+                    </div>
+                    <div style="display:flex;gap:12px;flex-wrap:wrap">
+                        <${PluginWheel} name="dstCh" label="Dst Ch" min=${1} max=${16}
+                            value=${dstChannel + 1} onChange=${(_, v) => setDstChannel(v - 1)} />
+                        <${PluginNoteSelect} name="dstNote" label="Dst Note"
+                            value=${dstNote} onChange=${w(setDstNote)} />
                     </div>
                 `}
                 ${type === 'cc_to_cc' && html`

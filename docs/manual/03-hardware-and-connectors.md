@@ -146,31 +146,99 @@ over SSH to see why.
 
 ## First-Time Setup
 
+The recommended path is to flash the **RaspiMIDIHub bootstrap
+image** with **Raspberry Pi Imager**. The image is a fresh
+Raspberry Pi OS Lite (64-bit, Trixie) with a oneshot that
+downloads and installs the latest RaspiMIDIHub release on first
+boot. Re-flashing the same image at any later time installs the
+newest RaspiMIDIHub release automatically -- the image stays
+valid across many software releases.
+
 Step by step, from a sealed Pi to a running unit:
 
-1. **Image the SD card** with Raspberry Pi OS **Lite** (Trixie or
-   Bookworm). The graphical "Desktop" image works but installs a
-   lot of unneeded packages; Lite is leaner. The Raspberry Pi
-   Imager tool is the easiest path.
-2. **Configure SSH and a hostname** in the Imager's advanced
-   options. RaspiMIDIHub uses `raspimidihub.local` as its mDNS
-   name; the OS hostname does not matter.
-3. **Boot the Pi** from the SD card with a wired ethernet or a
-   home WiFi network reachable for the install -- the install
-   pulls debs from GitHub.
-4. **Run the install one-liner** over SSH:
+1. **Install Raspberry Pi Imager** from
+   [raspberrypi.com/software](https://www.raspberrypi.com/software/).
+   Pi Imager is free, official, and runs on macOS, Windows, and
+   Linux.
+2. **Add the RaspiMIDIHub custom repository.** In Pi Imager, open
+   **⚙ Settings** (gear icon, top-right) and paste the URL
    ```
-   curl -sL https://github.com/wamdam/raspimidihub/releases/latest/download/install.sh | bash
-   sudo reboot
+   https://raw.githubusercontent.com/wamdam/raspimidihub/main/image/os-list.json
    ```
-5. **Wait for the reboot.** After roughly 30 seconds the green
-   ACT LED settles to steady-on. The AP starts broadcasting
-   `RaspiMIDIHub-XXXX`.
-6. **Join the AP** from a phone or laptop with the default
-   password `midihub1`. The captive portal opens the UI.
+   Restart Pi Imager. **RaspiMIDIHub OS** now appears in the OS
+   picker alongside the regular Raspberry Pi OS entries.
+3. **Pick the OS, pick the SD card, click Next.** The
+   customization dialog opens. The first-boot install needs
+   internet, so set at least one network path here:
+    - **WiFi SSID + password** -- the cleanest option; sets the
+      regulatory country at the same time. The image works around
+      a known Pi Imager / Trixie bug that otherwise leaves the
+      WiFi radio rfkilled (see chapter 17.5).
+    - **Or plug in ethernet** when you boot the Pi -- in that
+      case the WiFi field can be left empty.
+
+   Also set in the wizard:
+    - **Username and password** (or an SSH public key under
+      "Use password authentication / Allow public key
+      authentication").
+    - **Keyboard layout** and region.
+
+4. **Flash, eject, insert into the Pi, power on.**
+5. **Wait roughly 5 minutes.** The green ACT LED progresses
+   through five distinct patterns:
+
+   +------+-------------------+------------------------+
+   | Step | LED pattern       | Stage                  |
+   +:====:+:==================+:=======================+
+   |  1   | Slow heartbeat    | Booting, waiting for   |
+   |      | (lub-dub)         | network                |
+   +------+-------------------+------------------------+
+   |  2   | Medium blink      | Downloading the        |
+   |      | (\~2 Hz)          | installer              |
+   +------+-------------------+------------------------+
+   |  3   | Fast blink        | `apt install` running  |
+   |      | (\~5 Hz)          | -- *don't unplug*      |
+   +------+-------------------+------------------------+
+   |  4   | Solid on          | Install complete,      |
+   |      |                   | rebooting in 2 s       |
+   +------+-------------------+------------------------+
+   |  5   | Steady on (after  | Routing service        |
+   |      | reboot)           | running, AP up         |
+   +------+-------------------+------------------------+
+
+   If you instead see **one short flash per second with a long
+   dark gap**, the install failed. SSH in (the wizard's user
+   account still works) and run
+   `journalctl -u raspimidihub-bootstrap` to see why.
+
+6. **Join the AP** `RaspiMIDIHub-XXXX` from a phone or laptop
+   with the default password `midihub1`. The captive portal
+   opens the UI.
 7. **Plug in MIDI devices** and continue with chapter 7 (Quick
    Start) or chapter 16 (Settings) to change the AP password
    first.
+
+::: tip
+The customization wizard's user, SSH key, locale, and timezone
+flow through cloud-init on the first boot. They survive the
+RaspiMIDIHub install -- the wizard's user account is the one you
+will SSH in with later for maintenance (chapter 17).
+:::
+
+### Alternative: manual installation on existing Raspberry Pi OS Lite
+
+If you already have a fresh Raspberry Pi OS Lite system running
+(installed via Pi Imager *without* the RaspiMIDIHub repository),
+you can install RaspiMIDIHub from the shell:
+
+```
+curl -sL https://github.com/wamdam/raspimidihub/releases/latest/download/install.sh | bash
+sudo reboot
+```
+
+This is exactly what the bootstrap image runs on first boot --
+the two paths converge on the same packages and the same
+post-install state.
 
 ::: warning
 Install on a **fresh** Raspberry Pi OS Lite image only. The

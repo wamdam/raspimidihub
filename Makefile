@@ -1,5 +1,5 @@
 PACKAGE = raspimidihub
-VERSION = 3.1.3
+VERSION = 3.1.4
 DEB_NAME = $(PACKAGE)_$(VERSION)-1_all
 BUILD_DIR = build/$(DEB_NAME)
 DEB_FILE = dist/$(DEB_NAME).deb
@@ -12,7 +12,7 @@ ROSETUP_DEB_FILE = dist/$(ROSETUP_DEB_NAME).deb
 
 PI_HOST = user@10.1.1.2
 
-.PHONY: all clean deb deb-rosetup deploy deploy-rosetup install uninstall test test-pi run lint fmt fmt-check screenshots manual manual-deps manual-clean
+.PHONY: all clean deb deb-rosetup deploy deploy-rosetup install uninstall test test-pi run lint fmt fmt-check screenshots manual manual-deps manual-clean image image-release
 
 all: deb deb-rosetup
 
@@ -125,6 +125,39 @@ $(ROSETUP_DEB_FILE): rosetup/setup.sh rosetup/undo.sh rosetup/debian/postinst ro
 
 clean:
 	rm -rf build/ dist/
+
+# --- Bootstrap image (Pi OS Lite + first-boot installer) ---
+# The image is a fresh Raspberry Pi OS Lite (64-bit) with a oneshot
+# systemd unit that downloads + runs the latest install.sh on first
+# boot. It's keyed to the *upstream* Pi OS Lite release date, not to
+# our code version — one image installs whatever's latest at flash
+# time, and the same image stays valid across many code releases.
+#
+# Build prerequisites (one-time on the build host):
+#     sudo apt install libguestfs-tools qemu-user-static xz-utils curl
+# The build prompts for sudo twice (virt-customize + virt-sparsify).
+
+image:
+	cd image && ./build.sh
+
+# Usage: make image-release IMAGE_TAG=image-YYYY-MM-DD
+#   Creates a GitHub release with the .img.xz attached, then regenerates
+#   image/os-list.json with the real asset URL.
+image-release: image
+	@test -n "$$IMAGE_TAG" || (echo "ERROR: pass IMAGE_TAG=image-YYYY-MM-DD"; exit 1)
+	@IMG=$$(ls -t dist/raspimidihub-bootstrap-*.img.xz | head -1); \
+		IMG_BASE=$$(basename $$IMG); \
+		IMG_DATE=$$(echo $$IMG_BASE | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}'); \
+		echo "=== Releasing $$IMG_BASE under tag $$IMAGE_TAG ==="; \
+		gh release create $$IMAGE_TAG $$IMG \
+			--title "RaspiMIDIHub OS image ($$IMG_DATE)" \
+			--notes "Pre-built Raspberry Pi OS Lite (64-bit, Trixie) image that auto-installs the latest RaspiMIDIHub release on first boot. Flash with Raspberry Pi Imager — see README for the customization-wizard steps. Built from upstream $$IMG_DATE-raspios-trixie-arm64-lite.img.xz."; \
+		URL=https://github.com/wamdam/raspimidihub/releases/download/$$IMAGE_TAG/$$IMG_BASE; \
+		echo "[image-release] regenerating os-list.json with $$URL"; \
+		sed -i "s|\"url\": \"REPLACE_WITH_RELEASE_ASSET_URL\"|\"url\": \"$$URL\"|" dist/os-list.json; \
+		sed -i "s|\"url\": \"https://github.com/wamdam/raspimidihub/releases/download/[^\"]*\"|\"url\": \"$$URL\"|" dist/os-list.json; \
+		cp dist/os-list.json image/os-list.json
+	@echo "=== Done. Commit image/os-list.json to advertise the new image."
 
 # --- Release to GitHub ---
 # Usage: make release NOTES="changelog text here"

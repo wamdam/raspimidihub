@@ -62,7 +62,7 @@ needs_build=0
 if [ ! -f "$OUT_IMG_XZ" ]; then
     needs_build=1
 else
-    for f in "$UPSTREAM_FILE" firstboot-led bootstrap-run raspimidihub-bootstrap.service build.sh; do
+    for f in "$UPSTREAM_FILE" firstboot-led bootstrap-run apply-wifi-country raspimidihub-bootstrap.service raspimidihub-apply-wifi-country.service build.sh; do
         if [ "$f" -nt "$OUT_IMG_XZ" ]; then
             needs_build=1
             break
@@ -71,15 +71,19 @@ else
 fi
 
 if [ "$needs_build" = 0 ]; then
-    echo "[build] $OUT_IMG_XZ already up to date — nothing to do"
-    exit 0
-fi
+    echo "[build] $OUT_IMG_XZ already up to date — skipping image rebuild, regenerating manifest only"
+else
 
-# --- 4. Decompress upstream into work/ -------------------------------------
+# --- 4. Clean previous build artifacts -------------------------------------
+
+echo "[build] cleaning previous build artifacts..."
+sudo rm -rf "$WORK_DIR"/* 2>/dev/null || rm -rf "$WORK_DIR"/* 2>/dev/null || true
+rm -f "$OUT_IMG_XZ"
+
+# --- 5. Decompress upstream into work/ -------------------------------------
 
 WORK_IMG="$WORK_DIR/raspimidihub-bootstrap.img"
 echo "[build] decompressing upstream image..."
-rm -f "$WORK_IMG"
 xz -dc "$UPSTREAM_FILE" > "$WORK_IMG"
 
 # --- 5. virt-customize: drop in files + enable service ---------------------
@@ -90,9 +94,13 @@ sudo virt-customize -a "$WORK_IMG" \
     --chmod 0755:/usr/local/sbin/firstboot-led \
     --upload bootstrap-run:/usr/local/sbin/raspimidihub-bootstrap-run \
     --chmod 0755:/usr/local/sbin/raspimidihub-bootstrap-run \
+    --upload apply-wifi-country:/usr/local/sbin/raspimidihub-apply-wifi-country \
+    --chmod 0755:/usr/local/sbin/raspimidihub-apply-wifi-country \
     --copy-in raspimidihub-bootstrap.service:/etc/systemd/system/ \
+    --copy-in raspimidihub-apply-wifi-country.service:/etc/systemd/system/ \
     --mkdir /etc/systemd/system/multi-user.target.wants \
-    --link /etc/systemd/system/raspimidihub-bootstrap.service:/etc/systemd/system/multi-user.target.wants/raspimidihub-bootstrap.service
+    --link /etc/systemd/system/raspimidihub-bootstrap.service:/etc/systemd/system/multi-user.target.wants/raspimidihub-bootstrap.service \
+    --link /etc/systemd/system/raspimidihub-apply-wifi-country.service:/etc/systemd/system/multi-user.target.wants/raspimidihub-apply-wifi-country.service
 sudo chown "$USER:$(id -gn)" "$WORK_IMG"
 
 # --- 6. virt-sparsify: zero free blocks so xz can compress them away --------
@@ -112,6 +120,8 @@ mv -f "$SPARSE_IMG" "$WORK_IMG"
 echo "[build] compressing with xz -T0 -9..."
 xz -T0 -9 -f "$WORK_IMG"  # produces $WORK_IMG.xz
 mv "$WORK_IMG.xz" "$OUT_IMG_XZ"
+
+fi  # end of needs_build branch
 
 # --- 8. Compute sizes + hashes + emit os-list.json -------------------------
 

@@ -143,3 +143,159 @@ class TestHold:
         h.clear()
         p.panic()
         assert h.note_offs == [(0, 60)]
+
+
+class TestHoldToggleNotes:
+    """Toggle Notes mode: each note latches independently, second press releases."""
+
+    def _setup_toggle(self):
+        p, h = make_plugin(Hold)
+        p._param_values["use_release_note"] = True
+        p._param_values["release_note"] = RELEASE_NOTE
+        p._param_values["toggle_notes"] = True
+        return p, h
+
+    def test_first_press_plays_and_holds(self):
+        p, h = self._setup_toggle()
+        p.on_note_on(0, 60, 100)
+        p.on_note_off(0, 60)  # physical release ignored
+        assert h.note_ons == [(0, 60, 100)]
+        assert h.note_offs == []
+
+    def test_second_press_of_same_note_releases(self):
+        p, h = self._setup_toggle()
+        p.on_note_on(0, 60, 100)
+        p.on_note_off(0, 60)
+        h.clear()
+        p.on_note_on(0, 60, 100)  # second press → off
+        assert h.note_offs == [(0, 60)]
+        assert h.note_ons == []
+
+    def test_third_press_re_latches(self):
+        """Off → on → off → on must alternate cleanly."""
+        p, h = self._setup_toggle()
+        p.on_note_on(0, 60, 100)
+        p.on_note_off(0, 60)
+        p.on_note_on(0, 60, 100)
+        p.on_note_off(0, 60)  # released
+        h.clear()
+        p.on_note_on(0, 60, 80)
+        assert h.note_ons == [(0, 60, 80)]
+        assert h.note_offs == []
+
+    def test_different_notes_are_independent(self):
+        p, h = self._setup_toggle()
+        p.on_note_on(0, 60, 100)
+        p.on_note_off(0, 60)
+        p.on_note_on(0, 64, 100)
+        p.on_note_off(0, 64)
+        h.clear()
+        # Release only 60 — 64 must stay
+        p.on_note_on(0, 60, 100)
+        assert h.note_offs == [(0, 60)]
+        # 64 still latched: pressing it once more releases it
+        p.on_note_on(0, 64, 100)
+        assert (0, 64) in h.note_offs
+
+    def test_zero_velocity_note_on_ignored(self):
+        """Running-status note-off must not flip the latch."""
+        p, h = self._setup_toggle()
+        p.on_note_on(0, 60, 100)  # latched on
+        h.clear()
+        p.on_note_on(0, 60, 0)    # running-status off — ignore
+        assert h.note_ons == []
+        assert h.note_offs == []
+
+    def test_physical_note_off_ignored(self):
+        """The keyboard releasing the key must not unlatch the note."""
+        p, h = self._setup_toggle()
+        p.on_note_on(0, 60, 100)
+        h.clear()
+        p.on_note_off(0, 60)
+        assert h.note_offs == []  # still latched
+
+    def test_release_note_silences_all_latched(self):
+        p, h = self._setup_toggle()
+        p.on_note_on(0, 60, 100)
+        p.on_note_off(0, 60)
+        p.on_note_on(0, 64, 100)
+        p.on_note_off(0, 64)
+        p.on_note_on(0, 67, 100)
+        p.on_note_off(0, 67)
+        h.clear()
+        p.on_note_on(0, RELEASE_NOTE, 100)
+        p.on_note_off(0, RELEASE_NOTE)
+        assert sorted(n for _, n in h.note_offs) == [60, 64, 67]
+        assert not any(n == RELEASE_NOTE for _, n, _ in h.note_ons)
+
+    def test_panic_releases_toggled(self):
+        p, h = self._setup_toggle()
+        p.on_note_on(0, 60, 100)
+        p.on_note_on(0, 64, 100)
+        h.clear()
+        p.panic()
+        assert sorted(n for _, n in h.note_offs) == [60, 64]
+
+    def test_on_stop_releases_toggled(self):
+        p, h = self._setup_toggle()
+        p.on_note_on(0, 60, 100)
+        h.clear()
+        p.on_stop()
+        assert h.note_offs == [(0, 60)]
+
+    def test_transport_stop_releases_toggled(self):
+        p, h = self._setup_toggle()
+        p.on_note_on(0, 60, 100)
+        p.on_note_on(0, 64, 100)
+        h.clear()
+        p.on_transport_stop()
+        assert sorted(n for _, n in h.note_offs) == [60, 64]
+
+
+class TestHoldModeSwitch:
+    """Flipping the Toggle notes button mid-session must not leave stuck notes."""
+
+    def test_toggle_on_releases_chord_latch_notes(self):
+        p, h = make_plugin(Hold)
+        p._param_values["use_release_note"] = True
+        p._param_values["release_note"] = RELEASE_NOTE
+        # Chord-latch (default off): play & release to leave a held chord.
+        p.on_note_on(0, 60, 100)
+        p.on_note_on(0, 64, 100)
+        p.on_note_off(0, 60)
+        p.on_note_off(0, 64)
+        h.clear()
+        # Flip the mode.
+        p._param_values["toggle_notes"] = True
+        p.on_param_change("toggle_notes", True)
+        assert sorted(n for _, n in h.note_offs) == [60, 64]
+        # And toggle mode now works clean — no leftover state.
+        h.clear()
+        p.on_note_on(0, 72, 100)
+        p.on_note_off(0, 72)
+        assert h.note_ons == [(0, 72, 100)]
+
+    def test_toggle_off_releases_toggle_mode_notes(self):
+        p, h = make_plugin(Hold)
+        p._param_values["use_release_note"] = True
+        p._param_values["release_note"] = RELEASE_NOTE
+        p._param_values["toggle_notes"] = True
+        p.on_note_on(0, 60, 100)
+        p.on_note_on(0, 64, 100)
+        h.clear()
+        # Flip off — toggled notes must be released so chord-latch mode
+        # doesn't inherit a phantom "held" state.
+        p._param_values["toggle_notes"] = False
+        p.on_param_change("toggle_notes", False)
+        assert sorted(n for _, n in h.note_offs) == [60, 64]
+
+    def test_chord_latch_mode_unchanged_when_toggle_off(self):
+        """Sanity: existing chord-latch behavior remains intact."""
+        p, h = make_plugin(Hold)
+        p._param_values["use_release_note"] = True
+        p._param_values["release_note"] = RELEASE_NOTE
+        # toggle_notes defaults False — confirm by leaving it untouched.
+        p.on_note_on(0, 60, 100)
+        p.on_note_off(0, 60)
+        assert h.note_ons == [(0, 60, 100)]
+        assert h.note_offs == []

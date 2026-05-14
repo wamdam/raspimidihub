@@ -176,6 +176,133 @@ class TestNoteToCcToggle:
         assert fwd_cc == [(0, 80, 0)]
 
 
+class TestNoteToNoteMapping:
+    """Sampler use case: rewrite pad notes on one channel to C-3 on a per-voice channel.
+
+    The mapping must preserve velocity (note dynamics) and emit both note-on
+    and note-off so the receiver doesn't get a stuck note.
+    """
+
+    def test_note_on_rewrites_note_and_channel(self):
+        mapping = MidiMapping(
+            type=MappingType.NOTE_TO_NOTE,
+            src_channel=0, src_note=36,
+            dst_channel=2, dst_note=60,
+        )
+        engine, fc, fwd_cc, fwd_ev = _make_engine_and_conn([mapping])
+
+        ev = make_event(
+            MidiEventType.NOTEON, channel=0, note=36, velocity=100,
+            src_client=1, src_port=0, dst_client=128, dst_port=10,
+        )
+        engine.process_event(ev)
+
+        assert len(fwd_ev) == 1
+        out = fwd_ev[0]
+        assert out.type == MidiEventType.NOTEON
+        assert out.data.note.note == 60
+        assert out.data.note.channel == 2
+        assert out.data.note.velocity == 100  # preserved
+        assert len(fwd_cc) == 0
+
+    def test_note_off_rewrites_too(self):
+        mapping = MidiMapping(
+            type=MappingType.NOTE_TO_NOTE,
+            src_channel=0, src_note=36,
+            dst_channel=2, dst_note=60,
+        )
+        engine, fc, fwd_cc, fwd_ev = _make_engine_and_conn([mapping])
+
+        ev = make_event(
+            MidiEventType.NOTEOFF, channel=0, note=36, velocity=0,
+            src_client=1, src_port=0, dst_client=128, dst_port=10,
+        )
+        engine.process_event(ev)
+
+        assert len(fwd_ev) == 1
+        out = fwd_ev[0]
+        assert out.type == MidiEventType.NOTEOFF
+        assert out.data.note.note == 60
+        assert out.data.note.channel == 2
+
+    def test_unmatched_note_passes_through(self):
+        mapping = MidiMapping(
+            type=MappingType.NOTE_TO_NOTE,
+            src_channel=0, src_note=36,
+            dst_channel=2, dst_note=60,
+        )
+        engine, fc, fwd_cc, fwd_ev = _make_engine_and_conn([mapping])
+
+        ev = make_event(
+            MidiEventType.NOTEON, channel=0, note=37, velocity=100,
+            src_client=1, src_port=0, dst_client=128, dst_port=10,
+        )
+        engine.process_event(ev)
+
+        # Mapping didn't fire; original note is forwarded unchanged.
+        assert len(fwd_ev) == 1
+        assert fwd_ev[0].data.note.note == 37
+        assert fwd_ev[0].data.note.channel == 0
+
+    def test_pass_through_forwards_both(self):
+        mapping = MidiMapping(
+            type=MappingType.NOTE_TO_NOTE,
+            src_channel=0, src_note=36,
+            dst_channel=2, dst_note=60,
+            pass_through=True,
+        )
+        engine, fc, fwd_cc, fwd_ev = _make_engine_and_conn([mapping])
+
+        ev = make_event(
+            MidiEventType.NOTEON, channel=0, note=36, velocity=100,
+            src_client=1, src_port=0, dst_client=128, dst_port=10,
+        )
+        engine.process_event(ev)
+
+        # Two events forwarded: the rewritten one + the original.
+        assert len(fwd_ev) == 2
+        notes = {(e.data.note.note, e.data.note.channel) for e in fwd_ev}
+        assert notes == {(60, 2), (36, 0)}
+
+    def test_fan_out_two_voices(self):
+        """Sampler scenario: one pad triggers C-3 on two different voice channels."""
+        mappings = [
+            MidiMapping(type=MappingType.NOTE_TO_NOTE,
+                        src_channel=0, src_note=36, dst_channel=1, dst_note=60),
+            MidiMapping(type=MappingType.NOTE_TO_NOTE,
+                        src_channel=0, src_note=36, dst_channel=2, dst_note=60),
+        ]
+        engine, fc, fwd_cc, fwd_ev = _make_engine_and_conn(mappings)
+
+        ev = make_event(
+            MidiEventType.NOTEON, channel=0, note=36, velocity=100,
+            src_client=1, src_port=0, dst_client=128, dst_port=10,
+        )
+        engine.process_event(ev)
+
+        assert len(fwd_ev) == 2
+        assert {e.data.note.channel for e in fwd_ev} == {1, 2}
+        assert all(e.data.note.note == 60 for e in fwd_ev)
+
+    def test_dst_channel_none_keeps_source_channel(self):
+        mapping = MidiMapping(
+            type=MappingType.NOTE_TO_NOTE,
+            src_channel=None, src_note=36,
+            dst_channel=None, dst_note=60,
+        )
+        engine, fc, fwd_cc, fwd_ev = _make_engine_and_conn([mapping])
+
+        ev = make_event(
+            MidiEventType.NOTEON, channel=4, note=36, velocity=100,
+            src_client=1, src_port=0, dst_client=128, dst_port=10,
+        )
+        engine.process_event(ev)
+
+        assert len(fwd_ev) == 1
+        assert fwd_ev[0].data.note.note == 60
+        assert fwd_ev[0].data.note.channel == 4  # source channel kept
+
+
 class TestChannelMap:
     def test_remap_channel(self):
         mapping = MidiMapping(

@@ -1,0 +1,22 @@
+#!/bin/bash
+# Workaround for an RPi OS Trixie + Pi Imager interaction:
+# Pi Imager writes "cfg80211.ieee80211_regdom=XX" to cmdline.txt based on the
+# wizard's WiFi country, but on Trixie + NetworkManager that kernel parameter
+# alone doesn't push the regulatory domain through to the radio. The WiFi
+# stays rfkill-soft-blocked (phy0 soft=1) and any cloud-init-rendered NM
+# profile sits in state "unavailable" forever.
+#
+# raspi-config has the magic dance — set country + unblock radio + reload
+# NM — so we just call it.
+
+set -e
+
+COUNTRY=$(grep -oE 'cfg80211\.ieee80211_regdom=[A-Za-z]+' /proc/cmdline | cut -d= -f2)
+if [ -z "$COUNTRY" ]; then
+    echo "[wifi-country] no cfg80211.ieee80211_regdom in cmdline, skipping"
+    exit 0
+fi
+
+echo "[wifi-country] applying WiFi country: $COUNTRY"
+nmcli radio wifi on || true
+raspi-config nonint do_wifi_country "$COUNTRY"

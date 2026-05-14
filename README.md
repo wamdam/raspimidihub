@@ -143,22 +143,42 @@ Fullscreen play surfaces that send CCs over MIDI. Each cell is renameable, MIDI-
 ### Requirements
 
 - Raspberry Pi 3B+, 4B, 5, or Zero 2 W
-- **Fresh** [Raspberry Pi OS **Lite**](https://www.raspberrypi.com/software/operating-systems/) (Trixie/Bookworm or later)
 - microSD card (4 GB+)
 - USB MIDI devices
-- **Internet connection** during installation
+- **Internet on first boot** — ethernet, USB-tethered phone, or WiFi credentials set in the Pi Imager wizard
+- [Raspberry Pi Imager](https://www.raspberrypi.com/software/) (free, official Raspberry Pi flashing tool)
 
-> **Warning:** Install on a **fresh Raspberry Pi OS Lite** image only. The `raspimidihub-rosetup` package converts the filesystem to read-only and may conflict with other software. Do not install on a Pi you use for other purposes.
+### Installation — flash the bootstrap image (recommended)
 
-### Installation
+The fastest path: flash one image with [Raspberry Pi Imager](https://www.raspberrypi.com/software/), let it install itself on first boot.
+
+1. Open **Raspberry Pi Imager** → **⚙ Settings** (gear icon, top-right) → paste this **custom repository URL**:
+   ```
+   https://raw.githubusercontent.com/wamdam/raspimidihub/main/image/os-list.json
+   ```
+2. Restart Pi Imager. **RaspiMIDIHub OS** now appears in the OS picker.
+3. Pick it, pick your SD card, click **Next**. The customization dialog opens — set:
+   - **WiFi SSID + password** (or skip if you'll use ethernet)
+   - **Keyboard layout** + region
+   - **Username + password** (or paste an SSH public key)
+4. Flash. Insert SD into the Pi, plug in power.
+5. Wait roughly **5 minutes**. The green ACT LED progresses heartbeat → medium blink → fast blink → solid → reboot → steady-on. When it settles to steady, the appliance is up and the access point is broadcasting `RaspiMIDIHub-XXXX`.
+
+The image is just a fresh Raspberry Pi OS Lite (64-bit) + a oneshot that downloads and installs the latest RaspiMIDIHub release on first boot. Re-flashing the same image any time gives you the newest release — no separate image per code release.
+
+> Don't want to add a custom repository? Download the `.img.xz` directly from the [latest image release](https://github.com/wamdam/raspimidihub/releases/tag/image-2026-04-21), pick **Use custom** in Pi Imager, and select the file. The customization wizard still works.
+
+<details>
+<summary>Manual installation on an existing Raspberry Pi OS Lite system</summary>
+
+If you already have a fresh Raspberry Pi OS Lite running and prefer to install from the shell, run the one-liner over SSH:
 
 ```bash
 curl -sL https://github.com/wamdam/raspimidihub/releases/latest/download/install.sh | bash
 sudo reboot
 ```
 
-<details>
-<summary>Manual installation</summary>
+Or fetch the .debs manually:
 
 ```bash
 TAG=$(curl -sL -o /dev/null -w '%{url_effective}' https://github.com/wamdam/raspimidihub/releases/latest | grep -oP 'v[\d.]+$')
@@ -167,9 +187,11 @@ wget https://github.com/wamdam/raspimidihub/releases/download/$TAG/raspimidihub-
 sudo apt install ./raspimidihub_${TAG#v}-1_all.deb ./raspimidihub-rosetup_1.0.2-1_all.deb
 sudo reboot
 ```
+
+> **Warning:** Install on a **fresh Raspberry Pi OS Lite** image only. The `raspimidihub-rosetup` package converts the filesystem to read-only and may conflict with other software. Do not install on a Pi you use for other purposes.
 </details>
 
-After reboot, the Pi runs with a read-only filesystem and all connected MIDI devices are automatically routed. The WiFi AP starts automatically.
+After the install reboot, the Pi runs with a read-only filesystem and all connected MIDI devices are automatically routed. The WiFi AP starts automatically.
 
 ### Connecting
 

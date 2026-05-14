@@ -188,7 +188,7 @@ One-line summaries. The detailed reference for each lives in
 | **CC Smoother** | Removes jitter from noisy CC inputs with configurable smoothing; dual scopes (in / out) |
 | **Chord Generator** | Input note triggers a chord (major / minor / 7th / custom intervals) with inversions |
 | **Clock Divider** | Emit one MIDI Clock for every N received (2..32) |
-| **Hold** | Latch notes without a sustain pedal; MIDI-Learn the release note |
+| **Hold** | Latch notes without a sustain pedal; chord-latch or per-note toggle; MIDI-Learn the release note |
 | **Master Clock** | Internal BPM clock with start/stop/continue, beat meter, bar counter |
 | **MIDI Delay** | Pre-scheduled echoes with feedback repeats and velocity decay; sync rate or free ms |
 | **Note Splitter** | Splits keyboard at a configurable note into two channels with per-zone transpose |

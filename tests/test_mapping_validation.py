@@ -55,6 +55,15 @@ def chmap(src_ch=0, dst_ch=5):
     )
 
 
+def n2n(src_ch=0, src_note=60, dst_ch=1, dst_note=60, pass_through=False):
+    return MidiMapping(
+        type=MappingType.NOTE_TO_NOTE,
+        src_channel=src_ch, src_note=src_note,
+        dst_channel=dst_ch, dst_note=dst_note,
+        pass_through=pass_through,
+    )
+
+
 # ---------------------------------------------------------------------------
 # CC→CC matrix
 # ---------------------------------------------------------------------------
@@ -177,6 +186,58 @@ class TestChannelMapMatrix:
 
     def test_src_equals_dst_pointless(self):
         err = validate_new_mapping([], chmap(src_ch=5, dst_ch=5))
+        assert err and "no effect" in err.lower()
+
+
+# ---------------------------------------------------------------------------
+# Note→Note matrix (sampler use-case: pad notes on ch1 -> C-3 on per-voice channels)
+# ---------------------------------------------------------------------------
+
+class TestNoteToNoteMatrix:
+    """Existing: src_ch=0, src_note=36 (pad 1), dst_ch=1, dst_note=60 (C-3)."""
+
+    EXISTING = n2n(src_ch=0, src_note=36, dst_ch=1, dst_note=60)
+
+    @pytest.mark.parametrize("new,expect_error", [
+        pytest.param(n2n(0, 36, 1, 60), True, id="exact-duplicate"),
+        # Different src note → ALLOW (pad 2 on a different voice)
+        pytest.param(n2n(0, 37, 2, 60), False, id="different-src-note-different-dst-ch"),
+        # Same src note, different dst channel → ALLOW (layering same pad on two voices)
+        pytest.param(n2n(0, 36, 2, 60), False, id="fan-out-different-dst-ch"),
+        # Same src note, different dst note → ALLOW (transpose layer)
+        pytest.param(n2n(0, 36, 1, 72), False, id="fan-out-different-dst-note"),
+        # Different src ch → ALLOW
+        pytest.param(n2n(1, 36, 1, 60), False, id="different-src-ch"),
+        # Different pass-through → ALLOW
+        pytest.param(n2n(0, 36, 1, 60, pass_through=True), False, id="different-pass-through"),
+    ])
+    def test_matrix(self, new, expect_error):
+        err = validate_new_mapping([self.EXISTING], new)
+        if expect_error:
+            assert err
+        else:
+            assert err is None, err
+
+    def test_same_ch_same_note_pointless(self):
+        err = validate_new_mapping([], n2n(src_ch=2, src_note=60, dst_ch=2, dst_note=60))
+        assert err and "no effect" in err.lower()
+
+    def test_same_ch_different_note_allowed(self):
+        err = validate_new_mapping([], n2n(src_ch=2, src_note=60, dst_ch=2, dst_note=72))
+        assert err is None, err
+
+    def test_different_ch_same_note_allowed(self):
+        err = validate_new_mapping([], n2n(src_ch=0, src_note=60, dst_ch=5, dst_note=60))
+        assert err is None, err
+
+    def test_dst_channel_none_falls_back_to_src_channel(self):
+        """dst_channel=None + same src_note/dst_note == no-op."""
+        m = MidiMapping(
+            type=MappingType.NOTE_TO_NOTE,
+            src_channel=3, src_note=60,
+            dst_channel=None, dst_note=60,
+        )
+        err = validate_new_mapping([], m)
         assert err and "no effect" in err.lower()
 
 

@@ -81,10 +81,10 @@ The mappings list shows each mapping as a tappable row:
 clipboard holds a mapping, a **+ Paste Mapping** button appears
 next to it.
 
-## The Four Mapping Types
+## The Mapping Types
 
-The mapping form is the same form for all four types; the type
-radio at the top toggles which fields are visible.
+The mapping form is the same form for every type; the type radio
+at the top toggles which fields are visible.
 
 ### Note → CC
 
@@ -106,6 +106,29 @@ press sends CC value 127 (muted), second press sends CC value 0
 
 Fields: source channel, note number, output channel, CC#, toggle
 A, toggle B.
+
+### Note → Note
+
+Each Note On / Note Off on the source produces the same kind of
+event on the destination, with the note number rewritten and the
+channel routed to a different MIDI channel. Velocity is passed
+through unchanged.
+
+Use case: a pad controller has eight pads, all on the same MIDI
+channel, each emitting a different note number. The receiving
+sampler expects every voice to be triggered with the same note
+(typically C-3 = note 60) but on a different channel per voice.
+Add one Note → Note mapping per pad: source channel + pad's note
+→ destination channel for that voice + note 60. Eight pads become
+eight per-voice triggers without leaving the original controller
+or the sampler.
+
+Fan-out works the same way as on the other types: two Note → Note
+mappings with the same source but different destination channels
+layer one pad onto two voices.
+
+Fields: source channel, source note, destination channel,
+destination note.
 
 ### CC → CC
 
