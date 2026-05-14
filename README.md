@@ -152,21 +152,29 @@ Fullscreen play surfaces that send CCs over MIDI. Each cell is renameable, MIDI-
 
 The fastest path: flash one image with [Raspberry Pi Imager](https://www.raspberrypi.com/software/), let it install itself on first boot.
 
-1. Open **Raspberry Pi Imager** → **⚙ Settings** (gear icon, top-right) → paste this **custom repository URL**:
-   ```
-   https://raw.githubusercontent.com/wamdam/raspimidihub/main/image/os-list.json
-   ```
-2. Restart Pi Imager. **RaspiMIDIHub OS** now appears in the OS picker.
-3. Pick it, pick your SD card, click **Next**. The customization dialog opens — set:
-   - **WiFi SSID + password** (or skip if you'll use ethernet)
-   - **Keyboard layout** + region
-   - **Username + password** (or paste an SSH public key)
-4. Flash. Insert SD into the Pi, plug in power.
+1. **Download the image**: [`raspimidihub-bootstrap-2026-04-21.img.xz`](https://github.com/wamdam/raspimidihub/releases/download/image-2026-04-21/raspimidihub-bootstrap-2026-04-21.img.xz) (~535 MB) from the [image release](https://github.com/wamdam/raspimidihub/releases/tag/image-2026-04-21).
+2. Open **Raspberry Pi Imager**, click **CHOOSE OS** → scroll to the bottom → **Use custom**, then select the `.img.xz` file.
+3. Click **CHOOSE STORAGE**, pick your SD card, **NEXT**. Pi Imager asks "would you like to apply OS customisation settings?" — click **EDIT SETTINGS**:
+   - **WiFi SSID + password + country** (or skip if you'll use ethernet)
+   - **Keyboard layout** + locale + timezone
+   - **Username + password**, and paste an SSH public key if you want passwordless SSH later
+4. **Save** → **YES** → **YES** to write. Insert SD into the Pi, plug in power.
 5. Wait roughly **5 minutes**. The green ACT LED progresses heartbeat → medium blink → fast blink → solid → reboot → steady-on. When it settles to steady, the appliance is up and the access point is broadcasting `RaspiMIDIHub-XXXX`.
 
 The image is just a fresh Raspberry Pi OS Lite (64-bit) + a oneshot that downloads and installs the latest RaspiMIDIHub release on first boot. Re-flashing the same image any time gives you the newest release — no separate image per code release.
 
-> Don't want to add a custom repository? Download the `.img.xz` directly from the [latest image release](https://github.com/wamdam/raspimidihub/releases/tag/image-2026-04-21), pick **Use custom** in Pi Imager, and select the file. The customization wizard still works.
+<details>
+<summary>Pi Imager 2.0+ custom-repository (optional)</summary>
+
+If you'd rather have **RaspiMIDIHub OS** show up directly in Pi Imager's OS picker, add this URL in Pi Imager → **⚙ Settings** (gear icon, top-right) → **Use custom repository**:
+
+```
+https://raw.githubusercontent.com/wamdam/raspimidihub/main/image/os-list.json
+```
+
+Restart Pi Imager. This option only exists on Pi Imager 2.0+ — older versions are fine with the direct-download flow above.
+
+</details>
 
 <details>
 <summary>Manual installation on an existing Raspberry Pi OS Lite system</summary>

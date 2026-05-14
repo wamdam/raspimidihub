@@ -164,6 +164,12 @@ export function renderParamList(params, values, onChange, displayCtx) {
     const expanded = [];
     for (const p of params) {
         if (p.config_only && playOnly) continue;
+        if (p.visible_when) {
+            const cur = values[p.visible_when.param];
+            const cv = p.visible_when.value;
+            const matches = Array.isArray(cv) ? cv.includes(cur) : cur === cv;
+            if (!matches) continue;
+        }
         if (p.type === 'group') expanded.push({ _isGroup: true, title: p.title, children: p.children, cols: p.cols });
         else expanded.push(p);
     }

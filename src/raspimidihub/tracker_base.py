@@ -52,6 +52,7 @@ from raspimidihub.plugin_api import (
     Button,
     ChannelSelect,
     Group,
+    NoteSelect,
     PluginBase,
     TrackerGrid,
     Wheel,
@@ -254,6 +255,21 @@ class TrackerBase(PluginBase):
                   config_only=True, visible_when=("send_clock", True)),
             Button("send_transport", "Send Transport",
                    default=False, color="green", config_only=True),
+            # Pattern control channel: when set to 1..16, incoming notes
+            # on that channel never record or pass through — instead each
+            # configured pattern_note_N triggers a pattern switch (queued
+            # to the next page-0 boundary while playing, immediate while
+            # stopped). 0 = Off, no interception.
+            Wheel("pattern_ctrl_ch", "Pattern Ctrl Ch",
+                  min=0, max=16, default=0,
+                  labels=["Off"] + [str(i) for i in range(1, 17)],
+                  config_only=True),
+            Group("Pattern Notes", [
+                NoteSelect(f"pattern_note_{i}", f"P{i + 1}",
+                           default=36 + i, config_only=True)
+                for i in range(cls.PATTERN_COUNT)
+            ], config_only=True,
+                visible_when=("pattern_ctrl_ch", list(range(1, 17)))),
         ]
         return params
 
@@ -331,6 +347,10 @@ class TrackerBase(PluginBase):
         # Per-track channels default to 1.
         for i in range(self.TRACK_COUNT):
             self._param_values.setdefault(f"track_ch_{i}", 1)
+        # Pattern control channel + 8 trigger notes default to off / C1..G1.
+        self._param_values.setdefault("pattern_ctrl_ch", 0)
+        for i in range(self.PATTERN_COUNT):
+            self._param_values.setdefault(f"pattern_note_{i}", 36 + i)
 
         # Cursor + octave + playhead + cmd signals are live-play
         # state — moving them shouldn't mark the routing config dirty.
@@ -812,6 +832,22 @@ class TrackerBase(PluginBase):
         return matched, False
 
     def on_note_on(self, channel: int, note: int, velocity: int) -> None:
+        # Pattern control channel: when configured (1..16), notes on this
+        # channel are reserved for pattern switching. A press whose note
+        # matches one of the configured pattern_note_N values queues a
+        # switch (or fires immediately when stopped, via _handle_pattern_
+        # command's "tap" mode). All events on the channel are swallowed —
+        # no recording, no pass-through, regardless of whether the note
+        # matched a slot.
+        ctrl_ch = int(self._param_values.get("pattern_ctrl_ch") or 0)
+        if ctrl_ch != 0 and (channel + 1) == ctrl_ch:
+            if velocity > 0:
+                for i in range(self.PATTERN_COUNT):
+                    if int(self._param_values.get(f"pattern_note_{i}") or -1) == note:
+                        self._handle_pattern_command({"pattern": i, "mode": "tap"})
+                        break
+            return
+
         # Channel-driven routing. Auto Ch. → cursor-spread (historic
         # behaviour). Other channels → matching tracks. Unmatched
         # → drop both recording AND pass-through, so the tracker is
@@ -909,6 +945,12 @@ class TrackerBase(PluginBase):
             self.set_param("current_page", next_page)
 
     def on_note_off(self, channel: int, note: int) -> None:
+        # Pattern control channel: drop note-offs too (the channel is
+        # reserved — no pass-through, no held-key bookkeeping).
+        ctrl_ch = int(self._param_values.get("pattern_ctrl_ch") or 0)
+        if ctrl_ch != 0 and (channel + 1) == ctrl_ch:
+            return
+
         # Symmetric with on_note_on: pass-through on the first
         # routing target's channel. Recording doesn't write
         # release events (playback emits note-offs from the next
@@ -928,6 +970,11 @@ class TrackerBase(PluginBase):
             pass
 
     def on_cc(self, channel: int, cc: int, value: int) -> None:
+        # Pattern control channel reserves the whole channel — drop CCs too.
+        ctrl_ch = int(self._param_values.get("pattern_ctrl_ch") or 0)
+        if ctrl_ch != 0 and (channel + 1) == ctrl_ch:
+            return
+
         # Routing mirrors on_note_on but CCs never spread — they
         # always land on the first matching track. Auto Ch. → that's
         # cursor_track; direct routing → first track configured for

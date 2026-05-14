@@ -248,6 +248,10 @@ class Group:
     children: list = field(default_factory=list)
     cols: int | None = None  # override default 4-col grid for this group's inline row
     config_only: bool = False
+    # Same shape as Param.visible_when — (param_name, value_or_list).
+    # When set, the whole group (title + children) hides if the named
+    # param's current value doesn't match.
+    visible_when: tuple | None = None
 
     def to_dict(self) -> dict:
         d = {
@@ -259,6 +263,8 @@ class Group:
             d["cols"] = self.cols
         if self.config_only:
             d["config_only"] = True
+        if self.visible_when:
+            d["visible_when"] = {"param": self.visible_when[0], "value": self.visible_when[1]}
         return d
 
 

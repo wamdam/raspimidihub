@@ -160,16 +160,15 @@ Step by step, from a sealed Pi to a running unit:
    [raspberrypi.com/software](https://www.raspberrypi.com/software/).
    Pi Imager is free, official, and runs on macOS, Windows, and
    Linux.
-2. **Add the RaspiMIDIHub custom repository.** In Pi Imager, open
-   **⚙ Settings** (gear icon, top-right) and paste the URL
-   ```
-   https://raw.githubusercontent.com/wamdam/raspimidihub/main/image/os-list.json
-   ```
-   Restart Pi Imager. **RaspiMIDIHub OS** now appears in the OS
-   picker alongside the regular Raspberry Pi OS entries.
-3. **Pick the OS, pick the SD card, click Next.** The
-   customization dialog opens. The first-boot install needs
-   internet, so set at least one network path here:
+2. **Download the RaspiMIDIHub OS image** -- the file
+   `raspimidihub-bootstrap-YYYY-MM-DD.img.xz` (~535 MB) -- from
+   the [Image release page](https://github.com/wamdam/raspimidihub/releases/tag/image-2026-04-21).
+3. **Open Pi Imager.** Click **CHOOSE OS** → scroll to the
+   bottom → **Use custom**, and select the downloaded `.img.xz`.
+   Click **CHOOSE STORAGE** and pick the SD card. Click **NEXT**.
+   Pi Imager asks "would you like to apply OS customisation
+   settings?" -- click **EDIT SETTINGS**. The first-boot install
+   needs internet, so set at least one network path here:
     - **WiFi SSID + password** -- the cleanest option; sets the
       regulatory country at the same time. The image works around
       a known Pi Imager / Trixie bug that otherwise leaves the
@@ -183,7 +182,8 @@ Step by step, from a sealed Pi to a running unit:
       authentication").
     - **Keyboard layout** and region.
 
-4. **Flash, eject, insert into the Pi, power on.**
+4. **Save** the settings → **YES** → **YES** to write. Eject the
+   card, insert into the Pi, power on.
 5. **Wait roughly 5 minutes.** The green ACT LED progresses
    through five distinct patterns:
 
@@ -223,6 +223,16 @@ The customization wizard's user, SSH key, locale, and timezone
 flow through cloud-init on the first boot. They survive the
 RaspiMIDIHub install -- the wizard's user account is the one you
 will SSH in with later for maintenance (chapter 17).
+:::
+
+::: tip
+Pi Imager 2.0 and newer also support a "custom repository" URL
+under **⚙ Settings**. Pointing it at
+`https://raw.githubusercontent.com/wamdam/raspimidihub/main/image/os-list.json`
+makes **RaspiMIDIHub OS** show up directly in the OS picker --
+no need to download the file manually. The option is hidden on
+Pi Imager 1.x, which is why the steps above use the direct-
+download path: it works on every Pi Imager version.
 :::
 
 ### Alternative: manual installation on existing Raspberry Pi OS Lite

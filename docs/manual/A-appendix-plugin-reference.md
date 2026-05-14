@@ -245,6 +245,32 @@ triggers a panic.
 
 ![Panic Button config panel.](../screenshots/17-plugin-panic.png){width=35%}
 
+## Pitch CC
+
+Turns a keyboard into a chromatic player for synths and samplers
+whose pitch is controlled by a Control Change rather than by note
+number. Built for the Korg Volca Sample (CC 49 = sample playback
+rate), but works for any device with a "pitch is a CC" model.
+
+For every Note On, the plugin first emits a CC change whose value
+is `Base CC Value + (played_note - Base Note)`, clamped to
+0--127. Then it forwards the Note On itself, velocity preserved.
+Note Off forwards without a CC; the synth holds the last pitch
+until the next trigger overwrites it. The CC always goes out
+*before* the Note On -- reversed order would play every first
+note at the previously latched pitch.
+
+| Parameter | Type | Range | Default |
+|-----------|------|-------|---------|
+| **Base Note** | NoteSelect (learnable) | 0--127 | 60 (C-3) |
+| **Out CC#** | Wheel | 0--127 | 49 (Volca Sample pitch) |
+| **Base Val** | Wheel | 0--127 | 64 |
+
+**Input.** Notes, CC / Pitchbend / Aftertouch (pass-through).
+**Output.** CC (pitch) + Notes on the same channel; other events
+pass through.
+**Clock.** None.
+
 ## Scale Remapper
 
 Quantises incoming notes to a musical scale. Labelled wheels for
@@ -308,6 +334,16 @@ Configuration parameters (from the device-detail panel):
 - **Internal BPM** -- used when no external clock is routed in.
 - **Send Clock + Transport** -- Button toggle; when on, forwards
   incoming CLOCK / START / STOP / CONTINUE to OUT.
+- **Pattern Ctrl Ch** -- Wheel, range `Off` / 1..16, default
+  `Off`. When set, the channel is reserved end-to-end (no
+  recording, no pass-through, CCs dropped too) and incoming notes
+  trigger the matching pattern slot via the same queue-on-wrap
+  path that an on-screen Tap uses.
+- **Pattern Notes (P1..P8)** -- 8 × NoteSelect, learnable,
+  defaults 36..43 (C1..G1). Only visible when **Pattern Ctrl Ch**
+  is not Off. Each entry is the note that switches to that
+  pattern slot. A note that doesn't match any slot is dropped on
+  the control channel anyway.
 
 The grid data is part of the plugin instance state and is
 captured by **Save Config** and **Export Config** along with the

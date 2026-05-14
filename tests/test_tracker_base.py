@@ -1513,3 +1513,115 @@ def test_live_record_mirrors_into_selected_pattern():
     t.on_param_change("cmd_pattern_select", {"pattern": 1, "mode": "tap"})
     t.on_param_change("cmd_pattern_select", {"pattern": sel, "mode": "tap"})
     assert t._param_values["pages"][0]["rows"][0]["voices"][0]["note"] == "G-4"
+
+
+# ---------------------------------------------------------------------------
+# Pattern-control channel: incoming notes on pattern_ctrl_ch trigger pattern
+# switches (queued while playing, immediate while stopped). Recording and
+# pass-through are suppressed on the reserved channel.
+# ---------------------------------------------------------------------------
+
+def _started_with_ctrl(ctrl_ch=10, notes=None):
+    """Tracker with pattern_ctrl_ch on ch 10 (0-based ch 9) and the 8 trigger
+    notes set to 36..43 (the in-code default)."""
+    t = _started(track_count=4, auto_ch=0)
+    t._param_values["pattern_ctrl_ch"] = ctrl_ch
+    notes = notes if notes is not None else list(range(36, 44))
+    for i, n in enumerate(notes):
+        t._param_values[f"pattern_note_{i}"] = n
+    return t
+
+
+def test_control_note_when_stopped_switches_immediately():
+    t = _started_with_ctrl()
+    s = _Sender()
+    s.attach(t)
+    assert t._param_values["selected_pattern"] == 0
+    # Press the note assigned to pattern slot 3 on the control channel.
+    t.on_note_on(channel=9, note=39, velocity=100)
+    assert t._param_values["selected_pattern"] == 3
+    # Switched immediately because the engine is stopped — no queue lingers.
+    assert t._param_values["queued_pattern"] == -1
+    # The event did not leak to OUT.
+    assert s.events == []
+
+
+def test_control_note_when_playing_queues_switch():
+    t = _started_with_ctrl()
+    s = _Sender()
+    s.attach(t)
+    t._playing = True  # pretend transport is running
+    t.on_note_on(channel=9, note=41, velocity=100)
+    # Selection unchanged until the next page-0 boundary consumes the queue.
+    assert t._param_values["selected_pattern"] == 0
+    assert t._param_values["queued_pattern"] == 5
+    assert s.events == []
+
+
+def test_control_note_unmapped_is_swallowed():
+    """A control-channel note that doesn't match any slot still gets dropped —
+    the channel is reserved end-to-end."""
+    t = _started_with_ctrl()
+    s = _Sender()
+    s.attach(t)
+    t.on_note_on(channel=9, note=99, velocity=100)
+    assert t._param_values["selected_pattern"] == 0
+    assert t._param_values["queued_pattern"] == -1
+    assert s.events == []
+
+
+def test_control_note_off_is_swallowed():
+    t = _started_with_ctrl()
+    s = _Sender()
+    s.attach(t)
+    t.on_note_off(channel=9, note=36)
+    assert s.events == []
+
+
+def test_control_channel_cc_is_swallowed():
+    """CCs on the control channel are dropped — no record, no pass-through."""
+    t = _started_with_ctrl()
+    s = _Sender()
+    s.attach(t)
+    t.on_cc(channel=9, cc=74, value=100)
+    assert s.events == []
+
+
+def test_control_channel_off_disables_intercept():
+    """With pattern_ctrl_ch=0 (Off, the default), the intercept is bypassed
+    and notes route normally."""
+    t = _started(track_count=4, auto_ch=0)
+    # auto_ch=0, track_ch_i defaults to 1 → notes on channel 0 record into T1+
+    t._param_values["pattern_ctrl_ch"] = 0
+    t._param_values["pattern_note_0"] = 60
+    s = _Sender()
+    s.attach(t)
+    # Even though note 60 is configured as pattern_note_0, ctrl_ch=Off means
+    # no intercept — the note records / passes through as normal.
+    t.on_note_on(channel=0, note=60, velocity=100)
+    assert t._param_values["selected_pattern"] == 0
+    # OUT got a pass-through note-on.
+    assert any(e[0] == "on" for e in s.events)
+
+
+def test_control_velocity_zero_does_not_trigger_switch():
+    """A note-on with velocity 0 (running-status note-off) on the control
+    channel must NOT flip patterns — that would double-fire on every press."""
+    t = _started_with_ctrl()
+    s = _Sender()
+    s.attach(t)
+    t.on_note_on(channel=9, note=36, velocity=0)
+    assert t._param_values["selected_pattern"] == 0
+    assert s.events == []
+
+
+def test_control_note_overlap_with_auto_ch_wins():
+    """If pattern_ctrl_ch shares a channel number with auto_ch, control wins —
+    pattern switching takes priority over recording on the same channel."""
+    t = _started_with_ctrl(ctrl_ch=3)  # same as default auto_ch in helpers
+    t._param_values["auto_ch"] = 3
+    s = _Sender()
+    s.attach(t)
+    t.on_note_on(channel=2, note=37, velocity=100)  # channel 2 = MIDI ch 3
+    assert t._param_values["selected_pattern"] == 1
+    assert s.events == []

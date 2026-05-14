@@ -194,6 +194,7 @@ One-line summaries. The detailed reference for each lives in
 | **Note Splitter** | Splits keyboard at a configurable note into two channels with per-zone transpose |
 | **Note Transpose** | Shifts all notes up or down by semitones |
 | **Panic Button** | All Notes Off; second tap upgrades to All Sound Off |
+| **Pitch CC** | Each Note On emits a pitch CC (base value ± semitones from a base note) then the Note On itself — chromatic playback for samplers like the Volca Sample that pitch via CC |
 | **Scale Remapper** | Quantizes notes to a scale (major / minor / pentatonic / blues / ...) with labelled root selector |
 | **SysEx Sender** | Upload a `.syx` file in the panel; bytes stream to the destination (256-byte chunks, ~5 ms gap; nothing saved) |
 | **Velocity Curve** | Drawable 128-point velocity response curve with shape presets |

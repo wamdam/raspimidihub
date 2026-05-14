@@ -287,6 +287,31 @@ on the Tracker instance and apply to whichever pattern is playing.
 So the eight patterns share routing and tempo; they differ only in
 what they sequence.
 
+### Pattern switching from a MIDI controller
+
+Hands-free pattern switching from a keyboard or pad controller is
+opt-in via the **Pattern Ctrl Ch** wheel in the configuration
+panel. Set it to **Off** (the default) and nothing changes. Set it
+to a MIDI channel `1..16` and that channel becomes reserved for
+pattern control: a Group of eight **P1..P8** NoteSelect wheels
+appears, one per pattern slot.
+
+Pressing the configured note for slot *N* on the control channel
+behaves exactly like tapping slot *N* on screen -- queued to the
+next page-0 boundary while playing, immediate while stopped. The
+on-screen blink during the queued window matches a controller
+tap, so a player can see at a glance whether a press already
+landed or is still pending.
+
+Each P*N* row has a **Learn** button: tap it, then play the note
+on the controller to capture it. The channel-reservation means
+nothing else on this channel reaches the tracker -- no recording,
+no pass-through, not even CCs. Pick a channel that the rest of
+the routing matrix is not already using for a track.
+
+If a control channel and **Auto Ch.** or a per-track channel
+overlap, control wins. This keeps the reserved channel reserved.
+
 ## The Configuration Panel
 
 Open the Tracker's row or column header in the matrix to access
@@ -294,9 +319,14 @@ its plugin-config panel:
 
 - **Per-track channel mapping** -- eight ChannelSelect wheels, one
   per track.
+- **Auto Ch.** -- recording-routing wheel; see 13.6.1.
 - **Send Clock** + **BPM** -- clock-master mode; see 13.5.
 - **Send Transport** -- forward START / STOP / CONTINUE in either
   direction; see 13.5.
+- **Pattern Ctrl Ch** -- channel reserved for hands-free pattern
+  switching from a controller. Off by default; when set, the
+  **Pattern Notes** group with eight learnable P1..P8 NoteSelects
+  appears below.
 - **Help button** -- the standard `?` HELP text.
 
 ## Saving Tracker State

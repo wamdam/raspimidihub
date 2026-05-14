@@ -4,6 +4,56 @@ User-visible changes. Short tagged one-liners, no code or commit
 hashes. Tags: Added, Improved, Fix, Changed, Removed.
 
 
+2026-05-14 — Version 3.1.5
+
+The Tracker grows a hands-free pattern switcher. A new
+**Pattern Ctrl Ch** wheel on its config panel (default Off, set
+to a MIDI channel 1--16 to enable) reserves a whole channel for
+pattern control. When enabled, a Pattern Notes group appears
+with eight learnable **P1..P8** NoteSelects -- one trigger note
+per pattern slot. Pressing a configured note on the control
+channel behaves identically to an on-screen Tap: queued to the
+next page-0 boundary while playing, immediate while stopped.
+The on-screen blink during the queued window mirrors a press, so
+a player can tell at a glance whether a switch is locked in or
+still pending. The reserved channel drops everything else
+end-to-end -- notes, note-offs, CCs -- so a controller's
+pattern-control channel cannot bleed into recorded tracks. If a
+control channel and Auto Ch. or a per-track channel overlap,
+control wins.
+
+A new **Pitch CC** plugin turns a keyboard into a chromatic
+player for synths and samplers whose pitch is controlled by a
+Control Change rather than the MIDI note number -- the Korg
+Volca Sample being the canonical example (CC 49 = sample
+playback rate). For every Note On, the plugin first emits a CC
+change whose value is `Base CC Value + (played_note - Base
+Note)`, clamped to 0..127, then forwards the Note On itself with
+velocity preserved. The CC always goes out *before* the Note On
+because synths like the Volca Sample latch the pitch CC at
+trigger time -- reversed order would play every first note at
+the previous pitch. Note Off forwards without a CC; the synth
+holds the last pitch until the next trigger overwrites it. Drop
+the plugin between keyboard and Volca, set Base Note = C-3 /
+Out CC# = 49 / Base Val = 64, and the whole keyboard plays the
+sample chromatically. The plugin lives under
+**Add → Plugin → Pitch CC** alongside the other note
+transformations.
+
+The image-flow docs on the README and chapter 3 are reshaped
+around the simpler download-the-image path now that the
+bootstrap image is stable. The custom-repository URL still
+works -- it just moves below the direct-download instructions
+into a collapsible, since the only Pi Imager that picks it up
+is the 2.0+ beta.
+
+A small enabling change: `Group` params now support
+`visible_when` the same way individual params do, so a whole
+config group can hide entirely until its enabling param is set.
+This is what makes the Tracker's Pattern Notes group appear and
+disappear with Pattern Ctrl Ch.
+
+
 2026-05-14 — Version 3.1.4
 
 A fifth mapping type, **Note → Note**, lands on the filter

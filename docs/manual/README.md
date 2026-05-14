@@ -4,7 +4,7 @@ This directory contains the source for the RaspiMIDIHub User Manual.
 Each chapter lives in its own Markdown file. The whole set is meant to
 be rendered to `raspimidihub-manual.pdf` with pandoc.
 
-**Documented release:** Version 3.1.4 (manual last touched 2026-05-14).
+**Documented release:** Version 3.1.5 (manual last touched 2026-05-14).
 Bump `version:` in `metadata.yaml` together with the chapter content
 when the running build changes.
 
