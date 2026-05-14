@@ -1,0 +1,237 @@
+RaspiMIDIHub — Extensive Release Notes
+
+CHANGELOG.txt is the terse one-line-per-change record. This file
+preserves the prose-narrative notes for the releases where the
+"why" was worth remembering beyond the headline — what the change
+replaced, the incident that motivated a fix, or the underlying
+mechanism a power user might want to understand.
+
+Only entries with substantial context appear here; bullet-only
+releases live in CHANGELOG.txt only.
+
+
+Unreleased
+
+- Tracker on-screen Shift toggle. Removes the multi-touch
+  flakiness where a small finger drift while holding Shift on
+  screen would fire pointerleave and silently drop the selection
+  mid-edit. The keyboard Shift key still works as press-and-hold
+  (natural for hardware modifiers).
+- Tracker selection wrap at row 0 / row F. While Shift is engaged,
+  Up/Down wrap inside the current page instead of paging — so the
+  cursor and the selection anchor stay on the same page and the
+  selection rectangle survives. Without Shift, cursor wrap still
+  steps to the previous/next page as before.
+- Tracker End on row 0. A page whose first row is End is treated
+  as fully muted — the playhead keeps ticking silently so a user
+  can drop a note into a cell live and have it pick up on the
+  next clock, without re-pressing Play. Queued pattern switches
+  still fire on the wrap, so a "muted" pattern can still hand off
+  to the next slot at the boundary.
+- Manual PDF figure placement. The appendix is dense with tall
+  portrait phone screenshots; the previous policy forced them to
+  render at their source position even when there wasn't room,
+  cutting off the bottom of the panel (and sometimes the next
+  section heading). Figures now float to the top of the closest
+  page that fits them, or to a dedicated float page when they're
+  too tall to share with text. Captions intact, no more cropping;
+  some figures land one page after their section.
+
+
+2026-05-14 — Version 3.1.5
+
+The Tracker grows a hands-free pattern switcher. A new
+**Pattern Ctrl Ch** wheel on its config panel (default Off, set
+to a MIDI channel 1--16 to enable) reserves a whole channel for
+pattern control. When enabled, a Pattern Notes group appears
+with eight learnable **P1..P8** NoteSelects -- one trigger note
+per pattern slot. Pressing a configured note on the control
+channel behaves identically to an on-screen Tap: queued to the
+next page-0 boundary while playing, immediate while stopped.
+The on-screen blink during the queued window mirrors a press, so
+a player can tell at a glance whether a switch is locked in or
+still pending. The reserved channel drops everything else
+end-to-end -- notes, note-offs, CCs -- so a controller's
+pattern-control channel cannot bleed into recorded tracks. If a
+control channel and Auto Ch. or a per-track channel overlap,
+control wins.
+
+A new **Pitch CC** plugin turns a keyboard into a chromatic
+player for synths and samplers whose pitch is controlled by a
+Control Change rather than the MIDI note number -- the Korg
+Volca Sample being the canonical example (CC 49 = sample
+playback rate). For every Note On, the plugin first emits a CC
+change whose value is `Base CC Value + (played_note - Base
+Note)`, clamped to 0..127, then forwards the Note On itself with
+velocity preserved. The CC always goes out *before* the Note On
+because synths like the Volca Sample latch the pitch CC at
+trigger time -- reversed order would play every first note at
+the previous pitch. Note Off forwards without a CC; the synth
+holds the last pitch until the next trigger overwrites it. Drop
+the plugin between keyboard and Volca, set Base Note = C-3 /
+Out CC# = 49 / Base Val = 64, and the whole keyboard plays the
+sample chromatically. The plugin lives under
+**Add → Plugin → Pitch CC** alongside the other note
+transformations.
+
+The image-flow docs on the README and chapter 3 are reshaped
+around the simpler download-the-image path now that the
+bootstrap image is stable. The custom-repository URL still
+works -- it just moves below the direct-download instructions
+into a collapsible, since the only Pi Imager that picks it up
+is the 2.0+ beta.
+
+A small enabling change: `Group` params now support
+`visible_when` the same way individual params do, so a whole
+config group can hide entirely until its enabling param is set.
+This is what makes the Tracker's Pattern Notes group appear and
+disappear with Pattern Ctrl Ch.
+
+
+2026-05-14 — Version 3.1.4
+
+A fifth mapping type, **Note → Note**, lands on the filter
+panel. Pick a source note + channel and a destination note +
+channel; every matching Note On / Note Off is rewritten to the
+new note on the new channel, with velocity passed through
+unchanged. The use case is pad controllers that emit a different
+note per pad on one MIDI channel, feeding a sampler that expects
+the same trigger note (typically C-3 = 60) on a different
+channel per voice — one mapping per pad rewires the whole
+controller. Fan-out works like the other types: two mappings
+with the same source but different destinations layer one pad
+onto two voices. MIDI Learn stays on the type the user already
+picked instead of yanking back to Note → CC, so capturing a
+source note for a Note → Note row works on the first try.
+
+The **Hold plugin** grows a second latch mode. A new
+**Toggle notes** button at the top of its config card switches
+from the existing chord-latch behaviour into per-note toggle:
+the first press of a note latches it on, the next press of the
+same note releases it, and the keyboard's own note-offs are
+ignored. The Release Note keeps working as an "all off" trigger
+across every latched note. Flipping the mode mid-session releases
+everything currently sounding so the new mode starts clean. The
+chord-latch default is unchanged — existing Hold instances keep
+their behaviour.
+
+First-time setup gets a **pre-built RaspiMIDIHub OS image**.
+Flash the image with Raspberry Pi Imager, fill in WiFi / username
+/ SSH key in the wizard, boot the Pi, and the first-boot
+installer pulls the latest `install.sh` and brings the hub up
+unattended — typically inside five minutes. The image stays valid
+across many code releases because it only carries the bootstrap;
+each first boot fetches whatever is current. A custom-repository
+manifest at `image/os-list.json` makes "RaspiMIDIHub OS" appear
+in the Pi Imager OS picker. An `apply-wifi-country` first-boot
+oneshot works around an RPi OS Trixie + NetworkManager bug where
+the Imager's WiFi country in `cmdline.txt` doesn't actually
+unblock the radio, so WiFi-only setups come up on their own. The
+ACT LED reports install progress (heartbeat → blink → solid →
+reboot, with a one-flash-per-second SOS for failure) so a user
+without a screen knows what's happening. `make image` and
+`make image-release IMAGE_TAG=image-YYYY-MM-DD` build and publish
+the bootstrap image from the build host.
+
+
+2026-05-14 — Version 3.1.3
+
+Live recording on the Tracker becomes channel-aware. A new
+**Auto Ch.** wheel on the Tracker config (Off / 1..16, default
+**Off**) designates one MIDI channel that keeps the historic
+cursor-relative recording — notes on it land on the cursor
+track and chord-spread across consecutive tracks up to T8.
+Every other incoming channel now routes by channel match:
+notes on channel *N* land on whichever track is configured
+for *N* (T1..T8 in the Track Channels group). When two or
+more tracks share a channel, a polyphonic chord on that
+channel fills them in T1→T8 order. Channels that match
+neither Auto Ch. nor any configured track are silently
+dropped — no recording, no pass-through — so you can pick a
+track just by switching channels on the keyboard, with "wrong
+channel" giving instant silent feedback.
+
+Chord detection moves from a fixed 10 ms window to a held-note
+gate. A chord stays open as long as **any** played key is
+still held; the next chord only opens (and the cursor only
+auto-advances) when every key has been released and a new
+note-on arrives. Slow-played chords no longer collapse into
+sequences, and a fast arpeggio still records as a sequence
+because each note's note-off closes the chord. A ~2-second
+stale-timeout recovers automatically if a note-off goes
+missing.
+
+Manual Play now pre-rolls by ~50 ms before the first row
+sounds, so the first row plays its full length even on a cold
+ALSA output queue. External MIDI Start is unaffected — that
+path is already aligned to upstream timing.
+
+
+2026-05-13 — Version 3.1.2
+
+The Tracker grows up into a clock master. The single "Send Clock +
+Transport" toggle is split into two independent ones — **Send
+Clock** and **Send Transport** — and Send Clock now runs an
+internal 24-PPQ generator at the configured **BPM** (40--300, new
+wheel visible while Send Clock is on). The Tracker drives its own
+playhead from that generator, emits clock to OUT, and ignores
+external clock while it's the master, so downstream gear never
+sees two competing sources. Send Transport stays a forwarder of
+START / STOP / CONTINUE in both directions; either toggle works
+alone or together. Configs saved with the legacy `send_clock=True`
+migrate to both new flags on, preserving the old behaviour.
+
+The on-screen Play / Stop buttons now correctly emit their own
+START / STOP / CONTINUE to OUT (gated by Send Transport), so
+downstream slaves bar-align with the Tracker whether the
+transport originated upstream or inside the Tracker.
+
+Small UI quality-of-life: the Tracker's Plugin Config panel gets
+the same maximize (double-arrow) shortcut that controllers have —
+one tap jumps straight to the fullscreen Play tab. Mirrors the
+existing pencil shortcut on the Play bar that jumps back into the
+Plugin Config.
+
+
+2026-05-04 — Version 3.0.5
+
+The arpeggiator just grew up. Three changes that turn a static
+note-cycler into a live-programmable performance instrument:
+
+- Sustain pedal (CC 64) is now a temporary Hold. Press the
+  pedal and the keys you release stay arping; lift it and only the
+  notes you're physically holding right now survive. Stack a chord,
+  pedal down, release the keys, jam new notes on top — when you
+  lift the pedal, only what's currently under your fingers keeps
+  playing. CC 64 respects the existing Arp Ch filter and is
+  consumed (not passed through). Same effect for every pattern
+  mode.
+- New notes play on the very next step. Hold C E G in `up`
+  pattern, mid-cycle press D — D fires on the next tick and the
+  arp continues from there, instead of starting over from the
+  bottom. Pattern-aware seek so up / down / up-down / as-played all
+  behave naturally.
+- New `programmed` pattern — live step-sequencer mode. Each
+  keypress writes the next-to-fire step slot; multiple presses
+  between ticks fan into consecutive slots (chord-spread); slots
+  persist while any key is held or sustain is down, and clear when
+  everything's released. The StepEditor renders the loaded note
+  name (C4, F#3, …) under each step square. Disabled steps are
+  skipped on write so a muted step never silently swallows an
+  assignment. Multi-octave plays the slot sequence at +12 / +24 /
+  …  on successive cycles.
+
+Together: hold a chord and the sustain pedal, release the chord,
+keep playing — sustained notes loop. Punch new notes in `programmed`
+mode and watch them overwrite slots in real time as the cycle
+catches up. Lift everything, the phrase ends. Press a single key,
+a new one starts. Live performance, no preset switching.
+
+
+2026-05-03 — Version 3.0.1
+
+Numbered 3.0.1 (skipping 3.0.0) because Debian's version comparator
+treats `3.0.0a2-1` as **greater** than `3.0.0-1` — without an
+explicit `~` separator the alpha trailer counts as a newer suffix.
+Anyone testing the 3.0.0a2 alpha would have seen apt refuse the
+upgrade to 3.0.0 as a downgrade.

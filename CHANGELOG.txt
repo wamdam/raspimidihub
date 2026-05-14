@@ -1,422 +1,125 @@
 RaspiMIDIHub Changelog
 
 User-visible changes. Short tagged one-liners, no code or commit
-hashes. Tags: Added, Improved, Fix, Changed, Removed.
+hashes. Tags: Added, Improved, Fix, Changed, Removed. For the
+prose narrative behind larger changes, see CHANGELOG_EXTENSIVE.txt.
 
 
 Unreleased
 
-- Added: Settings → Display → **Layout density** dropdown with
-  **Default** and **Small screen (tighter)**. Small mode trims the
-  header, bottom-nav, page padding, controller bar and tracker
-  keypad so the UI fits a 360-px phone without clipping. Per-device
-  (stored in the browser, not the saved config) — a tablet and a
-  phone hitting the same hub can pick different densities.
-- Improved: Tracker on-screen **Shift** button is now a tap-toggle
-  instead of press-and-hold. One tap engages selection mode and
-  keeps it engaged across cursor moves; a second tap releases it.
-  The keyboard `Shift` key still works as press-and-hold (natural
-  for hardware modifiers). Removes the multi-touch flakiness where
-  a small finger drift while holding Shift on screen would fire
-  pointerleave and silently drop the selection mid-edit.
-- Fix: Tracker selection no longer breaks when the cursor crosses
-  the row-0 / row-F boundary. While Shift is engaged, Up/Down wrap
-  inside the current page instead of paging — so the cursor and
-  the selection anchor stay on the same page and the selection
-  rectangle survives. Without Shift, cursor wrap still steps to
-  the previous/next page as before.
-- Fix: Tracker `End` on row 0 no longer stops playback. A page
-  whose first row is `End` is treated as fully muted -- the
-  playhead keeps ticking silently so a user can drop a note
-  into a cell live and have it pick up on the next clock,
-  without re-pressing Play. Queued pattern switches still fire
-  on the wrap, so a "muted" pattern can still hand off to the
-  next slot at the boundary.
-- Fix: Manual PDF no longer clips plugin screenshots. The
-  appendix is dense with tall portrait phone screenshots; the
-  previous figure-placement policy forced them to render at
-  their source position even when there wasn't room, cutting
-  off the bottom of the panel (and sometimes the next section
-  heading). Figures now float to the top of the closest page
-  that fits them, or to a dedicated float page when they're
-  too tall to share with text. Captions intact, no more
-  cropping; some figures land one page after their section.
+- Added: Settings → Display → Layout density dropdown (Default / Small screen). Tightens chrome on a 360 px phone; per-device, stored in the browser.
+- Improved: Tracker on-screen Shift is a tap-toggle. Hardware Shift stays press-and-hold.
+- Fix: Tracker selection survives row-0 / row-F wrap (Up/Down wraps inside the current page while Shift is engaged).
+- Fix: Tracker End on row 0 keeps the playhead ticking instead of stopping; queued pattern switches still fire on the wrap.
+- Fix: Manual PDF figures float to the next-fitting page instead of clipping at the bottom of a packed page.
 
 
 2026-05-14 — Version 3.1.5
 
-The Tracker grows a hands-free pattern switcher. A new
-**Pattern Ctrl Ch** wheel on its config panel (default Off, set
-to a MIDI channel 1--16 to enable) reserves a whole channel for
-pattern control. When enabled, a Pattern Notes group appears
-with eight learnable **P1..P8** NoteSelects -- one trigger note
-per pattern slot. Pressing a configured note on the control
-channel behaves identically to an on-screen Tap: queued to the
-next page-0 boundary while playing, immediate while stopped.
-The on-screen blink during the queued window mirrors a press, so
-a player can tell at a glance whether a switch is locked in or
-still pending. The reserved channel drops everything else
-end-to-end -- notes, note-offs, CCs -- so a controller's
-pattern-control channel cannot bleed into recorded tracks. If a
-control channel and Auto Ch. or a per-track channel overlap,
-control wins.
-
-A new **Pitch CC** plugin turns a keyboard into a chromatic
-player for synths and samplers whose pitch is controlled by a
-Control Change rather than the MIDI note number -- the Korg
-Volca Sample being the canonical example (CC 49 = sample
-playback rate). For every Note On, the plugin first emits a CC
-change whose value is `Base CC Value + (played_note - Base
-Note)`, clamped to 0..127, then forwards the Note On itself with
-velocity preserved. The CC always goes out *before* the Note On
-because synths like the Volca Sample latch the pitch CC at
-trigger time -- reversed order would play every first note at
-the previous pitch. Note Off forwards without a CC; the synth
-holds the last pitch until the next trigger overwrites it. Drop
-the plugin between keyboard and Volca, set Base Note = C-3 /
-Out CC# = 49 / Base Val = 64, and the whole keyboard plays the
-sample chromatically. The plugin lives under
-**Add → Plugin → Pitch CC** alongside the other note
-transformations.
-
-The image-flow docs on the README and chapter 3 are reshaped
-around the simpler download-the-image path now that the
-bootstrap image is stable. The custom-repository URL still
-works -- it just moves below the direct-download instructions
-into a collapsible, since the only Pi Imager that picks it up
-is the 2.0+ beta.
-
-A small enabling change: `Group` params now support
-`visible_when` the same way individual params do, so a whole
-config group can hide entirely until its enabling param is set.
-This is what makes the Tracker's Pattern Notes group appear and
-disappear with Pattern Ctrl Ch.
+- Added: Tracker Pattern Ctrl Ch — reserve a MIDI channel (Off / 1..16) for pattern switching, with 8 learnable P1..P8 trigger notes. Control channel drops everything else end-to-end.
+- Added: Pitch CC plugin — emits a pitch CC before every Note On for synths whose pitch is a Control Change (e.g. Volca Sample CC 49). Add → Plugin → Pitch CC.
+- Added: Group params support visible_when, so a whole config group can hide until its enabling param is set.
+- Changed: README + chapter 3 reshaped around the OS image bootstrap; Pi-Imager custom-repository URL moves into a collapsible.
 
 
 2026-05-14 — Version 3.1.4
 
-A fifth mapping type, **Note → Note**, lands on the filter
-panel. Pick a source note + channel and a destination note +
-channel; every matching Note On / Note Off is rewritten to the
-new note on the new channel, with velocity passed through
-unchanged. The use case is pad controllers that emit a different
-note per pad on one MIDI channel, feeding a sampler that expects
-the same trigger note (typically C-3 = 60) on a different
-channel per voice — one mapping per pad rewires the whole
-controller. Fan-out works like the other types: two mappings
-with the same source but different destinations layer one pad
-onto two voices. MIDI Learn stays on the type the user already
-picked instead of yanking back to Note → CC, so capturing a
-source note for a Note → Note row works on the first try.
-
-The **Hold plugin** grows a second latch mode. A new
-**Toggle notes** button at the top of its config card switches
-from the existing chord-latch behaviour into per-note toggle:
-the first press of a note latches it on, the next press of the
-same note releases it, and the keyboard's own note-offs are
-ignored. The Release Note keeps working as an "all off" trigger
-across every latched note. Flipping the mode mid-session releases
-everything currently sounding so the new mode starts clean. The
-chord-latch default is unchanged — existing Hold instances keep
-their behaviour.
-
-First-time setup gets a **pre-built RaspiMIDIHub OS image**.
-Flash the image with Raspberry Pi Imager, fill in WiFi / username
-/ SSH key in the wizard, boot the Pi, and the first-boot
-installer pulls the latest `install.sh` and brings the hub up
-unattended — typically inside five minutes. The image stays valid
-across many code releases because it only carries the bootstrap;
-each first boot fetches whatever is current. A custom-repository
-manifest at `image/os-list.json` makes "RaspiMIDIHub OS" appear
-in the Pi Imager OS picker. An `apply-wifi-country` first-boot
-oneshot works around an RPi OS Trixie + NetworkManager bug where
-the Imager's WiFi country in `cmdline.txt` doesn't actually
-unblock the radio, so WiFi-only setups come up on their own. The
-ACT LED reports install progress (heartbeat → blink → solid →
-reboot, with a one-flash-per-second SOS for failure) so a user
-without a screen knows what's happening. `make image` and
-`make image-release IMAGE_TAG=image-YYYY-MM-DD` build and publish
-the bootstrap image from the build host.
+- Added: Note → Note mapping — rewrite source note+channel to destination note+channel, velocity passed through. Fifth mapping type. Fan-out works like the other types.
+- Added: Hold plugin Toggle notes mode — per-note latch (first press on, second press off). Chord-latch default unchanged.
+- Added: Pre-built RaspiMIDIHub OS image for first-time setup. Flash with Pi Imager; first boot pulls install.sh unattended.
+- Added: ACT-LED install progress codes (heartbeat → blink → solid → reboot, SOS for failure).
+- Added: make image and make image-release IMAGE_TAG=… build and publish the bootstrap image.
+- Fix: MIDI Learn stays on the user-picked mapping type (was yanking back to Note → CC).
+- Fix: WiFi-only first boot on RPi OS Trixie — `apply-wifi-country` oneshot unblocks the radio that NetworkManager would otherwise leave rfkill'd.
 
 
 2026-05-14 — Version 3.1.3
 
-Live recording on the Tracker becomes channel-aware. A new
-**Auto Ch.** wheel on the Tracker config (Off / 1..16, default
-**Off**) designates one MIDI channel that keeps the historic
-cursor-relative recording — notes on it land on the cursor
-track and chord-spread across consecutive tracks up to T8.
-Every other incoming channel now routes by channel match:
-notes on channel *N* land on whichever track is configured
-for *N* (T1..T8 in the Track Channels group). When two or
-more tracks share a channel, a polyphonic chord on that
-channel fills them in T1→T8 order. Channels that match
-neither Auto Ch. nor any configured track are silently
-dropped — no recording, no pass-through — so you can pick a
-track just by switching channels on the keyboard, with "wrong
-channel" giving instant silent feedback.
-
-Chord detection moves from a fixed 10 ms window to a held-note
-gate. A chord stays open as long as **any** played key is
-still held; the next chord only opens (and the cursor only
-auto-advances) when every key has been released and a new
-note-on arrives. Slow-played chords no longer collapse into
-sequences, and a fast arpeggio still records as a sequence
-because each note's note-off closes the chord. A ~2-second
-stale-timeout recovers automatically if a note-off goes
-missing.
-
-Manual Play now pre-rolls by ~50 ms before the first row
-sounds, so the first row plays its full length even on a cold
-ALSA output queue. External MIDI Start is unaffected — that
-path is already aligned to upstream timing.
+- Added: Tracker Auto Ch. wheel — one MIDI channel keeps cursor-relative recording; other channels route by channel match to T1..T8. Unmatched channels are silently dropped.
+- Improved: Tracker chord detection — held-note gate replaces the 10 ms window. Chords stay open while any key is held; fast arpeggios still record as a sequence.
+- Improved: Manual Play pre-rolls ~50 ms so the first row plays its full length on a cold ALSA queue. External MIDI Start unaffected.
 
 
 2026-05-13 — Version 3.1.2
 
-The Tracker grows up into a clock master. The single "Send Clock +
-Transport" toggle is split into two independent ones — **Send
-Clock** and **Send Transport** — and Send Clock now runs an
-internal 24-PPQ generator at the configured **BPM** (40--300, new
-wheel visible while Send Clock is on). The Tracker drives its own
-playhead from that generator, emits clock to OUT, and ignores
-external clock while it's the master, so downstream gear never
-sees two competing sources. Send Transport stays a forwarder of
-START / STOP / CONTINUE in both directions; either toggle works
-alone or together. Configs saved with the legacy `send_clock=True`
-migrate to both new flags on, preserving the old behaviour.
-
-The on-screen Play / Stop buttons now correctly emit their own
-START / STOP / CONTINUE to OUT (gated by Send Transport), so
-downstream slaves bar-align with the Tracker whether the
-transport originated upstream or inside the Tracker.
-
-Small UI quality-of-life: the Tracker's Plugin Config panel gets
-the same maximize (double-arrow) shortcut that controllers have —
-one tap jumps straight to the fullscreen Play tab. Mirrors the
-existing pencil shortcut on the Play bar that jumps back into the
-Plugin Config.
+- Added: Tracker becomes a clock master. Send Clock runs an internal 24-PPQ at the configured BPM; Tracker ignores external clock while master.
+- Added: BPM wheel on the Tracker (40..300), visible while Send Clock is on.
+- Changed: Send Clock + Transport split into independent Send Clock and Send Transport toggles. Legacy configs migrate to both on.
+- Improved: On-screen Play / Stop emit START / STOP / CONTINUE to OUT (gated by Send Transport).
+- Improved: Tracker Plugin Config gets the maximize (double-arrow) shortcut — one tap jumps to fullscreen Play.
 
 
 2026-05-13 — Version 3.1.1
 
-- Added: Tracker patterns — 8 numbered pattern slots below the
-  action row. Each pattern stores a full grid (pages + cells); the
-  per-track channels, BPM, and Send Clock + Transport toggle stay
-  on the Tracker instance. Tap a slot to switch: stopped = load
-  immediately (cursor to page 0 row 0); playing = queue the switch
-  for the next page-0 row-0 boundary, with the queued slot
-  blinking until it fires. Shift+Tap switches immediately while
-  playing, preserving the playhead with a page-0 fallback when
-  the new pattern is shorter. Long-press (or right-click) opens
-  a slot context menu: Overwrite-from-selected and Clear pattern.
-  Existing Tracker instances migrate their current grid into
-  slot 1 on first start; slots 2..8 begin empty.
-- Added: Tracker multi-cell selection → Transpose wheel. While a
-  Shift-extended selection is active the keypad's note / cc
-  controls swap for a single TRANSPOSE wheel (-24..+24). Each tick
-  shifts every real-pitch note inside the selection by N semitones;
-  CC cells are left untouched. The wheel resets to 0 when the
-  selection changes or clears, and the panel returns to the
-  note / cc keypad as soon as the selection collapses to a single
-  cell.
-- Added: Tracker `o` key writes an explicit Note-Off into the
-  focused cell and auto-advances the cursor, mirroring the
-  pitch-typing flow.
-- Added: Add Device panel now groups types into four sections --
-  Plugins / Controllers / Play / Bluetooth -- matching the runtime
-  taxonomy and the manual chapter 9.7. Controller descriptions
-  drop the cosmetic "(defaults CC ...)" suffix.
-- Improved: Cut / Copy / Paste / Clear confirmations in the Tracker
-  help line are now sticky for 2 seconds -- a noisy stream of
-  wheel-feedback messages won't drown the "Copied page" toast
-  before the user has a chance to read it.
-- Fix: Pattern slot data is now mirrored from live edits via the
-  live-record path too (was: only the API edit path updated the
-  slot, so a switch-away + switch-back lost notes played in during
-  recording).
-- Fix: TrackerGrid schema now declares the `patterns` storage
-  array as a recognised param key, so the host's stranded-param
-  tidy doesn't strip it on plugin (re)start. Was the reason the
-  first 3.1.0+patterns deploy looked like "switching does nothing"
-  -- the patterns array was being deleted between deploys.
-- Fix: Direct-vs-filtered cell colour wording in the manual --
-  direct cells render in the brand red, not "blue" as the manual
-  said. Filtered/mapped cells remain purple. Affects chapters 4,
-  9, and the mapping-reference appendix.
-- Changed: Manual chapter 9.7 (Add Menu) reflects the new four-way
-  grouping; chapter 11.10 drops the Tracker from the 16-plugin
-  count (now 15, with the Tracker promoted to its own chapter via
-  the Play tab). Chapter 7.5 (Quick Start → Add a Plugin) mentions
-  the Play section.
-- Removed: pyproject.toml. The package isn't published; the .deb
-  build doesn't use it; the dev .venv works fine with pytest.ini
-  + ruff.toml + PYTHONPATH=src. `make test`, `make lint`,
-  `make fmt`, `make screenshots` no longer pip-install the package
-  into the venv.
+- Added: Tracker patterns — 8 numbered slots below the action row. Tap to switch (queued to the next page-0 boundary while playing). Shift+Tap switches immediately. Long-press opens Overwrite / Clear.
+- Added: Tracker multi-cell selection → TRANSPOSE wheel (-24..+24 semitones). Note cells shift; CC cells are left untouched.
+- Added: Tracker `o` key writes an explicit Note-Off and auto-advances the cursor.
+- Added: Add Device panel groups types into Plugins / Controllers / Play / Bluetooth sections.
+- Improved: Tracker help-line confirmations (Cut / Copy / Paste / Clear) are sticky for 2 s so wheel feedback doesn't drown them.
+- Fix: Pattern-slot data mirrors live-record edits (was: only the API edit path updated the slot).
+- Fix: TrackerGrid `patterns` param survives plugin (re)start — host's stranded-param tidy no longer strips it.
+- Fix: Manual cell-colour wording — direct cells are brand red (not "blue"); filtered/mapped stay purple.
+- Changed: Manual chapter 9.7 reflects the four-way Add-Menu grouping; 11.10 drops the Tracker from the plugin count.
+- Removed: pyproject.toml. `make test/lint/fmt/screenshots` no longer pip-install the package into the venv.
 
 
 2026-05-11 — Version 3.1.0
 
-- Added: User Manual — a full 100+ page PDF reference shipped with
-  every release. Cover, branded design, every screen and plugin
-  documented. Linked from the README, the website, and the GitHub
-  release page (`raspimidihub-manual.pdf`). Markdown source under
-  `docs/manual/`; built with `make manual`.
-- Added: Tracker — 8-voice step sequencer on the new "Play" panel.
-  16 hex-numbered rows × 8 voice columns, up to 16 pages linearly
-  chained, looping back to page 0. Per voice cell: Note (3-char
-  pitch / Off / End / hold), Velocity (hex), CC# (hex or `.`), CC
-  Val (hex). Note and CC events fire independently per step.
-- Added: Per-track output channel on the Tracker — T1..T8 each
-  route to their own MIDI channel, configured in the device-detail
-  panel. Track header on the play surface reads "T1 [Ch 3]" etc.
-- Added: Play / Stop toggle in the Tracker header (Space toggles).
-  Manual transport without an external clock+Start.
-- Added: "Send Clock + Transport" toggle on the Tracker — when on,
-  forwards incoming CLOCK / START / STOP / CONTINUE to OUT so
-  downstream gear can slave off the Tracker instance.
-- Added: Live recording on the Tracker. Notes / CCs played in
-  while playback runs land on the row whose events are currently
-  sounding (cursor stays put); when stopped, step-record at the
-  cursor with auto-advance after each note.
-- Added: Tracker selection, Cut / Copy / Paste, keyboard typing
-  (q..u + 2,3,5,6,7 for chromatic note entry — QWERTY *and*
-  QWERTZ both work via event.code). Shift held + cursor move
-  extends a sub-cell rectangle; Cut removes the area into the
-  paste buffer; Shift+Cut/Copy targets the whole page. Paste
-  refuses to overlay a note-column buffer onto a cc-column cursor.
-- Added: New "Play" bottom-nav entry replaces Presets. Hosts the
-  Tracker (and any future SURFACE_KIND="play" plugins) alongside
-  the existing Controllers carousel.
-- Added: Note preview — turning the Note wheel or typing on the
-  keyboard fires the picked note out the Tracker's OUT port so
-  the user hears what they're entering. Auto-released after 300 ms.
-- Removed: Presets page and the underlying save/load/export/import
-  API. Not in use very often, cluttered the bottom-nav. Existing
-  configs with a stale "presets" key still load cleanly; the key
-  is dropped on first save.
-- Fix: Transient plugin params (cursor / playhead / cmd_play /
-  cmd_stop / drop fire signals, …) no longer get saved into
-  config.json — a mid-play snapshot used to replay cmd_play=True
-  on restart and re-fire whatever action the trigger signalled.
+- Added: User Manual — full 100+ page PDF shipped with every release. Markdown source under `docs/manual/`; built with `make manual`.
+- Added: Tracker — 8-voice step sequencer on the new Play tab. 16 rows × 8 voices × up to 16 pages, looping back to page 0. Per-cell Note / Velocity / CC# / CC Val.
+- Added: Tracker per-track MIDI channel (T1..T8) — Track Channels group in the config panel.
+- Added: Tracker Play / Stop toggle in the header (Space). Manual transport without an external clock.
+- Added: Tracker "Send Clock + Transport" toggle — forwards CLOCK / START / STOP / CONTINUE to OUT.
+- Added: Tracker live recording — playing-in notes land on the sounding row; step-record at the cursor when stopped, auto-advance after each note.
+- Added: Tracker selection (Shift + cursor), Cut / Copy / Paste / typed note entry (QWERTY + QWERTZ via event.code).
+- Added: Play bottom-nav entry replaces Presets. Hosts the Tracker and future SURFACE_KIND="play" plugins.
+- Added: Tracker note preview — turning the Note wheel or typing fires the picked note on OUT (auto-released after 300 ms).
+- Removed: Presets page and save/load/export/import API. Stale `presets` config keys load cleanly and drop on first save.
+- Fix: Transient plugin params (cursor / playhead / cmd_play / drop-fire signals) no longer get saved into config.json.
 
 
 2026-05-08 — Version 3.0.7
 
-- Fix: Arpeggiator programmed-mode slots now clear reliably when
-  every key is released. The "all released" gate trusted an
-  internal pressed-key tally that could drift out of sync (any
-  note-on whose paired note-off didn't reach the plugin pinned
-  the gate forever — repro path: rate-trigger or channel filter
-  toggled mid-press, or any bridge that dropped an event); a
-  pedal press+release cleared the slots but the next fresh press
-  fell back into the same hold. Now gates on whether a live slot
-  still maps to a held key, so a stale tally entry can't keep the
-  pattern ringing.
-- Improved: Arpeggiator config tightens to a single CONTROLS
-  group — Steps · Accent Vel. · Gate % · Octaves sit in one row
-  above the step grid, with Sync (and BPM when Free) below. Was
-  split across two groups; the row above the steps was the
-  natural place to read the four shapers at a glance.
+- Fix: Arpeggiator programmed-mode slots clear reliably when every key is released. Gates on held-slot state instead of a pressed-key tally that could drift.
+- Improved: Arpeggiator config — single CONTROLS group with Steps · Accent Vel. · Gate % · Octaves in one row above the step grid; Sync (and BPM when Free) below.
 
 
 2026-05-07 — Version 3.0.6
 
-Two browser-only UI fixes — touch was already fine.
-
-- Fix: MIDI Test Sender keyboard now drag-scrolls between octaves
-  in desktop browsers. The mouse path early-returned on any key
-  hit, so the only place a horizontal drag scrolled was the empty
-  strip below the keys; mouse now follows the same threshold-based
-  state machine as touch (press plays, drag past threshold scrolls
-  and releases the note).
-- Fix: Arpeggiator step semitone offsets no longer reset sibling
-  slots when you adjust them in the browser. MiniWheel's native
-  drag listener was bound once with a stale `onChange`, so each
-  drag rebuilt the step array from the original empty value and
-  wiped every other slot. Now uses an `onChange` ref like the
-  other plugin controls.
+- Fix: MIDI Test Sender keyboard drag-scrolls between octaves in desktop browsers (mouse path now follows the same threshold state machine as touch).
+- Fix: Arpeggiator step semitone offsets no longer reset sibling slots when adjusted in the browser.
 
 
 2026-05-04 — Version 3.0.5
 
-The arpeggiator just grew up. Three changes that turn a static
-note-cycler into a live-programmable performance instrument:
-
-Arpeggiator
-- Added: Sustain pedal (CC 64) is now a temporary Hold. Press the
-  pedal and the keys you release stay arping; lift it and only the
-  notes you're physically holding right now survive. Stack a chord,
-  pedal down, release the keys, jam new notes on top — when you
-  lift the pedal, only what's currently under your fingers keeps
-  playing. CC 64 respects the existing Arp Ch filter and is
-  consumed (not passed through). Same effect for every pattern
-  mode.
-- Added: New notes play on the very next step. Hold C E G in `up`
-  pattern, mid-cycle press D — D fires on the next tick and the
-  arp continues from there, instead of starting over from the
-  bottom. Pattern-aware seek so up / down / up-down / as-played all
-  behave naturally.
-- Added: New `programmed` pattern — live step-sequencer mode. Each
-  keypress writes the next-to-fire step slot; multiple presses
-  between ticks fan into consecutive slots (chord-spread); slots
-  persist while any key is held or sustain is down, and clear when
-  everything's released. The StepEditor renders the loaded note
-  name (C4, F#3, …) under each step square. Disabled steps are
-  skipped on write so a muted step never silently swallows an
-  assignment. Multi-octave plays the slot sequence at +12 / +24 /
-  …  on successive cycles.
-
-Together: hold a chord and the sustain pedal, release the chord,
-keep playing — sustained notes loop. Punch new notes in `programmed`
-mode and watch them overwrite slots in real time as the cycle
-catches up. Lift everything, the phrase ends. Press a single key,
-a new one starts. Live performance, no preset switching.
+- Added: Arpeggiator — sustain pedal (CC 64) acts as a temporary Hold. Released keys stay arping until the pedal lifts; CC 64 is consumed, not passed through.
+- Added: Arpeggiator — new notes fire on the next step (pattern-aware seek instead of pattern restart).
+- Added: Arpeggiator programmed pattern — live step-sequencer mode. Keypresses write the next-to-fire slot; chord-spread on simultaneous presses; slots persist while any key or pedal is down.
 
 
 2026-05-04 — Version 3.0.4
 
-- Improved: Drop button fade now interpolates XY pad cells too —
-  the dot animates from current position toward the captured target
-  during the fade window, with both X and Y CCs emitted per integer
-  step. Buttons stay discrete (half-fired makes no musical sense);
-  knobs / faders / wheels were already fading.
+- Improved: Drop button fade interpolates XY pad cells too. Both X and Y CCs emit per integer step during the fade window. Buttons stay discrete.
 
 
 2026-05-04 — Version 3.0.3
 
-- Fix: Update flow steps the system clock from an HTTP Date header
-  before any HTTPS request. The Pi has no RTC and our system-prepare
-  disables NTP, so on a cold boot the clock is stuck at last-shutdown
-  — TLS to api.github.com then failed with "certificate not yet
-  valid". HEAD against a plain-HTTP host (no TLS) reads the Date
-  header and steps CLOCK_REALTIME if drift > 60 s. Both the cabled
-  and transient-WiFi paths sync before probing.
+- Fix: Update flow steps the system clock from an HTTP Date header before TLS, so cold-boot installs no longer fail with "certificate not yet valid".
 
 
 2026-05-04 — Version 3.0.2
 
-- Fix: MIDI Learn on the Add Mapping panel — was waiting silently
-  forever because its EventSource never subscribed to `midi-activity`
-  under the per-view SSE subscription model. Now subscribes once the
-  connection event arrives, same shape as the NoteSelect Learn
-  button. Note / CC capture works again.
+- Fix: MIDI Learn on the Add Mapping panel — Note / CC capture works again (EventSource now subscribes to `midi-activity` under the per-view SSE model).
 
 
 2026-05-03 — Version 3.0.1
 
 Major release. Bluetooth MIDI, Controllers (Mixer 8 / FX 6 /
-Performance 16 / XY 4), drop buttons with bar-quantised fire, ALSA
-queue scheduling for sample-accurate plugin output, USB tethering,
-in-app updates with apt-resolved dependencies, per-device clock
-vetoes, hostapd via systemd, SysEx Sender plugin.
-
-Numbered 3.0.1 (skipping 3.0.0) because Debian's version comparator
-treats `3.0.0a2-1` as **greater** than `3.0.0-1` — without an
-explicit `~` separator the alpha trailer counts as a newer suffix.
-Anyone testing the 3.0.0a2 alpha would have seen apt refuse the
-upgrade to 3.0.0 as a downgrade.
+Performance 16 / XY 4), drop buttons with bar-quantised fire,
+ALSA queue scheduling, USB tethering, in-app updates with
+apt-resolved dependencies, per-device clock vetoes, hostapd via
+systemd, SysEx Sender plugin. (Numbered 3.0.1 to clear the
+3.0.0a2 alpha trailer — see CHANGELOG_EXTENSIVE.txt.)
 
 Bluetooth MIDI
 - Added: BLE-MIDI bridge — paired devices appear in the matrix with a
