@@ -692,9 +692,6 @@ class PluginBase:
         self._send_note_on_at = None
         self._send_note_off_at = None
         self._send_clock_at = None
-        self._send_start_at = None
-        self._send_stop_at = None
-        self._send_continue_at = None
         self._cancel_scheduled = None
         # Bulk SysEx output. Set by the host; the SysEx Sender plugin
         # uses this to stream a user-uploaded .syx file out the OUT port.
@@ -913,24 +910,6 @@ class PluginBase:
             self._send_clock_at(when_monotonic, tag)
         elif self._send_clock:
             self._send_clock()
-
-    def send_start_at(self, when_monotonic: float, tag: int = 0) -> None:
-        if self._send_start_at:
-            self._send_start_at(when_monotonic, tag)
-        elif self._send_start:
-            self._send_start()
-
-    def send_stop_at(self, when_monotonic: float, tag: int = 0) -> None:
-        if self._send_stop_at:
-            self._send_stop_at(when_monotonic, tag)
-        elif self._send_stop:
-            self._send_stop()
-
-    def send_continue_at(self, when_monotonic: float, tag: int = 0) -> None:
-        if self._send_continue_at:
-            self._send_continue_at(when_monotonic, tag)
-        elif self._send_continue:
-            self._send_continue()
 
     def cancel_scheduled(self, tag: int) -> None:
         """Remove all pending queued events tagged `tag` from this plugin's

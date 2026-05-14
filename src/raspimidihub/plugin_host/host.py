@@ -287,12 +287,6 @@ class PluginHost:
                                        tag=tag, channel=ch, note=note, velocity=0)
         instance.plugin._send_clock_at = lambda when, tag=0: \
             alsa_client.send_event_at(when, MidiEventType.CLOCK, tag=tag)
-        instance.plugin._send_start_at = lambda when, tag=0: \
-            alsa_client.send_event_at(when, MidiEventType.START, tag=tag)
-        instance.plugin._send_stop_at = lambda when, tag=0: \
-            alsa_client.send_event_at(when, MidiEventType.STOP, tag=tag)
-        instance.plugin._send_continue_at = lambda when, tag=0: \
-            alsa_client.send_event_at(when, MidiEventType.CONTINUE, tag=tag)
         instance.plugin._cancel_scheduled = lambda tag: alsa_client.cancel_tag(tag)
 
         # Bulk SysEx output for the SysEx Sender plugin. Routed straight

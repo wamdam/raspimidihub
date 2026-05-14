@@ -20,6 +20,5 @@ export { PluginChannelSelect } from './components/channelselect.js';
 export { PluginGroup } from './components/group.js';
 export { DisplayMeter, DisplayScope } from './components/display.js';
 export {
-    renderParam, renderParamGroup, renderParamList, INLINE_TYPES,
-    PluginConfigPanel,
+    renderParam, renderParamList, PluginConfigPanel,
 } from './components/renderparam.js';

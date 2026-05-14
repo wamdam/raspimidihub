@@ -6,7 +6,7 @@ import { html, tickFeedback, thudFeedback, _activeWheelTouch } from './common.js
 import { useEffect, useRef } from '../lib/hooks.module.js';
 
 // =======================================================================
-// WHEEL — scrollable drum wheel (pixel-offset based, matching controls-demo.html)
+// WHEEL — scrollable drum wheel (pixel-offset based)
 // =======================================================================
 export function PluginWheel({ name, label, min, max, value, onChange, suffix, tickLabel, mini, wide }) {
     const containerRef = useRef(null);

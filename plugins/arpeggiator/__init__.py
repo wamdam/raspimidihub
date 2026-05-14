@@ -377,10 +377,10 @@ flips Rate, never plays."""
         return None
 
     def on_note_on(self, channel, note, velocity):
-        # Rate trigger notes are consumed: they set the Rate radio and
+        # Rate trigger notes are consumed: they set the Rate wheel and
         # do NOT join the held-notes set, so the trigger range can't
         # be accidentally arpeggiated. set_param broadcasts the change
-        # to the UI via SSE so the user sees the radio flip live.
+        # to the UI via SSE so the user sees the wheel tick over live.
         idx = self._rate_trigger_index(channel, note)
         if idx is not None:
             self.set_param("rate", idx)
