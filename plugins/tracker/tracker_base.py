@@ -49,6 +49,7 @@ import time
 from dataclasses import dataclass
 from typing import Any
 
+from raspimidihub.clock_gen import ScheduledClockGenerator
 from raspimidihub.plugin_api import (
     Button,
     ChannelSelect,
@@ -246,9 +247,10 @@ class TrackerBase(PluginBase):
     MAX_ROWS_PER_PAGE = 16
     PATTERN_COUNT = 8
 
-    # Internal clock generator (used in clock-master mode).
-    _CLOCK_TAG = 0xC10C  # tag for cancel_scheduled
-    _CLOCK_LOOKAHEAD_S = 0.5  # how far ahead we pre-schedule ticks
+    # ALSA-queue scheduled tag for the clock-master generator's
+    # pre-emitted burst. Distinct from other plugins' tags via the
+    # 0xC10C magic so cancel_scheduled() drops only our ticks.
+    _CLOCK_TAG = 0xC10C
 
     inputs = [
         "Notes (recorded into focused row at the cursor track + neighbours)",
@@ -511,14 +513,16 @@ class TrackerBase(PluginBase):
         self._chord_page = 0
         self._chord_row = 0
 
-        # Clock-master generator bookkeeping. Thread spawns on
-        # demand the first time send_clock turns on (or on_start
-        # if a restored config already had it set).
-        self._gen_running = False
-        self._gen_thread: threading.Thread | None = None
-        self._gen_next_tick_monotonic: float | None = None
+        # Clock-master generator. Wraps the shared ScheduledClockGenerator
+        # helper so the refill thread + the BPM-change re-anchor logic
+        # match the Master Clock plugin. start() is a no-op if send_clock
+        # is off; we always call it on_start to keep the lifecycle simple.
+        self._clock_gen = ScheduledClockGenerator(
+            self, bpm_getter=lambda: self._param_values.get("bpm"),
+            tag=self._CLOCK_TAG,
+        )
         if self._param_values.get("send_clock"):
-            self._start_clock_generator()
+            self._clock_gen.start()
 
         # Manual-Play pre-roll timer (see _PLAY_PREROLL_S). Holds the
         # threading.Timer that will fire on_transport_start ~50 ms
@@ -527,7 +531,7 @@ class TrackerBase(PluginBase):
         self._preroll_timer: threading.Timer | None = None
 
     def on_stop(self) -> None:
-        self._stop_clock_generator()
+        self._clock_gen.stop()
         self._cancel_play_preroll()
         self._silence_all()
         self._held_recording_keys.clear()
@@ -1093,8 +1097,8 @@ class TrackerBase(PluginBase):
     # Clock + transport routing
     #
     # Two independent toggles:
-    #   - send_clock     : Tracker = clock master. Internal generator
-    #                       (started in _start_clock_generator) emits
+    #   - send_clock     : Tracker = clock master. The shared
+    #                       ScheduledClockGenerator helper emits
     #                       24-PPQ clock at the configured BPM via
     #                       send_clock_at(); the host's ClockBus
     #                       loops that back as on_tick to drive the
@@ -1133,56 +1137,6 @@ class TrackerBase(PluginBase):
                 self.send_continue()
             except Exception:
                 pass
-
-    # ---- Clock-master generator thread ----
-    def _start_clock_generator(self) -> None:
-        if self._gen_running:
-            return
-        self._gen_running = True
-        self._gen_next_tick_monotonic = None
-        self._gen_thread = threading.Thread(
-            target=self._clock_refill_loop, daemon=True,
-        )
-        self._gen_thread.start()
-
-    def _stop_clock_generator(self) -> None:
-        if not self._gen_running:
-            return
-        self._gen_running = False
-        try:
-            self.cancel_scheduled(self._CLOCK_TAG)
-        except Exception:
-            pass
-        self._gen_next_tick_monotonic = None
-
-    def _clock_refill_loop(self) -> None:
-        """Schedule 24-PPQ clock ticks `LOOKAHEAD_S` ahead of wall-
-        clock time when send_clock is on. Mirrors the Master Clock
-        plugin's refill loop -- send_clock_at() drops the tick into
-        the ALSA queue with sub-millisecond jitter; the Python
-        sleep here only governs how often the queue is topped up."""
-        while self._gen_running:
-            bpm = self._param_values.get("bpm")
-            try:
-                bpm = max(40, min(300, int(bpm or 120)))
-            except (TypeError, ValueError):
-                bpm = 120
-            interval = 60.0 / bpm / 24.0
-            now = time.monotonic()
-            if (self._gen_next_tick_monotonic is None
-                    or self._gen_next_tick_monotonic < now):
-                self._gen_next_tick_monotonic = now + 0.001
-            target = now + self._CLOCK_LOOKAHEAD_S
-            while (self._gen_running
-                   and self._gen_next_tick_monotonic < target):
-                try:
-                    self.send_clock_at(
-                        self._gen_next_tick_monotonic, self._CLOCK_TAG,
-                    )
-                except Exception:
-                    pass
-                self._gen_next_tick_monotonic += interval
-            time.sleep(self._CLOCK_LOOKAHEAD_S * 0.5)
 
     # ================================================================
     # Manual transport — Play / Stop buttons in the play-page header
@@ -1237,22 +1191,19 @@ class TrackerBase(PluginBase):
             # Reset the trigger so a re-tap of the same slot fires.
             self.set_param("cmd_pattern_select", None)
         elif name == "send_clock":
-            # Spin the internal generator up / down. The generator
-            # thread is the only thing that calls send_clock_at, so
-            # toggling here cleanly starts / stops the OUT emission
-            # AND the loopback that drives our own playhead.
+            # Spin the shared clock generator up / down. The generator
+            # is the only thing that calls send_clock_at, so toggling
+            # here cleanly starts / stops the OUT emission AND the
+            # loopback that drives our own playhead.
             if value:
-                self._start_clock_generator()
+                self._clock_gen.start()
             else:
-                self._stop_clock_generator()
-        elif name == "bpm" and self._gen_running:
+                self._clock_gen.stop()
+        elif name == "bpm":
             # Drop the rest of the pre-scheduled burst and re-anchor
             # at the new tempo; the refill loop picks up from now.
-            try:
-                self.cancel_scheduled(self._CLOCK_TAG)
-            except Exception:
-                pass
-            self._gen_next_tick_monotonic = None
+            # No-op when the generator isn't running.
+            self._clock_gen.reanchor()
 
     # ================================================================
     # Pattern bank -- 8 stored grids per Tracker, with one selected

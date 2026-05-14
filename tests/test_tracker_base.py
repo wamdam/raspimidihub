@@ -1363,7 +1363,7 @@ def test_legacy_send_clock_migrates_to_both_flags():
     assert u._param_values["send_clock"] is False
     assert u._param_values["send_transport"] is False
     # Stop the generator threads on_start may have started.
-    t._stop_clock_generator()
+    t._clock_gen.stop()
 
 
 # =========================================================================
