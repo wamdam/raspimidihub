@@ -1138,6 +1138,21 @@ class TrackerBase(PluginBase):
             # flipped empty <-> non-empty. (Internal pages mutations
             # in live-record paths call the helper directly.)
             self._mirror_pages_to_selected_pattern(value)
+        elif name == "patterns":
+            # Restored configs land here: the host's _restore_instances
+            # runs on_start first (which seeds pattern_status against
+            # empty patterns), then set_param("patterns", saved) — and
+            # without this branch, only the selected slot ever got its
+            # status refreshed (via the "pages" mirror). All other
+            # non-empty slots stayed flagged empty and rendered
+            # dashed-outline despite holding data. Recompute the
+            # whole status array from the incoming `value` (not from
+            # _param_values, which the host already mirrors but in-
+            # process callers might not) so every slot's highlight
+            # matches the loaded content.
+            if isinstance(value, list):
+                status = [not self._is_empty_pattern(p) for p in value]
+                self.set_param("pattern_status", status)
         elif name == "cmd_pattern_select" and isinstance(value, dict):
             self._handle_pattern_command(value)
             # Reset the trigger so a re-tap of the same slot fires.

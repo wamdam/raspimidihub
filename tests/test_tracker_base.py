@@ -1431,6 +1431,27 @@ def test_pages_edit_mirrors_into_selected_pattern():
     assert all(s is False for s in t._param_values["pattern_status"][1:])
 
 
+def test_patterns_replace_refreshes_full_status():
+    """Restored configs land in on_param_change("patterns", saved_array)
+    AFTER on_start has already seeded pattern_status against empty
+    defaults. Without a "patterns" handler, only the currently-
+    selected slot ever got refreshed (via the pages mirror), so a
+    saved config with content in slot 1+ rendered dashed-empty
+    until the user touched it. The handler must recompute the
+    whole status array."""
+    t = _started()
+    filled = [_filled_page(track_count=4)]
+    new_patterns = (
+        [filled, filled, filled]
+        + [[empty_page(t.TRACK_COUNT, t.MAX_ROWS_PER_PAGE)]] * 5
+    )
+    t.on_param_change("patterns", new_patterns)
+    # Slots 0..2 carry data → True; slots 3..7 stay empty → False.
+    assert t._param_values["pattern_status"] == (
+        [True, True, True] + [False] * 5
+    )
+
+
 def test_tap_while_stopped_switches_immediately_and_resets_cursor():
     t = _started()
     # Seed two distinct patterns to make the switch observable.
