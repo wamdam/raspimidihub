@@ -159,29 +159,24 @@ body {
 .play-pager::-webkit-scrollbar { display: none; }
 .play-page-btn {
     position: absolute;
-    left: 12px;
-    right: 12px;
+    left: 0;
+    right: 0;
     z-index: 5;
     background: rgba(20, 22, 36, 0.92);
     border: 1px solid rgba(255,255,255,0.10);
     color: var(--text);
-    padding: 6px 10px;
+    padding: 8px 10px;
     font-size: 12px;
     font-weight: 500;
     cursor: pointer;
     backdrop-filter: blur(6px);
-    box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+    box-shadow: 0 1px 6px rgba(0,0,0,0.5);
+    border-left: none;
+    border-right: none;
 }
-.play-page-btn.up   { top:    4px; border-radius: 0 0 6px 6px; }
-.play-page-btn.down { bottom: calc(var(--pattern-strip-h, 42px) + 4px);
-                      border-radius: 6px 6px 0 0; }
+.play-page-btn.up   { top:    0; border-top: none; border-radius: 0 0 6px 6px; }
+.play-page-btn.down { bottom: 0; border-bottom: none; border-radius: 6px 6px 0 0; }
 .play-page-btn:hover { background: rgba(40, 42, 56, 0.95); }
-.play-pattern-strip {
-    flex: 0 0 auto;
-    padding: 6px 10px;
-    border-top: 1px solid rgba(255,255,255,0.08);
-    background: rgba(10, 12, 24, 0.4);
-}
 .pattern-strip {
     display: grid;
     grid-template-columns: repeat(8, 1fr);

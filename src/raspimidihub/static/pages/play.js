@@ -14,7 +14,6 @@ import { html, api } from '../ui/common.js';
 import { useEffect, useState, useCallback, useRef } from '../lib/hooks.module.js';
 import { useSSESubscription } from '../ui/sse-subscriptions.js';
 import { renderParamList } from '../components/renderparam.js';
-import { PluginPatternStrip } from '../components/patternstrip.js';
 import { usePluginParams } from '../ui/plugin-params.js';
 
 const SWIPE_MIN_PX = 50;
@@ -23,12 +22,16 @@ const SWIPE_MAX_MS = 700;
 // previous page's tail row is still in view after the tap.
 const PAGE_FACTOR = 0.8;
 
-function findPatternStrip(schema) {
-    if (!schema) return null;
+// Plugins that need pagination — currently identified by their
+// schema containing a `patternstrip` param. The Tracker doesn't
+// declare one and keeps its own internal scroll target, so it's
+// left out of the pager.
+function needsPager(schema) {
+    if (!schema) return false;
     for (const p of schema) {
-        if (p && p.type === 'patternstrip') return p;
+        if (p && p.type === 'patternstrip') return true;
     }
-    return null;
+    return false;
 }
 
 function PlaySurface({ instance, pluginData, pluginDisplays, clockPosition }) {
@@ -48,17 +51,10 @@ function PlaySurface({ instance, pluginData, pluginDisplays, clockPosition }) {
     const pagerRef = useRef(null);
     const [canUp, setCanUp] = useState(false);
     const [canDown, setCanDown] = useState(false);
-
-    // The pattern strip lives outside the paged param area, fixed at
-    // the bottom of the play surface (Tracker-style). Filter it out
-    // of the main param flow so it doesn't render twice.
-    const stripParam = pluginData ? findPatternStrip(pluginData.params_schema) : null;
-    const mainSchema = stripParam
-        ? (pluginData.params_schema || []).filter((p) => p !== stripParam)
-        : (pluginData?.params_schema);
+    const usePager = pluginData ? needsPager(pluginData.params_schema) : false;
 
     useEffect(() => {
-        if (!stripParam) return;
+        if (!usePager) return;
         const el = pagerRef.current;
         if (!el) return;
         let raf = 0;
@@ -85,7 +81,7 @@ function PlaySurface({ instance, pluginData, pluginDisplays, clockPosition }) {
             ro.disconnect();
             if (raf) cancelAnimationFrame(raf);
         };
-    }, [stripParam, pluginData?.id]);
+    }, [usePager, pluginData?.id]);
 
     const pageBy = useCallback((dir) => {
         const el = pagerRef.current;
@@ -107,29 +103,27 @@ function PlaySurface({ instance, pluginData, pluginDisplays, clockPosition }) {
         clockPosition,
     };
 
-    // Plugins without a PatternStrip (e.g. the Tracker, which has
-    // its own internal scroll target) keep the original layout.
-    if (!stripParam) {
+    // Plugins that don't declare a PatternStrip (e.g. the Tracker,
+    // which has its own internal scroll target) keep the original
+    // layout — no pager wrapper, no page buttons.
+    if (!usePager) {
         return html`<div class="controller-surface">
             ${renderParamList(pluginData.params_schema, pluginParams, onPluginParamChange, displayCtx)}
         </div>`;
     }
 
+    // Pattern strip renders inline at the end of the param flow (the
+    // plugin already lists it last in `params`). Pagination buttons
+    // float at the top / bottom of the visible viewport, conditional
+    // on overflow in that direction.
     return html`<div class="play-surface-wrap">
         <div class="play-pager" ref=${pagerRef}>
-            ${renderParamList(mainSchema, pluginParams, onPluginParamChange, displayCtx)}
+            ${renderParamList(pluginData.params_schema, pluginParams, onPluginParamChange, displayCtx)}
         </div>
         ${canUp ? html`<button class="play-page-btn up"
             onclick=${() => pageBy(-1)}>↑ More</button>` : null}
         ${canDown ? html`<button class="play-page-btn down"
             onclick=${() => pageBy(1)}>↓ More</button>` : null}
-        <div class="play-pattern-strip">
-            <${PluginPatternStrip}
-                name=${stripParam.name}
-                value=${pluginParams[stripParam.name]}
-                count=${stripParam.count || 8}
-                onChange=${onPluginParamChange} />
-        </div>
     </div>`;
 }
 
