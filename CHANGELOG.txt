@@ -16,6 +16,7 @@ Unreleased
 - Improved: Routing matrix row-header column is permanently narrow (~96 px) with middle-truncated labels (Velocity Equalizer 1 → Velo…ar 1) so the matrix gets the room. Tapping a row opens its context menu with the full label at the top.
 - Changed: Controller page scrolls vertically again — taller controller layouts no longer clip on short screens. Knob / wheel / fader drags still don't reach the page handler thanks to cell-level stopPropagation, so the horizontal-swipe between instances stays unambiguous.
 - Improved: Scale catalogue + nearest-in-scale quantiser moved to a shared `raspimidihub.scales` module so the Euclidean plugin and the Scale Remapper share one source of truth.
+- Fix: update-check no longer strands the Pi off-AP when NetworkManager is slow — an `nmcli connection reload` taking >5 s used to crash the WiFi switch and cancel the 180 s watchdog that should have brought the AP back. Reload calls now tolerate slow returns, the fallback restores AP on any client-mode error (return-False *or* raise), and the watchdog stays armed until wifi mode is verifiably back to AP.
 
 
 2026-05-14 — Version 3.1.6

@@ -342,3 +342,114 @@ class TestUpdateFetcher:
         # Tried to join, fallback already restored AP via WifiManager
         # itself — orchestrator just sees mode != "client".
         assert wifi_mgr.client_calls == [("Home", "wrong")]
+
+    def test_start_client_raising_restores_ap_and_keeps_watchdog_armed(
+            self, monkeypatch, tmp_path):
+        """Regression for #wifi-stuck-after-update-check.
+
+        A 5s `nmcli connection reload` cap was firing TimeoutExpired
+        while NM was busy, propagating out of start_client *and*
+        start_client_with_fallback, bypassing the AP-fallback. The
+        UpdateFetcher.run finally then cancelled the watchdog, leaving
+        the Pi stranded in client/unknown mode with the AP off.
+
+        Post-fix invariants this test pins down:
+          1. start_client_with_fallback raising still leads the
+             orchestrator to call _switch_to_ap (last-ditch restore).
+          2. If the Pi *isn't* back in AP mode after the orchestrator
+             exits, cancel_watchdog() is NOT called — let the watchdog
+             fire and force a service restart.
+        """
+        _redirect_status(monkeypatch, tmp_path)
+        monkeypatch.setattr(uf, "probe_internet", lambda timeout=4.0: False)
+        monkeypatch.setattr(uf, "schedule_watchdog", lambda reason: True)
+        cancel_calls: list[bool] = []
+        monkeypatch.setattr(uf, "cancel_watchdog",
+                            lambda: cancel_calls.append(True))
+
+        class _BrokenWifi(_FakeWifi):
+            """Simulates start_client_with_fallback itself raising
+            (e.g. nmcli reload TimeoutExpired propagating out of the
+            inner subprocess call, pre-fix) AND failing to restore AP
+            on its own. The orchestrator must compensate."""
+            async def start_client_with_fallback(self, ssid, password,
+                                                  ap_ssid, ap_password):
+                self.client_calls.append((ssid, password))
+                self.mode = "unknown"  # mid-switch, neither AP nor client
+                raise RuntimeError(
+                    "Command '['nmcli', 'connection', 'reload']' "
+                    "timed out after 5 seconds")
+
+        wifi_mgr = _BrokenWifi()
+        cfg = _make_config(
+            wifi_mode_pref="wifi_for_updates",
+            client_ssid="Home", client_password="hunter2",
+        )
+        fetcher = uf.UpdateFetcher(wifi_mgr, cfg)
+
+        async def work():
+            raise AssertionError("work must not run when assoc fails")
+
+        with pytest.raises(uf.NoInternetError):
+            asyncio.run(fetcher.run(work))
+
+        # (1) Orchestrator called _switch_to_ap as the last-ditch
+        # restore — proves we don't rely solely on the watchdog when
+        # start_client_with_fallback misbehaves.
+        assert wifi_mgr.ap_calls == [("Test-AP", "midihub1")]
+        assert wifi_mgr.mode == "ap"
+        # (2) Because we ended up back in AP, the watchdog is allowed
+        # to be cancelled. That's expected; the dangerous case is the
+        # next test where we DON'T end up in AP.
+        assert cancel_calls == [True]
+
+    def test_watchdog_stays_armed_when_ap_restore_fails(
+            self, monkeypatch, tmp_path):
+        """The pathological case: nothing brought us back to AP, not
+        even the orchestrator's last-ditch _switch_to_ap. The watchdog
+        is then the only thing standing between the user and a stuck
+        Pi — we must NOT cancel it."""
+        _redirect_status(monkeypatch, tmp_path)
+        monkeypatch.setattr(uf, "probe_internet", lambda timeout=4.0: False)
+        monkeypatch.setattr(uf, "schedule_watchdog", lambda reason: True)
+        cancel_calls: list[bool] = []
+        monkeypatch.setattr(uf, "cancel_watchdog",
+                            lambda: cancel_calls.append(True))
+
+        class _TotallyBrokenWifi(_FakeWifi):
+            async def start_client_with_fallback(self, ssid, password,
+                                                  ap_ssid, ap_password):
+                self.client_calls.append((ssid, password))
+                self.mode = "unknown"
+                raise RuntimeError("nmcli timed out")
+
+            def start_ap(self, ssid="", password=""):
+                # Even the AP restore fails — e.g. hostapd unit refuses
+                # to start, dnsmasq port collision, etc.
+                self.ap_calls.append((ssid, password))
+                # mode stays "unknown" — start_ap did NOT recover.
+
+        wifi_mgr = _TotallyBrokenWifi()
+        cfg = _make_config(
+            wifi_mode_pref="wifi_for_updates",
+            client_ssid="Home", client_password="hunter2",
+        )
+        fetcher = uf.UpdateFetcher(wifi_mgr, cfg)
+
+        async def work():
+            raise AssertionError("work must not run")
+
+        with pytest.raises(uf.NoInternetError):
+            asyncio.run(fetcher.run(work))
+
+        # We tried to switch back to AP — both via the orchestrator's
+        # last-ditch path. (Once is enough; the test pre-fix would
+        # have skipped this entirely.)
+        assert wifi_mgr.ap_calls  # at least one attempt
+        # Crucially, the watchdog was NOT cancelled — wifi.mode never
+        # got back to "ap", so the watchdog stays armed and will
+        # systemctl-restart raspimidihub at the 180s deadline, which
+        # brings the AP back on the boot path. THIS is the regression
+        # guard: if a future refactor reintroduces unconditional
+        # cancel_watchdog(), this assertion catches it immediately.
+        assert cancel_calls == []

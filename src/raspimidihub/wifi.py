@@ -538,10 +538,24 @@ no-hosts
             log.exception("Failed to write WiFi connection file")
             return False
 
-        # Give wlan0 back to NetworkManager
-        _run(["nmcli", "device", "set", WLAN_IFACE, "managed", "yes"], check=False)
-        # Reload NM to pick up the new connection file
-        _run(["nmcli", "connection", "reload"], check=False, timeout=5)
+        # Give wlan0 back to NetworkManager. Best-effort: a stuck or busy
+        # NM should not torpedo the whole switch — the subsequent
+        # `connection up` is the real arbiter of success.
+        for cmd in (
+            ["nmcli", "device", "set", WLAN_IFACE, "managed", "yes"],
+            # Reload NM to pick up the new connection file. We saw a 5s
+            # cap fire `TimeoutExpired` in the wild (#wifi-stuck-after-
+            # update-check) while the reload still completed in the
+            # background — bump to 15s and swallow timeouts. `check=False`
+            # doesn't suppress TimeoutExpired in subprocess.run, so we
+            # have to catch it explicitly.
+            ["nmcli", "connection", "reload"],
+        ):
+            try:
+                _run(cmd, check=False, timeout=15)
+            except subprocess.TimeoutExpired:
+                log.warning("%s timed out (continuing — `connection up` "
+                            "will decide success)", " ".join(cmd))
         time.sleep(2)
 
         # Activate the connection
@@ -560,12 +574,30 @@ no-hosts
 
     async def start_client_with_fallback(self, ssid: str, password: str,
                                           ap_ssid: str, ap_password: str):
-        """Try client mode, fall back to AP after timeout."""
+        """Try client mode, fall back to AP on failure.
+
+        "Failure" covers both `start_client` returning False *and*
+        `start_client` raising — the latter happens when an underlying
+        subprocess (nmcli, ip, ...) times out unexpectedly. The function
+        name promises a fallback; honour it on every error path."""
         loop = asyncio.get_event_loop()
-        success = await loop.run_in_executor(None, self.start_client, ssid, password)
+        try:
+            success = await loop.run_in_executor(
+                None, self.start_client, ssid, password)
+        except Exception:
+            log.exception("start_client raised, treating as failure")
+            success = False
         if not success:
             log.warning("Client mode failed, falling back to AP")
-            await loop.run_in_executor(None, self.start_ap, ap_ssid, ap_password)
+            try:
+                await loop.run_in_executor(
+                    None, self.start_ap, ap_ssid, ap_password)
+            except Exception:
+                # start_ap failing here is bad but not the worst case —
+                # the update_flow watchdog stays armed when wifi.mode is
+                # not "ap" and will systemctl-restart raspimidihub,
+                # whose async_main brings the AP back unconditionally.
+                log.exception("start_ap fallback raised — relying on watchdog")
 
     def set_ap_password(self, new_password: str):
         """Update AP password in hostapd config and reload."""

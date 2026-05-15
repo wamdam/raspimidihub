@@ -677,6 +677,105 @@ class TestStartApRetryPath:
         assert attempts["n"] == 1, "no retry when first spawn succeeds"
 
 
+class TestStartClient:
+    """Regression coverage for #wifi-stuck-after-update-check.
+
+    A 5s cap on `nmcli connection reload` was raising TimeoutExpired in
+    the field while the reload actually completed in the background.
+    `check=False` does NOT suppress TimeoutExpired in subprocess.run,
+    so the exception unwound through start_client and bypassed every
+    fallback the orchestrator had.
+    """
+
+    def test_nmcli_reload_timeout_does_not_kill_start_client(
+            self, monkeypatch, tmp_path):
+        """The reload call is best-effort. If it times out, start_client
+        must keep going and let `connection up` (which has its own
+        timeout *and* a try/except below) decide success."""
+        import contextlib
+
+        m = WifiManager()
+        monkeypatch.setattr(m, "stop_ap", lambda: None)
+        monkeypatch.setattr(wifi, "NM_CONN_DIR", tmp_path)
+
+        # Stub rw remount — it would otherwise shell out to `mount`.
+        @contextlib.contextmanager
+        def _noop():
+            yield
+        monkeypatch.setattr(wifi, "_rw_rootfs", _noop)
+
+        calls: list[list[str]] = []
+
+        def fake_run(cmd, **kw):
+            calls.append(list(cmd))
+            # Simulate NM being slow: the reload call hits its 15s cap
+            # before nmcli returns. Pre-fix this propagated out of
+            # start_client; post-fix it's caught and we move on.
+            if cmd[:3] == ["nmcli", "connection", "reload"]:
+                raise subprocess.TimeoutExpired(
+                    cmd=" ".join(cmd), timeout=kw.get("timeout", 15))
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+        monkeypatch.setattr(wifi, "_run", fake_run)
+
+        ok = m.start_client("Home", "hunter2")
+
+        # start_client got past the reload and ran `connection up`.
+        assert any(c[:3] == ["nmcli", "connection", "up"] for c in calls), \
+            "start_client must reach `connection up` even when reload times out"
+        # `connection up` was stubbed to succeed → start_client returns True
+        # and self._mode is "client".
+        assert ok is True
+        assert m.mode == "client"
+
+
+class TestStartClientWithFallback:
+    """The orchestrator promises: on any client-mode failure, the AP
+    comes back. Pre-fix, an exception bubbling out of start_client
+    (rather than a False return) bypassed the fallback. Pin the
+    invariant in both directions."""
+
+    def test_start_client_raising_still_triggers_ap_fallback(self, monkeypatch):
+        """An uncaught exception inside start_client must NOT skip the
+        fallback to AP. This is the exact path that stranded a real Pi."""
+        import asyncio
+        m = WifiManager()
+        ap_calls: list[tuple[str, str]] = []
+
+        def boom(ssid, password):
+            raise RuntimeError("simulated nmcli timeout")
+
+        monkeypatch.setattr(m, "start_client", boom)
+        monkeypatch.setattr(m, "start_ap",
+                            lambda ssid="", password="":
+                            ap_calls.append((ssid, password)))
+
+        asyncio.run(m.start_client_with_fallback(
+            "Home", "hunter2", "RaspiMIDIHub-XXXX", "midihub1"))
+
+        assert ap_calls == [("RaspiMIDIHub-XXXX", "midihub1")], \
+            "start_client raising must route to the AP fallback"
+
+    def test_start_client_returning_false_still_triggers_ap_fallback(
+            self, monkeypatch):
+        """Unchanged behaviour — the False-return path still runs the
+        fallback. Kept as a guard against regressions in the new
+        try/except wrapper."""
+        import asyncio
+        m = WifiManager()
+        ap_calls: list[tuple[str, str]] = []
+
+        monkeypatch.setattr(m, "start_client", lambda s, p: False)
+        monkeypatch.setattr(m, "start_ap",
+                            lambda ssid="", password="":
+                            ap_calls.append((ssid, password)))
+
+        asyncio.run(m.start_client_with_fallback(
+            "Home", "wrong", "RaspiMIDIHub-XXXX", "midihub1"))
+
+        assert ap_calls == [("RaspiMIDIHub-XXXX", "midihub1")]
+
+
 class TestStopAp:
     def test_stops_systemd_unit_and_kills_strays(
             self, monkeypatch, fake_fs, stub_run, stub_kill):

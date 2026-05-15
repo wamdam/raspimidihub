@@ -502,7 +502,18 @@ class UpdateFetcher:
             return await self._transient_wifi_path(
                 work, saved_ssid, saved_password, version_label)
         finally:
-            cancel_watchdog()
+            # The watchdog's whole purpose is to recover when we fail to
+            # get back to AP. Only disarm it if we *are* back in AP mode;
+            # otherwise let it fire and force a service restart. Pre-fix
+            # we unconditionally cancelled it here, so a single nmcli
+            # timeout in start_client could strand the Pi in client mode
+            # with no recovery short of a reboot.
+            if getattr(self.wifi, "mode", None) == "ap":
+                cancel_watchdog()
+            else:
+                log.warning("Leaving watchdog armed — wifi.mode=%r "
+                            "(expected 'ap' after orchestrator exit)",
+                            getattr(self.wifi, "mode", None))
 
     async def _run_work(self, work, *, switched: bool, version_label: str):
         """Run the user's callable, handle the AP restoration, and write
@@ -546,6 +557,13 @@ class UpdateFetcher:
                 ssid, password, ap_ssid, ap_password)
         except Exception as e:
             log.error("WiFi association raised: %s", e)
+            # start_client_with_fallback is *supposed* to leave us back
+            # in AP mode on any failure, but if it itself crashed, the
+            # Pi may still be wedged in client/unknown mode. Make a
+            # last-ditch effort here so the watchdog isn't the only
+            # path back to AP.
+            if getattr(self.wifi, "mode", None) != "ap":
+                await self._switch_to_ap()
             self._abort("error-wifi-assoc",
                         f"Failed to switch to WiFi: {e}")
             raise NoInternetError(f"Failed to switch to WiFi: {e}") from e
