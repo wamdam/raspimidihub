@@ -69,14 +69,17 @@ export function ScrollAssist() {
         main.scrollBy({ top: dir * STEP_PX, behavior: 'smooth' });
     };
 
-    // Render the wrapper always (it's an invisible anchor for the
-    // `.closest('.main')` lookup); the FABs themselves render
-    // conditionally on overflow.
-    return html`<div class="scroll-fab-stack" ref=${wrapRef}>
-        ${canUp ? html`<button class="scroll-fab"
+    // Up sits at top-right (just below the sticky header) and down
+    // at bottom-right (just above the bottom nav). Splitting the
+    // stack means neither button covers the content the user is
+    // trying to reach: scroll down → down button stays at the
+    // bottom; scroll back up → up button is at the top, away from
+    // the just-reached row.
+    return html`<div class="scroll-fab-anchor" ref=${wrapRef}>
+        ${canUp ? html`<button class="scroll-fab scroll-fab-up"
             aria-label="Scroll up"
             onclick=${() => scrollBy(-1)}>▲</button>` : null}
-        ${canDown ? html`<button class="scroll-fab"
+        ${canDown ? html`<button class="scroll-fab scroll-fab-down"
             aria-label="Scroll down"
             onclick=${() => scrollBy(1)}>▼</button>` : null}
     </div>`;
