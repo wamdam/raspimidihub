@@ -432,7 +432,35 @@ export function DeviceDetailPanel({ device, onClose, showToast, refresh, pluginD
                         ${showHelp && html`
                             <div style="background:var(--bg);padding:10px;border-radius:6px;margin-bottom:12px">
                                 ${pluginData.help && html`
-                                    <div style="font-size:12px;color:var(--text-dim);white-space:pre-wrap;line-height:1.5">${pluginData.help}</div>
+                                    <div style="font-size:12px;color:var(--text-dim);line-height:1.5">${
+                                        // Reflow help text: split on blank lines into
+                                        // paragraphs, then each line is either a flowed
+                                        // sentence (hard line-wraps inside collapse to
+                                        // spaces) or a bullet starting with "- "/"* "
+                                        // (kept as its own line). Lets the source keep
+                                        // 70-col line wrapping for readability while the
+                                        // rendered output reflows to the panel width.
+                                        pluginData.help.split(/\n\s*\n/).map((para, pi) => {
+                                            const blocks = [];
+                                            let buf = '';
+                                            const flush = () => { if (buf) { blocks.push({bullet: false, text: buf}); buf = ''; } };
+                                            for (const raw of para.split('\n')) {
+                                                const t = raw.trim();
+                                                if (!t) { flush(); continue; }
+                                                if (/^[-*]\s/.test(t) || /^\d+\.\s/.test(t)) {
+                                                    flush();
+                                                    blocks.push({bullet: true, text: t});
+                                                } else {
+                                                    buf = buf ? buf + ' ' + t : t;
+                                                }
+                                            }
+                                            flush();
+                                            return html`<div key=${pi} style="margin-top:${pi === 0 ? '0' : '8px'}">${
+                                                blocks.map((b, bi) => html`<div key=${bi}
+                                                    style="${b.bullet ? 'padding-left:8px;text-indent:-8px;' : ''}margin-top:${bi === 0 ? '0' : '2px'}">${b.text}</div>`)
+                                            }</div>`;
+                                        })
+                                    }</div>
                                 `}
                                 ${pluginData.inputs && pluginData.inputs.length > 0 && html`
                                     <div style="margin-top:${pluginData.help ? '12px' : '0'};padding-top:${pluginData.help ? '10px' : '0'};${pluginData.help ? 'border-top:1px solid var(--surface2);' : ''}">

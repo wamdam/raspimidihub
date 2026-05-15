@@ -41,11 +41,10 @@ initial wiring, never during a set.
 | Play    | **Step Pattern** | StepEditor | per-step on/off + offset + accent | all-on, offset 0 |
 | Play    | **Patterns** | PatternStrip | bottom-of-surface P1--P8 bank selector | slot 1 active |
 | Setup   | **Arp Ch** | ChannelSelect | 1--16 or any | any |
-| Setup   | **Ctrl Ch** | ChannelSelect | 1--16 or any | any |
 | Setup   | **Sync** | Radio | free / tempo / transport | transport |
 | Setup   | **BPM** (visible when Sync = free) | Wheel | 40--300 | 120 |
-| Setup   | **Pattern Ctrl Ch** | Wheel | Off / 1--16 (reserves a channel for slot switching) | Off |
-| Setup   | **P1..P8** (visible when Pattern Ctrl Ch is on) | NoteSelect ×8 | one learnable trigger note per slot | C2..G2 (36..43) |
+| Setup   | **Ctrl Ch** | Wheel | Off / 1--16 (reserves a channel for slot switching) | Off |
+| Setup   | **P1..P8** (visible when Ctrl Ch is on) | NoteSelect ×8 | one learnable trigger note per slot | C2..G2 (36..43) |
 
 **Pattern modes.** `up` / `down` / `up-down` / `random` /
 `as-played` are the standard held-note arpeggiator behaviours.
@@ -66,9 +65,9 @@ switch, so a slot change can rewrite the pattern under a chord
 held with the pedal. Edits to any play-surface knob auto-write
 back to the active slot (no Store action), so the bank tracks
 your live working state. To switch from a hardware controller,
-set **Pattern Ctrl Ch** to a dedicated MIDI channel and
+set **Ctrl Ch** to a dedicated MIDI channel and
 MIDI-Learn the trigger note for each slot (P1..P8). All notes
-arriving on the Pattern Ctrl Ch are consumed -- they switch
+arriving on the Ctrl Ch are consumed -- they switch
 slots and never reach the arp's held-notes buffer.
 
 **CC automation.** Block CC 70..83 covers every play-surface
@@ -85,7 +84,7 @@ wired for one drives the other.
 sustain pedal -- released keys keep arping until pedal lift),
 CC 70..83 (parameter automation; see the CC table above), Clock
 + Transport (when **Sync** is `tempo` or `transport`), and the
-8 learnable notes on **Pattern Ctrl Ch** when set (each picks a
+8 learnable notes on **Ctrl Ch** when set (each picks a
 pattern slot; consumed, not arpeggiated).
 **Output.** Notes (the arpeggiated stream). Aftertouch and Pitch
 Bend pass through unchanged.
@@ -223,12 +222,11 @@ anything.
 | Play    | **Step Pattern** | StepEditor (override mode) | per-step default / force-on / force-on+accent / force-off + offset | all default |
 | Play    | **Patterns** | PatternStrip | end-of-surface P1--P8 bank selector | slot 1 active |
 | Setup   | **Arp Ch** | ChannelSelect | 1--16 or any | any |
-| Setup   | **Ctrl Ch** | ChannelSelect | 1--16 or any | any |
 | Setup   | **Sync** | Radio | free / tempo / transport | transport |
 | Setup   | **BPM** (visible when Sync = free) | Wheel | 40--300 | 120 |
 | Setup   | **Retrig** | Button | reset the cycle on the first key of a phrase | on |
-| Setup   | **Pattern Ctrl Ch** | Wheel | Off / 1--16 (reserves a channel for slot switching) | Off |
-| Setup   | **P1..P8** (visible when Pattern Ctrl Ch is on) | NoteSelect ×8 | one learnable trigger note per slot | C2..G2 (36..43) |
+| Setup   | **Ctrl Ch** | Wheel | Off / 1--16 (reserves a channel for slot switching) | Off |
+| Setup   | **P1..P8** (visible when Ctrl Ch is on) | NoteSelect ×8 | one learnable trigger note per slot | C2..G2 (36..43) |
 
 **Pitch modes.** `up` / `down` / `up-down` / `random` /
 `as-played` voice the held buffer one note per step. `chord`
@@ -261,9 +259,9 @@ so the pattern can rewrite itself under a chord held with the
 pedal. Edits to any play-surface knob auto-write back to the
 active slot (no Store action), so the bank tracks live working
 state. To switch from a hardware controller, set
-**Pattern Ctrl Ch** to a dedicated MIDI channel and MIDI-Learn
+**Ctrl Ch** to a dedicated MIDI channel and MIDI-Learn
 the trigger note for each slot (P1..P8). All notes arriving on
-the Pattern Ctrl Ch are consumed -- they switch slots and never
+the Ctrl Ch are consumed -- they switch slots and never
 reach the held-notes buffer.
 
 **CC automation.** Block CC 70..88 (skipping CC 84, GM
@@ -518,13 +516,13 @@ Configuration parameters (from the device-detail panel):
 - **Internal BPM** -- used when no external clock is routed in.
 - **Send Clock + Transport** -- Button toggle; when on, forwards
   incoming CLOCK / START / STOP / CONTINUE to OUT.
-- **Pattern Ctrl Ch** -- Wheel, range `Off` / 1..16, default
+- **Ctrl Ch** -- Wheel, range `Off` / 1..16, default
   `Off`. When set, the channel is reserved end-to-end (no
   recording, no pass-through, CCs dropped too) and incoming notes
   trigger the matching pattern slot via the same queue-on-wrap
   path that an on-screen Tap uses.
 - **Pattern Notes (P1..P8)** -- 8 × NoteSelect, learnable,
-  defaults 36..43 (C1..G1). Only visible when **Pattern Ctrl Ch**
+  defaults 36..43 (C1..G1). Only visible when **Ctrl Ch**
   is not Off. Each entry is the note that switches to that
   pattern slot. A note that doesn't match any slot is dropped on
   the control channel anyway.

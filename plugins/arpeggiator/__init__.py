@@ -157,15 +157,11 @@ active slot without arpeggiating."""
         # and the sync-mode + BPM live here — touched on initial
         # wiring, never during a set.
         Group("Setup", [
-            # Channel filters. 0 = Any (default); 1-16 restricts which
-            # incoming notes count as arpeggiate input vs rate-trigger
-            # input. Useful when one keyboard plays melodies on ch1
-            # and a footswitch / aux key sends rate-trigger notes on
-            # ch16 — set arp_channel=1, control_channel=16 and the
-            # same note range no longer has to be split between the
-            # two functions.
+            # Arp Ch (0 = Any) restricts which incoming notes count
+            # as arpeggiate input. Useful when one keyboard plays
+            # melodies on ch1 and another sends pattern-trigger
+            # notes on ch16 — set Arp Ch = 1 and Ctrl Ch = 16.
             ChannelSelect("arp_channel", "Arp Ch", default=0, allow_any=True),
-            ChannelSelect("control_channel", "Ctrl Ch", default=0, allow_any=True),
             Radio("sync_mode", "Sync",
                   ["free", "tempo", "transport"], default="transport"),
             Wheel("bpm", "BPM", min=40, max=300, default=120,
@@ -175,7 +171,7 @@ active slot without arpeggiating."""
             # slot selection (every note on the channel is
             # consumed). Each pattern_note_N is the learnable note
             # that picks slot N.
-            Wheel("pattern_ctrl_ch", "Pattern Ctrl Ch",
+            Wheel("pattern_ctrl_ch", "Ctrl Ch",
                   min=0, max=16, default=0,
                   labels=["Off"] + [str(i) for i in range(1, 17)]),
             Group("Pattern Notes", [

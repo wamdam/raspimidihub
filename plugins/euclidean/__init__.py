@@ -267,7 +267,6 @@ play-surface knob; see Appendix A for the full table."""
 
         Group("Setup", [
             ChannelSelect("arp_channel", "Arp Ch", default=0, allow_any=True),
-            ChannelSelect("control_channel", "Ctrl Ch", default=0, allow_any=True),
             Radio("sync_mode", "Sync",
                   ["free", "tempo", "transport"], default="transport"),
             Wheel("bpm", "BPM", min=40, max=300, default=120,
@@ -275,7 +274,7 @@ play-surface knob; see Appendix A for the full table."""
             Button("retrig", "Retrig", default=True, color="green"),
             # Pattern-slot hardware trigger — Tracker-shaped: a
             # dedicated channel + 8 learnable notes pick the slot.
-            Wheel("pattern_ctrl_ch", "Pattern Ctrl Ch",
+            Wheel("pattern_ctrl_ch", "Ctrl Ch",
                   min=0, max=16, default=0,
                   labels=["Off"] + [str(i) for i in range(1, 17)]),
             Group("Pattern Notes", [
@@ -319,7 +318,7 @@ play-surface knob; see Appendix A for the full table."""
         "Notes",
         "CC#64 (sustain pedal — temporarily holds the input chord)",
         "CC#70..83, CC#85..88 (parameter automation; see HELP)",
-        "Pattern Ctrl Ch notes (set Pattern slot 1..8)",
+        "Ctrl Ch notes (set Pattern slot 1..8)",
         "Clock",
         "Aftertouch",
         "Pitch Bend",
