@@ -1,9 +1,12 @@
 ---
 title: "RaspiMIDIHub"
-subtitle: "User Manual -- Version 4.0.0"
+subtitle: "User Manual"
 author: "RaspiMIDIHub Project"
-version: "4.0.0"
-date: "2026-05-15"
+# Version + date are injected by `make manual` from the Makefile's
+# `VERSION` variable and the top-most entry in `CHANGELOG.txt` --
+# do not hard-code them here. The cover-page version pill reads
+# `\manualversion` (set in templates/version.tex by the Makefile);
+# the cover-page date is passed in via pandoc's `--metadata date=`.
 documentclass: report
 papersize: a4
 fontsize: 10pt

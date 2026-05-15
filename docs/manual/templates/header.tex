@@ -18,9 +18,17 @@
 \definecolor{mutedText}{HTML}{8892a4}         % cover subtitle / cover author
 \definecolor{codeTint}{HTML}{F2F4F7}          % inline code background
 
-% Manual version shown on the cover. Bump alongside the `version`
-% field in `metadata.yaml`. Both should match the released `.deb`.
-\providecommand{\manualversion}{3.1.1}
+% Manual version shown on the cover.
+%
+% Source of truth: `Makefile`'s `VERSION` variable. `make manual`
+% generates `templates/version.tex` from that and pandoc loads it
+% via `--include-in-header` BEFORE this file, so `\manualversion`
+% is already defined when we get here. These `\providecommand`s
+% are the fallback for someone running pandoc directly without
+% going through the Makefile -- the placeholder makes it obvious
+% the build went off-path.
+\providecommand{\manualversion}{(unset -- build via `make manual`)}
+\providecommand{\manualdate}{}
 
 % ------------------------------------------------------------------
 % Branded cover. Pandoc emits \maketitle; we override it with a dark

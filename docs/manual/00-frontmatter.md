@@ -1,9 +1,9 @@
 # Front Matter {.unnumbered}
 
-**RaspiMIDIHub User Manual.** This manual covers RaspiMIDIHub Version
-3.1.2 and was last updated 2026-05-13. Information in this document is
-subject to change as the software evolves; check the project's
-`CHANGELOG.txt` for release-by-release deltas.
+**RaspiMIDIHub User Manual.** The documented release is shown on
+the cover page. Information in this document is subject to change
+as the software evolves; check the project's `CHANGELOG.txt` for
+release-by-release deltas.
 
 RaspiMIDIHub is distributed under the LGPL. Bundled third-party
 components retain their own licences (Preact -- MIT; HTM -- Apache 2.0).
