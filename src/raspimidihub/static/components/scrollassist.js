@@ -56,17 +56,27 @@ export function ScrollAssist() {
         };
         main.addEventListener('scroll', onScroll, { passive: true });
         window.addEventListener('resize', onScroll);
-        // Watch the scroll container AND its first child so content
-        // height changes (page swaps, plugin params expanding, slot
-        // loads) re-evaluate visibility immediately.
+        // ResizeObserver on .main catches viewport-size changes
+        // (rotate, density toggle). Content-height changes inside
+        // .main don't move .main's own box, so they need a
+        // MutationObserver instead.
         const ro = new ResizeObserver(update);
         ro.observe(main);
-        if (main.firstElementChild) ro.observe(main.firstElementChild);
+        // MutationObserver on .main with subtree:true picks up every
+        // DOM change inside the scroll container — page swaps (a
+        // new plugin's params landing after an async fetch), step-
+        // grid resizes, slot-load broadcasts, group expansions —
+        // and re-evaluates the FAB visibility on the next frame
+        // (rAF-coalesced via onScroll). Cheap: the update path is
+        // a single read of scrollTop / scrollHeight / clientHeight.
+        const mo = new MutationObserver(onScroll);
+        mo.observe(main, { childList: true, subtree: true });
         update();
         return () => {
             main.removeEventListener('scroll', onScroll);
             window.removeEventListener('resize', onScroll);
             ro.disconnect();
+            mo.disconnect();
             if (raf) cancelAnimationFrame(raf);
         };
     }, [enabled]);
