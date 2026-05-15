@@ -562,6 +562,25 @@ rectangle would disappear. The selection can span multiple
 voices and multiple rows on the visible page. The action row
 shows the cell count on the right when a selection is active.
 
+#### Transpose
+
+As soon as a selection covers two or more cells, the keypad's
+note-half swaps its usual Note / Velocity / OCT controls for a
+single **TRANSPOSE** wheel (-24..+24 semitones). Each tick on
+the wheel shifts every real-pitch note inside the selection by
+one semitone in that direction -- velocities, CCs, and rests
+are left untouched. The wheel position reads as the cumulative
+shift since this selection became active; spinning back to 0
+restores the pitches the selection started with.
+
+The wheel returns to 0 the moment the selection clears or its
+bounds change, so a fresh selection always begins at zero
+(notes are not snapped back -- the wheel just stops tracking
+the previous selection's state). The TRANSPOSE wheel is the
+multi-cell counterpart to the `+` / `-` keyboard nudge
+described in *Keyboard Note Entry* below, which moves a single
+focused cell.
+
 #### Cut / Copy / Paste
 
 The action row left-to-right reads
@@ -612,14 +631,19 @@ one cell without retyping it.
 
 ### Pages
 
-Pages run linearly from 0 to F (up to 16 pages). The page strip
-at the top of the surface shows the active page; tap a page
-button to jump.
+Pages run linearly from 0 to F (up to 16 pages). There is no
+separate page strip -- the current page shows up as the hex
+prefix on the row labels (`20`..`2F` means page 2). Navigation:
 
-Page buttons are renameable. The action row buttons that bear
-on page operations (insert a page, delete a page, etc.) reflect
-the current page navigation state; see the surface for the
-exact labels in the running build.
+- `PgUp` / `PgDn` move one page in either direction (wrapping
+  at the ends), keeping the row index where it is.
+- Walking the cursor off the top or bottom of the current page
+  (`↑` on row 0, `↓` on row F) flips to the previous / next
+  page and lands on the wrap-around row.
+- **+ page** and **− page** buttons next to the BPM/Rate
+  controls insert a fresh page after the current one or delete
+  the current page. The − button disables when only one page is
+  left; the + button disables at the 16-page ceiling.
 
 After the last page the Tracker loops back to page 0. `End` in
 a note cell ends the page early and jumps to the next page;
