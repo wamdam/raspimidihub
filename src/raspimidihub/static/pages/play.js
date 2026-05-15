@@ -21,6 +21,11 @@ const SWIPE_MAX_MS = 700;
 // One pagination "page" is 80% of the visible viewport so the
 // previous page's tail row is still in view after the tap.
 const PAGE_FACTOR = 0.8;
+// Must match the .play-pager-content { padding-bottom } value in
+// style.css. Subtracted from the overflow check so this safety
+// padding doesn't fake a "more below" state when content actually
+// fits.
+const CONTENT_BOTTOM_PAD = 52;
 
 // Plugins that need pagination — currently identified by their
 // schema containing a `patternstrip` param. The Tracker doesn't
@@ -71,7 +76,11 @@ function PlaySurface({ instance, pluginData, pluginDisplays, clockPosition }) {
             const top = el.scrollTop;
             const maxScroll = el.scrollHeight - el.clientHeight;
             setCanUp(top > 4);
-            setCanDown(maxScroll > 4 && top < maxScroll - 4);
+            // Subtract the bottom-safety padding so a fully-fitting
+            // surface (overflow == CONTENT_BOTTOM_PAD because of the
+            // pad alone) doesn't register canDown.
+            setCanDown(maxScroll - CONTENT_BOTTOM_PAD > 4
+                       && top < maxScroll - 4);
             // Measure where the bottom UI chrome starts (the higher
             // of bottom-nav.top / midi-bar.top) and pin the .down
             // button there.

@@ -173,6 +173,16 @@ body {
     scroll-behavior: smooth;
     scrollbar-width: none;
 }
+/* Bottom safety: the .down page button is a fixed overlay above
+   the bottom chrome. Without a buffer below the content, the
+   last row (the pattern strip) gets hidden behind that overlay
+   when the user scrolls to the very bottom. 52 px = a little
+   taller than the button so the strip clears the button edge.
+   `canDown`'s threshold subtracts this so the padding doesn't
+   register as fake overflow. */
+.play-pager-content {
+    padding-bottom: 52px;
+}
 .play-pager::-webkit-scrollbar { display: none; }
 .play-page-btn {
     /* `.up` stays absolute inside .play-surface-wrap (anchored to
