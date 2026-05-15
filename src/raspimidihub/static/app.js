@@ -82,10 +82,51 @@ function FullscreenButton() {
     </button>`;
 }
 
+// Bottom-nav tab switch with per-tab sub-state memory. Saves the
+// currently-visible sub-state (open device panel on Routing, selected
+// instance on Controller / Play) at the moment of leaving, then
+// restores the destination tab's last sub-state on arrival. Stored
+// per-device in localStorage — the user might want Euclidean
+// permanently on one phone and Tracker on another. An explicit
+// "close" of the sub-state (panel dismissed, no instance selected)
+// is preserved as an empty string, so reopening the tab honours
+// that close instead of springing the panel back open.
+const TAB_SUBKEY = {
+    routing: 'deviceId', controller: 'controllerId', play: 'playId',
+};
+function tabStorageKey(tab) { return `raspimidihub:lastIn:${tab}`; }
+function saveTabSubState(route) {
+    const key = TAB_SUBKEY[route.tab];
+    if (!key) return;
+    const val = route[key];
+    try { localStorage.setItem(tabStorageKey(route.tab), val != null ? String(val) : ''); } catch {}
+}
+function loadTabSubState(tab) {
+    const key = TAB_SUBKEY[tab];
+    if (!key) return null;
+    try {
+        const v = localStorage.getItem(tabStorageKey(tab));
+        return v || null;  // empty string => intentionally cleared
+    } catch { return null; }
+}
+
 function App() {
     const { route, navigate } = useRouter();
     const tab = route.tab;
-    const setTab = useCallback((t) => navigate({ tab: t }), [navigate]);
+    const setTab = useCallback((t) => {
+        // Capture where we're leaving FROM, then jump to the new
+        // tab's remembered sub-state (or empty if nothing saved /
+        // explicitly cleared).
+        saveTabSubState(route);
+        if (t === route.tab) return;  // re-tap of current tab is a no-op
+        const key = TAB_SUBKEY[t];
+        const restored = loadTabSubState(t);
+        if (key && restored) {
+            navigate({ tab: t, [key]: restored });
+        } else {
+            navigate({ tab: t });
+        }
+    }, [navigate, route]);
     const [devices, setDevices] = useState([]);
     const devicesRef = useRef([]);
     const connectionsRef = useRef([]);
