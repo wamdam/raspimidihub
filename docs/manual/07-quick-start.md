@@ -65,9 +65,9 @@ Tap **Add** at the bottom of the matrix. The Add overlay opens with a
 list of available plugins (chapter 11), controllers (chapter 12),
 play surfaces (chapter 13), and the Bluetooth scan section
 (chapter 14). Pick **Arpeggiator** under the **Play** section
-(the Arpeggiator and the Tracker both render fullscreen play
-surfaces; see chapter 11). A new row and column appear in the
-matrix for the new plugin instance.
+(the Tracker, the Arpeggiator and the Euclidean all render
+fullscreen play surfaces; see chapter 13). A new row and column
+appear in the matrix for the new plugin instance.
 
 Plugins start *unconnected* by design (see chapter 11 for why). Tap
 the cell where the keyboard row meets the Arpeggiator column to route

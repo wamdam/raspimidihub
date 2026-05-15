@@ -44,10 +44,10 @@ and an output port, just like a USB synth has an input port and an
 output port. The same routing, filtering, and mapping behaviour
 that works on USB devices works on plugins.
 
-The Tracker, the controllers (Mixer 8, FX 6, Performance 16,
-XY 4), and every other plugin are implemented this way. There is
-no special-case path for any plugin -- they all live in the same
-routing graph.
+The play-surface plugins (Tracker, Arpeggiator, Euclidean), the
+controllers (Mixer 8, FX 6, Performance 16, XY 4), and every
+other plugin are implemented this way. There is no special-case
+path for any plugin -- they all live in the same routing graph.
 
 ## The Bluetooth MIDI Bridge
 

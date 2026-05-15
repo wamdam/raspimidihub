@@ -29,12 +29,14 @@ flow without writing code.
 
 ### Virtual instruments and play surfaces
 
-Plugins -- arpeggiators, LFOs, chord generators, delays, the
-Tracker step sequencer, ten others -- appear in the same matrix
-as virtual MIDI devices. Controllers -- Mixer 8, FX 6,
-Performance 16, XY 4 -- turn the phone or tablet into a tap-to-
-play MIDI controller surface that the matrix routes like any
-other device.
+Plugins -- LFOs, chord generators, delays, scale remappers,
+velocity curves, a dozen others -- appear in the same matrix
+as virtual MIDI devices. Three of them (the Tracker step
+sequencer, the Arpeggiator, the Euclidean step generator)
+additionally render fullscreen play surfaces on the **Play**
+tab. Controllers -- Mixer 8, FX 6, Performance 16, XY 4 --
+turn the phone or tablet into a tap-to-play MIDI controller
+surface that the matrix routes like any other device.
 
 ### Appliance reliability
 

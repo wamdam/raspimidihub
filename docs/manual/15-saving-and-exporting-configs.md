@@ -105,6 +105,9 @@ unit *runs*:
   every captured drop-button snapshot, the chosen theme
 - The Tracker's grid contents, page count, per-track channels, and
   cursor position (the Tracker is a plugin)
+- The 8-slot pattern bank on every play-surface plugin (Tracker,
+  Arpeggiator, Euclidean), including which slot is active and the
+  per-slot trigger notes
 - Every device rename and every port rename
 - The default routing for new devices (Connect all / None)
 - The WiFi configuration: AP SSID and password, home WiFi
@@ -119,7 +122,11 @@ Some state is deliberately *not* part of the project config:
   paired devices.
 - **System logs and the deb cache** -- ephemeral.
 - **Display preferences** (MIDI activity bar visibility, tick
-  sounds) -- stored separately as per-browser preferences.
+  sounds, scroll-assist buttons, layout density) -- stored
+  separately as per-browser preferences.
+- **Per-tab last-viewed sub-state** (which play surface or
+  controller instance you left open in each bottom-nav tab) --
+  also browser-local.
 
 Exporting a config from one RaspiMIDIHub unit and importing it on
 another moves the routing and plugin state across, but the second

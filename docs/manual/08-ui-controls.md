@@ -61,8 +61,12 @@ five or fewer.
 
 A step-sequencer grid: a row of cells, each with an on/off dot, an
 optional per-step note offset, and an optional accent flag. The
-**Arpeggiator** uses it for the pattern; the **Tracker** uses a
-larger and more specialised variant (chapter 13).
+**Arpeggiator** uses it for the pattern (three-state cycle:
+default → on → on+accent → default); the **Euclidean** uses a
+four-state variant on top of an algorithm-underlay preview
+(default → FORCE_ON → FORCE_ON+accent → FORCE_OFF → default);
+the **Tracker** uses a larger and more specialised variant
+(chapter 13).
 
 Tap a cell to toggle on or off. Drag vertically on a step to set
 its note offset. A surrounding length parameter controls how many
@@ -146,12 +150,12 @@ wherever a parameter selects a MIDI channel.
 ## Group
 
 Not really a control -- a labelled section that visually groups
-related parameters in the config panel. The **Arpeggiator** uses
-a `Setup` group (config-only) to bundle channel filters,
-trigger-note plumbing and sync mode out of the way of the live
-**Play** surface; the **Tracker** uses **Track Channels**,
-**Pattern Notes** and so on for the same purpose. Groups affect
-layout only.
+related parameters in the config panel. The **Arpeggiator** and
+the **Euclidean** each use a `Setup` group (config-only) to
+bundle channel filters, sync mode and the per-slot trigger notes
+out of the way of the live **Play** surface; the **Tracker**
+uses **Track Channels**, **Pattern Notes** and so on for the
+same purpose. Groups affect layout only.
 
 ## MIDI Learn
 

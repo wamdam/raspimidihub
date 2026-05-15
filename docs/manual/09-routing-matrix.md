@@ -34,6 +34,12 @@ The diagonal -- a device's own row meeting its own column -- is
 always blocked. Self-connections would feed a device into itself
 and the loop-prevention logic disallows them.
 
+The row-header column on the left is held to a fixed narrow
+width (~96 px) so the rest of the matrix gets the room. Long
+device names are middle-truncated to fit (`Velocity Equalizer
+1 → Velo…ar 1`); tapping a row header opens its context menu
+with the full name at the top of the menu.
+
 ## The Cell Context Menu
 
 Tapping a cell opens its context menu. The entries depend on the
@@ -139,8 +145,8 @@ do:
    FX 6, Performance 16, XY 4) that live on the **Controller** tab.
    See chapter 12.
 3. **Play** -- fullscreen play surfaces that live on the **Play**
-   tab. Currently the Tracker (chapter 13) and the Arpeggiator
-   (Appendix A.1).
+   tab. Currently the Tracker, the Arpeggiator and the Euclidean
+   (chapter 13; per-plugin parameter tables in Appendix A).
 4. **Bluetooth MIDI** -- a Scan button and a list of paired
    peripherals. See chapter 14 for the pairing flow.
 

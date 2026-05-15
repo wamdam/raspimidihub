@@ -31,15 +31,16 @@ The bottom navigation has up to four tabs:
 |------|------|---------|
 | **Routing** | `/routing` | The connection matrix and everything attached to it |
 | **Controller** | `/controller` | Fullscreen tap-to-play surfaces |
-| **Play** | `/play` | The Tracker step sequencer |
+| **Play** | `/play` | The play-surface plugins (Tracker, Arpeggiator, Euclidean) |
 | **Settings** | `/settings` | System configuration |
 
 Two of these tabs are conditional:
 
 - The **Controller** tab only appears when at least one controller
   instance has been added (chapter 12).
-- The **Play** tab only appears when at least one Tracker instance
-  has been added (chapter 13).
+- The **Play** tab only appears when at least one play-surface
+  plugin (Tracker, Arpeggiator, Euclidean) has been added
+  (chapter 13).
 
 The **Routing** and **Settings** tabs are always there. The
 **Routing** tab is the home screen of the appliance.
@@ -94,8 +95,9 @@ The whole UI is touch-first. Five gestures recur everywhere:
   the obvious one), normal browser scrolling works.
 
 Some controls also respond to keyboard input. The Tracker has its
-own keyboard scheme (chapter 13 and appendix D); `ESC` is the
-universal "close the topmost overlay" key everywhere.
+own keyboard scheme on the **Play** tab (chapter 13 and appendix
+D); `ESC` is the universal "close the topmost overlay" key
+everywhere.
 
 ## The Captive Portal
 

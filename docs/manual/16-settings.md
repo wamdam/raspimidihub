@@ -98,23 +98,26 @@ connections regardless of the **MIDI Routing** choice.
 
 ## Display
 
-Two toggles and a layout selector:
+Three toggles and a layout selector, all marked **(this device
+only)** in the heading -- every Display preference is browser-
+local; nothing on this card travels with **Save / Export
+Config**.
 
 - **MIDI activity bar** -- shows or hides the persistent
   two-source activity bar above the bottom navigation.
 - **Knob / wheel tick sounds** -- enables a small click on each
   integer step of a wheel or fader drag.
+- **Scroll-assist buttons** -- shows round accent-coloured
+  floating buttons in the top-right (▲) and bottom-right (▼) of
+  any overflowing page. Each tap scrolls roughly 200 px in that
+  direction; the buttons only appear when content actually runs
+  past the viewport edge. Default on.
 - **Layout density** -- a dropdown with **Default** and **Small
   screen (tighter)**. Small mode shrinks the header, bottom
   navigation, page padding, and the per-plugin controller bar so
-  more content fits on a 360-px-wide phone. The selection is
-  per-device (stored in the browser, not the saved config) -- the
-  same hub can render in Default on a tablet and Small on a
-  phone without one overriding the other.
-
-The two toggles feed the dirty-state model and ride with **Save
-Config**. The Layout density dropdown does not; it is a viewing
-preference local to the device.
+  more content fits on a 360-px-wide phone. The same hub can
+  render in Default on a tablet and Small on a phone without one
+  overriding the other.
 
 ## Stats
 

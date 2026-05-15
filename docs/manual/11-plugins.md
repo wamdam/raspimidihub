@@ -65,11 +65,11 @@ The panel header carries three universal controls:
 
 - **Maximize (double-arrow) icon** -- opens the plugin in its
   dedicated fullscreen tab if it has one: controllers jump to the
-  **Controller** tab, the Tracker jumps to the **Play** tab. Only
-  shown for plugins with a fullscreen surface. The reverse direction
-  -- jumping from the fullscreen surface back into this Plugin
-  Config panel -- is the **pencil** icon on the Controller / Play
-  top bar.
+  **Controller** tab; the Tracker, the Arpeggiator and the
+  Euclidean jump to the **Play** tab. Only shown for plugins with
+  a fullscreen surface. The reverse direction -- jumping from
+  the fullscreen surface back into this Plugin Config panel --
+  is the **pencil** icon on the Controller / Play top bar.
 - **`?` help button** -- shows the plugin's extended `HELP` text:
   a longer explanation of what the plugin does and an example or
   two.
@@ -92,8 +92,8 @@ Plugins fall into three groups with respect to clock:
   **Scale Remapper**, **Velocity Curve**, **Velocity Equalizer**,
   **CC Smoother**, **Hold**, **SysEx Sender**).
 - **Clock-consuming** -- listen for incoming MIDI Clock to drive
-  their own timing (**Arpeggiator**, **CC LFO**, **MIDI Delay**,
-  **Clock Divider** -- both consumes and produces).
+  their own timing (**Arpeggiator**, **Euclidean**, **CC LFO**,
+  **MIDI Delay**, **Clock Divider** -- both consumes and produces).
 - **Clock-generating** -- emit MIDI Clock (**Master Clock**,
   **Tracker** with **Send Clock + Transport** enabled,
   **Clock Divider**).
@@ -117,9 +117,9 @@ boundary). Those events are pre-scheduled through the ALSA kernel
 queue so they leave the system at the exact target time, with
 sub-millisecond jitter under heavy load.
 
-Plugins that react to *incoming* clock ticks (the **Arpeggiator**
-and the **Tracker** both work this way) fire their events
-synchronously when the clock subdivision arrives. Timing
+Plugins that react to *incoming* clock ticks (the **Arpeggiator**,
+the **Euclidean** and the **Tracker** all work this way) fire
+their events synchronously when the clock subdivision arrives. Timing
 precision then follows the incoming clock -- a rock-solid clock
 source produces rock-solid output, and a jittery clock source
 produces output that tracks the same jitter.
@@ -132,13 +132,15 @@ latency under one millisecond.
 ## CC Automation
 
 Some plugins accept incoming MIDI CCs as parameter automation
-directly -- the **Arpeggiator**, for example, takes CC 74 as
-**RATE** and CC 75 as **GATE** out of the box. The CC value is
-scaled to the parameter's full range and the on-screen control
-animates in real time as the hardware CC arrives. Touching the
-on-screen control while a CC is also moving the parameter
-produces a single resolved value, with no flicker between
-sources.
+directly -- the **Arpeggiator** and the **Euclidean**, for
+example, share a CC 70..88 block that covers every play-surface
+knob (CC 74 = **Rate**, CC 75 = **Gate** on both, so a hardware
+controller wired for one drives the matching knob on the other
+identically). The CC value is scaled to the parameter's full
+range and the on-screen control animates in real time as the
+hardware CC arrives. Touching the on-screen control while a CC
+is also moving the parameter produces a single resolved value,
+with no flicker between sources.
 
 For parameters that the plugin does not accept directly, a **CC →
 CC** mapping at the routing level can rewrite the incoming CC

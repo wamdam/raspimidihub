@@ -13,12 +13,13 @@ the Pi into:
 - A **MIDI routing hub** with an all-to-all default and a tap-to-
   edit matrix UI for everything beyond the default.
 - A **host for virtual MIDI instruments** -- the built-in plugins
-  for arpeggiator, LFO, chord generator, delay, scale remapper,
-  velocity curve, the Tracker step sequencer, and more.
+  for LFO, chord generator, delay, scale remapper, velocity curve,
+  and more.
 - A **host for play surfaces** -- the four controller templates
   (Mixer 8, FX 6, Performance 16, XY 4) that turn the phone or
   tablet into a tap-to-play MIDI controller with drop-button
-  scene recall.
+  scene recall, plus three fullscreen play-surface plugins
+  (Tracker, Arpeggiator, Euclidean) on a dedicated **Play** tab.
 - A **MIDI access point** -- a built-in WiFi access point with a
   captive portal so the configuration UI opens automatically on a
   phone the first time it connects.
@@ -73,7 +74,7 @@ menu names are formatted, what the **Note**, **Warning**, and
 
 This manual is updated alongside the software. The currently
 documented release is shown on the cover page. Patch-level
-changes between minor releases (3.0.x → 3.0.y) may not all be
+changes between minor releases (4.0.x → 4.0.y) may not all be
 called out in the manual; the `CHANGELOG.txt` in the project
 repository is the authoritative per-release delta.
 
