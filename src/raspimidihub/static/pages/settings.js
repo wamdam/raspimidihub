@@ -839,12 +839,12 @@ export function SettingsPage({ showToast, showMidiBar, toggleMidiBar }) {
             <h3>Display</h3>
             <label class="msg-toggle">
                 <input type="checkbox" checked=${showMidiBar} onchange=${toggleMidiBar} />
-                <span>MIDI activity bar</span>
+                <span>MIDI activity bar <span style="color:var(--text-dim);font-size:11px;font-weight:400">(this device only)</span></span>
             </label>
             <label class="msg-toggle">
                 <input type="checkbox" checked=${soundsOn}
                     onchange=${e => { setSoundsEnabled(e.target.checked); setSoundsOn(e.target.checked); }} />
-                <span>Knob / wheel tick sounds</span>
+                <span>Knob / wheel tick sounds <span style="color:var(--text-dim);font-size:11px;font-weight:400">(this device only)</span></span>
             </label>
             <label class="msg-toggle">
                 <input type="checkbox" data-testid="scroll-assist-toggle"
