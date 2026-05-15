@@ -120,13 +120,23 @@ body {
    instead of below the fold. */
 .main:has(> .play-page) { overflow: hidden; }
 .main .controller-page.play-page {
-    /* The page can keep its inherited margin / padding tricks for
-       the controller-page bg bleed — the .down pagination button
-       is a viewport-fixed overlay (bottom: var(--nav-reserve))
-       so the page doesn't need to flush-fill to the bottom-nav
-       edge. Forcing a flex column with overflow:hidden so the
-       pager (flex:1 child) is the scroll target rather than the
-       page itself. */
+    /* The page needs a constrained height (not min-height) so the
+       pager (flex:1 child) gets a fixed clientHeight and can
+       actually detect overflow — without that, scrollHeight ==
+       clientHeight and the pagination buttons never appear.
+       Specificity (`.main .controller-page.play-page` = 0,3,0)
+       beats the density-small override at
+       `:root.density-small .controller-page` (0,2,1) so this
+       holds on small phones too.
+
+       The page extends a bit beyond .main's content area via the
+       inherited negative margin-bottom (.controller-page tricks);
+       that empty area below the pager is where the bottom nav
+       overlays. The viewport-fixed .down button (bottom:
+       var(--nav-reserve)) covers the visual gap. */
+    height: 100%;
+    min-height: 100%;
+    box-sizing: border-box;
     display: flex;
     flex-direction: column;
     overflow: hidden;
