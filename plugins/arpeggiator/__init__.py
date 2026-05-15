@@ -19,12 +19,14 @@ import random
 import threading
 import time
 
+from raspimidihub import slot_bank
 from raspimidihub.plugin_api import (
     Button,
     ChannelSelect,
     Group,
     Knob,
     NoteSelect,
+    PatternStrip,
     PluginBase,
     Radio,
     StepEditor,
@@ -113,6 +115,16 @@ flips Rate, never plays."""
     ]
     _DEFAULT_RATE_IDX = _RATE_OPTIONS.index("1/8")  # 10
 
+    # Every play_only param that should be captured into a pattern
+    # slot. Switching slot N replaces each of these from
+    # `pattern_slots[N]`; edits to any of them auto-write back into
+    # the active slot. `active_slot` itself is excluded — it's the
+    # bank selector, not part of the snapshot.
+    _SLOT_PARAMS = [
+        "pattern", "rate", "step_count", "accent_vel",
+        "gate", "octaves", "steps",
+    ]
+
     params = [
         # Play-surface controls. Pattern + Rate are wide wheels in the
         # top row (span=2 each → 4-col grid filled). The four shapers
@@ -136,6 +148,13 @@ flips Rate, never plays."""
         StepEditor("steps", "Step Pattern", length_param="step_count",
                    default_length=8, default_on=True, span=4,
                    slot_notes_param="step_slot_notes", play_only=True),
+        # Pattern-slot strip — bottom-of-play-surface bank selector.
+        # Switching slots is immediate and held notes / sustain
+        # persist across the switch; the snapshot scope is the
+        # `_SLOT_PARAMS` set above.
+        PatternStrip("active_slot", "Patterns",
+                     count=slot_bank.SLOT_COUNT, default=0,
+                     slots_param="pattern_slots", play_only=True),
         # Config-only setup. Channel filters, rate-trigger plumbing
         # and the sync-mode + BPM live here — touched on initial
         # wiring, never during a set.
@@ -162,6 +181,20 @@ flips Rate, never plays."""
                   ["free", "tempo", "transport"], default="transport"),
             Wheel("bpm", "BPM", min=40, max=300, default=120,
                   visible_when=("sync_mode", "free")),
+            # Pattern-slot hardware trigger — mirrors the Tracker's
+            # plumbing. 0 = Off; 1..16 reserves that channel for
+            # slot selection (every note on the channel is
+            # consumed). Each pattern_note_N is the learnable note
+            # that picks slot N.
+            Wheel("pattern_ctrl_ch", "Pattern Ctrl Ch",
+                  min=0, max=16, default=0,
+                  labels=["Off"] + [str(i) for i in range(1, 17)]),
+            Group("Pattern Notes", [
+                NoteSelect(f"pattern_note_{i}", f"P{i + 1}",
+                           default=36 + i, config_only=True)
+                for i in range(slot_bank.SLOT_COUNT)
+            ], config_only=True,
+                visible_when=("pattern_ctrl_ch", list(range(1, 17)))),
         ], config_only=True),
     ]
 
@@ -227,6 +260,12 @@ flips Rate, never plays."""
         self._step_slots: list = []
         self._next_slot_to_play = 0
         self._write_slot = 0
+
+        # Pattern bank — 8 snapshots of the play-surface params. On a
+        # fresh instance every slot is a clone of the defaults so
+        # switching slot N always lands on a real (if undifferentiated)
+        # pattern; existing saved configs keep whatever they stored.
+        slot_bank.init_slot_bank(self, self._SLOT_PARAMS)
 
     def on_stop(self):
         self._free_running = False
@@ -389,6 +428,15 @@ flips Rate, never plays."""
         return None
 
     def on_note_on(self, channel, note, velocity):
+        # Slot-trigger notes are checked first — they live on a
+        # dedicated control channel and switch the pattern bank.
+        # Trigger notes are consumed (the held-notes buffer never
+        # sees them) so the Pattern Ctrl Ch is fully reserved.
+        slot_idx = slot_bank.trigger_note_index(self, channel, note)
+        if slot_idx is not None:
+            if slot_idx != self.get_param("active_slot"):
+                slot_bank.load_slot(self, self._SLOT_PARAMS, slot_idx)
+            return
         # Rate trigger notes are consumed: they set the Rate wheel and
         # do NOT join the held-notes set, so the trigger range can't
         # be accidentally arpeggiated. set_param broadcasts the change
@@ -450,9 +498,11 @@ flips Rate, never plays."""
                 self._seek_to_new_note(note)
 
     def on_note_off(self, channel, note):
-        # Symmetric to on_note_on: trigger-range and non-matching-arp-
-        # channel note-offs are also consumed, so the held-notes list
-        # never sees them at all.
+        # Symmetric to on_note_on: trigger-range, slot-trigger, and
+        # non-matching-arp-channel note-offs are also consumed, so
+        # the held-notes list never sees them at all.
+        if slot_bank.trigger_note_index(self, channel, note) is not None:
+            return
         if self._rate_trigger_index(channel, note) is not None:
             return
         if not self._channel_match(channel, "arp_channel"):
@@ -566,6 +616,18 @@ flips Rate, never plays."""
         self._advance()
 
     def on_param_change(self, name, value):
+        # Pattern bank: a user-driven `active_slot` change loads the
+        # snapshot from the slot bank (and broadcasts every loaded
+        # param via set_param, so the surface knobs animate to their
+        # new values). The load path itself sets `_loading_slot`, so
+        # the record_edit call below is a no-op while it's running.
+        if name == "active_slot":
+            slot_bank.load_slot(self, self._SLOT_PARAMS, int(value))
+            return
+        # Any edit to a snapshotted play_only param writes back into
+        # the active slot. Guarded against feedback loops by
+        # `_loading_slot`.
+        slot_bank.record_edit(self, self._SLOT_PARAMS, name, value)
         if name == "sync_mode":
             if value == "free":
                 self._free_running = False

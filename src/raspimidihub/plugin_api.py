@@ -262,6 +262,29 @@ class Display(Param):
 
 
 @dataclass
+class PatternStrip(Param):
+    """Bottom-of-play-surface bank selector. Renders a row of `count`
+    tappable buttons; the int param at `name` holds the active index.
+    The play page renders this widget OUTSIDE the pageable param
+    list, fixed at the bottom of the surface above the bottom nav —
+    matches the Tracker's strip placement. `count` defaults to 8 to
+    line up with the slot_bank helper. `slots_param` names the
+    sibling list-of-dicts param that stores per-slot snapshots — see
+    `raspimidihub.slot_bank` for the snapshot / load mechanics."""
+    count: int = 8
+    default: int = 0
+    slots_param: str = ""
+
+    def to_dict(self) -> dict:
+        d = super().to_dict()
+        d["count"] = self.count
+        d["default"] = self.default
+        if self.slots_param:
+            d["slots_param"] = self.slots_param
+        return d
+
+
+@dataclass
 class Group:
     """Titled section grouping related params. `config_only=True`
     hides the entire group (title + children) from a play surface —

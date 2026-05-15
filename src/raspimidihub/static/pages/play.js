@@ -14,10 +14,22 @@ import { html, api } from '../ui/common.js';
 import { useEffect, useState, useCallback, useRef } from '../lib/hooks.module.js';
 import { useSSESubscription } from '../ui/sse-subscriptions.js';
 import { renderParamList } from '../components/renderparam.js';
+import { PluginPatternStrip } from '../components/patternstrip.js';
 import { usePluginParams } from '../ui/plugin-params.js';
 
 const SWIPE_MIN_PX = 50;
 const SWIPE_MAX_MS = 700;
+// One pagination "page" is 80% of the visible viewport so the
+// previous page's tail row is still in view after the tap.
+const PAGE_FACTOR = 0.8;
+
+function findPatternStrip(schema) {
+    if (!schema) return null;
+    for (const p of schema) {
+        if (p && p.type === 'patternstrip') return p;
+    }
+    return null;
+}
 
 function PlaySurface({ instance, pluginData, pluginDisplays, clockPosition }) {
     const {
@@ -33,6 +45,58 @@ function PlaySurface({ instance, pluginData, pluginDisplays, clockPosition }) {
         if (pluginData?.params) setPluginParams(pluginData.params);
     }, [pluginData?.params]);
 
+    const pagerRef = useRef(null);
+    const [canUp, setCanUp] = useState(false);
+    const [canDown, setCanDown] = useState(false);
+
+    // The pattern strip lives outside the paged param area, fixed at
+    // the bottom of the play surface (Tracker-style). Filter it out
+    // of the main param flow so it doesn't render twice.
+    const stripParam = pluginData ? findPatternStrip(pluginData.params_schema) : null;
+    const mainSchema = stripParam
+        ? (pluginData.params_schema || []).filter((p) => p !== stripParam)
+        : (pluginData?.params_schema);
+
+    useEffect(() => {
+        if (!stripParam) return;
+        const el = pagerRef.current;
+        if (!el) return;
+        let raf = 0;
+        const update = () => {
+            raf = 0;
+            const top = el.scrollTop;
+            const maxScroll = el.scrollHeight - el.clientHeight;
+            setCanUp(top > 4);
+            setCanDown(top < maxScroll - 4);
+        };
+        const onScroll = () => {
+            if (raf) return;
+            raf = requestAnimationFrame(update);
+        };
+        el.addEventListener('scroll', onScroll, { passive: true });
+        // ResizeObserver catches viewport changes (rotate, density)
+        // AND content changes (slot loads change which params fit).
+        const ro = new ResizeObserver(update);
+        ro.observe(el);
+        if (el.firstChild) ro.observe(el.firstChild);
+        update();
+        return () => {
+            el.removeEventListener('scroll', onScroll);
+            ro.disconnect();
+            if (raf) cancelAnimationFrame(raf);
+        };
+    }, [stripParam, pluginData?.id]);
+
+    const pageBy = useCallback((dir) => {
+        const el = pagerRef.current;
+        if (!el) return;
+        const step = Math.max(60, el.clientHeight * PAGE_FACTOR);
+        el.scrollTo({
+            top: el.scrollTop + dir * step,
+            behavior: 'smooth',
+        });
+    }, []);
+
     if (!pluginData) {
         return html`<div class="controller-loading">Loading…</div>`;
     }
@@ -42,8 +106,30 @@ function PlaySurface({ instance, pluginData, pluginDisplays, clockPosition }) {
         playOnly: true,
         clockPosition,
     };
-    return html`<div class="controller-surface">
-        ${renderParamList(pluginData.params_schema, pluginParams, onPluginParamChange, displayCtx)}
+
+    // Plugins without a PatternStrip (e.g. the Tracker, which has
+    // its own internal scroll target) keep the original layout.
+    if (!stripParam) {
+        return html`<div class="controller-surface">
+            ${renderParamList(pluginData.params_schema, pluginParams, onPluginParamChange, displayCtx)}
+        </div>`;
+    }
+
+    return html`<div class="play-surface-wrap">
+        <div class="play-pager" ref=${pagerRef}>
+            ${renderParamList(mainSchema, pluginParams, onPluginParamChange, displayCtx)}
+        </div>
+        ${canUp ? html`<button class="play-page-btn up"
+            onclick=${() => pageBy(-1)}>↑ More</button>` : null}
+        ${canDown ? html`<button class="play-page-btn down"
+            onclick=${() => pageBy(1)}>↓ More</button>` : null}
+        <div class="play-pattern-strip">
+            <${PluginPatternStrip}
+                name=${stripParam.name}
+                value=${pluginParams[stripParam.name]}
+                count=${stripParam.count || 8}
+                onChange=${onPluginParamChange} />
+        </div>
     </div>`;
 }
 
@@ -133,7 +219,7 @@ export function PlayPage({ pluginDisplays, showToast, selectedId, onSelect, onEd
         else if (dx > 0 && prev) setSelectedId(prev.id);
     }, [prev, next, setSelectedId]);
 
-    return html`<div class="page controller-page"
+    return html`<div class="page controller-page play-page"
             ontouchstart=${onTouchStart}
             ontouchend=${onTouchEnd}
             ontouchcancel=${onTouchEnd}>

@@ -27,6 +27,7 @@ import random
 import threading
 import time
 
+from raspimidihub import slot_bank
 from raspimidihub.plugin_api import (
     Button,
     ChannelSelect,
@@ -34,6 +35,7 @@ from raspimidihub.plugin_api import (
     Group,
     Knob,
     NoteSelect,
+    PatternStrip,
     PluginBase,
     Radio,
     StepEditor,
@@ -261,6 +263,11 @@ play-surface knob; see Appendix A for the full table."""
         # indicator). Read-only meter.
         Display("_envelope", "Envelope", display_name="envelope"),
 
+        # Pattern-slot strip — same bank machinery as the Arpeggiator.
+        PatternStrip("active_slot", "Patterns",
+                     count=slot_bank.SLOT_COUNT, default=0,
+                     slots_param="pattern_slots", play_only=True),
+
         Group("Setup", [
             ChannelSelect("arp_channel", "Arp Ch", default=0, allow_any=True),
             ChannelSelect("control_channel", "Ctrl Ch", default=0, allow_any=True),
@@ -272,6 +279,17 @@ play-surface knob; see Appendix A for the full table."""
             Wheel("bpm", "BPM", min=40, max=300, default=120,
                   visible_when=("sync_mode", "free")),
             Button("retrig", "Retrig", default=True, color="green"),
+            # Pattern-slot hardware trigger — Tracker-shaped: a
+            # dedicated channel + 8 learnable notes pick the slot.
+            Wheel("pattern_ctrl_ch", "Pattern Ctrl Ch",
+                  min=0, max=16, default=0,
+                  labels=["Off"] + [str(i) for i in range(1, 17)]),
+            Group("Pattern Notes", [
+                NoteSelect(f"pattern_note_{i}", f"P{i + 1}",
+                           default=36 + i, config_only=True)
+                for i in range(slot_bank.SLOT_COUNT)
+            ], config_only=True,
+                visible_when=("pattern_ctrl_ch", list(range(1, 17)))),
         ], config_only=True),
     ]
 
@@ -319,6 +337,18 @@ play-surface knob; see Appendix A for the full table."""
     ]
 
     clock_divisions = list(_RATE_OPTIONS)
+
+    # Every play_only param that gets captured into a pattern slot.
+    # Switching slot N replaces each of these from
+    # `pattern_slots[N]`; edits write back to the active slot.
+    # `active_slot` itself is excluded — it's the bank selector.
+    _SLOT_PARAMS = [
+        "pattern", "rate", "pulses", "steps", "rotate", "octaves",
+        "phase", "cycles", "open", "gate", "accent_vel",
+        "fade_in", "fade_out", "jitter",
+        "tune_spread", "spread_snap", "scale", "root",
+        "steps_grid",
+    ]
 
     display_outputs = [
         {"name": "envelope", "type": "meter", "label": "Envelope",
@@ -368,6 +398,9 @@ play-surface knob; see Appendix A for the full table."""
         self._publish_algo_underlay()
         self.set_display("envelope", 0)
 
+        # Pattern bank — 8 snapshots of every play-surface param.
+        slot_bank.init_slot_bank(self, self._SLOT_PARAMS)
+
     def on_stop(self):
         self._free_running = False
         self._silence_all()
@@ -410,6 +443,14 @@ play-surface knob; see Appendix A for the full table."""
         return None
 
     def on_note_on(self, channel, note, velocity):
+        # Slot-trigger notes are checked first — they live on a
+        # dedicated control channel and switch the pattern bank.
+        # Trigger notes are consumed.
+        slot_idx = slot_bank.trigger_note_index(self, channel, note)
+        if slot_idx is not None:
+            if slot_idx != self.get_param("active_slot"):
+                slot_bank.load_slot(self, self._SLOT_PARAMS, slot_idx)
+            return
         # Pattern-trigger notes are consumed: they set the Pattern
         # wheel and do not join the held-notes buffer.
         idx = self._pattern_trigger_index(channel, note)
@@ -447,6 +488,8 @@ play-surface knob; see Appendix A for the full table."""
                     self._start_free_runner()
 
     def on_note_off(self, channel, note):
+        if slot_bank.trigger_note_index(self, channel, note) is not None:
+            return
         if self._pattern_trigger_index(channel, note) is not None:
             return
         if not self._channel_match(channel, "arp_channel"):
@@ -515,6 +558,13 @@ play-surface knob; see Appendix A for the full table."""
     # ----- param-change reactions --------------------------------------------
 
     def on_param_change(self, name, value):
+        # Pattern bank: a user-driven `active_slot` change loads the
+        # snapshot. Held notes, sustain and the playhead are
+        # untouched; only the snapshotted play-surface params move.
+        if name == "active_slot":
+            slot_bank.load_slot(self, self._SLOT_PARAMS, int(value))
+            return
+        slot_bank.record_edit(self, self._SLOT_PARAMS, name, value)
         if name in ("pulses", "steps", "rotate", "phase", "cycles", "open"):
             with self._lock:
                 self._refresh_algo_pattern()
