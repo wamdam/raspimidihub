@@ -73,9 +73,15 @@ MIDI-Learn the trigger note for each slot (P1..P8). All notes
 arriving on the Pattern Ctrl Ch are consumed -- they switch
 slots and never reach the arp's held-notes buffer.
 
-**CC automation.** CC 74 maps to **Rate** (the integer index into
-the rate options); CC 75 maps to **Gate %**. Useful for keyboard
-controllers with assignable knobs.
+**CC automation.** Block CC 70..83 covers every play-surface
+knob, mirroring the Euclidean's mapping so a hardware controller
+wired for one drives the other.
+
+| CC | Parameter | CC | Parameter |
+|----|-----------|----|-----------|
+| 70 | Pattern   | 74 | Rate |
+| 71 | Octaves   | 75 | Gate % |
+| 73 | Steps     | 83 | Accent Vel. |
 
 **Input.** Notes (held-note buffer), CC 64 (temporary Hold via
 sustain pedal -- released keys keep arping until pedal lift),

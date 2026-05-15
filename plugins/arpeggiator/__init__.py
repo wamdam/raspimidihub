@@ -200,12 +200,24 @@ flips Rate, never plays."""
         ], config_only=True),
     ]
 
-    cc_inputs = {74: "rate", 75: "gate"}
+    # Block CC#70..83 — mirrors the Euclidean's shared-param
+    # mapping so a hardware controller wired for one plugin drives
+    # the matching knobs on the other.
+    cc_inputs = {
+        70: "pattern",
+        71: "octaves",
+        73: "step_count",
+        74: "rate",
+        75: "gate",
+        83: "accent_vel",
+    }
     cc_outputs = []
 
     inputs = ["Notes", "CC#64 (sustain pedal — temporarily holds arping notes)",
-              "CC#74 (rate)", "CC#75 (gate)",
+              "CC#70 (pattern)", "CC#71 (octaves)", "CC#73 (steps)",
+              "CC#74 (rate)", "CC#75 (gate)", "CC#83 (accent vel.)",
               "Notes in [Base, Base+15) when Trigger Note is on (sets Rate)",
+              "Pattern Ctrl Ch notes (set Pattern slot 1..8)",
               "Clock", "Aftertouch", "Pitch Bend"]
     outputs = ["Notes (arpeggiated)", "Aftertouch (pass-through)", "Pitch Bend (pass-through)"]
 
