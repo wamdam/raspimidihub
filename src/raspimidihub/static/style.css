@@ -371,6 +371,17 @@ body {
     padding: 6px 8px;
     background: var(--surface2, #2a2a2a);
     border-radius: 6px;
+    /* Reserve two lines so scrolling the CC wheel through values that
+     * collide / don't collide doesn't bounce the layout below. The
+     * .empty variant uses the same min-height with a placeholder
+     * message inside. */
+    min-height: calc(2 * 1.4em + 12px);
+    box-sizing: border-box;
+}
+.cc-bind-collisions.empty {
+    color: var(--text-dim);
+    opacity: 0.5;
+    font-style: italic;
 }
 .cc-bind-footer {
     display: flex;

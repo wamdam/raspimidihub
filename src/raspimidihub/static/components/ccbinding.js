@@ -135,12 +135,19 @@ export function CcBinding({ open, onClose }) {
 
     async function refreshCollisions(o, cc, ch) {
         if (cc === null || cc === undefined) { setCollisions([]); return; }
+        // Scope: only THIS plugin instance. Cross-instance overlap is
+        // not a collision — different instances commonly receive CCs
+        // from different sources via the routing matrix, so two
+        // Arpeggiators on CC 74 are independent. Within one instance
+        // it IS worth flagging ("if you bind your hardware to CC 74
+        // it'll drive both Rate AND Gate on this Arp").
         try {
             const { mappings } = await api('/api/plugins/cc-mappings');
             const hits = (mappings || []).filter((m) =>
-                m.cc === cc
-                && (ch === null || ch === undefined || m.ch === null || m.ch === undefined || m.ch === ch)
-                && !(m.instance_id === o.instanceId && m.param === o.paramName));
+                m.instance_id === o.instanceId
+                && m.param !== o.paramName
+                && m.cc === cc
+                && (ch === null || ch === undefined || m.ch === null || m.ch === undefined || m.ch === ch));
             setCollisions(hits);
         } catch {
             setCollisions([]);
@@ -210,13 +217,18 @@ export function CcBinding({ open, onClose }) {
 
     if (!open) return null;
 
+    // The collision strip is ALWAYS rendered (with reserved 2-line
+    // min-height in CSS) so that scrolling the CC wheel through values
+    // with / without collisions doesn't jump the rest of the modal.
+    // Within-plugin scope only — listing the param label is enough;
+    // the plugin name is in the popup title.
     const collisionLine = collisions.length === 0
-        ? null
+        ? html`<div class="cc-bind-collisions empty">No other controls on this plugin use this CC</div>`
         : collisions.length <= 3
             ? html`<div class="cc-bind-collisions">Also drives: ${collisions.map((c, i) =>
-                html`<span>${i > 0 ? ', ' : ''}${c.instance_name} → ${c.param_label}</span>`)}</div>`
+                html`<span>${i > 0 ? ', ' : ''}${c.param_label}</span>`)}</div>`
             : html`<div class="cc-bind-collisions">Also drives: ${collisions.slice(0, 2).map((c) =>
-                `${c.instance_name} → ${c.param_label}`).join(', ')} · +${collisions.length - 2} more</div>`;
+                c.param_label).join(', ')} · +${collisions.length - 2} more</div>`;
 
     const isCleared = binding && (binding.cc === null || binding.cc === undefined);
 
