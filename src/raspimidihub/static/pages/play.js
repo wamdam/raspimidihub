@@ -18,26 +18,6 @@ import { usePluginParams } from '../ui/plugin-params.js';
 
 const SWIPE_MIN_PX = 50;
 const SWIPE_MAX_MS = 700;
-// One pagination "page" is 80% of the visible viewport so the
-// previous page's tail row is still in view after the tap.
-const PAGE_FACTOR = 0.8;
-// Must match the .play-pager-content { padding-bottom } value in
-// style.css. Subtracted from the overflow check so this safety
-// padding doesn't fake a "more below" state when content actually
-// fits.
-const CONTENT_BOTTOM_PAD = 52;
-
-// Plugins that need pagination — currently identified by their
-// schema containing a `patternstrip` param. The Tracker doesn't
-// declare one and keeps its own internal scroll target, so it's
-// left out of the pager.
-function needsPager(schema) {
-    if (!schema) return false;
-    for (const p of schema) {
-        if (p && p.type === 'patternstrip') return true;
-    }
-    return false;
-}
 
 function PlaySurface({ instance, pluginData, pluginDisplays, clockPosition }) {
     const {
@@ -53,92 +33,6 @@ function PlaySurface({ instance, pluginData, pluginDisplays, clockPosition }) {
         if (pluginData?.params) setPluginParams(pluginData.params);
     }, [pluginData?.params]);
 
-    const pagerRef = useRef(null);
-    const contentRef = useRef(null);
-    const [canUp, setCanUp] = useState(false);
-    const [canDown, setCanDown] = useState(false);
-    // Dynamic bottom offset for the .down page button — distance
-    // from viewport bottom to the top of whatever is reserved
-    // there (bottom nav, optionally midi-bar). Measured live so
-    // the button sits flush above the actual UI chrome, not above
-    // the slightly-larger CSS reserve.
-    const [downOffset, setDownOffset] = useState(72);
-    const usePager = pluginData ? needsPager(pluginData.params_schema) : false;
-
-    useEffect(() => {
-        if (!usePager) return;
-        const el = pagerRef.current;
-        const inner = contentRef.current;
-        if (!el || !inner) return;
-        let raf = 0;
-        const update = () => {
-            raf = 0;
-            const top = el.scrollTop;
-            const maxScroll = el.scrollHeight - el.clientHeight;
-            setCanUp(top > 4);
-            // Subtract the bottom-safety padding so a fully-fitting
-            // surface (overflow == CONTENT_BOTTOM_PAD because of the
-            // pad alone) doesn't register canDown.
-            setCanDown(maxScroll - CONTENT_BOTTOM_PAD > 4
-                       && top < maxScroll - 4);
-            // Measure where the bottom UI chrome starts (the higher
-            // of bottom-nav.top / midi-bar.top) and pin the .down
-            // button there.
-            const nav = document.querySelector('.bottom-nav');
-            const midi = document.querySelector('.midi-bar');
-            const vh = window.innerHeight;
-            let topY = vh;
-            if (nav) {
-                const r = nav.getBoundingClientRect();
-                if (r.height > 0) topY = Math.min(topY, r.top);
-            }
-            if (midi) {
-                const r = midi.getBoundingClientRect();
-                if (r.height > 0) topY = Math.min(topY, r.top);
-            }
-            const offset = Math.max(0, vh - topY);
-            setDownOffset(offset);
-        };
-        const onScroll = () => {
-            if (raf) return;
-            raf = requestAnimationFrame(update);
-        };
-        el.addEventListener('scroll', onScroll, { passive: true });
-        // Observe the inner content wrapper (rather than the pager
-        // itself or just its first child) so any in-place size
-        // change — step count grew, slot load brought in a different
-        // grid length, a Group expanded — re-evaluates the button
-        // visibility immediately.
-        const ro = new ResizeObserver(update);
-        ro.observe(inner);
-        ro.observe(el);  // viewport-size changes (rotate, density)
-        // Also watch the bottom UI chrome so the button-offset
-        // tracks the midi-bar showing / hiding and density changes.
-        const nav = document.querySelector('.bottom-nav');
-        const midi = document.querySelector('.midi-bar');
-        if (nav) ro.observe(nav);
-        if (midi) ro.observe(midi);
-        const onResize = () => onScroll();
-        window.addEventListener('resize', onResize);
-        update();
-        return () => {
-            el.removeEventListener('scroll', onScroll);
-            window.removeEventListener('resize', onResize);
-            ro.disconnect();
-            if (raf) cancelAnimationFrame(raf);
-        };
-    }, [usePager, pluginData?.id]);
-
-    const pageBy = useCallback((dir) => {
-        const el = pagerRef.current;
-        if (!el) return;
-        const step = Math.max(60, el.clientHeight * PAGE_FACTOR);
-        el.scrollTo({
-            top: el.scrollTop + dir * step,
-            behavior: 'smooth',
-        });
-    }, []);
-
     if (!pluginData) {
         return html`<div class="controller-loading">Loading…</div>`;
     }
@@ -148,34 +42,8 @@ function PlaySurface({ instance, pluginData, pluginDisplays, clockPosition }) {
         playOnly: true,
         clockPosition,
     };
-
-    // Plugins that don't declare a PatternStrip (e.g. the Tracker,
-    // which has its own internal scroll target) keep the original
-    // layout — no pager wrapper, no page buttons.
-    if (!usePager) {
-        return html`<div class="controller-surface">
-            ${renderParamList(pluginData.params_schema, pluginParams, onPluginParamChange, displayCtx)}
-        </div>`;
-    }
-
-    // Pattern strip renders inline at the end of the param flow (the
-    // plugin already lists it last in `params`). Pagination buttons
-    // float at the top / bottom of the visible viewport, conditional
-    // on overflow in that direction. The inner `.play-pager-content`
-    // wrapper exists for the ResizeObserver — it picks up content
-    // height changes (step count, slot loads) that wouldn't fire on
-    // a per-child observer.
-    return html`<div class="play-surface-wrap">
-        <div class="play-pager" ref=${pagerRef}>
-            <div class="play-pager-content" ref=${contentRef}>
-                ${renderParamList(pluginData.params_schema, pluginParams, onPluginParamChange, displayCtx)}
-            </div>
-        </div>
-        ${canUp ? html`<button class="play-page-btn up"
-            onclick=${() => pageBy(-1)}>↑ More</button>` : null}
-        ${canDown ? html`<button class="play-page-btn down"
-            style="bottom:${downOffset}px"
-            onclick=${() => pageBy(1)}>↓ More</button>` : null}
+    return html`<div class="controller-surface">
+        ${renderParamList(pluginData.params_schema, pluginParams, onPluginParamChange, displayCtx)}
     </div>`;
 }
 
@@ -265,7 +133,7 @@ export function PlayPage({ pluginDisplays, showToast, selectedId, onSelect, onEd
         else if (dx > 0 && prev) setSelectedId(prev.id);
     }, [prev, next, setSelectedId]);
 
-    return html`<div class="page controller-page play-page"
+    return html`<div class="page controller-page"
             ontouchstart=${onTouchStart}
             ontouchend=${onTouchEnd}
             ontouchcancel=${onTouchEnd}>
