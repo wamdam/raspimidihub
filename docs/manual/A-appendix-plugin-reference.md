@@ -39,12 +39,15 @@ initial wiring, never during a set.
 | Play    | **Gate %** | Wheel | 10--100 | 80 |
 | Play    | **Octaves** | Wheel | 1--4 | 1 |
 | Play    | **Step Pattern** | StepEditor | per-step on/off + offset + accent | all-on, offset 0 |
+| Play    | **Patterns** | PatternStrip | bottom-of-surface P1--P8 bank selector | slot 1 active |
 | Setup   | **Arp Ch** | ChannelSelect | 1--16 or any | any |
 | Setup   | **Ctrl Ch** | ChannelSelect | 1--16 or any | any |
 | Setup   | **Trigger Note** | Button | enable rate-trigger range | off |
 | Setup   | **Base** (visible when Trigger Note is on) | NoteSelect | first note of a 15-semitone rate-trigger range | C1 (24) |
 | Setup   | **Sync** | Radio | free / tempo / transport | transport |
 | Setup   | **BPM** (visible when Sync = free) | Wheel | 40--300 | 120 |
+| Setup   | **Pattern Ctrl Ch** | Wheel | Off / 1--16 (reserves a channel for slot switching) | Off |
+| Setup   | **P1..P8** (visible when Pattern Ctrl Ch is on) | NoteSelect ×8 | one learnable trigger note per slot | C2..G2 (36..43) |
 
 **Pattern modes.** `up` / `down` / `up-down` / `random` /
 `as-played` are the standard held-note arpeggiator behaviours.
@@ -55,6 +58,20 @@ persist while any key or the sustain pedal is held. `chord` fires
 every held note simultaneously each step -- the per-step offset,
 accent and gate apply to the whole burst, and `Octaves > 1`
 doubles the chord into the higher octaves.
+
+**Pattern bank.** The strip below the step grid (P1..P8) is an
+8-slot pattern bank. Each slot carries a snapshot of every
+play-surface param (Pattern, Rate, Steps, Accent Vel., Gate,
+Octaves, Step Pattern grid). Tap a slot to switch -- the change
+is immediate, and held notes plus sustain state survive the
+switch, so a slot change can rewrite the pattern under a chord
+held with the pedal. Edits to any play-surface knob auto-write
+back to the active slot (no Store action), so the bank tracks
+your live working state. To switch from a hardware controller,
+set **Pattern Ctrl Ch** to a dedicated MIDI channel and
+MIDI-Learn the trigger note for each slot (P1..P8). All notes
+arriving on the Pattern Ctrl Ch are consumed -- they switch
+slots and never reach the arp's held-notes buffer.
 
 **CC automation.** CC 74 maps to **Rate** (the integer index into
 the rate options); CC 75 maps to **Gate %**. Useful for keyboard
@@ -201,6 +218,7 @@ anything.
 | Play    | **Root** | Wheel | C ... B | C |
 | Play    | **Step Pattern** | StepEditor (override mode) | per-step default / force-on / force-on+accent / force-off + offset | all default |
 | Play    | **Envelope** | Display (meter) | 0--127 (live velocity multiplier) | -- |
+| Play    | **Patterns** | PatternStrip | bottom-of-surface P1--P8 bank selector | slot 1 active |
 | Setup   | **Arp Ch** | ChannelSelect | 1--16 or any | any |
 | Setup   | **Ctrl Ch** | ChannelSelect | 1--16 or any | any |
 | Setup   | **Pattern Trigger** | Button | enable a 6-semitone Pattern selector range | off |
@@ -208,6 +226,8 @@ anything.
 | Setup   | **Sync** | Radio | free / tempo / transport | transport |
 | Setup   | **BPM** (visible when Sync = free) | Wheel | 40--300 | 120 |
 | Setup   | **Retrig** | Button | reset the cycle on the first key of a phrase | on |
+| Setup   | **Pattern Ctrl Ch** | Wheel | Off / 1--16 (reserves a channel for slot switching) | Off |
+| Setup   | **P1..P8** (visible when Pattern Ctrl Ch is on) | NoteSelect ×8 | one learnable trigger note per slot | C2..G2 (36..43) |
 
 **Pitch modes.** `up` / `down` / `up-down` / `random` /
 `as-played` voice the held buffer one note per step. `chord`
@@ -236,6 +256,21 @@ the Pattern wheel. When **Pattern Trigger** is on, MIDI notes in
 `[Base, Base+6)` pick the Pattern; trigger notes are consumed
 (they do not arpeggiate). MIDI-Learn the Base wheel from a
 controller.
+
+**Pattern bank.** The strip at the bottom of the play surface
+(P1..P8) is an 8-slot pattern bank. Each slot carries a snapshot
+of every play-surface param -- pattern mode, rate, the whole
+Bjorklund + window-wave setup, the step grid, scale + root, the
+spread and fade envelope. Tap a slot to switch -- the change is
+immediate, and held notes plus sustain state survive the switch,
+so the pattern can rewrite itself under a chord held with the
+pedal. Edits to any play-surface knob auto-write back to the
+active slot (no Store action), so the bank tracks live working
+state. To switch from a hardware controller, set
+**Pattern Ctrl Ch** to a dedicated MIDI channel and MIDI-Learn
+the trigger note for each slot (P1..P8). All notes arriving on
+the Pattern Ctrl Ch are consumed -- they switch slots and never
+reach the held-notes buffer.
 
 **CC automation.** Block CC 70..88 (skipping CC 84, GM
 Portamento Control) drives every play-surface knob, so any

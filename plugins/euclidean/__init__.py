@@ -31,7 +31,6 @@ from raspimidihub import slot_bank
 from raspimidihub.plugin_api import (
     Button,
     ChannelSelect,
-    Display,
     Group,
     Knob,
     NoteSelect,
@@ -259,10 +258,6 @@ play-surface knob; see Appendix A for the full table."""
                    override_mode=True,
                    algo_underlay_param="step_algo_on"),
 
-        # Velocity-envelope strip below the grid (Fade In / Fade Out
-        # indicator). Read-only meter.
-        Display("_envelope", "Envelope", display_name="envelope"),
-
         # Pattern-slot strip — same bank machinery as the Arpeggiator.
         PatternStrip("active_slot", "Patterns",
                      count=slot_bank.SLOT_COUNT, default=0,
@@ -338,6 +333,13 @@ play-surface knob; see Appendix A for the full table."""
 
     clock_divisions = list(_RATE_OPTIONS)
 
+    # No `display_outputs` for v1 — the velocity-envelope strip
+    # planned in docs/eucledian.md isn't shipped as a `Display`
+    # param because the generic meter widget reads as an awkward
+    # tile next to the knob row. The Fade In / Fade Out values are
+    # still on their own knobs; a dedicated thin-strip widget can
+    # land later once the layout has a slot for it.
+
     # Every play_only param that gets captured into a pattern slot.
     # Switching slot N replaces each of these from
     # `pattern_slots[N]`; edits write back to the active slot.
@@ -348,11 +350,6 @@ play-surface knob; see Appendix A for the full table."""
         "fade_in", "fade_out", "jitter",
         "tune_spread", "spread_snap", "scale", "root",
         "steps_grid",
-    ]
-
-    display_outputs = [
-        {"name": "envelope", "type": "meter", "label": "Envelope",
-         "min": 0, "max": 127},
     ]
 
     # ----- lifecycle ----------------------------------------------------------
@@ -396,7 +393,6 @@ play-surface knob; see Appendix A for the full table."""
         self._refresh_algo_pattern()
         self._refresh_scale_map()
         self._publish_algo_underlay()
-        self.set_display("envelope", 0)
 
         # Pattern bank — 8 snapshots of every play-surface param.
         slot_bank.init_slot_bank(self, self._SLOT_PARAMS)
@@ -416,7 +412,6 @@ play-surface knob; see Appendix A for the full table."""
             self._fade_dir = 0.0
             self._fadeout_notes = []
             self._silence_all()
-        self.set_display("envelope", 0)
 
     # ----- input handlers -----------------------------------------------------
 
@@ -757,8 +752,6 @@ play-surface knob; see Appendix A for the full table."""
                 self._sorted_notes = []
                 self._free_running = False
 
-            self.set_display("envelope", int(self._fade_value * 127))
-
     # ----- voicing / scale / spread ------------------------------------------
 
     def _build_voicing(self, source: list[tuple[int, int, int]]
@@ -866,7 +859,6 @@ play-surface knob; see Appendix A for the full table."""
             self._fade_dir = 0.0
             self._fadeout_notes = []
             self._silence_all()
-            self.set_display("envelope", 0)
             return
         # Capture the source the next _advance should keep voicing.
         # `_sorted_notes` is empty here (we just cleared `_held_notes`),

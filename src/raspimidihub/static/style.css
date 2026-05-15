@@ -120,8 +120,17 @@ body {
    instead of below the fold. */
 .main:has(> .play-page) { overflow: hidden; }
 .controller-page.play-page {
+    /* Override the default .controller-page bleed-through trick
+       (margin-bottom: -72px; padding-bottom: 80px) so the flex
+       chain below cleanly fills .main's content area. The page
+       sits inside .main's content box (.main keeps its 72 px
+       padding-bottom for the fixed bottom nav), and the bottom
+       pattern strip lands flush above the nav. */
+    margin-bottom: 0;
+    padding-bottom: 0;
     height: 100%;
     min-height: 100%;
+    box-sizing: border-box;
     display: flex;
     flex-direction: column;
     overflow: hidden;
