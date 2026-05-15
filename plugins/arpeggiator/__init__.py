@@ -61,12 +61,16 @@ class Arpeggiator(PluginBase):
     NAME = "Arpeggiator"
     DESCRIPTION = "Plays held notes as a pattern with step sequencer"
     AUTHOR = "RaspiMIDIHub"
-    VERSION = "1.1"
+    VERSION = "1.2"
     HELP = """\
 Combines arpeggiator patterns with a step sequencer. Hold notes and
 the arp cycles through them in the selected pattern (up/down/etc).
 Each step can be on/off and has a note offset (semitones from the
 current arp note). Only active steps play — inactive steps are rests.
+
+Pattern modes: up / down / up-down / random / as-played / programmed
+/ chord. `chord` fires every held note simultaneously each step
+(same offset / accent / gate apply to the whole burst).
 
 Default: all steps on, zero offset = classic arpeggiator.
 Set offsets to create melodic variations on each step.
@@ -90,8 +94,12 @@ flips Rate, never plays."""
     # the runtime conditional logic (`as-played`, `programmed`, …).
     # Stored value is the integer index into this list; _pattern_str()
     # converts back to the label string for comparisons.
+    # `chord` is appended at the end on purpose: legacy configs that
+    # stored the pattern as an int index (post-3.1.6) still resolve to
+    # their original label because nothing earlier in the list shifted.
     _PATTERN_OPTIONS = [
         "up", "down", "up-down", "random", "as-played", "programmed",
+        "chord",
     ]
 
     # Single source of truth for the rate Wheel's tick labels AND the
@@ -195,7 +203,11 @@ flips Rate, never plays."""
         self._arp_step = 0       # position in the arp note sequence
         self._seq_step = 0       # position in the step editor
         self._direction = 1
-        self._playing_note = None
+        # Notes currently sounding from the last fired step. List form
+        # so chord mode can keep multiple alive and `_note_off_current`
+        # silences the whole burst on the next step. Single-note
+        # patterns simply keep one entry.
+        self._playing_notes: list[tuple[int, int]] = []
         self._lock = threading.Lock()
         self._free_thread = None
         self._free_running = False
@@ -314,8 +326,8 @@ flips Rate, never plays."""
         _arp_step to whichever index in the eventual `notes` list
         produces new_note."""
         pattern = self._pattern_str()
-        if pattern == "random":
-            return  # random plays randomly, no seek meaningful
+        if pattern in ("random", "chord"):
+            return  # no single "next" note to seek toward
         if pattern == "as-played":
             # held_notes order is press order; new note was just appended.
             self._arp_step = max(0, len(self._held_notes) - 1)
@@ -654,6 +666,30 @@ flips Rate, never plays."""
             if not step.get("on", True):
                 return
 
+            # Chord mode: every held note (× octaves) fires at once on
+            # this step, with the same per-step offset / accent / gate.
+            # The `_arp_step` counter is not advanced — chord has no
+            # "next" pitch to pick.
+            if pattern == "chord":
+                offset = step.get("offset", 0)
+                accent_add = (self.get_param("accent_vel") or 0
+                              if step.get("accent") else 0)
+                rate_period = self._rate_period_seconds()
+                note_off_at = (time.monotonic()
+                               + max(0.005, rate_period * gate)
+                               if rate_period > 0 else None)
+                for note, vel, ch in notes:
+                    out_note = note + offset
+                    if not (0 <= out_note <= 127):
+                        continue
+                    out_vel = min(127, vel + accent_add) if accent_add else vel
+                    self.send_note_on(ch, out_note, out_vel)
+                    if note_off_at is not None:
+                        self.send_note_off_at(note_off_at, ch, out_note,
+                                              tag=_ARP_TAG)
+                    self._playing_notes.append((ch, out_note))
+                return
+
             # Get the arp note
             if pattern == "random":
                 arp_idx = random.randint(0, len(notes) - 1)
@@ -691,7 +727,7 @@ flips Rate, never plays."""
                 if rate_period > 0:
                     note_off_at = time.monotonic() + max(0.005, rate_period * gate)
                     self.send_note_off_at(note_off_at, ch, note, tag=_ARP_TAG)
-                self._playing_note = (ch, note)
+                self._playing_notes.append((ch, note))
 
             # Advance arp position
             if pattern == "up-down":
@@ -753,21 +789,20 @@ flips Rate, never plays."""
             if rate_period > 0:
                 note_off_at = time.monotonic() + max(0.005, rate_period * gate)
                 self.send_note_off_at(note_off_at, ch, note_out, tag=_ARP_TAG)
-            self._playing_note = (ch, note_out)
+            self._playing_notes.append((ch, note_out))
 
     def _note_off_current(self):
-        if self._playing_note:
-            ch, note = self._playing_note
+        for ch, note in self._playing_notes:
             self.send_note_off(ch, note)
+        self._playing_notes = []
 
     def _silence_all(self):
         """Cancel every pending scheduled note-off and immediately
-        silence the currently-sounding note. Used by panic / transport-
+        silence the currently-sounding notes. Used by panic / transport-
         stop / no-keys-held — we need notes to stop NOW, not at their
         gate boundary."""
         self.cancel_scheduled(_ARP_TAG)
         self._note_off_current()
-        self._playing_note = None
 
     def _rate_period_seconds(self) -> float:
         """Seconds per arp step at the current rate + sync mode. Used

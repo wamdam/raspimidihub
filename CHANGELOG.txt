@@ -4,6 +4,14 @@ User-visible changes. Short tagged one-liners, no code or commit
 hashes. Tags: Added, Improved, Fix, Changed, Removed.
 
 
+Unreleased
+
+- Added: Arpeggiator `chord` pattern — every held note fires simultaneously each step, with the per-step offset / accent / gate applied to the whole burst. Octaves > 1 doubles the chord up. Stored as a new index appended to _PATTERN_OPTIONS so existing configs keep their pattern selection.
+- Added: Euclidean play-surface plugin — held notes voiced through a Bjorklund-distributed step pattern. Three layers: algorithm (Pulses / Steps / Rotate), Window wave (Phase / Cycles / Open as a sine threshold mask), and a four-state Step grid (default / FORCE_ON / FORCE_ON+accent / FORCE_OFF) with an algorithm-underlay preview. Internal Scale + Root (9 scales including chromatic pass-through), Tune Spread + Snap (free / octaves / fifths+octaves), Jitter, Fade In / Fade Out with live velocity strip, Pattern Trigger note range. Full block CC 70..88 (skipping CC 84) covers every play-surface knob; CC 74 / CC 75 stay Arp-consistent. Add via Add → Play.
+- Added: StepEditor `override_mode` — four-state head cycle (default → FORCE_ON → FORCE_ON+accent → FORCE_OFF → default) with an algorithm-underlay tint on default cells. Used by the Euclidean plugin; the Arpeggiator keeps its three-state cycle.
+- Improved: Scale catalogue + nearest-in-scale quantiser moved to a shared `raspimidihub.scales` module so the Euclidean plugin and the Scale Remapper share one source of truth.
+
+
 2026-05-14 — Version 3.1.6
 
 - Added: Arpeggiator is now a play-surface plugin — Pattern + Rate are wide wheels above four shapers and the step grid on the Play tab, alongside the Tracker. Add via Add → Play. Setup group (Arp Ch / Ctrl Ch / Trigger Note / Sync / BPM) stays in the device-detail panel.

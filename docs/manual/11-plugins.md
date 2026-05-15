@@ -187,6 +187,7 @@ One-line summaries. The detailed reference for each lives in
 | **CC Smoother** | Removes jitter from noisy CC inputs with configurable smoothing; dual scopes (in / out) |
 | **Chord Generator** | Input note triggers a chord (major / minor / 7th / custom intervals) with inversions |
 | **Clock Divider** | Emit one MIDI Clock for every N received (2..32) |
+| **Euclidean** | Held notes voiced through a Bjorklund-distributed step pattern; per-step manual overrides on top; chord mode; internal Scale + Root; Jitter, Tune Spread, Fade In / Out; full block CC automation. *Play-surface plugin* — added from **Add → Play** |
 | **Hold** | Latch notes without a sustain pedal; chord-latch or per-note toggle; MIDI-Learn the release note |
 | **Master Clock** | Internal BPM clock with start/stop/continue, beat meter, bar counter |
 | **MIDI Delay** | Pre-scheduled echoes with feedback repeats and velocity decay; sync rate or free ms |
@@ -199,13 +200,13 @@ One-line summaries. The detailed reference for each lives in
 | **Velocity Curve** | Drawable 128-point velocity response curve with shape presets |
 | **Velocity Equalizer** | Normalise velocity to a fixed value or compress the range |
 
-The **Tracker** and the **Arpeggiator** are *play-surface*
-plugins -- they live in the routing matrix like every other
-plugin but additionally render a fullscreen play surface on the
-**Play** tab in the bottom navigation. Find them under
-**Add → Play**. The Tracker has its own chapter (13); the
-Arpeggiator's surface and parameter reference live in
-**Appendix A.1**.
+The **Tracker**, the **Arpeggiator** and the **Euclidean** are
+*play-surface* plugins -- they live in the routing matrix like
+every other plugin but additionally render a fullscreen play
+surface on the **Play** tab in the bottom navigation. Find them
+under **Add → Play**. The Tracker has its own chapter (13);
+the Arpeggiator's and the Euclidean's surfaces and parameter
+references live in **Appendix A**.
 
 ## User-Supplied Plugins
 

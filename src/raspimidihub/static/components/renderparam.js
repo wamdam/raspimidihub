@@ -72,7 +72,9 @@ export function renderParam(param, values, onChange, allValues, displayCtx) {
                 value=${val || []} onChange=${onChange}
                 lengthParam=${param.length_param} allValues=${allValues}
                 defaultOn=${param.default_on}
-                slotNotesParam=${param.slot_notes_param} />`;
+                slotNotesParam=${param.slot_notes_param}
+                overrideMode=${param.override_mode}
+                algoUnderlayParam=${param.algo_underlay_param} />`;
         case 'curveeditor':
             return html`<${PluginCurveEditor} name=${param.name} label=${param.label}
                 value=${val} onChange=${onChange} />`;

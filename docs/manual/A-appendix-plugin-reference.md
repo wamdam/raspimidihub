@@ -32,7 +32,7 @@ initial wiring, never during a set.
 
 | Surface | Parameter | Type | Range | Default |
 |---------|-----------|------|-------|---------|
-| Play    | **Pattern** | Wheel (wide) | up / down / up-down / random / as-played / programmed | up |
+| Play    | **Pattern** | Wheel (wide) | up / down / up-down / random / as-played / programmed / chord | up |
 | Play    | **Rate** | Wheel (wide) | 4/1 / 4/1T / 2/1 / ... / 1/16T / 1/32 (15 values) | 1/8 |
 | Play    | **Steps** | Wheel | 1--32 | 8 |
 | Play    | **Accent Vel.** | Knob | 0--127 (added to step velocity) | 30 |
@@ -51,7 +51,10 @@ initial wiring, never during a set.
 `programmed` is the live step-sequencer mode added in v3.0.5: each
 keypress writes the next-to-fire step slot; multiple presses
 between ticks fan into consecutive slots (chord-spread); slots
-persist while any key or the sustain pedal is held.
+persist while any key or the sustain pedal is held. `chord` fires
+every held note simultaneously each step -- the per-step offset,
+accent and gate apply to the whole burst, and `Octaves > 1`
+doubles the chord into the higher octaves.
 
 **CC automation.** CC 74 maps to **Rate** (the integer index into
 the rate options); CC 75 maps to **Gate %**. Useful for keyboard
@@ -150,6 +153,128 @@ Continue through.
 **Clock.** Consumes and produces.
 
 ![Clock Divider config panel.](../screenshots/21-plugin-clock-divider.png){width=35%}
+
+## Euclidean
+
+Holds incoming notes and plays them as a Bjorklund-distributed
+pattern over the configured **Steps**. Lives on the **Play** tab
+alongside the Arpeggiator and Tracker (`SURFACE_KIND = "play"`);
+add it from **Add → Play**. Polyrhythm is two instances on the
+same clock with co-prime pulse / step counts.
+
+The pattern is built in three layers. The **Euclidean** layer
+(Pulses / Steps / Rotate) distributes the active steps evenly.
+The **Window wave** layer (Phase / Cycles / Open) is a sine
+threshold that masks which steps are allowed to fire: **Phase**
+moves the wave's peak across the cycle, **Cycles** sets how many
+periods fit in one pattern cycle (0.5 / 1 / 2 / 3 / 4), and
+**Open** controls how much of the wave sits above the open
+threshold. **Open = 100** makes the layer transparent; **Open = 0**
+closes the gate entirely (manual overrides still work). The
+**Step grid** at the bottom lets the user override individual
+steps -- tap the head to cycle
+`default → FORCE_ON → FORCE_ON+accent → FORCE_OFF → default`.
+Default cells defer to the algorithm and display a subdued
+underlay tint when both layers agree the step should fire, so
+the user can see what the generator is doing before touching
+anything.
+
+| Surface | Parameter | Type | Range | Default |
+|---------|-----------|------|-------|---------|
+| Play    | **Pattern** | Wheel (wide) | up / down / up-down / random / as-played / chord | up |
+| Play    | **Rate** | Wheel (wide) | 4/1 ... 1/32 (15 values, same as Arp) | 1/16 |
+| Play    | **Pulses** | Wheel | 0--32 (capped by Steps) | 4 |
+| Play    | **Steps** | Wheel | 1--32 | 16 |
+| Play    | **Rotate** | Wheel | -16--+16 | 0 |
+| Play    | **Octaves** | Wheel | 1--4 | 1 |
+| Play    | **Phase** | Wheel | 0--31 | 0 |
+| Play    | **Cycles** | Wheel | 0.5 / 1 / 2 / 3 / 4 | 1 |
+| Play    | **Open** | Knob | 0--100 | 100 |
+| Play    | **Gate %** | Wheel | 10--100 | 80 |
+| Play    | **Accent Vel.** | Knob | 0--127 (added to step velocity) | 30 |
+| Play    | **Fade In** | Wheel | 0--16 firing steps | 0 |
+| Play    | **Fade Out** | Wheel | 0--16 firing steps | 0 |
+| Play    | **Jitter %** | Knob | 0--100 (per-step micro-timing) | 0 |
+| Play    | **Tune Spread** | Knob | 0--100 (random transpose probability / size) | 0 |
+| Play    | **Snap** | Wheel | free / octaves / fifths+octaves | octaves |
+| Play    | **Scale** | Wheel | major / minor / dorian / mixolydian / pentatonic / blues / harmonic m / whole tone / chromatic | major |
+| Play    | **Root** | Wheel | C ... B | C |
+| Play    | **Step Pattern** | StepEditor (override mode) | per-step default / force-on / force-on+accent / force-off + offset | all default |
+| Play    | **Envelope** | Display (meter) | 0--127 (live velocity multiplier) | -- |
+| Setup   | **Arp Ch** | ChannelSelect | 1--16 or any | any |
+| Setup   | **Ctrl Ch** | ChannelSelect | 1--16 or any | any |
+| Setup   | **Pattern Trigger** | Button | enable a 6-semitone Pattern selector range | off |
+| Setup   | **Base** (visible when Pattern Trigger is on) | NoteSelect | first note of the 6-semitone range | C2 (36) |
+| Setup   | **Sync** | Radio | free / tempo / transport | transport |
+| Setup   | **BPM** (visible when Sync = free) | Wheel | 40--300 | 120 |
+| Setup   | **Retrig** | Button | reset the cycle on the first key of a phrase | on |
+
+**Pitch modes.** `up` / `down` / `up-down` / `random` /
+`as-played` voice the held buffer one note per step. `chord`
+fires every held note simultaneously each step. Output is
+quantised to the internal **Scale + Root** (set `Scale = chromatic`
+for an identity pass-through).
+
+**Tune Spread + Snap.** Tune Spread is both the probability of a
+random transpose this step and the size of the jump. Snap
+pre-quantises the jump: `free` is any semitone within ±12;
+`octaves` is ±12 / ±24 / 0; `fifths+octaves` is ±5 / ±7 / ±12 /
+±19 / ±24 / 0. The Scale quantiser runs *after* the spread, so a
+fifths-and-octaves jump stays in scale by construction.
+
+**Fade In / Fade Out.** Velocity-ramp envelope around a phrase.
+Fade In ramps 0% → 100% over N **firing** steps when the pattern
+transitions from idle to playing (so the ramp time tracks the
+density of the pattern). Fade Out drains 100% → 0% over N firing
+steps after every key is released (or after sustain pedal lift),
+then silences. A key-on during a fade-out cancels it and snaps
+back to full. The velocity strip below the Step grid is a live
+indicator of the current multiplier.
+
+**Pattern Trigger.** Like the Arpeggiator's Rate Trigger but for
+the Pattern wheel. When **Pattern Trigger** is on, MIDI notes in
+`[Base, Base+6)` pick the Pattern; trigger notes are consumed
+(they do not arpeggiate). MIDI-Learn the Base wheel from a
+controller.
+
+**CC automation.** Block CC 70..88 (skipping CC 84, GM
+Portamento Control) drives every play-surface knob, so any
+hardware controller wired for the Arpeggiator's CC 74 (Rate) and
+CC 75 (Gate) drives this plugin identically. Discrete-enum
+params (Pattern / Snap / Scale / Root) accept the same 0--127 CC
+form -- the host scales 0--127 across the param's min..max.
+
+| CC | Parameter | CC | Parameter |
+|----|-----------|----|-----------|
+| 70 | Pattern    | 80 | Fade In |
+| 71 | Octaves    | 81 | Fade Out |
+| 72 | Pulses     | 82 | Jitter |
+| 73 | Steps      | 83 | Accent Vel. |
+| 74 | Rate       | 85 | Tune Spread |
+| 75 | Gate %     | 86 | Snap |
+| 76 | Open       | 87 | Scale |
+| 77 | Phase      | 88 | Root |
+| 78 | Cycles     |    |    |
+| 79 | Rotate     |    |    |
+
+**Input.** Notes (held buffer), CC 64 (sustain pedal — holds the
+input chord across release), CC 70..83 / CC 85..88 (parameter
+automation), notes in the Pattern-Trigger range (consumed),
+Clock, Aftertouch, Pitch Bend.
+**Output.** Notes (Bjorklund-voiced, scale-quantised). Aftertouch
+and Pitch Bend pass through unchanged.
+**Clock.** Consumes external clock when **Sync** is `tempo` or
+`transport`; free-runs at **BPM** when **Sync** is `free`.
+**Display.** Envelope meter (0..127), live with the velocity ramp
+during a Fade In / Fade Out.
+
+Screenshots needed:
+
+- `screenshots/euclidean-play.png` — fullscreen Play surface with
+  a populated step grid (default / FORCE_ON / accent / FORCE_OFF
+  cells all visible) and a non-zero Fade In ramp running.
+- `screenshots/euclidean-config.png` — device-detail panel with
+  the Setup group expanded.
 
 ## Hold
 

@@ -163,6 +163,14 @@ class StepEditor(Param):
     # name (e.g. C4) under each step — used by the Arpeggiator's
     # `programmed` pattern mode to show what's loaded into each slot.
     slot_notes_param: str | None = None
+    # Override mode (used by the Euclidean plugin). Each cell stores a
+    # `state` of "default" / "on" / "accent" / "off" and the head tap
+    # cycles those four values. The "default" state defers to a
+    # sibling per-step boolean array (see `algo_underlay_param`) that
+    # tells the user what the algorithm would do, so the override is
+    # additive on top of the generator rather than a complete pattern.
+    override_mode: bool = False
+    algo_underlay_param: str | None = None
 
     def to_dict(self) -> dict:
         d = super().to_dict()
@@ -170,6 +178,10 @@ class StepEditor(Param):
                   "default_on": self.default_on})
         if self.slot_notes_param:
             d["slot_notes_param"] = self.slot_notes_param
+        if self.override_mode:
+            d["override_mode"] = True
+        if self.algo_underlay_param:
+            d["algo_underlay_param"] = self.algo_underlay_param
         return d
 
 
@@ -547,7 +559,12 @@ def get_defaults(params: list) -> dict[str, Any]:
     for p in get_all_params(params):
         if isinstance(p, StepEditor):
             length = p.default_length
-            defaults[p.name] = [{"on": p.default_on, "offset": 0} for _ in range(length)]
+            if p.override_mode:
+                defaults[p.name] = [{"state": "default", "offset": 0}
+                                    for _ in range(length)]
+            else:
+                defaults[p.name] = [{"on": p.default_on, "offset": 0}
+                                    for _ in range(length)]
         elif isinstance(p, CurveEditor):
             defaults[p.name] = list(range(128))  # linear by default
         elif isinstance(p, XYPad):
