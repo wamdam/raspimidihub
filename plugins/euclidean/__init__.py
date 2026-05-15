@@ -268,9 +268,6 @@ play-surface knob; see Appendix A for the full table."""
         Group("Setup", [
             ChannelSelect("arp_channel", "Arp Ch", default=0, allow_any=True),
             ChannelSelect("control_channel", "Ctrl Ch", default=0, allow_any=True),
-            Button("pattern_trigger", "Pattern Trigger", default=False, color="green"),
-            NoteSelect("pattern_base", "Base", default=36,
-                       visible_when=("pattern_trigger", True)),
             Radio("sync_mode", "Sync",
                   ["free", "tempo", "transport"], default="transport"),
             Wheel("bpm", "BPM", min=40, max=300, default=120,
@@ -322,7 +319,7 @@ play-surface knob; see Appendix A for the full table."""
         "Notes",
         "CC#64 (sustain pedal — temporarily holds the input chord)",
         "CC#70..83, CC#85..88 (parameter automation; see HELP)",
-        "Notes in [Base, Base+6) when Pattern Trigger is on (sets Pattern)",
+        "Pattern Ctrl Ch notes (set Pattern slot 1..8)",
         "Clock",
         "Aftertouch",
         "Pitch Bend",
@@ -421,24 +418,6 @@ play-surface knob; see Appendix A for the full table."""
         v = self.get_param(param_name)
         return v is None or v == 0 or int(v) - 1 == channel
 
-    def _pattern_trigger_index(self, channel: int, note: int) -> int | None:
-        """Return pattern-table index N if `note` on `channel` is the
-        Nth semitone of the pattern-trigger range AND control_channel
-        allows the source channel, else None. Returns None when the
-        Setup-group "Pattern Trigger" toggle is off, so trigger notes
-        flow into the held-notes buffer normally."""
-        if not self.get_param("pattern_trigger"):
-            return None
-        if not self._channel_match(channel, "control_channel"):
-            return None
-        base = self.get_param("pattern_base")
-        if base is None:
-            return None
-        idx = note - int(base)
-        if 0 <= idx < len(_PATTERN_OPTIONS):
-            return idx
-        return None
-
     def on_note_on(self, channel, note, velocity):
         # Slot-trigger notes are checked first — they live on a
         # dedicated control channel and switch the pattern bank.
@@ -447,12 +426,6 @@ play-surface knob; see Appendix A for the full table."""
         if slot_idx is not None:
             if slot_idx != self.get_param("active_slot"):
                 slot_bank.load_slot(self, self._SLOT_PARAMS, slot_idx)
-            return
-        # Pattern-trigger notes are consumed: they set the Pattern
-        # wheel and do not join the held-notes buffer.
-        idx = self._pattern_trigger_index(channel, note)
-        if idx is not None:
-            self.set_param("pattern", idx)
             return
         if not self._channel_match(channel, "arp_channel"):
             return
@@ -486,8 +459,6 @@ play-surface knob; see Appendix A for the full table."""
 
     def on_note_off(self, channel, note):
         if slot_bank.trigger_note_index(self, channel, note) is not None:
-            return
-        if self._pattern_trigger_index(channel, note) is not None:
             return
         if not self._channel_match(channel, "arp_channel"):
             return

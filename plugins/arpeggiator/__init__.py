@@ -8,11 +8,11 @@ this, gate was effectively 100% (cut by the next step's note_off).
 
 Surface: kind="play" — appears in the Play tab carousel next to the
 Tracker. Pattern, Rate, Steps, Accent, Gate, Octaves and the step
-grid render on the play surface; channel filters / Trigger Note +
-Base / Sync + BPM are config_only and live in the device-detail
-panel. Pattern and Rate are wide integer-indexed Wheels (storage
-is the index into _PATTERN_OPTIONS / _RATE_OPTIONS); on_start
-migrates legacy string-stored configs.
+grid render on the play surface; channel filters / Sync + BPM /
+Pattern Ctrl Ch + Pattern Notes are config_only and live in the
+device-detail panel. Pattern and Rate are wide integer-indexed
+Wheels (storage is the index into _PATTERN_OPTIONS / _RATE_OPTIONS);
+on_start migrates legacy string-stored configs.
 """
 
 import random
@@ -21,7 +21,6 @@ import time
 
 from raspimidihub import slot_bank
 from raspimidihub.plugin_api import (
-    Button,
     ChannelSelect,
     Group,
     Knob,
@@ -81,16 +80,15 @@ Set some steps off to create rhythmic gaps.
 Sync: Free=internal BPM, Tempo=external clock, Transport=clock+Start/Stop.
 Gate % = note length (100=legato, 10=staccato).
 
-Trigger Note: when on, MIDI notes from `Base` upward set the rate
-live. Base = first rate (4/1), Base+1 semitone = 4/1T, +2 = 2/1, …
-covering all 15 rates. Trigger notes are consumed — they don't get
-arpeggiated. Pick a Base outside your playing range (default C1).
-Use MIDI Learn on the Base wheel to capture from a controller.
-
 Arp Ch / Ctrl Ch: channel filters on the input. Default Any =
-accept any channel (current behaviour). Set Arp Ch = 1 + Ctrl Ch
-= 16 to wire a separate keyboard / footswitch on ch16 that only
-flips Rate, never plays."""
+accept any channel. Set Arp Ch = 1 + Ctrl Ch = 16 to wire a
+separate keyboard / footswitch on ch16 that only switches
+patterns, never plays.
+
+Pattern Ctrl Ch + Pattern Notes (P1..P8): reserve a MIDI channel
+for pattern-slot switching and MIDI-Learn one trigger note per
+slot. Notes on that channel are consumed — they switch the
+active slot without arpeggiating."""
 
     # Single source of truth for the pattern Wheel's tick labels AND
     # the runtime conditional logic (`as-played`, `programmed`, …).
@@ -104,10 +102,8 @@ flips Rate, never plays."""
         "chord",
     ]
 
-    # Single source of truth for the rate Wheel's tick labels AND the
-    # rate-trigger note→rate mapping. Index N in this list is the rate
-    # selected when (note - rate_base) == N. Same idea as _PATTERN_OPTIONS
-    # — the param stores the index, _rate_str() returns the label.
+    # Tick labels for the rate Wheel. The param stores the integer
+    # index, `_rate_str()` returns the label.
     _RATE_OPTIONS = [
         "4/1", "4/1T", "2/1", "2/1T", "1/1", "1/1T",
         "1/2", "1/2T", "1/4", "1/4T", "1/8", "1/8T",
@@ -170,15 +166,6 @@ flips Rate, never plays."""
             # two functions.
             ChannelSelect("arp_channel", "Arp Ch", default=0, allow_any=True),
             ChannelSelect("control_channel", "Ctrl Ch", default=0, allow_any=True),
-            # Live-rate trigger: when enabled, a MIDI note in the
-            # [rate_base, rate_base + len(_RATE_OPTIONS)) range sets
-            # the Rate wheel without being arpeggiated. Hit MIDI Learn
-            # on the Base wheel and play the lowest rate-trigger key
-            # to capture; the next 14 semitones cover the remaining
-            # rates in the order they appear in _RATE_OPTIONS.
-            Button("rate_trigger", "Trigger Note", default=False, color="green"),
-            NoteSelect("rate_base", "Base", default=24,  # C1 — below most
-                       visible_when=("rate_trigger", True)),  # playing ranges
             Radio("sync_mode", "Sync",
                   ["free", "tempo", "transport"], default="transport"),
             Wheel("bpm", "BPM", min=40, max=300, default=120,
@@ -216,7 +203,6 @@ flips Rate, never plays."""
     inputs = ["Notes", "CC#64 (sustain pedal — temporarily holds arping notes)",
               "CC#70 (pattern)", "CC#71 (octaves)", "CC#73 (steps)",
               "CC#74 (rate)", "CC#75 (gate)", "CC#83 (accent vel.)",
-              "Notes in [Base, Base+15) when Trigger Note is on (sets Rate)",
               "Pattern Ctrl Ch notes (set Pattern slot 1..8)",
               "Clock", "Aftertouch", "Pitch Bend"]
     outputs = ["Notes (arpeggiated)", "Aftertouch (pass-through)", "Pitch Bend (pass-through)"]
@@ -423,24 +409,6 @@ flips Rate, never plays."""
         v = self.get_param(param_name)
         return v is None or v == 0 or int(v) - 1 == channel
 
-    def _rate_trigger_index(self, channel: int, note: int) -> int | None:
-        """Return rate-table index N if `note` on `channel` is the Nth
-        semitone of the rate-trigger range AND control_channel allows
-        the source channel, else None. The trigger feature is opt-in
-        via the Pattern group's "Trigger Note" toggle; when off, this
-        always returns None and notes flow through to the arp filter."""
-        if not self.get_param("rate_trigger"):
-            return None
-        if not self._channel_match(channel, "control_channel"):
-            return None
-        base = self.get_param("rate_base")
-        if base is None:
-            return None
-        idx = note - int(base)
-        if 0 <= idx < len(self._RATE_OPTIONS):
-            return idx
-        return None
-
     def on_note_on(self, channel, note, velocity):
         # Slot-trigger notes are checked first — they live on a
         # dedicated control channel and switch the pattern bank.
@@ -450,14 +418,6 @@ flips Rate, never plays."""
         if slot_idx is not None:
             if slot_idx != self.get_param("active_slot"):
                 slot_bank.load_slot(self, self._SLOT_PARAMS, slot_idx)
-            return
-        # Rate trigger notes are consumed: they set the Rate wheel and
-        # do NOT join the held-notes set, so the trigger range can't
-        # be accidentally arpeggiated. set_param broadcasts the change
-        # to the UI via SSE so the user sees the wheel tick over live.
-        idx = self._rate_trigger_index(channel, note)
-        if idx is not None:
-            self.set_param("rate", idx)
             return
         # Arp channel filter: notes on a non-matching channel pass
         # through without joining the held-notes set, so they don't
@@ -512,12 +472,10 @@ flips Rate, never plays."""
                 self._seek_to_new_note(note)
 
     def on_note_off(self, channel, note):
-        # Symmetric to on_note_on: trigger-range, slot-trigger, and
-        # non-matching-arp-channel note-offs are also consumed, so
-        # the held-notes list never sees them at all.
+        # Symmetric to on_note_on: slot-trigger and non-matching-
+        # arp-channel note-offs are also consumed, so the held-notes
+        # list never sees them at all.
         if slot_bank.trigger_note_index(self, channel, note) is not None:
-            return
-        if self._rate_trigger_index(channel, note) is not None:
             return
         if not self._channel_match(channel, "arp_channel"):
             return

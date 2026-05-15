@@ -42,8 +42,6 @@ initial wiring, never during a set.
 | Play    | **Patterns** | PatternStrip | bottom-of-surface P1--P8 bank selector | slot 1 active |
 | Setup   | **Arp Ch** | ChannelSelect | 1--16 or any | any |
 | Setup   | **Ctrl Ch** | ChannelSelect | 1--16 or any | any |
-| Setup   | **Trigger Note** | Button | enable rate-trigger range | off |
-| Setup   | **Base** (visible when Trigger Note is on) | NoteSelect | first note of a 15-semitone rate-trigger range | C1 (24) |
 | Setup   | **Sync** | Radio | free / tempo / transport | transport |
 | Setup   | **BPM** (visible when Sync = free) | Wheel | 40--300 | 120 |
 | Setup   | **Pattern Ctrl Ch** | Wheel | Off / 1--16 (reserves a channel for slot switching) | Off |
@@ -85,10 +83,10 @@ wired for one drives the other.
 
 **Input.** Notes (held-note buffer), CC 64 (temporary Hold via
 sustain pedal -- released keys keep arping until pedal lift),
-CC 74 / CC 75 (Rate / Gate automation), Clock + Transport (when
-**Sync** is `tempo` or `transport`). Notes in the trigger range
-when **Trigger Note** is on are consumed (set the Rate without
-arpeggiating).
+CC 70..83 (parameter automation; see the CC table above), Clock
++ Transport (when **Sync** is `tempo` or `transport`), and the
+8 learnable notes on **Pattern Ctrl Ch** when set (each picks a
+pattern slot; consumed, not arpeggiated).
 **Output.** Notes (the arpeggiated stream). Aftertouch and Pitch
 Bend pass through unchanged.
 **Clock.** Consumes external clock when **Sync** is `tempo` (free-
@@ -223,12 +221,9 @@ anything.
 | Play    | **Scale** | Wheel | major / minor / dorian / mixolydian / pentatonic / blues / harmonic m / whole tone / chromatic | major |
 | Play    | **Root** | Wheel | C ... B | C |
 | Play    | **Step Pattern** | StepEditor (override mode) | per-step default / force-on / force-on+accent / force-off + offset | all default |
-| Play    | **Envelope** | Display (meter) | 0--127 (live velocity multiplier) | -- |
-| Play    | **Patterns** | PatternStrip | bottom-of-surface P1--P8 bank selector | slot 1 active |
+| Play    | **Patterns** | PatternStrip | end-of-surface P1--P8 bank selector | slot 1 active |
 | Setup   | **Arp Ch** | ChannelSelect | 1--16 or any | any |
 | Setup   | **Ctrl Ch** | ChannelSelect | 1--16 or any | any |
-| Setup   | **Pattern Trigger** | Button | enable a 6-semitone Pattern selector range | off |
-| Setup   | **Base** (visible when Pattern Trigger is on) | NoteSelect | first note of the 6-semitone range | C2 (36) |
 | Setup   | **Sync** | Radio | free / tempo / transport | transport |
 | Setup   | **BPM** (visible when Sync = free) | Wheel | 40--300 | 120 |
 | Setup   | **Retrig** | Button | reset the cycle on the first key of a phrase | on |
@@ -254,14 +249,7 @@ transitions from idle to playing (so the ramp time tracks the
 density of the pattern). Fade Out drains 100% → 0% over N firing
 steps after every key is released (or after sustain pedal lift),
 then silences. A key-on during a fade-out cancels it and snaps
-back to full. The velocity strip below the Step grid is a live
-indicator of the current multiplier.
-
-**Pattern Trigger.** Like the Arpeggiator's Rate Trigger but for
-the Pattern wheel. When **Pattern Trigger** is on, MIDI notes in
-`[Base, Base+6)` pick the Pattern; trigger notes are consumed
-(they do not arpeggiate). MIDI-Learn the Base wheel from a
-controller.
+back to full.
 
 **Pattern bank.** The strip at the bottom of the play surface
 (P1..P8) is an 8-slot pattern bank. Each slot carries a snapshot
