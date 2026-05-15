@@ -52,6 +52,12 @@ function PlaySurface({ instance, pluginData, pluginDisplays, clockPosition }) {
     const contentRef = useRef(null);
     const [canUp, setCanUp] = useState(false);
     const [canDown, setCanDown] = useState(false);
+    // Dynamic bottom offset for the .down page button — distance
+    // from viewport bottom to the top of whatever is reserved
+    // there (bottom nav, optionally midi-bar). Measured live so
+    // the button sits flush above the actual UI chrome, not above
+    // the slightly-larger CSS reserve.
+    const [downOffset, setDownOffset] = useState(72);
     const usePager = pluginData ? needsPager(pluginData.params_schema) : false;
 
     useEffect(() => {
@@ -66,6 +72,23 @@ function PlaySurface({ instance, pluginData, pluginDisplays, clockPosition }) {
             const maxScroll = el.scrollHeight - el.clientHeight;
             setCanUp(top > 4);
             setCanDown(maxScroll > 4 && top < maxScroll - 4);
+            // Measure where the bottom UI chrome starts (the higher
+            // of bottom-nav.top / midi-bar.top) and pin the .down
+            // button there.
+            const nav = document.querySelector('.bottom-nav');
+            const midi = document.querySelector('.midi-bar');
+            const vh = window.innerHeight;
+            let topY = vh;
+            if (nav) {
+                const r = nav.getBoundingClientRect();
+                if (r.height > 0) topY = Math.min(topY, r.top);
+            }
+            if (midi) {
+                const r = midi.getBoundingClientRect();
+                if (r.height > 0) topY = Math.min(topY, r.top);
+            }
+            const offset = Math.max(0, vh - topY);
+            setDownOffset(offset);
         };
         const onScroll = () => {
             if (raf) return;
@@ -80,9 +103,18 @@ function PlaySurface({ instance, pluginData, pluginDisplays, clockPosition }) {
         const ro = new ResizeObserver(update);
         ro.observe(inner);
         ro.observe(el);  // viewport-size changes (rotate, density)
+        // Also watch the bottom UI chrome so the button-offset
+        // tracks the midi-bar showing / hiding and density changes.
+        const nav = document.querySelector('.bottom-nav');
+        const midi = document.querySelector('.midi-bar');
+        if (nav) ro.observe(nav);
+        if (midi) ro.observe(midi);
+        const onResize = () => onScroll();
+        window.addEventListener('resize', onResize);
         update();
         return () => {
             el.removeEventListener('scroll', onScroll);
+            window.removeEventListener('resize', onResize);
             ro.disconnect();
             if (raf) cancelAnimationFrame(raf);
         };
@@ -133,6 +165,7 @@ function PlaySurface({ instance, pluginData, pluginDisplays, clockPosition }) {
         ${canUp ? html`<button class="play-page-btn up"
             onclick=${() => pageBy(-1)}>↑ More</button>` : null}
         ${canDown ? html`<button class="play-page-btn down"
+            style="bottom:${downOffset}px"
             onclick=${() => pageBy(1)}>↓ More</button>` : null}
     </div>`;
 }
