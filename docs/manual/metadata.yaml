@@ -1,9 +1,9 @@
 ---
 title: "RaspiMIDIHub"
-subtitle: "User Manual -- Version 3.1.6"
+subtitle: "User Manual -- Version 4.0.0"
 author: "RaspiMIDIHub Project"
-version: "3.1.6"
-date: "2026-05-14"
+version: "4.0.0"
+date: "2026-05-15"
 documentclass: report
 papersize: a4
 fontsize: 10pt

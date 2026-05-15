@@ -101,9 +101,9 @@ Plugins on the **Play** bottom-nav tab (alongside Controllers). They route in th
 - **Pattern + Rate** as wide wheels at the top of the play surface for one-finger live tweaks; **Steps / Accent Vel. / Gate % / Octaves** as a row of shapers; **Step Pattern** grid below for per-step on/off + offset + accent
 - **Seven pattern modes** -- up / down / up-down / random / as-played / `programmed` (live step-sequencer: keypresses write the next-to-fire slot, chord-spread on simultaneous presses, slots persist while keys / pedal are held) / `chord` (every held note fires simultaneously each step)
 - **Sustain pedal (CC 64)** acts as temporary Hold -- released keys keep arping until pedal lift
-- **Trigger Note** range (Base..Base+15) sets the Rate live without arpeggiating, so a hardware aux key flips tempo divisions
-- **CC automation** -- CC 74 → Rate, CC 75 → Gate %
-- **Setup group** (config-only) -- Arp Ch / Ctrl Ch / Trigger Note + Base / Sync (free / tempo / transport) + BPM, in the slide-up device-detail panel
+- **CC automation** -- block CC 70..83 covers pattern, octaves, steps, rate, gate, accent vel.
+- **Pattern bank** -- 8 P1..P8 slots, each storing a full snapshot of the play-surface params. Tap to switch immediately; held notes / sustain persist across the switch. Long-press for Overwrite / Reset
+- **Setup group** (config-only) -- Sync (free / tempo / transport) + BPM / Arp Ch / Ctrl Ch + 8 learnable trigger notes, in the slide-up device-detail panel
 
 **Tracker**
 - **8-voice step sequencer**, **16 hex-numbered rows × up to 16 pages** chained linearly, loops back to page 0
@@ -121,9 +121,10 @@ Plugins on the **Play** bottom-nav tab (alongside Controllers). They route in th
 - **Six pattern modes** -- up / down / up-down / random / as-played / chord (every held note fires simultaneously each step)
 - **Internal Scale + Root** -- 9 scales (major / minor / dorian / mixolydian / pentatonic / blues / harmonic m / whole tone / chromatic) quantise the output; chromatic is the identity pass-through
 - **Tune Spread + Snap** -- random per-step transpose, with snap presets (free / octaves / 5ths+oct.) that bias toward consonant intervals before the scale quantiser
-- **Fade In / Fade Out** -- velocity ramps over N firing steps at the start of a phrase and after every key is released; live velocity-envelope strip beneath the grid
+- **Fade In / Fade Out** -- velocity ramps over N firing steps at the start of a phrase and after every key is released
 - **Jitter** -- per-step micro-timing humanisation, re-rolled every step
-- **Pattern Trigger** range (Base..Base+6) picks the Pattern wheel live from a hardware key
+- **Pattern bank** -- 8 P1..P8 slots, each a full snapshot of every play-surface param. Tap to switch immediately; held notes / sustain persist. Long-press for Overwrite / Reset
+- **Ctrl Ch + 8 trigger notes** -- reserve a MIDI channel and MIDI-Learn one note per slot for hardware pattern switching
 - **CC automation** -- full block CC 70..88 (skipping CC 84) covers every play-surface knob; CC 74 / CC 75 stay Arp-consistent
 - **Polyrhythm** -- two instances on the same Master Clock with co-prime pulse / step counts
 

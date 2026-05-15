@@ -119,10 +119,9 @@ in two flavours:
 
 - **Latching** (the default). One tap toggles on, the next tap
   toggles off. The LED follows the value. This is the on/off
-  switch used for **Trigger Note** on the **Arpeggiator**,
-  **Sync to Clock** on the **CC LFO**, **Play** on the **Master
-  Clock**, **Send Clock** / **Send Transport** on the **Tracker**,
-  and so on.
+  switch used for **Sync to Clock** on the **CC LFO**, **Play**
+  on the **Master Clock**, **Send Clock** / **Send Transport** on
+  the **Tracker**, **Retrig** on the **Euclidean**, and so on.
 - **Trigger** (momentary). Each tap fires an action and the LED
   flashes briefly; the value self-resets back to off. This is the
   red **Panic!** button on the **Panic Button** plugin, and the
