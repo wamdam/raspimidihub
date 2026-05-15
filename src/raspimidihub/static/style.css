@@ -113,6 +113,54 @@ body {
    restoring scroll here is safe and lets denser / taller
    controller layouts overflow on shorter screens. */
 .main:has(> .controller-page) { overflow-y: auto; }
+
+/* Floating scroll-assist buttons — stacked in the bottom-right of
+   any overflowing .main. The stack is invisible (no
+   background / pointer-events) except for the round FABs inside,
+   so taps on empty area pass through to the page underneath. The
+   `bottom` value mirrors .main's padding-bottom (which already
+   reserves space for the bottom nav + optional midi-bar) plus a
+   14 px breathing margin. */
+.scroll-fab-stack {
+    position: fixed;
+    right: 16px;
+    bottom: calc(var(--nav-pad, 72px) + 14px);
+    z-index: 50;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    pointer-events: none;
+}
+.scroll-fab {
+    pointer-events: auto;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: rgba(20, 22, 36, 0.85);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: var(--text);
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 120ms, transform 120ms;
+}
+.scroll-fab:hover { background: rgba(40, 42, 56, 0.95); }
+.scroll-fab:active { transform: scale(0.92); }
+
+/* --nav-pad mirrors .main's padding-bottom so the FAB stack
+   tracks density-small and the midi-bar's visibility without
+   inline JS measurement. */
+:root { --nav-pad: 72px; }
+.main.with-midi-bar { --nav-pad: 96px; }
+:root.density-small { --nav-pad: 56px; }
+:root.density-small .main.with-midi-bar { --nav-pad: 78px; }
+
 .pattern-strip {
     display: grid;
     grid-template-columns: repeat(8, 1fr);

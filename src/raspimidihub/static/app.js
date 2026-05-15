@@ -13,6 +13,7 @@ import { render } from './lib/preact.module.js';
 import { useState, useEffect, useRef, useCallback } from './lib/hooks.module.js';
 import { html, api, useSSE, Toast, MidiBar, hardReload } from './ui/common.js';
 import { applyLayoutDensity, getLayoutDensity } from './components/common.js';
+import { ScrollAssist } from './components/scrollassist.js';
 import { ContextMenu } from './ui/contextmenu.js';
 import { setSSEConnectionId, useSSESubscription } from './ui/sse-subscriptions.js';
 import { IconRouting, IconController, IconPlay, IconSettings, IconFullscreen, IconFullscreenExit } from './ui/icons.js';
@@ -395,7 +396,7 @@ function App() {
             </div>
         </div>
         ${configFallback && html`<div class="banner">Config unreadable — using default all-to-all routing. Save to fix.</div>`}
-        <div class="main ${showMidiBar ? 'with-midi-bar' : ''}">${page}</div>
+        <div class="main ${showMidiBar ? 'with-midi-bar' : ''}">${page}<${ScrollAssist} /></div>
         ${showMidiBar && html`<${MidiBar} events=${midiEvents} />`}
         <nav class="bottom-nav">
             <button class=${tab === 'routing' ? 'active' : ''} onclick=${() => setTab('routing')}>
