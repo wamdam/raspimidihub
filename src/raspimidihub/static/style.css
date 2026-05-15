@@ -165,6 +165,7 @@ body {
     gap: 4px;
 }
 .pattern-strip-btn {
+    width: 100%;
     background: var(--surface);
     border: 1px solid rgba(255,255,255,0.08);
     color: var(--text-dim);
@@ -185,6 +186,40 @@ body {
     background: var(--surface2);
     color: var(--text);
 }
+.pattern-strip-btn-wrap {
+    position: relative;
+    flex: 1 1 0;
+    min-width: 0;
+}
+.pattern-strip-menu {
+    position: absolute;
+    left: 0;
+    bottom: calc(100% + 4px);
+    z-index: 10;
+    min-width: 170px;
+    background: var(--surface, #1a1a1a);
+    border: 1px solid var(--surface2, #2a2a2a);
+    border-radius: 6px;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
+    display: flex;
+    flex-direction: column;
+    padding: 4px;
+    gap: 2px;
+}
+.pattern-strip-menu-item {
+    text-align: left;
+    background: transparent;
+    border: 0;
+    border-radius: 4px;
+    color: var(--text);
+    font: inherit;
+    font-size: 13px;
+    padding: 8px 10px;
+    cursor: pointer;
+}
+.pattern-strip-menu-item:hover { background: var(--surface2); }
+.pattern-strip-menu-item.danger { color: var(--accent, #e94560); }
+.pattern-strip-menu-item.danger:hover { background: rgba(233, 69, 96, 0.12); }
 
 /* --- Bottom Nav --- */
 .bottom-nav {

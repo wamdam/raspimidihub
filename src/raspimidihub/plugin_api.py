@@ -263,17 +263,20 @@ class Display(Param):
 
 @dataclass
 class PatternStrip(Param):
-    """Bottom-of-play-surface bank selector. Renders a row of `count`
-    tappable buttons; the int param at `name` holds the active index.
-    The play page renders this widget OUTSIDE the pageable param
-    list, fixed at the bottom of the surface above the bottom nav —
-    matches the Tracker's strip placement. `count` defaults to 8 to
-    line up with the slot_bank helper. `slots_param` names the
-    sibling list-of-dicts param that stores per-slot snapshots — see
-    `raspimidihub.slot_bank` for the snapshot / load mechanics."""
+    """End-of-play-surface bank selector. Renders a row of `count`
+    tappable buttons; the int param at `name` holds the active
+    index. Tap to switch; long-press opens a Paste-from-current /
+    Reset-to-default menu — same shape as the Tracker's pattern
+    row. `count` defaults to 8 to line up with the slot_bank
+    helper. `slots_param` names the sibling list-of-dicts param
+    that stores per-slot snapshots; `cmd_param` names the sibling
+    that receives `{slot, mode}` payloads from the long-press menu
+    — see `raspimidihub.slot_bank` for the snapshot / load / clone
+    / clear mechanics."""
     count: int = 8
     default: int = 0
     slots_param: str = ""
+    cmd_param: str = ""
 
     def to_dict(self) -> dict:
         d = super().to_dict()
@@ -281,6 +284,8 @@ class PatternStrip(Param):
         d["default"] = self.default
         if self.slots_param:
             d["slots_param"] = self.slots_param
+        if self.cmd_param:
+            d["cmd_param"] = self.cmd_param
         return d
 
 

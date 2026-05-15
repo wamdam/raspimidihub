@@ -154,7 +154,9 @@ flips Rate, never plays."""
         # `_SLOT_PARAMS` set above.
         PatternStrip("active_slot", "Patterns",
                      count=slot_bank.SLOT_COUNT, default=0,
-                     slots_param="pattern_slots", play_only=True),
+                     slots_param="pattern_slots",
+                     cmd_param="pattern_cmd",
+                     play_only=True),
         # Config-only setup. Channel filters, rate-trigger plumbing
         # and the sync-mode + BPM live here — touched on initial
         # wiring, never during a set.
@@ -623,6 +625,19 @@ flips Rate, never plays."""
         # the record_edit call below is a no-op while it's running.
         if name == "active_slot":
             slot_bank.load_slot(self, self._SLOT_PARAMS, int(value))
+            return
+        # Long-press menu on the pattern strip dispatches a
+        # {slot, mode: "clone"|"clear"} payload through this sibling
+        # param. After dispatch we clear the trigger so a repeat of
+        # the same command (long-press same slot, same item) still
+        # fires.
+        if name == "pattern_cmd":
+            from raspimidihub.plugin_api import get_defaults
+            slot_bank.handle_command(
+                self, self._SLOT_PARAMS,
+                get_defaults(type(self).params), value)
+            if value is not None:
+                self.set_param("pattern_cmd", None)
             return
         # Any edit to a snapshotted play_only param writes back into
         # the active slot. Guarded against feedback loops by

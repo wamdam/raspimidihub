@@ -261,7 +261,9 @@ play-surface knob; see Appendix A for the full table."""
         # Pattern-slot strip — same bank machinery as the Arpeggiator.
         PatternStrip("active_slot", "Patterns",
                      count=slot_bank.SLOT_COUNT, default=0,
-                     slots_param="pattern_slots", play_only=True),
+                     slots_param="pattern_slots",
+                     cmd_param="pattern_cmd",
+                     play_only=True),
 
         Group("Setup", [
             ChannelSelect("arp_channel", "Arp Ch", default=0, allow_any=True),
@@ -558,6 +560,15 @@ play-surface knob; see Appendix A for the full table."""
         # untouched; only the snapshotted play-surface params move.
         if name == "active_slot":
             slot_bank.load_slot(self, self._SLOT_PARAMS, int(value))
+            return
+        # Long-press menu on the pattern strip → Paste / Reset.
+        if name == "pattern_cmd":
+            from raspimidihub.plugin_api import get_defaults
+            slot_bank.handle_command(
+                self, self._SLOT_PARAMS,
+                get_defaults(type(self).params), value)
+            if value is not None:
+                self.set_param("pattern_cmd", None)
             return
         slot_bank.record_edit(self, self._SLOT_PARAMS, name, value)
         if name in ("pulses", "steps", "rotate", "phase", "cycles", "open"):

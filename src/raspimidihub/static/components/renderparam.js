@@ -119,14 +119,14 @@ export function renderParam(param, values, onChange, allValues, displayCtx) {
             return html`<${PluginTrackerGrid} param=${param} values=${values}
                 onChange=${onChange} displayCtx=${displayCtx} />`;
         case 'patternstrip':
-            // Normally the play page renders the strip OUTSIDE the
-            // pageable param list (fixed-bottom slot). This case
-            // keeps the strip working when it appears in any other
-            // render context (e.g. the device-detail panel) — same
-            // tap-to-switch behaviour, just inline.
+            // Renders inline as the trailing param of the play
+            // surface (same as any other tile). The long-press menu
+            // dispatches Paste / Reset commands through `cmd_param`
+            // so the plugin's slot bank can clone or wipe slots.
             return html`<${PluginPatternStrip} name=${param.name}
                 value=${val} onChange=${onChange}
-                count=${param.count || 8} />`;
+                count=${param.count || 8}
+                cmdParam=${param.cmd_param} />`;
         default:
             return html`<div style="color:var(--text-dim);font-size:12px">Unknown: ${param.type}</div>`;
     }

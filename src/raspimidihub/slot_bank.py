@@ -157,6 +157,89 @@ def load_slot(plugin, snapshot_names: list[str], new_idx: int) -> None:
     plugin.set_param("active_slot", new_idx)
 
 
+def clone_slot(plugin, snapshot_names: list[str],
+               src_idx: int, dst_idx: int) -> None:
+    """Copy the snapshot at slot `src_idx` into slot `dst_idx`. Used
+    by the play-surface strip's long-press menu ("Paste from
+    current") — the user long-presses slot N to overwrite it with
+    whatever is in the currently-active slot.
+
+    Deep-copies mutable values so the two slots don't end up
+    sharing a step-grid list. If dst_idx is the active slot, the
+    new contents are also loaded as live state so the change is
+    audible without an explicit tap."""
+    pv = plugin._param_values
+    slots = pv.get("pattern_slots")
+    if not isinstance(slots, list):
+        return
+    if not (0 <= src_idx < len(slots) and 0 <= dst_idx < len(slots)):
+        return
+    if src_idx == dst_idx:
+        return  # no-op
+    src = slots[src_idx] or {}
+    dst: dict = {}
+    for k in snapshot_names:
+        v = src.get(k)
+        if isinstance(v, list):
+            dst[k] = [dict(x) if isinstance(x, dict) else x for x in v]
+        elif isinstance(v, dict):
+            dst[k] = dict(v)
+        else:
+            dst[k] = v
+    slots[dst_idx] = dst
+    # If the user just overwrote the slot they're playing on, push
+    # the new contents into live state too.
+    active = int(pv.get("active_slot") or 0)
+    if dst_idx == active:
+        load_slot(plugin, snapshot_names, dst_idx)
+
+
+def clear_slot(plugin, snapshot_names: list[str], idx: int,
+               defaults: dict) -> None:
+    """Reset slot `idx` to the plugin's declared defaults. `defaults`
+    is the output of `plugin_api.get_defaults(plugin.params)`. If
+    the target is the active slot, live state is reloaded too."""
+    pv = plugin._param_values
+    slots = pv.get("pattern_slots")
+    if not isinstance(slots, list):
+        return
+    if not (0 <= idx < len(slots)):
+        return
+    fresh: dict = {}
+    for k in snapshot_names:
+        v = defaults.get(k)
+        if isinstance(v, list):
+            fresh[k] = [dict(x) if isinstance(x, dict) else x for x in v]
+        elif isinstance(v, dict):
+            fresh[k] = dict(v)
+        else:
+            fresh[k] = v
+    slots[idx] = fresh
+    active = int(pv.get("active_slot") or 0)
+    if idx == active:
+        load_slot(plugin, snapshot_names, idx)
+
+
+def handle_command(plugin, snapshot_names: list[str],
+                   defaults: dict, cmd: dict) -> None:
+    """Dispatch a pattern-strip command from the UI. Cmd shape is
+    `{slot: int, mode: "clone" | "clear"}` — "clone" pastes the
+    currently-active slot into the target; "clear" resets the
+    target to plugin defaults."""
+    if not isinstance(cmd, dict):
+        return
+    try:
+        idx = int(cmd.get("slot"))
+    except (TypeError, ValueError):
+        return
+    mode = cmd.get("mode")
+    if mode == "clone":
+        src = int(plugin._param_values.get("active_slot") or 0)
+        clone_slot(plugin, snapshot_names, src, idx)
+    elif mode == "clear":
+        clear_slot(plugin, snapshot_names, idx, defaults)
+
+
 def trigger_note_index(plugin, channel: int, note: int) -> int | None:
     """If `note` on `channel` matches the slot-trigger setup (the
     pattern_ctrl_ch + per-slot pattern_note_N), return the slot index
