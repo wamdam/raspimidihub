@@ -274,17 +274,21 @@ play-surface knob; see Appendix A for the full table."""
                      play_only=True),
 
         Group("Setup", [
-            ChannelSelect("arp_channel", "Arp Ch", default=0, allow_any=True),
+            # Layout: Sync on top (own row), then Arp Ch + Ctrl Ch
+            # + Retrig side-by-side, then BPM (only visible when
+            # Sync=free), then the 8 learnable pattern-trigger
+            # notes (only visible when Ctrl Ch != Off).
             Radio("sync_mode", "Sync",
                   ["free", "tempo", "transport"], default="transport"),
-            Wheel("bpm", "BPM", min=40, max=300, default=120,
-                  visible_when=("sync_mode", "free")),
-            Button("retrig", "Retrig", default=True, color="green"),
+            ChannelSelect("arp_channel", "Arp Ch", default=0, allow_any=True),
             # Pattern-slot hardware trigger — Tracker-shaped: a
             # dedicated channel + 8 learnable notes pick the slot.
             Wheel("pattern_ctrl_ch", "Ctrl Ch",
                   min=0, max=16, default=0,
                   labels=["Off"] + [str(i) for i in range(1, 17)]),
+            Button("retrig", "Retrig", default=True, color="green"),
+            Wheel("bpm", "BPM", min=40, max=300, default=120,
+                  visible_when=("sync_mode", "free")),
             Group("Pattern Notes", [
                 NoteSelect(f"pattern_note_{i}", f"P{i + 1}",
                            default=36 + i, config_only=True)

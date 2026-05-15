@@ -157,15 +157,17 @@ active slot without arpeggiating."""
         # and the sync-mode + BPM live here — touched on initial
         # wiring, never during a set.
         Group("Setup", [
+            # Layout: Sync on top (own row), then Arp Ch + Ctrl Ch
+            # side-by-side, then BPM (only visible when Sync=free),
+            # then the 8 learnable pattern-trigger notes (only
+            # visible when Ctrl Ch != Off).
+            Radio("sync_mode", "Sync",
+                  ["free", "tempo", "transport"], default="transport"),
             # Arp Ch (0 = Any) restricts which incoming notes count
             # as arpeggiate input. Useful when one keyboard plays
             # melodies on ch1 and another sends pattern-trigger
             # notes on ch16 — set Arp Ch = 1 and Ctrl Ch = 16.
             ChannelSelect("arp_channel", "Arp Ch", default=0, allow_any=True),
-            Radio("sync_mode", "Sync",
-                  ["free", "tempo", "transport"], default="transport"),
-            Wheel("bpm", "BPM", min=40, max=300, default=120,
-                  visible_when=("sync_mode", "free")),
             # Pattern-slot hardware trigger — mirrors the Tracker's
             # plumbing. 0 = Off; 1..16 reserves that channel for
             # slot selection (every note on the channel is
@@ -174,6 +176,8 @@ active slot without arpeggiating."""
             Wheel("pattern_ctrl_ch", "Ctrl Ch",
                   min=0, max=16, default=0,
                   labels=["Off"] + [str(i) for i in range(1, 17)]),
+            Wheel("bpm", "BPM", min=40, max=300, default=120,
+                  visible_when=("sync_mode", "free")),
             Group("Pattern Notes", [
                 NoteSelect(f"pattern_note_{i}", f"P{i + 1}",
                            default=36 + i, config_only=True)
