@@ -196,7 +196,7 @@ anything.
 | Play    | **Fade Out** | Wheel | 0--16 firing steps | 0 |
 | Play    | **Jitter %** | Knob | 0--100 (per-step micro-timing) | 0 |
 | Play    | **Tune Spread** | Knob | 0--100 (random transpose probability / size) | 0 |
-| Play    | **Snap** | Wheel | free / octaves / fifths+octaves | octaves |
+| Play    | **Snap** | Wheel | free / octaves / 5ths+oct. | octaves |
 | Play    | **Scale** | Wheel | major / minor / dorian / mixolydian / pentatonic / blues / harmonic m / whole tone / chromatic | major |
 | Play    | **Root** | Wheel | C ... B | C |
 | Play    | **Step Pattern** | StepEditor (override mode) | per-step default / force-on / force-on+accent / force-off + offset | all default |
@@ -218,7 +218,7 @@ for an identity pass-through).
 **Tune Spread + Snap.** Tune Spread is both the probability of a
 random transpose this step and the size of the jump. Snap
 pre-quantises the jump: `free` is any semitone within ±12;
-`octaves` is ±12 / ±24 / 0; `fifths+octaves` is ±5 / ±7 / ±12 /
+`octaves` is ±12 / ±24 / 0; `5ths+oct.` is ±5 / ±7 / ±12 /
 ±19 / ±24 / 0. The Scale quantiser runs *after* the spread, so a
 fifths-and-octaves jump stays in scale by construction.
 

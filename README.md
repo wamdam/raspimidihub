@@ -120,7 +120,7 @@ Plugins on the **Play** bottom-nav tab (alongside Controllers). They route in th
 - **Three-layer pattern model** -- algorithm + window wave + per-step manual overrides on top (default / FORCE_ON / FORCE_ON+accent / FORCE_OFF). Default cells render a subdued underlay tint to preview what the generator would do
 - **Six pattern modes** -- up / down / up-down / random / as-played / chord (every held note fires simultaneously each step)
 - **Internal Scale + Root** -- 9 scales (major / minor / dorian / mixolydian / pentatonic / blues / harmonic m / whole tone / chromatic) quantise the output; chromatic is the identity pass-through
-- **Tune Spread + Snap** -- random per-step transpose, with snap presets (free / octaves / fifths+octaves) that bias toward consonant intervals before the scale quantiser
+- **Tune Spread + Snap** -- random per-step transpose, with snap presets (free / octaves / 5ths+oct.) that bias toward consonant intervals before the scale quantiser
 - **Fade In / Fade Out** -- velocity ramps over N firing steps at the start of a phrase and after every key is released; live velocity-envelope strip beneath the grid
 - **Jitter** -- per-step micro-timing humanisation, re-rolled every step
 - **Pattern Trigger** range (Base..Base+6) picks the Pattern wheel live from a hardware key

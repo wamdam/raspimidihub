@@ -106,11 +106,13 @@ body {
     padding-bottom: 72px; /* space for bottom nav */
     overflow-y: auto;
 }
-/* When the Controller page is the active route, suppress vertical
-   scrolling on .main so that finger drags on knobs/wheels can't slide
-   the page, and so the horizontal-swipe gesture for switching
-   instances has unambiguous axis ownership. */
-.main:has(> .controller-page) { overflow: hidden; }
+/* Controller page used to suppress vertical scrolling on .main to
+   keep knob drags from sliding the page. Cell-level
+   stopPropagation on touchstart already gives controls exclusive
+   axis ownership for drags that start on a knob/wheel/fader, so
+   restoring scroll here is safe and lets denser / taller
+   controller layouts overflow on shorter screens. */
+.main:has(> .controller-page) { overflow-y: auto; }
 
 /* --- Bottom Nav --- */
 .bottom-nav {

@@ -73,7 +73,7 @@ _RATE_OPTIONS = [
 ]
 _DEFAULT_RATE_IDX = _RATE_OPTIONS.index("1/16")
 
-_SNAP_OPTIONS = ["free", "octaves", "fifths+octaves"]
+_SNAP_OPTIONS = ["free", "octaves", "5ths+oct."]
 
 # `chromatic` last so the wheel reads major→…→chromatic. The dict in
 # raspimidihub.scales lists it first as the identity pass-through.
@@ -98,7 +98,7 @@ _CYCLES_VALUES = [0.5, 1.0, 2.0, 3.0, 4.0]
 # fixed set scaled by the spread amount.
 _SNAP_INTERVALS = {
     "octaves": [-24, -12, 0, 12, 24],
-    "fifths+octaves": [-24, -19, -12, -7, -5, 0, 5, 7, 12, 19, 24],
+    "5ths+oct.": [-24, -19, -12, -7, -5, 0, 5, 7, 12, 19, 24],
 }
 
 
@@ -192,7 +192,7 @@ Pitch is quantised to the internal Scale + Root. Set Scale =
 chromatic for an identity pass-through.
 
 Tune Spread randomly transposes each step (Snap = free / octaves /
-fifths+octaves). Jitter humanises the per-step timing.
+5ths+oct.). Jitter humanises the per-step timing.
 
 Fade In / Fade Out ramp velocity at the start of a phrase (from
 silence) and at the end (after every key is released).
