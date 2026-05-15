@@ -175,7 +175,6 @@ updates are flowing."""
     ]
 
     # No MIDI I/O — purely a UI demo
-    cc_inputs: dict[int, str] = {}
     cc_outputs: list[int] = []
     inputs: list[str] = []
     outputs: list[str] = []

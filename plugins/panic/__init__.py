@@ -27,11 +27,9 @@ or send CC#64 value 127 from a foot switch to silence everything.
 Keep this wired to your output as a safety net."""
 
     params = [
-        Button("trigger", "Panic!", color="red", trigger=True),
+        Button("trigger", "Panic!", color="red", trigger=True, default_cc=64),
         Wheel("trigger_cc", "Trigger CC #", min=0, max=127, default=64),
     ]
-
-    cc_inputs = {64: "trigger"}
 
     inputs = ["CC#64 (trigger)"]
     outputs = ["All Notes Off + All Sound Off on all channels"]

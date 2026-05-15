@@ -15,6 +15,7 @@ from typing import Any
 from ..plugin_api import (
     PluginBase,
     get_all_params,
+    get_default_cc_map,
     get_defaults,
     params_to_dicts,
 )
@@ -24,6 +25,21 @@ from .clock_bus import ClockBus
 from .instance import PluginInstance
 
 log = logging.getLogger(__name__)
+
+
+def _diff_cc_map(live: dict, default: dict) -> dict:
+    """Return the subset of `live` that differs from `default`. Used
+    by serialize_instances to keep saved configs tidy — a plugin
+    instance the user never rebinds writes no `cc_map` field at all.
+    A cleared binding (cc=None) always counts as a diff: the user's
+    intent ("don't accept any CC for this param") must survive a
+    restart, otherwise the seed would re-add the default."""
+    diff: dict = {}
+    for name, binding in live.items():
+        seed = default.get(name)
+        if seed is None or seed != binding:
+            diff[name] = {"ch": binding.get("ch"), "cc": binding.get("cc")}
+    return diff
 
 
 # ---------------------------------------------------------------------------
@@ -482,12 +498,24 @@ class PluginHost:
             elif ev.type == MidiEventType.CONTROLLER:
                 cc_num = ev.data.control.param
                 cc_val = ev.data.control.value
-                # Check if this CC is mapped to a param
-                if cc_num in plugin.cc_inputs:
-                    param_name = plugin.cc_inputs[cc_num]
+                cc_ch = ev.data.control.channel
+                # Walk the per-instance cc_map. Multiple params may bind
+                # to the same CC (collisions are intentional — one CC
+                # can drive several controls); each matching entry fires
+                # its own param update. Cleared bindings carry cc=None
+                # and are skipped.
+                matched = False
+                for param_name, binding in plugin.cc_map.items():
+                    b_cc = binding.get("cc")
+                    if b_cc is None or b_cc != cc_num:
+                        continue
+                    b_ch = binding.get("ch")
+                    if b_ch is not None and b_ch != cc_ch:
+                        continue
                     self._cc_to_param(instance, param_name, cc_val)
-                else:
-                    plugin.on_cc(ev.data.note.channel, cc_num, cc_val)
+                    matched = True
+                if not matched:
+                    plugin.on_cc(cc_ch, cc_num, cc_val)
             elif ev.type == MidiEventType.PITCHBEND:
                 plugin.on_pitchbend(ev.data.control.channel, ev.data.control.value)
             elif ev.type == MidiEventType.CHANPRESS:
@@ -677,7 +705,8 @@ class PluginHost:
             "out_port": instance.alsa_client.out_port if instance.alsa_client else None,
             "params_schema": schema,
             "params": dict(instance.plugin._param_values),
-            "cc_inputs": {str(k): v for k, v in cls.cc_inputs.items()},
+            "cc_map": dict(instance.plugin.cc_map),
+            "default_cc_map": get_default_cc_map(cls.params),
             "cc_outputs": cls.cc_outputs,
             "inputs": cls.inputs,
             "outputs": cls.outputs,
@@ -742,18 +771,28 @@ class PluginHost:
         cmd_play / cmd_stop, note_preview …) are filtered out so a
         save mid-play doesn't carry trigger-style truthy values into
         the next plugin restart, where they'd replay through
-        on_param_change and re-fire whatever action they signal."""
+        on_param_change and re-fire whatever action they signal.
+
+        cc_map is persisted only when it differs from the default
+        seed — keeping configs tidy for plugins the user never
+        rebinds. A cleared binding (cc=None) always serialises so
+        the clear survives a restart."""
         result = []
         for instance in self._instances.values():
             transient = getattr(instance.plugin, "transient_params", set()) or set()
             params = {k: v for k, v in instance.plugin._param_values.items()
                       if k not in transient}
-            result.append({
+            entry = {
                 "id": instance.id,
                 "type": instance.plugin_type,
                 "name": instance.name,
                 "params": params,
-            })
+            }
+            cc_map = _diff_cc_map(instance.plugin.cc_map,
+                                  get_default_cc_map(type(instance.plugin).params))
+            if cc_map:
+                entry["cc_map"] = cc_map
+            result.append(entry)
         return result
 
     def restore_instances(self, saved: list[dict]) -> None:
@@ -770,6 +809,7 @@ class PluginHost:
             name = item.get("name", "")
             saved_id = item.get("id", "")
             saved_params = item.get("params", {})
+            saved_cc_map = item.get("cc_map", {})
 
             try:
                 instance = self.create_instance(plugin_type, name)
@@ -786,6 +826,14 @@ class PluginHost:
                     except ValueError:
                         pass
                     log.info("Restored plugin %s with saved ID %s", name, saved_id)
+                # Overlay saved cc_map on top of the default seed
+                for pname, binding in saved_cc_map.items():
+                    if not isinstance(binding, dict):
+                        continue
+                    instance.plugin.cc_map[pname] = {
+                        "ch": binding.get("ch"),
+                        "cc": binding.get("cc"),
+                    }
                 # Apply saved params
                 for pname, pvalue in saved_params.items():
                     self.set_param(instance.id, pname, pvalue)

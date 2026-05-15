@@ -15,6 +15,7 @@ from . import __version__
 from .bluetooth import BluetoothMidi
 from .config import Config
 from .midi_engine import Connection, MidiEngine
+from .plugin_api import get_all_params, get_default_cc_map
 from .midi_filter import (
     ALL_CHANNELS,
     ALL_MSG_TYPES,
@@ -185,6 +186,44 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
     # runs before that, so doing it here would no-op.
     engine._dirty_loop = asyncio.get_event_loop()
     engine._dirty_sse_cb = server.send_sse
+
+    # MIDI Learn — armed state for the CC binding popup. Keyed by
+    # learn_id (UUID). Values: {instance_id, param, timeout_task}.
+    # The first inbound CONTROLLER event after arming fires SSE
+    # cc_learn_result and drops the entry. 30 s timeout fires SSE
+    # cc_learn_timeout and also drops the entry. Learn observes
+    # every CC on any source — not gated by routing to the plugin —
+    # so a user binding Arp 1 → Rate can move ANY knob on ANY
+    # controller routed to the Pi to capture it.
+    cc_learn_armed: dict[str, dict] = {}
+    cc_learn_loop = asyncio.get_event_loop()
+
+    from .alsa_seq import MidiEventType as _MidiEventType
+
+    def _cc_learn_observe(ev) -> None:
+        if not cc_learn_armed:
+            return
+        if ev.type != int(_MidiEventType.CONTROLLER):
+            return
+        if ev.dest.port != engine._monitor_port:
+            return
+        cc_ch = ev.data.control.channel
+        cc_num = ev.data.control.param
+        for learn_id, entry in list(cc_learn_armed.items()):
+            entry.get("timeout_task") and entry["timeout_task"].cancel()
+            cc_learn_armed.pop(learn_id, None)
+            asyncio.run_coroutine_threadsafe(
+                server.send_sse("cc_learn_result", {
+                    "learn_id": learn_id,
+                    "instance_id": entry["instance_id"],
+                    "param": entry["param"],
+                    "ch": cc_ch,
+                    "cc": cc_num,
+                }),
+                cc_learn_loop,
+            )
+
+    engine.on_midi_event(_cc_learn_observe)
 
     # Captive-portal probe access log. The phone's OS hits one of these
     # endpoints periodically to decide whether the network has internet;
@@ -1700,6 +1739,78 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
             return Response.json({})
         return Response.json(engine._plugin_host.list_types())
 
+    @server.route("POST", "/api/cc-learn/start")
+    async def api_cc_learn_start(req: Request) -> Response:
+        """Arm MIDI Learn for one (instance, param). Body:
+        {instance_id, param}. Returns {learn_id}. The next inbound
+        CONTROLLER event on any routed source fires SSE
+        cc_learn_result with {learn_id, ch, cc}. Auto-cancels after
+        30 s with cc_learn_timeout."""
+        if not engine._plugin_host:
+            return Response.error("Plugin host not available", 503)
+        body = req.json or {}
+        instance_id = body.get("instance_id", "")
+        param = body.get("param", "")
+        if not instance_id or not param:
+            return Response.error("instance_id and param required", 400)
+        if engine._plugin_host.get_instance(instance_id) is None:
+            return Response.error("Instance not found", 404)
+        import uuid
+        learn_id = uuid.uuid4().hex
+        entry = {"instance_id": instance_id, "param": param, "timeout_task": None}
+
+        async def _timeout() -> None:
+            try:
+                await asyncio.sleep(30.0)
+            except asyncio.CancelledError:
+                return
+            if cc_learn_armed.pop(learn_id, None) is not None:
+                await server.send_sse("cc_learn_timeout", {"learn_id": learn_id})
+
+        entry["timeout_task"] = asyncio.create_task(_timeout())
+        cc_learn_armed[learn_id] = entry
+        return Response.json({"learn_id": learn_id})
+
+    @server.route("POST", "/api/cc-learn/cancel")
+    async def api_cc_learn_cancel(req: Request) -> Response:
+        """Cancel an armed Learn. Body: {learn_id}."""
+        body = req.json or {}
+        learn_id = body.get("learn_id", "")
+        entry = cc_learn_armed.pop(learn_id, None)
+        if entry is None:
+            return Response.json({"status": "not-armed"})
+        if entry.get("timeout_task"):
+            entry["timeout_task"].cancel()
+        return Response.json({"status": "cancelled"})
+
+    @server.route("GET", "/api/plugins/cc-mappings")
+    async def api_plugins_cc_mappings(req: Request) -> Response:
+        """Flat list of every per-instance CC binding across all plugins.
+
+        Powers the Settings → Plugin Control Mappings sub-page (and any
+        client-side collision lookup). Returns each binding once,
+        including cleared entries (cc=None) so the page can show "—"
+        rather than re-seeding the default. Param labels are pulled
+        from the schema where available."""
+        if not engine._plugin_host:
+            return Response.json({"mappings": []})
+        rows = []
+        for inst in engine._plugin_host.get_instances():
+            cls = type(inst.plugin)
+            label_for = {p.name: p.label for p in get_all_params(cls.params)
+                         if getattr(p, "name", None)}
+            for param, binding in inst.plugin.cc_map.items():
+                rows.append({
+                    "instance_id": inst.id,
+                    "instance_name": inst.name,
+                    "plugin_type": inst.plugin_type,
+                    "param": param,
+                    "param_label": label_for.get(param, param),
+                    "ch": binding.get("ch"),
+                    "cc": binding.get("cc"),
+                })
+        return Response.json({"mappings": rows})
+
     @server.route("GET", "/api/plugins/icon/", exact=False)
     async def api_plugin_icon(req: Request) -> Response:
         """Serve a plugin's icon.svg."""
@@ -1849,6 +1960,42 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
             return Response.error("Instance not found", 404)
         return Response.json(data)
 
+    @server.route("PUT", "/api/plugins/instances/", exact=False)
+    async def api_plugins_cc_map_put(req: Request) -> Response:
+        """Set a user CC binding on a plugin param.
+
+        Path: /api/plugins/instances/<id>/cc-map/<param>
+        Body: {"ch": int | null, "cc": int | null}
+
+        ch=null = any channel; cc=null = cleared (the param stops
+        accepting any CC; the cleared state is durable across
+        restart so the seed default doesn't reappear). Broadcasts
+        the new binding via SSE so other open panels stay in sync.
+        """
+        if not engine._plugin_host:
+            return Response.error("Plugin host not available", 503)
+        suffix = req.path[len("/api/plugins/instances/"):].strip("/")
+        parts = suffix.split("/")
+        if len(parts) != 3 or parts[1] != "cc-map":
+            return Response.error("Not found", 404)
+        instance_id, _, param = parts
+        instance = engine._plugin_host.get_instance(instance_id)
+        if instance is None:
+            return Response.error("Instance not found", 404)
+        body = req.json or {}
+        ch = body.get("ch")
+        cc = body.get("cc")
+        if ch is not None and not (isinstance(ch, int) and 0 <= ch <= 15):
+            return Response.error("ch must be null or 0..15", 400)
+        if cc is not None and not (isinstance(cc, int) and 0 <= cc <= 127):
+            return Response.error("cc must be null or 0..127", 400)
+        instance.plugin.cc_map[param] = {"ch": ch, "cc": cc}
+        engine.mark_dirty()
+        await server.send_sse("cc_map_changed", {
+            "instance_id": instance_id, "param": param, "ch": ch, "cc": cc,
+        })
+        return Response.json({"status": "updated"})
+
     @server.route("PATCH", "/api/plugins/instances/", exact=False)
     async def api_plugins_instance_patch(req: Request) -> Response:
         """Update plugin params or name. Body: {params?, name?}"""
@@ -1879,10 +2026,33 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
 
     @server.route("DELETE", "/api/plugins/instances/", exact=False)
     async def api_plugins_instance_delete(req: Request) -> Response:
-        """Stop and remove a plugin instance."""
+        """Stop and remove a plugin instance — or, when the path is the
+        cc-map sub-resource (/api/plugins/instances/<id>/cc-map/<param>),
+        reset that single param's binding to the plugin's default_cc."""
         if not engine._plugin_host:
             return Response.error("Plugin host not available", 503)
-        instance_id = req.path.split("/api/plugins/instances/")[1].rstrip("/")
+        suffix = req.path[len("/api/plugins/instances/"):].strip("/")
+        parts = suffix.split("/")
+        # cc-map sub-resource: reset a single binding to the seed default
+        if len(parts) == 3 and parts[1] == "cc-map":
+            instance_id, _, param = parts
+            instance = engine._plugin_host.get_instance(instance_id)
+            if instance is None:
+                return Response.error("Instance not found", 404)
+            cls = type(instance.plugin)
+            seed = get_default_cc_map(cls.params)
+            if param in seed:
+                instance.plugin.cc_map[param] = dict(seed[param])
+            else:
+                instance.plugin.cc_map.pop(param, None)
+            new_binding = instance.plugin.cc_map.get(param, {"ch": None, "cc": None})
+            engine.mark_dirty()
+            await server.send_sse("cc_map_changed", {
+                "instance_id": instance_id, "param": param,
+                "ch": new_binding.get("ch"), "cc": new_binding.get("cc"),
+            })
+            return Response.json({"status": "reset", "binding": new_binding})
+        instance_id = suffix
         instance = engine._plugin_host.get_instance(instance_id)
         if instance is None:
             return Response.error("Instance not found", 404)
