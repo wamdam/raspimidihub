@@ -171,6 +171,25 @@ export function renderParamGroup(items, values, onChange, displayCtx, cols) {
         // device-detail panel so they don't render twice.
         if (p.config_only && playOnly) continue;
         if (p.play_only && !playOnly) continue;
+        // Honour visible_when on nested children (top-level
+        // visible_when is checked in renderParamList; this branch
+        // covers params + groups nested inside another Group).
+        if (p.visible_when) {
+            const cur = values[p.visible_when.param];
+            const cv = p.visible_when.value;
+            const matches = Array.isArray(cv) ? cv.includes(cur) : cur === cv;
+            if (!matches) continue;
+        }
+        // Nested group — render its title + recurse into its
+        // children. Without this branch a Group-inside-Group falls
+        // through to renderParam's `Unknown` default.
+        if (p.type === 'group') {
+            flushInline();
+            result.push(html`<${PluginGroup} title=${p.title}>
+                ${renderParamGroup(p.children, values, onChange, displayCtx, p.cols)}
+            <//>`);
+            continue;
+        }
         const rendered = renderParam(p, values, onChange, values, displayCtx);
         if (!rendered) continue;
         if (INLINE_TYPES.has(p.type)) inlineRun.push(applySpan(rendered, p.span));
