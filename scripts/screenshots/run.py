@@ -54,6 +54,7 @@ DEMO_PLUGINS = [
     ("cc_smoother", "CC Smoother"),
     ("chord_generator", "Chord Generator"),
     ("clock_divider", "Clock Divider"),
+    ("euclidean", "Euclidean"),
     ("hold", "Hold"),
     ("master_clock", "Master Clock"),
     ("midi_delay", "MIDI Delay"),
@@ -175,8 +176,10 @@ def build_scenes(target: str, instances: dict[str, dict]) -> list[dict]:
     """Materialise the scene list. URL paths reference the running
     Pi; client_ids are resolved per-scene from the demo instances we
     just created."""
+    # 01-routing is captured BEFORE the demo set is created — see
+    # main() — so the matrix screenshot shows the user's loaded
+    # config, not the 21-plugin demo population.
     scenes: list[dict] = [
-        {"name": "01-routing", "path": "/routing"},
         {"name": "04-settings", "path": "/settings"},
     ]
     # Controller play-surface scenes. One per controller template,
@@ -201,6 +204,9 @@ def build_scenes(target: str, instances: dict[str, dict]) -> list[dict]:
     # the Arp is also SURFACE_KIND="play". Path is the instance id.
     if (arp := instances.get("arpeggiator")) is not None:
         scenes.append({"name": "arpeggiator-play", "path": f"/play/{arp['id']}"})
+    # Euclidean play-surface — third SURFACE_KIND="play" plugin.
+    if (eu := instances.get("euclidean")) is not None:
+        scenes.append({"name": "euclidean-play", "path": f"/play/{eu['id']}"})
     # 05/07/08 need a real connection in the matrix so there is an
     # 'on' cell to click. We wire a transient one between two demo
     # plugins; setup_demo_plugins already wiped the live state and
@@ -240,6 +246,7 @@ def build_scenes(target: str, instances: dict[str, dict]) -> list[dict]:
         "velocity_curve": "19-plugin-velocity-curve",
         "velocity_equalizer": "20-plugin-velocity-equalizer",
         "clock_divider": "21-plugin-clock-divider",
+        "euclidean": "30-plugin-euclidean-config",
         "hold": "22-plugin-hold",
         "sysex_sender": "27-plugin-sysex-sender",
         "tracker": "28-plugin-tracker-config",
@@ -336,6 +343,23 @@ def main() -> int:
         print(f"error: cannot reach {target}/api/system: {e}", file=sys.stderr)
         return 2
 
+    cfg = VIEWPORT_PRESETS[args.viewport]
+
+    # Phase 1: capture the matrix against whatever's currently loaded
+    # (the user's real config), BEFORE we wipe state for the demo
+    # plugin set. Doing this first means the routing screenshot shows
+    # a realistic instance set instead of the 21-plugin demo
+    # population. Filter applies — if the user is only running a
+    # specific scene this phase is skipped when it doesn't match.
+    pre_setup = [{"name": "01-routing", "path": "/routing"}]
+    if args.filter:
+        pre_setup = [s for s in pre_setup if args.filter in s["name"]]
+    if pre_setup:
+        print(f"taking {len(pre_setup)} pre-setup screenshot(s) "
+              "(against the loaded config)")
+        screenshot_scenes(target, pre_setup, out_dir,
+                          headless=not args.headed, preset=args.viewport)
+
     if args.skip_setup:
         # Resolve scenes by querying live instances.
         live = json.loads(api_request(target, "GET", "/plugins/instances"))
@@ -350,17 +374,27 @@ def main() -> int:
         print("error: no scenes matched", file=sys.stderr)
         return 1
 
-    cfg = VIEWPORT_PRESETS[args.viewport]
-    print(f"taking {len(scenes)} screenshot(s) → {out_dir} "
+    print(f"taking {len(scenes)} demo-set screenshot(s) → {out_dir} "
           f"({args.viewport}: {cfg['viewport']['width']}x{cfg['viewport']['height']} "
           f"@ DPR{cfg['dpr']})")
     screenshot_scenes(target, scenes, out_dir, headless=not args.headed,
                       preset=args.viewport)
 
-    print()
-    print("done. The Pi is now running the demo plugin set.")
-    print("Click 'Load Config' in Settings (or POST /api/config/load) "
-          "to restore your saved state.")
+    # Restore the user's saved config so the Pi is in the same
+    # state it started in. Best-effort — if there is no saved
+    # config (fresh install), we leave the demo set in place.
+    if not args.skip_setup:
+        try:
+            api_request(target, "POST", "/config/load")
+            print()
+            print("done. Saved config reloaded — Pi is back to its starting state.")
+        except (urllib.error.URLError, OSError) as e:
+            print()
+            print(f"done. Failed to auto-restore saved config: {e}")
+            print("Click 'Load Config' in Settings to restore manually.")
+    else:
+        print()
+        print("done.")
     return 0
 
 
