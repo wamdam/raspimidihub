@@ -119,28 +119,30 @@ body {
    sibling (the bottom pattern strip) sits at the visible bottom
    instead of below the fold. */
 .main:has(> .play-page) { overflow: hidden; }
-/* `.main .controller-page.play-page` has specificity (0,3,0) so it
-   beats the density-small override at `:root.density-small
-   .controller-page` (0,2,1). Without this bump the small-density
-   negative-margin / padding-bottom bleed trick re-applies and the
-   flex chain below sits 1-2 cm short of the actual bottom. */
 .main .controller-page.play-page {
-    /* Override the default .controller-page bleed-through trick
-       (margin-bottom: -72px; padding-bottom: 80px) so the flex
-       chain below cleanly fills .main's content area. The page
-       sits inside .main's content box (.main keeps its 72 px
-       padding-bottom for the fixed bottom nav), and the bottom
-       pattern strip lands flush above the nav. */
-    margin-bottom: 0;
-    padding-bottom: 0;
-    height: 100%;
-    min-height: 100%;
-    box-sizing: border-box;
+    /* The page can keep its inherited margin / padding tricks for
+       the controller-page bg bleed — the .down pagination button
+       is a viewport-fixed overlay (bottom: var(--nav-reserve))
+       so the page doesn't need to flush-fill to the bottom-nav
+       edge. Forcing a flex column with overflow:hidden so the
+       pager (flex:1 child) is the scroll target rather than the
+       page itself. */
     display: flex;
     flex-direction: column;
     overflow: hidden;
 }
 .main .controller-page.play-page .controller-bar { flex: 0 0 auto; }
+
+/* Space below the surface reserved for the fixed bottom nav (and
+   the MIDI activity bar when visible). The .down page button uses
+   this as its `bottom:` offset so it lands just above the nav
+   regardless of density / midi-bar state. Mirrors the values used
+   by `.main`'s padding-bottom so the button aligns with where the
+   nav effectively starts. */
+:root { --nav-reserve: 72px; }
+.main.with-midi-bar { --nav-reserve: 96px; }
+:root.density-small { --nav-reserve: 56px; }
+:root.density-small .main.with-midi-bar { --nav-reserve: 78px; }
 .play-surface-wrap {
     flex: 1;
     min-height: 0;
@@ -163,10 +165,15 @@ body {
 }
 .play-pager::-webkit-scrollbar { display: none; }
 .play-page-btn {
-    position: absolute;
+    /* `.up` stays absolute inside .play-surface-wrap (anchored to
+       the wrap's top edge = right below the controller-bar).
+       `.down` is viewport-fixed so it lands above the bottom nav
+       regardless of how the play-page itself is sized — sidesteps
+       the height-cascade fragility that left a gap on small-
+       density phones. */
     left: 0;
     right: 0;
-    z-index: 5;
+    z-index: 20;
     background: rgba(20, 22, 36, 0.92);
     border: 1px solid rgba(255,255,255,0.10);
     color: var(--text);
@@ -179,8 +186,8 @@ body {
     border-left: none;
     border-right: none;
 }
-.play-page-btn.up   { top:    0; border-top: none; border-radius: 0 0 6px 6px; }
-.play-page-btn.down { bottom: 0; border-bottom: none; border-radius: 6px 6px 0 0; }
+.play-page-btn.up   { position: absolute; top: 0; border-top: none; border-radius: 0 0 6px 6px; }
+.play-page-btn.down { position: fixed; bottom: var(--nav-reserve, 72px); border-bottom: none; border-radius: 6px 6px 0 0; }
 .play-page-btn:hover { background: rgba(40, 42, 56, 0.95); }
 .pattern-strip {
     display: grid;
