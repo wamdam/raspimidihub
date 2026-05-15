@@ -265,6 +265,14 @@ body {
     left: 0;
     background: var(--surface);
     z-index: 1;
+    /* Smooth interpolation as JS updates max-width on scroll — keeps
+       the shrink animation from looking janky. */
+    transition: max-width 80ms linear;
+}
+.matrix th.row-header .row-header-label {
+    display: inline-block;
+    vertical-align: middle;
+    overflow: hidden;
 }
 .matrix th.corner-header {
     position: sticky;

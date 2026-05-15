@@ -16,6 +16,31 @@
 import { html } from '../ui/common.js';
 import { useTapMenu } from '../ui/contextmenu.js';
 import { IconDIN, IconBluetooth, PluginIcon } from '../ui/icons.js';
+import { useEffect, useRef, useState } from '../lib/hooks.module.js';
+
+// Width budget for the matrix row-header column as it shrinks. At
+// shrink = 0 the column is at its natural width (no cap); at
+// shrink = 1 it caps at ROW_HEADER_NARROW px, with linear
+// interpolation in between. The visible chars budget is roughly the
+// (capped) text-only width divided by an average char width.
+const ROW_HEADER_NATURAL = 180;
+const ROW_HEADER_NARROW = 80;
+const ROW_HEADER_CHROME = 24;     // icon + horizontal padding
+const ROW_HEADER_CH_PX = 6.5;     // approx px per char at 12px sans-serif
+// scrollLeft beyond this is treated as "fully shrunk" — smaller
+// matrices shrink fully once they hit their own end-of-scroll.
+const SHRINK_FULL_AT_PX = 280;
+
+function midEllipsis(text, chars) {
+    if (!text || text.length <= chars) return text || '';
+    if (chars <= 2) return text.slice(0, 1) + '…';
+    const remain = chars - 1; // 1 char for the ellipsis itself
+    const head = Math.ceil(remain / 2);
+    const tail = remain - head;
+    return tail > 0
+        ? text.slice(0, head) + '…' + text.slice(-tail)
+        : text.slice(0, head) + '…';
+}
 
 export function MatrixCell({ on, filtered, getMenuItems, showContextMenu, offline }) {
     const trigger = useTapMenu(showContextMenu, getMenuItems);
@@ -26,7 +51,7 @@ export function MatrixCell({ on, filtered, getMenuItems, showContextMenu, offlin
     </td>`;
 }
 
-export function MatrixHeader({ item, label, isPlugin, pluginType, isBluetooth, sendsClock, clockBlocked, multiEffective, clockBeat, online, getMenuItems, showContextMenu, midiRate }) {
+export function MatrixHeader({ item, label, isPlugin, pluginType, isBluetooth, sendsClock, clockBlocked, multiEffective, clockBeat, online, getMenuItems, showContextMenu, midiRate, shrink }) {
     const trigger = useTapMenu(showContextMenu, getMenuItems);
     // Three-state clock icon:
     //   blocked       → desaturated + faint  (still pulses so the user
@@ -43,8 +68,26 @@ export function MatrixHeader({ item, label, isPlugin, pluginType, isBluetooth, s
     const title = clockBlocked ? 'Sending clock (blocked from system clock)'
                 : multiEffective ? 'Multiple clock sources!'
                 : 'Sending clock';
-    return html`<th class="row-header ${online ? '' : 'offline'} ${isPlugin ? 'plugin-row' : ''} ${isBluetooth ? 'bt-row' : ''}" style="cursor:pointer"
-        onClick=${trigger.onClick} onContextMenu=${trigger.onContextMenu}>${isPlugin ? html`<${PluginIcon} type=${pluginType} />` : html`<span class="dev-icon ${isBluetooth ? 'bt' : 'din'}" style="display:inline-flex;vertical-align:middle;margin-right:3px">${isBluetooth ? IconBluetooth : IconDIN}</span>`} ${label}${sendsClock ? html`<span key=${clockBeat || 0} class="clock-icon ${cls}" title="${title}"></span>` : ''}
+
+    // shrink (0..1) is set by ConnectionMatrix from the horizontal
+    // scrollLeft of the .matrix container. At 0 the row-header column
+    // is at its natural width; at 1 it caps at ROW_HEADER_NARROW px
+    // and the label uses middle-ellipsis (Velocity Equalizer 1 →
+    // Velo…er 1) so the trailing instance number stays readable.
+    const s = Math.max(0, Math.min(1, shrink || 0));
+    const thStyle = s > 0
+        ? `cursor:pointer;max-width:${ROW_HEADER_NATURAL - (ROW_HEADER_NATURAL - ROW_HEADER_NARROW) * s}px`
+        : 'cursor:pointer';
+    let displayLabel = label;
+    if (s > 0 && label) {
+        const widthPx = ROW_HEADER_NATURAL - (ROW_HEADER_NATURAL - ROW_HEADER_NARROW) * s;
+        const charsAvail = Math.max(4, Math.floor((widthPx - ROW_HEADER_CHROME) / ROW_HEADER_CH_PX));
+        displayLabel = midEllipsis(label, charsAvail);
+    }
+
+    return html`<th class="row-header ${online ? '' : 'offline'} ${isPlugin ? 'plugin-row' : ''} ${isBluetooth ? 'bt-row' : ''}" style="${thStyle}"
+        title="${label || ''}"
+        onClick=${trigger.onClick} onContextMenu=${trigger.onContextMenu}>${isPlugin ? html`<${PluginIcon} type=${pluginType} />` : html`<span class="dev-icon ${isBluetooth ? 'bt' : 'din'}" style="display:inline-flex;vertical-align:middle;margin-right:3px">${isBluetooth ? IconBluetooth : IconDIN}</span>`} <span class="row-header-label">${displayLabel}</span>${sendsClock ? html`<span key=${clockBeat || 0} class="clock-icon ${cls}" title="${title}"></span>` : ''}
         <${RateMeter} rate=${midiRate} /></th>`;
 }
 
@@ -66,6 +109,36 @@ export function RateMeter({ rate }) {
 }
 
 export function ConnectionMatrix({ devices, connections, showToast, clockSources, clockQuarters, midiRates, onAddPlugin, getCellMenuItems, getHeaderMenuItems, showContextMenu }) {
+    // Row-header shrink: horizontal scroll drives a 0..1 ratio so the
+    // sticky-left column gradually narrows and labels middle-truncate,
+    // giving the matrix more horizontal real estate without losing the
+    // instance number at the tail of long names.
+    const matrixRef = useRef(null);
+    const [shrink, setShrink] = useState(0);
+    useEffect(() => {
+        const el = matrixRef.current;
+        if (!el) return;
+        let raf = 0;
+        const update = () => {
+            raf = 0;
+            const max = Math.min(el.scrollWidth - el.clientWidth, SHRINK_FULL_AT_PX);
+            const ratio = max > 0 ? Math.max(0, Math.min(1, el.scrollLeft / max)) : 0;
+            setShrink(ratio);
+        };
+        const onScroll = () => {
+            if (raf) return;
+            raf = requestAnimationFrame(update);
+        };
+        el.addEventListener('scroll', onScroll, { passive: true });
+        window.addEventListener('resize', onScroll);
+        update();
+        return () => {
+            el.removeEventListener('scroll', onScroll);
+            window.removeEventListener('resize', onScroll);
+            if (raf) cancelAnimationFrame(raf);
+        };
+    }, []);
+
     const inputs = [];
     const outputs = [];
     for (const dev of devices) {
@@ -131,7 +204,7 @@ export function ConnectionMatrix({ devices, connections, showToast, clockSources
     }
 
     return html`
-        <div class="matrix">
+        <div class="matrix" ref=${matrixRef}>
             <table>
                 <thead>
                     <tr>
@@ -156,7 +229,8 @@ export function ConnectionMatrix({ devices, connections, showToast, clockSources
                                 online=${inp.online}
                                 getMenuItems=${() => getHeaderMenuItems ? getHeaderMenuItems(inp, 'input') : []}
                                 showContextMenu=${showContextMenu}
-                                midiRate=${midiRates && midiRates[inp.client_id + ':' + inp.port_id]} />
+                                midiRate=${midiRates && midiRates[inp.client_id + ':' + inp.port_id]}
+                                shrink=${shrink} />
                             ${outputs.map(out => {
                                 if (isSelf(inp, out)) return html`<td class="self"></td>`;
                                 const offline = isOffline(inp, out);
