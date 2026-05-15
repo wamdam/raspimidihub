@@ -198,6 +198,14 @@ Tune Spread randomly transposes each step (Snap = free / octaves /
 Fade In / Fade Out ramp velocity at the start of a phrase (from
 silence) and at the end (after every key is released).
 
+Retrig (Setup): when ON, the cycle restarts from step 1 each
+time you start a fresh phrase (released-all-keys → press-a-key)
+— predictable kick-off, every chord starts the pattern from the
+top. When OFF, the cycle keeps free-wheeling across rest gaps,
+so re-triggering after silence picks up wherever the clock would
+have landed if you'd kept holding — useful when you want the
+pattern locked to bar time regardless of when you stab a chord.
+
 Routing example:
   [Keyboard]    → [Euclidean] → [Synth]
   [Master Clock] → [Euclidean]
