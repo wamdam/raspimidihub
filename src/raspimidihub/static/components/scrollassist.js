@@ -10,7 +10,7 @@
  */
 
 import { useEffect, useRef, useState } from '../lib/hooks.module.js';
-import { html, tickFeedback } from './common.js';
+import { html, tickFeedback, getScrollAssist } from './common.js';
 
 // Per-tap step. Fixed so the feel is the same across every screen
 // size — taller pages just need a few more taps.
@@ -20,10 +20,21 @@ const SHOW_AT_PX = 30;
 
 export function ScrollAssist() {
     const wrapRef = useRef(null);
+    const [enabled, setEnabled] = useState(getScrollAssist);
     const [canUp, setCanUp] = useState(false);
     const [canDown, setCanDown] = useState(false);
 
+    // Track the per-device setting. Settings → Display → Scroll
+    // assist dispatches `scrollassistchange` so the FABs toggle
+    // live without a page reload.
     useEffect(() => {
+        const onChange = (e) => setEnabled(!!e.detail);
+        window.addEventListener('scrollassistchange', onChange);
+        return () => window.removeEventListener('scrollassistchange', onChange);
+    }, []);
+
+    useEffect(() => {
+        if (!enabled) { setCanUp(false); setCanDown(false); return; }
         // Walk up to find the scrolling .main — it's our parent in
         // the tree, but the ref reaches into the rendered DOM after
         // mount.
@@ -58,7 +69,7 @@ export function ScrollAssist() {
             ro.disconnect();
             if (raf) cancelAnimationFrame(raf);
         };
-    }, []);
+    }, [enabled]);
 
     const scrollBy = (dir) => {
         const wrap = wrapRef.current;

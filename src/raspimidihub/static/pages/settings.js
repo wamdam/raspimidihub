@@ -7,7 +7,8 @@ import { useState, useEffect } from '../lib/hooks.module.js';
 import { html, api, hardReload } from '../ui/common.js';
 import { UPDATE_LABELS } from '../state/constants.js';
 import { getSoundsEnabled, setSoundsEnabled,
-         getLayoutDensity, setLayoutDensity, DENSITY_OPTIONS } from '../components/common.js';
+         getLayoutDensity, setLayoutDensity, DENSITY_OPTIONS,
+         getScrollAssist, setScrollAssist } from '../components/common.js';
 
 function NetworkCard({ iface, showToast }) {
     const [method, setMethod] = useState(iface.method || 'auto');
@@ -735,6 +736,7 @@ export function SettingsPage({ showToast, showMidiBar, toggleMidiBar }) {
     const [isUpgrading, setIsUpgrading] = useState(false);
     const [soundsOn, setSoundsOn] = useState(getSoundsEnabled());
     const [density, setDensity] = useState(getLayoutDensity());
+    const [scrollAssistOn, setScrollAssistOn] = useState(getScrollAssist());
     useEffect(() => { api('/network').then(setIfaces).catch(() => {}); }, []);
     useEffect(() => {
         let cancelled = false;
@@ -843,6 +845,12 @@ export function SettingsPage({ showToast, showMidiBar, toggleMidiBar }) {
                 <input type="checkbox" checked=${soundsOn}
                     onchange=${e => { setSoundsEnabled(e.target.checked); setSoundsOn(e.target.checked); }} />
                 <span>Knob / wheel tick sounds</span>
+            </label>
+            <label class="msg-toggle">
+                <input type="checkbox" data-testid="scroll-assist-toggle"
+                    checked=${scrollAssistOn}
+                    onchange=${e => { setScrollAssist(e.target.checked); setScrollAssistOn(e.target.checked); }} />
+                <span>Scroll-assist buttons <span style="color:var(--text-dim);font-size:11px;font-weight:400">(this device only)</span></span>
             </label>
             <div class="form-group" style="margin-top:10px;margin-bottom:0">
                 <label>Layout density <span style="color:var(--text-dim);font-size:11px;font-weight:400">(this device only)</span></label>

@@ -95,6 +95,26 @@ export function applyLayoutDensity(v) {
     if (v && v !== 'default') el.classList.add('density-' + v);
 }
 
+// Scroll-assist FAB pair preference — per-device, stored in
+// localStorage so it travels with the browser. Default is on; some
+// users prefer pure finger-scroll and don't want the overlay
+// affordance. setScrollAssist dispatches `scrollassistchange` on
+// the window so the live FAB component picks the change up without
+// a page reload.
+const SCROLL_ASSIST_KEY = 'raspimidihub:scrollAssist';
+export function getScrollAssist() {
+    try {
+        // Missing key OR explicit '1' → on. Only '0' disables.
+        return localStorage.getItem(SCROLL_ASSIST_KEY) !== '0';
+    } catch { return true; }
+}
+export function setScrollAssist(on) {
+    try { localStorage.setItem(SCROLL_ASSIST_KEY, on ? '1' : '0'); } catch {}
+    if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('scrollassistchange', { detail: !!on }));
+    }
+}
+
 const NOTE_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
 export function noteName(n) { return `${NOTE_NAMES[n % 12]}${Math.floor(n / 12) - 2}`; }
 
