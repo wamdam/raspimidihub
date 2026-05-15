@@ -17,7 +17,7 @@ import { PluginChannelSelect } from './channelselect.js';
 import { PluginGroup } from './group.js';
 import { PluginLayoutGrid } from './layoutgrid.js';
 import { PluginTrackerGrid } from './trackergrid.js';
-import { PluginPatternStrip } from './patternstrip.js';
+import { PluginPatternBank } from './patternbank.js';
 import { DisplayMeter, DisplayScope } from './display.js';
 
 // =======================================================================
@@ -118,15 +118,22 @@ export function renderParam(param, values, onChange, allValues, displayCtx) {
             // is no longer needed here.
             return html`<${PluginTrackerGrid} param=${param} values=${values}
                 onChange=${onChange} displayCtx=${displayCtx} />`;
-        case 'patternstrip':
+        case 'patternstrip': {
             // Renders inline as the trailing param of the play
-            // surface (same as any other tile). The long-press menu
-            // dispatches Paste / Reset commands through `cmd_param`
-            // so the plugin's slot bank can clone or wipe slots.
-            return html`<${PluginPatternStrip} name=${param.name}
-                value=${val} onChange=${onChange}
+            // surface. Tap → flips the active-slot int; long-press →
+            // dispatches Paste / Reset via `cmd_param`. No queued /
+            // playing / empty modifiers on this side (the strip
+            // plugins keep every slot populated).
+            const onTap = (idx) => onChange(param.name, idx);
+            const onCmd = param.cmd_param
+                ? (idx, mode) => onChange(param.cmd_param, { slot: idx, mode })
+                : undefined;
+            return html`<${PluginPatternBank}
                 count=${param.count || 8}
-                cmdParam=${param.cmd_param} />`;
+                selected=${val}
+                onTap=${onTap}
+                onCmd=${onCmd} />`;
+        }
         default:
             return html`<div style="color:var(--text-dim);font-size:12px">Unknown: ${param.type}</div>`;
     }

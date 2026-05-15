@@ -159,39 +159,67 @@ body {
 :root.density-small { --nav-pad: 56px; --header-pad: 32px; }
 :root.density-small .main.with-midi-bar { --nav-pad: 78px; }
 
-.pattern-strip {
+/* Unified pattern-slot bank — shared between the Tracker's bottom
+   row and the Arp / Euclidean play-surface trailing rows. Optional
+   modifiers (.playing / .queued / .empty) only apply when the
+   parent passes the matching props; the strip plugins never do, so
+   they read as a clean .selected-or-not selector. */
+.pattern-bank {
     display: grid;
     grid-template-columns: repeat(8, 1fr);
     gap: 4px;
 }
-.pattern-strip-btn {
+.pattern-bank-slot-wrap {
+    position: relative;
+    min-width: 0;
+}
+.pattern-bank-slot {
     width: 100%;
+    height: 32px;
+    padding: 0;
     background: var(--surface);
     border: 1px solid rgba(255,255,255,0.08);
     color: var(--text-dim);
-    padding: 6px 0;
+    border-radius: 4px;
+    font-family: inherit;
     font-size: 12px;
     font-weight: 600;
     cursor: pointer;
-    border-radius: 4px;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+    touch-action: manipulation;
     transition: background 80ms, color 80ms, border-color 80ms;
 }
-.pattern-strip-btn.active {
+.pattern-bank-slot.empty {
+    background: transparent;
+    border-style: dashed;
+    color: var(--text-muted, #888);
+}
+.pattern-bank-slot.selected {
     background: var(--accent);
     color: #fff;
     border-color: var(--accent);
-    box-shadow: 0 0 6px rgba(233,69,96,0.4);
+    box-shadow: 0 0 6px rgba(233, 69, 96, 0.4);
 }
-.pattern-strip-btn:hover:not(.active) {
+.pattern-bank-slot.selected.playing {
+    background: var(--accent-warm, var(--accent));
+    border-color: var(--accent-warm, var(--accent));
+}
+.pattern-bank-slot.queued {
+    border-color: var(--accent-warm, var(--accent));
+    color: var(--accent-warm, var(--accent));
+    animation: pattern-bank-queue-blink 0.8s ease-in-out infinite;
+}
+.pattern-bank-slot:hover:not(.selected) {
     background: var(--surface2);
     color: var(--text);
 }
-.pattern-strip-btn-wrap {
-    position: relative;
-    flex: 1 1 0;
-    min-width: 0;
+@keyframes pattern-bank-queue-blink {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0.45; }
 }
-.pattern-strip-menu {
+.pattern-bank-menu {
     position: absolute;
     left: 0;
     bottom: calc(100% + 4px);
@@ -206,7 +234,7 @@ body {
     padding: 4px;
     gap: 2px;
 }
-.pattern-strip-menu-item {
+.pattern-bank-menu-item {
     text-align: left;
     background: transparent;
     border: 0;
@@ -217,9 +245,9 @@ body {
     padding: 8px 10px;
     cursor: pointer;
 }
-.pattern-strip-menu-item:hover { background: var(--surface2); }
-.pattern-strip-menu-item.danger { color: var(--accent, #e94560); }
-.pattern-strip-menu-item.danger:hover { background: rgba(233, 69, 96, 0.12); }
+.pattern-bank-menu-item:hover { background: var(--surface2); }
+.pattern-bank-menu-item.danger { color: var(--accent, #e94560); }
+.pattern-bank-menu-item.danger:hover { background: rgba(233, 69, 96, 0.12); }
 
 /* --- Bottom Nav --- */
 .bottom-nav {
@@ -977,8 +1005,8 @@ body {
 :root.density-small .tracker-keypad-top { gap: 6px; }
 :root.density-small .tracker-keypad-col { gap: 2px; }
 :root.density-small .tracker-keypad-action-btn { padding: 3px 10px; font-size: 11px; }
-:root.density-small .tracker-pattern-row { margin-top: 2px; }
-:root.density-small .tracker-pattern-slot { height: 24px; font-size: 11px; }
+:root.density-small .tracker-keypad-bottom > .pattern-bank { margin-top: 2px; }
+:root.density-small .tracker-keypad-bottom .pattern-bank-slot { height: 24px; font-size: 11px; }
 /* `.trackergrid { height: 100% }` resolves against an indeterminate
  * parent height when controller-page uses min-height: 100% — the
  * browser ends up sizing it just shy of the controller-page content
@@ -1487,104 +1515,11 @@ body {
  *   - .queued: pending switch on next boundary; pulsing
  * Long-press opens a context popover anchored below the slot.
  */
-.tracker-pattern-row {
-    display: flex;
-    flex: 0 0 auto;
-    gap: 6px;
-    align-items: center;
-    margin-top: 4px;
-}
-.tracker-pattern-slots {
-    display: flex;
-    flex: 1 1 auto;
-    gap: 4px;
-    flex-wrap: nowrap;
-}
-.tracker-pattern-slot-wrap {
-    position: relative;
-    flex: 1 1 0;
-    min-width: 0;
-}
-.tracker-pattern-slot {
-    width: 100%;
-    height: 28px;
-    padding: 0;
-    border-radius: 6px;
-    border: 1px solid var(--surface2, #2a2a2a);
-    background: var(--surface2, #2a2a2a);
-    color: var(--text, #ccc);
-    font-family: inherit;
-    font-size: 12px;
-    font-weight: 600;
-    cursor: pointer;
-    user-select: none;
-    -webkit-user-select: none;
-    -webkit-touch-callout: none;
-    touch-action: manipulation;
-    transition: background 0.12s, border-color 0.12s, color 0.12s;
-}
-.tracker-pattern-slot.empty {
-    background: transparent;
-    color: var(--text-muted, #888);
-    border-color: var(--surface2, #2a2a2a);
-    border-style: dashed;
-}
-.tracker-pattern-slot.selected {
-    background: var(--accent, #4af);
-    border-color: var(--accent, #5cf);
-    color: #000;
-}
-.tracker-pattern-slot.selected.playing {
-    background: var(--accent-warm, #e94560);
-    border-color: var(--accent-warm, #e94560);
-    color: #fff;
-}
-.tracker-pattern-slot.queued {
-    border-color: var(--accent-warm, #e94560);
-    color: var(--accent-warm, #e94560);
-    animation: tracker-pattern-queue-blink 0.8s ease-in-out infinite;
-}
-@keyframes tracker-pattern-queue-blink {
-    0%, 100% { opacity: 1; }
-    50%      { opacity: 0.45; }
-}
-
-/* Long-press context menu — local popover anchored to its slot. */
-.tracker-pattern-menu {
-    position: absolute;
-    left: 0;
-    bottom: calc(100% + 4px);
-    z-index: 10;
-    min-width: 180px;
-    background: var(--surface, #1a1a1a);
-    border: 1px solid var(--surface2, #2a2a2a);
-    border-radius: 6px;
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
-    display: flex;
-    flex-direction: column;
-    padding: 4px;
-    gap: 2px;
-}
-.tracker-pattern-menu-item {
-    text-align: left;
-    background: transparent;
-    border: 0;
-    border-radius: 4px;
-    color: var(--text, #ccc);
-    font: inherit;
-    font-size: 13px;
-    padding: 8px 10px;
-    cursor: pointer;
-}
-.tracker-pattern-menu-item:hover {
-    background: var(--surface2, #2a2a2a);
-}
-.tracker-pattern-menu-item.danger {
-    color: var(--accent-warm, #e94560);
-}
-.tracker-pattern-menu-item.danger:hover {
-    background: rgba(233, 69, 96, 0.12);
-}
+/* Tracker pattern bank — uses the shared .pattern-bank rules
+   above; only a margin tweak so the row sits cleanly under the
+   keypad action row. The Tracker passes status / queued / playing
+   props so .empty / .queued / .playing modifiers apply. */
+.tracker-keypad-bottom > .pattern-bank { margin-top: 4px; }
 .tracker-keypad-action-btn {
     background: var(--surface2, #2a2a2a);
     color: var(--text);

@@ -22,7 +22,7 @@ import { html } from '../ui/common.js';
 import { useCallback, useEffect, useRef, useState } from '../lib/hooks.module.js';
 import { PluginWheel } from './wheel.js';
 import { PluginKnob } from './knob.js';
-import { PluginPatternRow } from './patternrow.js';
+import { PluginPatternBank } from './patternbank.js';
 
 const HEX = '0123456789ABCDEF';
 const HOLD = '---';
@@ -1240,7 +1240,7 @@ export function PluginTrackerGrid({ param, values, onChange }) {
     // Pattern bank -- 8 stored grids per Tracker instance. The
     // currently-selected one is what the surface above edits; tap to
     // switch (queue when playing), Shift+Tap to switch immediately,
-    // long-press for the copy/clear menu. See PluginPatternRow.
+    // long-press for the copy/clear menu. See PluginPatternBank.
     const patternCount = param.pattern_count || 8;
     const selectedPattern = clamp(
         values[param.selected_pattern_param] ?? 0, 0, patternCount - 1,
@@ -1250,19 +1250,29 @@ export function PluginTrackerGrid({ param, values, onChange }) {
         return (typeof q === 'number' && q >= 0 && q < patternCount) ? q : -1;
     })();
     const patternStatus = values[param.pattern_status_param] || [];
-    const onPatternCommand = useCallback((payload) => {
-        // payload: {pattern, mode}
+    // PatternBank speaks (idx, opts/mode) — the Tracker's backend
+    // expects `{pattern, mode}` over cmd_pattern_select_param, so
+    // wrap on the way out. Tap-with-Shift queues vs immediate is
+    // also negotiated here.
+    const dispatch = useCallback((payload) => {
         if (!param.cmd_pattern_select_param) return;
         onChange(param.cmd_pattern_select_param, payload);
     }, [onChange, param]);
-    const patternRow = html`<${PluginPatternRow}
+    const onTap = useCallback((idx, opts) => {
+        dispatch({ pattern: idx, mode: opts && opts.shift ? 'shift' : 'tap' });
+    }, [dispatch]);
+    const onCmd = useCallback((idx, mode) => {
+        dispatch({ pattern: idx, mode });
+    }, [dispatch]);
+    const patternRow = html`<${PluginPatternBank}
         count=${patternCount}
         selected=${selectedPattern}
         queued=${queuedPattern}
         status=${patternStatus}
         playing=${isPlaying}
         shiftEngagedRef=${shiftEngagedRef}
-        onChange=${onPatternCommand} />`;
+        onTap=${onTap}
+        onCmd=${onCmd} />`;
 
     // Three-row keypad: top = controls + cursor cluster; middle =
     // action row spanning the full width; bottom = pattern bank.
