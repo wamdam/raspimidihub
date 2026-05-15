@@ -836,24 +836,24 @@ export function SettingsPage({ showToast, showMidiBar, toggleMidiBar }) {
             <p style="font-size:11px;color:var(--text-dim)">When a new device is plugged in, should it be connected to all other devices automatically?</p>
         </div>
         <div class="card">
-            <h3>Display</h3>
+            <h3>Display <span style="color:var(--text-dim);font-size:11px;font-weight:400;margin-left:6px">(this device only)</span></h3>
             <label class="msg-toggle">
                 <input type="checkbox" checked=${showMidiBar} onchange=${toggleMidiBar} />
-                <span>MIDI activity bar <span style="color:var(--text-dim);font-size:11px;font-weight:400">(this device only)</span></span>
+                <span>MIDI activity bar</span>
             </label>
             <label class="msg-toggle">
                 <input type="checkbox" checked=${soundsOn}
                     onchange=${e => { setSoundsEnabled(e.target.checked); setSoundsOn(e.target.checked); }} />
-                <span>Knob / wheel tick sounds <span style="color:var(--text-dim);font-size:11px;font-weight:400">(this device only)</span></span>
+                <span>Knob / wheel tick sounds</span>
             </label>
             <label class="msg-toggle">
                 <input type="checkbox" data-testid="scroll-assist-toggle"
                     checked=${scrollAssistOn}
                     onchange=${e => { setScrollAssist(e.target.checked); setScrollAssistOn(e.target.checked); }} />
-                <span>Scroll-assist buttons <span style="color:var(--text-dim);font-size:11px;font-weight:400">(this device only)</span></span>
+                <span>Scroll-assist buttons</span>
             </label>
             <div class="form-group" style="margin-top:10px;margin-bottom:0">
-                <label>Layout density <span style="color:var(--text-dim);font-size:11px;font-weight:400">(this device only)</span></label>
+                <label>Layout density</label>
                 <select data-testid="layout-density"
                     value=${density}
                     onChange=${e => { setLayoutDensity(e.target.value); setDensity(e.target.value); }}>
