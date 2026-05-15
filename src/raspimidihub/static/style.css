@@ -249,6 +249,140 @@ body {
 .pattern-bank-menu-item.danger { color: var(--accent, #e94560); }
 .pattern-bank-menu-item.danger:hover { background: rgba(233, 69, 96, 0.12); }
 
+/* --- CC Binding popup ---
+ * Long-press / right-click on a Knob / Wheel / Fader / Radio /
+ * NoteSelect / Button opens this modal. Sits above ContextMenu's
+ * z-index (1100) so a stray right-click underneath doesn't surface
+ * the wrong menu over the popup.
+ */
+.cc-bind-bg {
+    position: fixed;
+    inset: 0;
+    z-index: 1200;
+    background: rgba(0, 0, 0, 0.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+}
+.cc-bind-modal {
+    background: var(--surface, #1a1a1a);
+    border: 1px solid var(--surface2, #2a2a2a);
+    border-radius: 10px;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6);
+    width: 100%;
+    max-width: 380px;
+    padding: 14px 16px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    color: var(--text);
+}
+.cc-bind-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+}
+.cc-bind-title {
+    font-size: 15px;
+    font-weight: 600;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.cc-bind-x {
+    background: transparent;
+    border: 0;
+    color: var(--text-dim);
+    font-size: 22px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 2px 6px;
+}
+.cc-bind-x:hover { color: var(--text); }
+.cc-bind-current {
+    font-size: 13px;
+    color: var(--text-dim);
+}
+.cc-bind-current strong { color: var(--text); font-weight: 600; }
+.cc-bind-default { color: var(--text-dim); }
+.cc-bind-fields {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+.cc-bind-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 12px;
+    color: var(--text-dim);
+}
+.cc-bind-field select,
+.cc-bind-field input {
+    background: var(--surface2, #2a2a2a);
+    color: var(--text);
+    border: 1px solid var(--surface3, #333);
+    border-radius: 6px;
+    padding: 8px 10px;
+    font: inherit;
+    font-size: 14px;
+}
+.cc-bind-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+.cc-bind-btn {
+    background: var(--surface2, #2a2a2a);
+    color: var(--text);
+    border: 1px solid var(--surface3, #333);
+    border-radius: 6px;
+    padding: 8px 12px;
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+}
+.cc-bind-btn:disabled { opacity: 0.45; cursor: default; }
+.cc-bind-btn:not(:disabled):hover { background: var(--surface3, #333); }
+.cc-bind-btn.cc-bind-primary {
+    background: var(--accent, #e94560);
+    border-color: var(--accent, #e94560);
+    color: #fff;
+    font-weight: 600;
+}
+.cc-bind-btn.cc-bind-primary:not(:disabled):hover { filter: brightness(1.1); }
+.cc-bind-btn.cc-bind-secondary {
+    color: var(--text-dim);
+}
+.cc-bind-btn.cc-bind-learning {
+    background: var(--accent, #e94560);
+    color: #fff;
+    border-color: var(--accent, #e94560);
+    flex: 1;
+    animation: cc-bind-pulse 1.2s ease-in-out infinite;
+}
+@keyframes cc-bind-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(233, 69, 96, 0.45); }
+    50%      { box-shadow: 0 0 0 8px rgba(233, 69, 96, 0); }
+}
+.cc-bind-collisions {
+    font-size: 12px;
+    color: var(--text-dim);
+    line-height: 1.4;
+    padding: 6px 8px;
+    background: var(--surface2, #2a2a2a);
+    border-radius: 6px;
+}
+.cc-bind-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 4px;
+}
+
 /* --- Bottom Nav --- */
 .bottom-nav {
     position: fixed;

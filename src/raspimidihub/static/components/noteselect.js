@@ -2,7 +2,7 @@
  * NoteSelect plugin control.
  */
 
-import { html, tickFeedback, thudFeedback, noteName } from './common.js';
+import { html, tickFeedback, thudFeedback, noteName, makeLongPress } from './common.js';
 import { useState, useEffect, useRef } from '../lib/hooks.module.js';
 
 // =======================================================================
@@ -15,7 +15,7 @@ import { useState, useEffect, useRef } from '../lib/hooks.module.js';
 //                  a wrapper that renders -1 as "Off".
 // =======================================================================
 export function PluginNoteSelect({ name, label, value, onChange, learnable,
-                                   min = 0, formatValue = noteName }) {
+                                   min = 0, formatValue = noteName, onBindRequest }) {
     const containerRef = useRef(null);
     const innerRef = useRef(null);
     const TICK_H = 20;
@@ -56,18 +56,27 @@ export function PluginNoteSelect({ name, label, value, onChange, learnable,
 
     useEffect(() => { s.value = value; setOffset(valueToOffset(value)); updateTicks(); }, [value]);
 
+    const onBindRef = useRef(onBindRequest);
+    onBindRef.current = onBindRequest;
+
     useEffect(() => {
         const el = containerRef.current; if (!el) return;
+        const lp = makeLongPress(() => {
+            if (onBindRef.current) onBindRef.current(name);
+        });
         function onStart(e) {
+            if (e.button === 2) return;  // right-click → onContextMenu
             e.preventDefault(); e.stopPropagation();
             if (s.animId) { cancelAnimationFrame(s.animId); s.animId = null; }
             s.atBoundary = false; const pt = e.touches ? e.touches[0] : e;
             s.startY = pt.clientY; s.startOffset = s.offset; s.lastY = pt.clientY; s.lastT = Date.now(); s.velocity = 0;
+            lp.start(pt.clientX, pt.clientY);
             el.addEventListener('touchmove', onMove, { passive: false }); el.addEventListener('mousemove', onMove);
             window.addEventListener('touchend', onEnd); window.addEventListener('mouseup', onEnd);
         }
         function onMove(e) {
             e.preventDefault(); e.stopPropagation(); const pt = e.touches ? e.touches[0] : e;
+            if (lp.moveDidFire(pt.clientX, pt.clientY)) return;
             const now = Date.now(); const dt = now - s.lastT; if (dt > 0) s.velocity = (pt.clientY - s.lastY) / dt;
             s.lastY = pt.clientY; s.lastT = now; let raw = s.startOffset + (pt.clientY - s.startY);
             const clamped = clampOffset(raw); if (raw !== clamped && !s.atBoundary) { thudFeedback(); s.velocity = 0; s.atBoundary = true; } else if (raw === clamped) s.atBoundary = false;
@@ -76,6 +85,7 @@ export function PluginNoteSelect({ name, label, value, onChange, learnable,
         }
         function onEnd(e) {
             if (e) e.stopPropagation();
+            lp.end();
             el.removeEventListener('touchmove', onMove); el.removeEventListener('mousemove', onMove);
             window.removeEventListener('touchend', onEnd); window.removeEventListener('mouseup', onEnd);
             if (Math.abs(s.velocity) > 0.2) { const friction = 0.95; function frame() { s.velocity *= friction; let raw = s.offset + s.velocity * 16; const cl = clampOffset(raw); if (raw !== cl) { s.offset = cl; s.velocity = 0; thudFeedback(); setOffset(s.offset); snapToValue(); return; } s.offset = cl; const nv = offsetToValue(s.offset); if (nv !== s.value) { tickFeedback(); s.value = nv; updateTicks(); onChange(name, nv); } setOffset(s.offset); if (Math.abs(s.velocity) > 0.05) s.animId = requestAnimationFrame(frame); else snapToValue(); } s.animId = requestAnimationFrame(frame); }
@@ -89,8 +99,20 @@ export function PluginNoteSelect({ name, label, value, onChange, learnable,
             const nv = clampValue(s.value + delta);
             if (nv !== s.value) { s.value = nv; setOffset(valueToOffset(nv)); updateTicks(); onChange(name, nv); (nv === min || nv === MAX) ? thudFeedback() : tickFeedback(); }
         }
-        el.addEventListener('touchstart', onStart, { passive: false }); el.addEventListener('mousedown', onStart); el.addEventListener('wheel', onWheel, { passive: false });
-        return () => { el.removeEventListener('touchstart', onStart); el.removeEventListener('mousedown', onStart); el.removeEventListener('wheel', onWheel); };
+        function onContextMenu(e) {
+            e.preventDefault();
+            if (onBindRef.current) onBindRef.current(name);
+        }
+        el.addEventListener('touchstart', onStart, { passive: false });
+        el.addEventListener('mousedown', onStart);
+        el.addEventListener('contextmenu', onContextMenu);
+        el.addEventListener('wheel', onWheel, { passive: false });
+        return () => {
+            el.removeEventListener('touchstart', onStart);
+            el.removeEventListener('mousedown', onStart);
+            el.removeEventListener('contextmenu', onContextMenu);
+            el.removeEventListener('wheel', onWheel);
+        };
     }, [name, min]);
 
     // Learn: open a fresh SSE, register interest in midi-activity for

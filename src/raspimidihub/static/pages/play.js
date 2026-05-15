@@ -19,7 +19,7 @@ import { usePluginParams } from '../ui/plugin-params.js';
 const SWIPE_MIN_PX = 50;
 const SWIPE_MAX_MS = 700;
 
-function PlaySurface({ instance, pluginData, pluginDisplays, clockPosition }) {
+function PlaySurface({ instance, pluginData, pluginDisplays, clockPosition, openCcBinding }) {
     const {
         params: pluginParams,
         setParams: setPluginParams,
@@ -41,13 +41,15 @@ function PlaySurface({ instance, pluginData, pluginDisplays, clockPosition }) {
         values: (pluginDisplays && pluginDisplays[instance.id]) || {},
         playOnly: true,
         clockPosition,
+        instanceId: instance.id,
+        openCcBinding,
     };
     return html`<div class="controller-surface">
         ${renderParamList(pluginData.params_schema, pluginParams, onPluginParamChange, displayCtx)}
     </div>`;
 }
 
-export function PlayPage({ pluginDisplays, showToast, selectedId, onSelect, onEditConfig, clockPosition }) {
+export function PlayPage({ pluginDisplays, showToast, selectedId, onSelect, onEditConfig, clockPosition, openCcBinding }) {
     useSSESubscription(
         ['transport-start', 'clock-position'],
         selectedId ? [selectedId] : [],
@@ -158,6 +160,7 @@ export function PlayPage({ pluginDisplays, showToast, selectedId, onSelect, onEd
             instance=${selected}
             pluginData=${pluginData && pluginData.id === selected.id ? pluginData : null}
             pluginDisplays=${pluginDisplays}
-            clockPosition=${clockPosition} />
+            clockPosition=${clockPosition}
+            openCcBinding=${openCcBinding} />
     </div>`;
 }

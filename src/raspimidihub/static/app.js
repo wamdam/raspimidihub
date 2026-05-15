@@ -15,6 +15,7 @@ import { html, api, useSSE, Toast, MidiBar, hardReload } from './ui/common.js';
 import { applyLayoutDensity, getLayoutDensity } from './components/common.js';
 import { ScrollAssist } from './components/scrollassist.js';
 import { ContextMenu } from './ui/contextmenu.js';
+import { CcBinding } from './components/ccbinding.js';
 import { setSSEConnectionId, useSSESubscription } from './ui/sse-subscriptions.js';
 import { IconRouting, IconController, IconPlay, IconSettings, IconFullscreen, IconFullscreenExit } from './ui/icons.js';
 import { runStorageCleanup } from './ui/storage.js';
@@ -401,6 +402,39 @@ function App() {
     }, []);
     const closeContextMenu = useCallback(() => setContextMenu(null), []);
 
+    // CC binding popup state. Long-press / right-click on a bindable
+    // control passes through `openCcBinding(instanceId, paramName)`
+    // (threaded via displayCtx in renderparam.js).
+    const [ccBinding, setCcBinding] = useState(null);
+    const openCcBinding = useCallback(async (instanceId, paramName) => {
+        // Look up the plugin's display name + param label so the
+        // popup header reads "Arp 1 → Rate" instead of opaque IDs.
+        try {
+            const inst = await api(`/plugins/instances/${encodeURIComponent(instanceId)}`);
+            const findLabel = (items) => {
+                for (const p of items || []) {
+                    if (p.name === paramName) return p.label || p.name;
+                    if (p.type === 'group' && p.children) {
+                        const hit = findLabel(p.children);
+                        if (hit) return hit;
+                    }
+                }
+                return null;
+            };
+            const paramLabel = findLabel(inst.params_schema) || paramName;
+            setCcBinding({
+                instanceId,
+                paramName,
+                paramLabel,
+                pluginName: inst.name || instanceId,
+            });
+        } catch (err) {
+            console.warn('openCcBinding lookup failed:', err);
+            setCcBinding({ instanceId, paramName, paramLabel: paramName, pluginName: instanceId });
+        }
+    }, []);
+    const closeCcBinding = useCallback(() => setCcBinding(null), []);
+
     let page;
     switch (tab) {
         case 'routing':
@@ -414,6 +448,7 @@ function App() {
                 selectedId=${route.controllerId}
                 onSelect=${setControllerId}
                 onEditConfig=${openControllerConfig}
+                openCcBinding=${openCcBinding}
                 clockPosition=${clockPosition} />`;
             break;
         case 'play':
@@ -421,6 +456,7 @@ function App() {
                 selectedId=${route.playId}
                 onSelect=${setPlayId}
                 onEditConfig=${openPlayConfig}
+                openCcBinding=${openCcBinding}
                 clockPosition=${clockPosition} />`;
             break;
         case 'settings':
@@ -457,10 +493,12 @@ function App() {
             pluginDisplays=${pluginDisplays}
             clipboard=${clipboard} setClipboard=${setClipboard}
             showContextMenu=${showContextMenu}
+            openCcBinding=${openCcBinding}
             onJumpToController=${(instanceId) => navigate({ tab: 'controller', controllerId: instanceId })}
             onJumpToPlay=${(instanceId) => navigate({ tab: 'play', playId: instanceId })} />`}
         <${Toast} message=${toast} />
         <${ContextMenu} menu=${contextMenu} onClose=${closeContextMenu} />
+        <${CcBinding} open=${ccBinding} onClose=${closeCcBinding} />
     `;
 }
 

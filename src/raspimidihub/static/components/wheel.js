@@ -2,17 +2,19 @@
  * Wheel plugin control.
  */
 
-import { html, tickFeedback, thudFeedback, _activeWheelTouch } from './common.js';
+import { html, tickFeedback, thudFeedback, makeLongPress, _activeWheelTouch } from './common.js';
 import { useEffect, useRef } from '../lib/hooks.module.js';
 
 // =======================================================================
 // WHEEL — scrollable drum wheel (pixel-offset based)
 // =======================================================================
-export function PluginWheel({ name, label, min, max, value, onChange, suffix, tickLabel, mini, wide }) {
+export function PluginWheel({ name, label, min, max, value, onChange, suffix, tickLabel, mini, wide, onBindRequest }) {
     const containerRef = useRef(null);
     const innerRef = useRef(null);
     const onChangeRef = useRef(onChange);
     onChangeRef.current = onChange;
+    const onBindRef = useRef(onBindRequest);
+    onBindRef.current = onBindRequest;
     // Mini variant: half-height container (32px instead of 52px) with
     // a proportionally-shorter tick row. Same scroll/drag math, just
     // smaller. Used in dense edit panels (per-cell Ch / CC / On / Off,
@@ -74,6 +76,13 @@ export function PluginWheel({ name, label, min, max, value, onChange, suffix, ti
 
         const oc = onChangeRef;
 
+        // Long-press handler — open the CC binding popup if the user
+        // holds without moving. lp.moveDidFire returns true once fired
+        // so the move handlers below abort and the drag is suppressed.
+        const lp = makeLongPress(() => {
+            if (onBindRef.current) onBindRef.current(name);
+        });
+
         // Common move-step that runs from both touch and mouse paths.
         function applyMove(clientY) {
             const now = Date.now(); const dt = now - s.lastT;
@@ -116,6 +125,7 @@ export function PluginWheel({ name, label, min, max, value, onChange, suffix, ti
             activeTouchId = t.identifier;
             s._touchId = t.identifier;
             startGesture(t.clientY);
+            lp.start(t.clientX, t.clientY);
             el.addEventListener('touchmove', onTouchMove, { passive: false });
             window.addEventListener('touchend', onTouchEnd);
             window.addEventListener('touchcancel', onTouchEnd);
@@ -123,7 +133,9 @@ export function PluginWheel({ name, label, min, max, value, onChange, suffix, ti
         function onTouchMove(e) {
             e.preventDefault(); e.stopPropagation();
             const t = findTouch(e, activeTouchId);
-            if (t) applyMove(t.clientY);
+            if (!t) return;
+            if (lp.moveDidFire(t.clientX, t.clientY)) return;
+            applyMove(t.clientY);
         }
         function onTouchEnd(e) {
             if (e) e.stopPropagation();
@@ -132,6 +144,7 @@ export function PluginWheel({ name, label, min, max, value, onChange, suffix, ti
                     _activeWheelTouch.delete(activeTouchId);
                     activeTouchId = null;
                     s._touchId = null;
+                    lp.end();
                     el.removeEventListener('touchmove', onTouchMove);
                     window.removeEventListener('touchend', onTouchEnd);
                     window.removeEventListener('touchcancel', onTouchEnd);
@@ -143,16 +156,30 @@ export function PluginWheel({ name, label, min, max, value, onChange, suffix, ti
 
         // --- Mouse path: separate from touch (no multitouch concerns).
         function onMouseDown(e) {
+            if (e.button === 2) return;  // right-click → onContextMenu
             e.preventDefault();
             startGesture(e.clientY);
-            const mm = (ev) => applyMove(ev.clientY);
+            lp.start(e.clientX, e.clientY);
+            const mm = (ev) => {
+                if (lp.moveDidFire(ev.clientX, ev.clientY)) {
+                    window.removeEventListener('mousemove', mm);
+                    window.removeEventListener('mouseup', mu);
+                    return;
+                }
+                applyMove(ev.clientY);
+            };
             const mu = () => {
+                lp.end();
                 window.removeEventListener('mousemove', mm);
                 window.removeEventListener('mouseup', mu);
                 endGesture();
             };
             window.addEventListener('mousemove', mm);
             window.addEventListener('mouseup', mu);
+        }
+        function onContextMenu(e) {
+            e.preventDefault();
+            if (onBindRef.current) onBindRef.current(name);
         }
         function animateMomentum() {
             const friction = 0.95;
@@ -185,10 +212,12 @@ export function PluginWheel({ name, label, min, max, value, onChange, suffix, ti
         }
         el.addEventListener('touchstart', onTouchStart, { passive: false });
         el.addEventListener('mousedown', onMouseDown);
+        el.addEventListener('contextmenu', onContextMenu);
         el.addEventListener('wheel', onWheel, { passive: false });
         return () => {
             el.removeEventListener('touchstart', onTouchStart);
             el.removeEventListener('mousedown', onMouseDown);
+            el.removeEventListener('contextmenu', onContextMenu);
             el.removeEventListener('wheel', onWheel);
         };
     }, [min, max, name]);
