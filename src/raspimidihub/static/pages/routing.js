@@ -419,7 +419,15 @@ export function RoutingPage({ devices, connections, refresh, showToast, clockSou
         showToast(`Renamed to "${next.trim()}"`);
     };
 
-    const headerMenuItems = (item) => {
+    const headerMenuItems = (item, _role, fullLabel) => {
+        // The matrix row/column labels are abbreviated to leave room
+        // for cells. The full label gets surfaced as a styled header
+        // at the top of this menu so the user can verify which row /
+        // column they tapped before committing to a destructive
+        // action (Remove / Delete).
+        const headerItem = fullLabel
+            ? [{ header: true, label: fullLabel }, { divider: true }]
+            : [];
         // Offline hardware: keep the existing "remove?" confirmation
         // available without forcing the user to tap-then-confirm. Offline
         // plugins shouldn't exist (instances live as long as we keep
@@ -445,11 +453,12 @@ export function RoutingPage({ devices, connections, refresh, showToast, clockSou
             }
             items.push({ label: 'Remove', danger: true,
                 action: () => item.stable_id && onRemoveDevice && onRemoveDevice(item.stable_id) });
-            return items;
+            return [...headerItem, ...items];
         }
         if (item.is_plugin) {
             const isCompat = clipboard && clipboard.kind === 'plugin';
             return [
+                ...headerItem,
                 { label: 'Edit', action: () => onDeviceOpenForMenu(item.client_id) },
                 { label: 'Copy', action: () => copyPlugin(item) },
                 { label: 'Paste as new', action: () => pasteAsNewPlugin(),
@@ -462,6 +471,7 @@ export function RoutingPage({ devices, connections, refresh, showToast, clockSou
         // monitor + test sender) and Rename. Hardware can't be deleted
         // here — unplug to remove.
         return [
+            ...headerItem,
             { label: 'Edit', action: () => onDeviceOpenForMenu(item.client_id) },
             { label: 'Rename', action: () => renameHardware(item) },
         ];

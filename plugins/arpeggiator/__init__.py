@@ -19,12 +19,14 @@ import random
 import threading
 import time
 
+from raspimidihub import slot_bank
 from raspimidihub.plugin_api import (
     Button,
     ChannelSelect,
     Group,
     Knob,
     NoteSelect,
+    PatternStrip,
     PluginBase,
     Radio,
     StepEditor,
@@ -61,12 +63,16 @@ class Arpeggiator(PluginBase):
     NAME = "Arpeggiator"
     DESCRIPTION = "Plays held notes as a pattern with step sequencer"
     AUTHOR = "RaspiMIDIHub"
-    VERSION = "1.1"
+    VERSION = "1.2"
     HELP = """\
 Combines arpeggiator patterns with a step sequencer. Hold notes and
 the arp cycles through them in the selected pattern (up/down/etc).
 Each step can be on/off and has a note offset (semitones from the
 current arp note). Only active steps play — inactive steps are rests.
+
+Pattern modes: up / down / up-down / random / as-played / programmed
+/ chord. `chord` fires every held note simultaneously each step
+(same offset / accent / gate apply to the whole burst).
 
 Default: all steps on, zero offset = classic arpeggiator.
 Set offsets to create melodic variations on each step.
@@ -90,8 +96,12 @@ flips Rate, never plays."""
     # the runtime conditional logic (`as-played`, `programmed`, …).
     # Stored value is the integer index into this list; _pattern_str()
     # converts back to the label string for comparisons.
+    # `chord` is appended at the end on purpose: legacy configs that
+    # stored the pattern as an int index (post-3.1.6) still resolve to
+    # their original label because nothing earlier in the list shifted.
     _PATTERN_OPTIONS = [
         "up", "down", "up-down", "random", "as-played", "programmed",
+        "chord",
     ]
 
     # Single source of truth for the rate Wheel's tick labels AND the
@@ -104,6 +114,16 @@ flips Rate, never plays."""
         "1/16", "1/16T", "1/32",
     ]
     _DEFAULT_RATE_IDX = _RATE_OPTIONS.index("1/8")  # 10
+
+    # Every play_only param that should be captured into a pattern
+    # slot. Switching slot N replaces each of these from
+    # `pattern_slots[N]`; edits to any of them auto-write back into
+    # the active slot. `active_slot` itself is excluded — it's the
+    # bank selector, not part of the snapshot.
+    _SLOT_PARAMS = [
+        "pattern", "rate", "step_count", "accent_vel",
+        "gate", "octaves", "steps",
+    ]
 
     params = [
         # Play-surface controls. Pattern + Rate are wide wheels in the
@@ -128,6 +148,13 @@ flips Rate, never plays."""
         StepEditor("steps", "Step Pattern", length_param="step_count",
                    default_length=8, default_on=True, span=4,
                    slot_notes_param="step_slot_notes", play_only=True),
+        # Pattern-slot strip — bottom-of-play-surface bank selector.
+        # Switching slots is immediate and held notes / sustain
+        # persist across the switch; the snapshot scope is the
+        # `_SLOT_PARAMS` set above.
+        PatternStrip("active_slot", "Patterns",
+                     count=slot_bank.SLOT_COUNT, default=0,
+                     slots_param="pattern_slots", play_only=True),
         # Config-only setup. Channel filters, rate-trigger plumbing
         # and the sync-mode + BPM live here — touched on initial
         # wiring, never during a set.
@@ -154,6 +181,20 @@ flips Rate, never plays."""
                   ["free", "tempo", "transport"], default="transport"),
             Wheel("bpm", "BPM", min=40, max=300, default=120,
                   visible_when=("sync_mode", "free")),
+            # Pattern-slot hardware trigger — mirrors the Tracker's
+            # plumbing. 0 = Off; 1..16 reserves that channel for
+            # slot selection (every note on the channel is
+            # consumed). Each pattern_note_N is the learnable note
+            # that picks slot N.
+            Wheel("pattern_ctrl_ch", "Pattern Ctrl Ch",
+                  min=0, max=16, default=0,
+                  labels=["Off"] + [str(i) for i in range(1, 17)]),
+            Group("Pattern Notes", [
+                NoteSelect(f"pattern_note_{i}", f"P{i + 1}",
+                           default=36 + i, config_only=True)
+                for i in range(slot_bank.SLOT_COUNT)
+            ], config_only=True,
+                visible_when=("pattern_ctrl_ch", list(range(1, 17)))),
         ], config_only=True),
     ]
 
@@ -195,7 +236,11 @@ flips Rate, never plays."""
         self._arp_step = 0       # position in the arp note sequence
         self._seq_step = 0       # position in the step editor
         self._direction = 1
-        self._playing_note = None
+        # Notes currently sounding from the last fired step. List form
+        # so chord mode can keep multiple alive and `_note_off_current`
+        # silences the whole burst on the next step. Single-note
+        # patterns simply keep one entry.
+        self._playing_notes: list[tuple[int, int]] = []
         self._lock = threading.Lock()
         self._free_thread = None
         self._free_running = False
@@ -215,6 +260,12 @@ flips Rate, never plays."""
         self._step_slots: list = []
         self._next_slot_to_play = 0
         self._write_slot = 0
+
+        # Pattern bank — 8 snapshots of the play-surface params. On a
+        # fresh instance every slot is a clone of the defaults so
+        # switching slot N always lands on a real (if undifferentiated)
+        # pattern; existing saved configs keep whatever they stored.
+        slot_bank.init_slot_bank(self, self._SLOT_PARAMS)
 
     def on_stop(self):
         self._free_running = False
@@ -314,8 +365,8 @@ flips Rate, never plays."""
         _arp_step to whichever index in the eventual `notes` list
         produces new_note."""
         pattern = self._pattern_str()
-        if pattern == "random":
-            return  # random plays randomly, no seek meaningful
+        if pattern in ("random", "chord"):
+            return  # no single "next" note to seek toward
         if pattern == "as-played":
             # held_notes order is press order; new note was just appended.
             self._arp_step = max(0, len(self._held_notes) - 1)
@@ -377,6 +428,15 @@ flips Rate, never plays."""
         return None
 
     def on_note_on(self, channel, note, velocity):
+        # Slot-trigger notes are checked first — they live on a
+        # dedicated control channel and switch the pattern bank.
+        # Trigger notes are consumed (the held-notes buffer never
+        # sees them) so the Pattern Ctrl Ch is fully reserved.
+        slot_idx = slot_bank.trigger_note_index(self, channel, note)
+        if slot_idx is not None:
+            if slot_idx != self.get_param("active_slot"):
+                slot_bank.load_slot(self, self._SLOT_PARAMS, slot_idx)
+            return
         # Rate trigger notes are consumed: they set the Rate wheel and
         # do NOT join the held-notes set, so the trigger range can't
         # be accidentally arpeggiated. set_param broadcasts the change
@@ -438,9 +498,11 @@ flips Rate, never plays."""
                 self._seek_to_new_note(note)
 
     def on_note_off(self, channel, note):
-        # Symmetric to on_note_on: trigger-range and non-matching-arp-
-        # channel note-offs are also consumed, so the held-notes list
-        # never sees them at all.
+        # Symmetric to on_note_on: trigger-range, slot-trigger, and
+        # non-matching-arp-channel note-offs are also consumed, so
+        # the held-notes list never sees them at all.
+        if slot_bank.trigger_note_index(self, channel, note) is not None:
+            return
         if self._rate_trigger_index(channel, note) is not None:
             return
         if not self._channel_match(channel, "arp_channel"):
@@ -554,6 +616,18 @@ flips Rate, never plays."""
         self._advance()
 
     def on_param_change(self, name, value):
+        # Pattern bank: a user-driven `active_slot` change loads the
+        # snapshot from the slot bank (and broadcasts every loaded
+        # param via set_param, so the surface knobs animate to their
+        # new values). The load path itself sets `_loading_slot`, so
+        # the record_edit call below is a no-op while it's running.
+        if name == "active_slot":
+            slot_bank.load_slot(self, self._SLOT_PARAMS, int(value))
+            return
+        # Any edit to a snapshotted play_only param writes back into
+        # the active slot. Guarded against feedback loops by
+        # `_loading_slot`.
+        slot_bank.record_edit(self, self._SLOT_PARAMS, name, value)
         if name == "sync_mode":
             if value == "free":
                 self._free_running = False
@@ -654,6 +728,30 @@ flips Rate, never plays."""
             if not step.get("on", True):
                 return
 
+            # Chord mode: every held note (× octaves) fires at once on
+            # this step, with the same per-step offset / accent / gate.
+            # The `_arp_step` counter is not advanced — chord has no
+            # "next" pitch to pick.
+            if pattern == "chord":
+                offset = step.get("offset", 0)
+                accent_add = (self.get_param("accent_vel") or 0
+                              if step.get("accent") else 0)
+                rate_period = self._rate_period_seconds()
+                note_off_at = (time.monotonic()
+                               + max(0.005, rate_period * gate)
+                               if rate_period > 0 else None)
+                for note, vel, ch in notes:
+                    out_note = note + offset
+                    if not (0 <= out_note <= 127):
+                        continue
+                    out_vel = min(127, vel + accent_add) if accent_add else vel
+                    self.send_note_on(ch, out_note, out_vel)
+                    if note_off_at is not None:
+                        self.send_note_off_at(note_off_at, ch, out_note,
+                                              tag=_ARP_TAG)
+                    self._playing_notes.append((ch, out_note))
+                return
+
             # Get the arp note
             if pattern == "random":
                 arp_idx = random.randint(0, len(notes) - 1)
@@ -691,7 +789,7 @@ flips Rate, never plays."""
                 if rate_period > 0:
                     note_off_at = time.monotonic() + max(0.005, rate_period * gate)
                     self.send_note_off_at(note_off_at, ch, note, tag=_ARP_TAG)
-                self._playing_note = (ch, note)
+                self._playing_notes.append((ch, note))
 
             # Advance arp position
             if pattern == "up-down":
@@ -753,21 +851,20 @@ flips Rate, never plays."""
             if rate_period > 0:
                 note_off_at = time.monotonic() + max(0.005, rate_period * gate)
                 self.send_note_off_at(note_off_at, ch, note_out, tag=_ARP_TAG)
-            self._playing_note = (ch, note_out)
+            self._playing_notes.append((ch, note_out))
 
     def _note_off_current(self):
-        if self._playing_note:
-            ch, note = self._playing_note
+        for ch, note in self._playing_notes:
             self.send_note_off(ch, note)
+        self._playing_notes = []
 
     def _silence_all(self):
         """Cancel every pending scheduled note-off and immediately
-        silence the currently-sounding note. Used by panic / transport-
+        silence the currently-sounding notes. Used by panic / transport-
         stop / no-keys-held — we need notes to stop NOW, not at their
         gate boundary."""
         self.cancel_scheduled(_ARP_TAG)
         self._note_off_current()
-        self._playing_note = None
 
     def _rate_period_seconds(self) -> float:
         """Seconds per arp step at the current rate + sync mode. Used

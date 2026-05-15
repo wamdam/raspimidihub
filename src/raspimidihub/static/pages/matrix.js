@@ -17,6 +17,24 @@ import { html } from '../ui/common.js';
 import { useTapMenu } from '../ui/contextmenu.js';
 import { IconDIN, IconBluetooth, PluginIcon } from '../ui/icons.js';
 
+// Row-header column is always narrow so the matrix gets maximum
+// horizontal room. Labels middle-truncate to fit the budget; tap
+// the row to open the context menu where the full name is shown at
+// the top for unambiguous identification.
+const ROW_HEADER_WIDTH = 96;
+const ROW_HEADER_CHARS = 9; // fits "Velo…ar 1" at 12px sans-serif
+
+function midEllipsis(text, chars) {
+    if (!text || text.length <= chars) return text || '';
+    if (chars <= 2) return text.slice(0, 1) + '…';
+    const remain = chars - 1; // 1 char for the ellipsis itself
+    const head = Math.ceil(remain / 2);
+    const tail = remain - head;
+    return tail > 0
+        ? text.slice(0, head) + '…' + text.slice(-tail)
+        : text.slice(0, head) + '…';
+}
+
 export function MatrixCell({ on, filtered, getMenuItems, showContextMenu, offline }) {
     const trigger = useTapMenu(showContextMenu, getMenuItems);
     let cls = on ? (filtered ? 'on filtered' : 'on') : '';
@@ -43,8 +61,15 @@ export function MatrixHeader({ item, label, isPlugin, pluginType, isBluetooth, s
     const title = clockBlocked ? 'Sending clock (blocked from system clock)'
                 : multiEffective ? 'Multiple clock sources!'
                 : 'Sending clock';
-    return html`<th class="row-header ${online ? '' : 'offline'} ${isPlugin ? 'plugin-row' : ''} ${isBluetooth ? 'bt-row' : ''}" style="cursor:pointer"
-        onClick=${trigger.onClick} onContextMenu=${trigger.onContextMenu}>${isPlugin ? html`<${PluginIcon} type=${pluginType} />` : html`<span class="dev-icon ${isBluetooth ? 'bt' : 'din'}" style="display:inline-flex;vertical-align:middle;margin-right:3px">${isBluetooth ? IconBluetooth : IconDIN}</span>`} ${label}${sendsClock ? html`<span key=${clockBeat || 0} class="clock-icon ${cls}" title="${title}"></span>` : ''}
+
+    // Row-header column is always capped narrow so the matrix gets
+    // maximum horizontal room. The full label is surfaced as a header
+    // in the tap menu (see getHeaderMenuItems in routing.js), so the
+    // abbreviation never costs the user identification.
+    const displayLabel = label ? midEllipsis(label, ROW_HEADER_CHARS) : '';
+    return html`<th class="row-header ${online ? '' : 'offline'} ${isPlugin ? 'plugin-row' : ''} ${isBluetooth ? 'bt-row' : ''}" style="cursor:pointer;max-width:${ROW_HEADER_WIDTH}px"
+        title="${label || ''}"
+        onClick=${trigger.onClick} onContextMenu=${trigger.onContextMenu}>${isPlugin ? html`<${PluginIcon} type=${pluginType} />` : html`<span class="dev-icon ${isBluetooth ? 'bt' : 'din'}" style="display:inline-flex;vertical-align:middle;margin-right:3px">${isBluetooth ? IconBluetooth : IconDIN}</span>`} <span class="row-header-label">${displayLabel}</span>${sendsClock ? html`<span key=${clockBeat || 0} class="clock-icon ${cls}" title="${title}"></span>` : ''}
         <${RateMeter} rate=${midiRate} /></th>`;
 }
 
@@ -138,7 +163,7 @@ export function ConnectionMatrix({ devices, connections, showToast, clockSources
                         <th class="corner-header"><span class="from-label">FROM ↓</span><span class="to-label">TO →</span></th>
                         ${outputs.map(o => html`<${ColumnHeader} key=${o.client_id + ':' + o.port_id} item=${o}
                             label=${label(o)}
-                            getMenuItems=${() => getHeaderMenuItems ? getHeaderMenuItems(o, 'output') : []}
+                            getMenuItems=${() => getHeaderMenuItems ? getHeaderMenuItems(o, 'output', label(o)) : []}
                             showContextMenu=${showContextMenu} />`)}
                     </tr>
                 </thead>
@@ -154,7 +179,7 @@ export function ConnectionMatrix({ devices, connections, showToast, clockSources
                                 multiEffective=${multiEffective}
                                 clockBeat=${clockQuarters && clockQuarters[inp.client_id]}
                                 online=${inp.online}
-                                getMenuItems=${() => getHeaderMenuItems ? getHeaderMenuItems(inp, 'input') : []}
+                                getMenuItems=${() => getHeaderMenuItems ? getHeaderMenuItems(inp, 'input', label(inp)) : []}
                                 showContextMenu=${showContextMenu}
                                 midiRate=${midiRates && midiRates[inp.client_id + ':' + inp.port_id]} />
                             ${outputs.map(out => {

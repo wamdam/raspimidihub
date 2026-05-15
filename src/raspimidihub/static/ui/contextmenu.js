@@ -16,10 +16,14 @@
  *
  * ## Items
  *
- * `items: [{ label, action, danger?, disabled? } | { divider: true }]`.
+ * `items: [{ label, action, danger?, disabled? } | { divider: true } |
+ *          { header: true, label }]`.
  * `action` is called when the user picks the item; the menu closes
  * automatically afterwards. Pass `disabled: true` for items that show
  * but aren't clickable (typical for Paste when the clipboard is empty).
+ * Pass `header: true` for a non-clickable styled header — used to
+ * surface the full name of a row whose visible label is abbreviated
+ * in the matrix.
  */
 
 import { useEffect, useRef, useState } from '../lib/hooks.module.js';
@@ -106,9 +110,21 @@ export function ContextMenu({ menu, onClose }) {
                        box-shadow:0 8px 24px rgba(0,0,0,0.6);
                        border:1px solid var(--surface2);
                        visibility:${pos ? 'visible' : 'hidden'}">
-                ${menu.items.map((item, i) => item.divider
-                    ? html`<div key=${i} style="height:1px;background:var(--surface2);margin:6px 0"></div>`
-                    : html`<button key=${i}
+                ${menu.items.map((item, i) => {
+                    if (item.divider) {
+                        return html`<div key=${i} style="height:1px;background:var(--surface2);margin:6px 0"></div>`;
+                    }
+                    if (item.header) {
+                        return html`<div key=${i} data-testid="menu-header"
+                            style="padding:10px 16px 8px;font-size:13px;
+                                   font-weight:600;color:var(--text);
+                                   white-space:nowrap;
+                                   border-bottom:1px solid var(--surface2);
+                                   margin-bottom:4px;
+                                   max-width:280px;overflow:hidden;
+                                   text-overflow:ellipsis">${item.label}</div>`;
+                    }
+                    return html`<button key=${i}
                         data-testid=${'menu-item-' + (item.testId || item.label.toLowerCase().replace(/[^a-z0-9]+/g, '-'))}
                         disabled=${item.disabled}
                         onclick=${() => { item.action(); onClose(); }}
@@ -120,8 +136,8 @@ export function ContextMenu({ menu, onClose }) {
                                border-radius:6px;
                                line-height:1.2">
                         ${item.label}
-                    </button>`
-                )}
+                    </button>`;
+                })}
             </div>
         </div>
     `;

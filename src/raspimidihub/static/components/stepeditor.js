@@ -9,8 +9,13 @@ import { noteName } from '../state/constants.js';
 // =======================================================================
 // STEP EDITOR — grid with on/off dots and mini-wheel offsets
 // =======================================================================
-export function PluginStepEditor({ name, label, value, onChange, lengthParam, allValues, defaultOn, slotNotesParam }) {
-    // value is array of {on, offset}
+export function PluginStepEditor({ name, label, value, onChange, lengthParam, allValues, defaultOn, slotNotesParam, overrideMode, algoUnderlayParam }) {
+    // Cell shape differs by mode:
+    //   plain mode    → {on, accent, offset}
+    //   override mode → {state: "default"|"on"|"accent"|"off", offset}
+    // override_mode cells also read a sibling per-step boolean array
+    // (algoUnderlayParam) to render the algorithm's preview as a
+    // subdued underlay on default-state cells.
     const steps = value || [];
     const length = (lengthParam && allValues && allValues[lengthParam])
         ? parseInt(allValues[lengthParam]) || 16 : steps.length || 16;
@@ -20,33 +25,65 @@ export function PluginStepEditor({ name, label, value, onChange, lengthParam, al
     const slotNotes = (slotNotesParam && allValues
                        && Array.isArray(allValues[slotNotesParam]))
         ? allValues[slotNotesParam] : null;
+    const algoUnderlay = (algoUnderlayParam && allValues
+                          && Array.isArray(allValues[algoUnderlayParam]))
+        ? allValues[algoUnderlayParam] : null;
+
+    const emptyCell = () => overrideMode
+        ? { state: 'default', offset: 0 }
+        : { on: !!defaultOn, offset: 0 };
+
     // Extend array if step count increased
     const displaySteps = [];
     for (let i = 0; i < length; i++) {
-        displaySteps.push(steps[i] || { on: !!defaultOn, offset: 0 });
+        displaySteps.push(steps[i] || emptyCell());
     }
 
     const toggleStep = (i) => {
         tickFeedback();
         const newSteps = [...steps];
-        while (newSteps.length <= i) newSteps.push({ on: !!defaultOn, offset: 0 });
+        while (newSteps.length <= i) newSteps.push(emptyCell());
         const s = newSteps[i];
-        // Cycle: off → on → accent → off
-        if (!s.on) {
-            newSteps[i] = { ...s, on: true, accent: false };
-        } else if (!s.accent) {
-            newSteps[i] = { ...s, accent: true };
+        if (overrideMode) {
+            // Cycle: default → on → accent → off → default
+            const cur = s.state || 'default';
+            const next = cur === 'default' ? 'on'
+                       : cur === 'on'      ? 'accent'
+                       : cur === 'accent'  ? 'off'
+                       : 'default';
+            newSteps[i] = { ...s, state: next };
         } else {
-            newSteps[i] = { ...s, on: false, accent: false };
+            // Plain cycle: off → on → accent → off
+            if (!s.on) {
+                newSteps[i] = { ...s, on: true, accent: false };
+            } else if (!s.accent) {
+                newSteps[i] = { ...s, accent: true };
+            } else {
+                newSteps[i] = { ...s, on: false, accent: false };
+            }
         }
         onChange(name, newSteps);
     };
 
     const setOffset = (i, offset) => {
         const newSteps = [...steps];
-        while (newSteps.length <= i) newSteps.push({ on: false, offset: 0 });
+        while (newSteps.length <= i) newSteps.push(emptyCell());
         newSteps[i] = { ...newSteps[i], offset: Math.max(-24, Math.min(24, offset)) };
         onChange(name, newSteps);
+    };
+
+    const cellClass = (step, i) => {
+        const beat = i % 4 === 0 ? ' beat' : '';
+        if (overrideMode) {
+            const st = step.state || 'default';
+            if (st === 'on')     return `force-on${beat}`;
+            if (st === 'accent') return `force-on accent${beat}`;
+            if (st === 'off')    return `force-off${beat}`;
+            // default: tint if the algorithm wants this step on.
+            const alg = algoUnderlay && algoUnderlay[i];
+            return `${alg ? 'alg-on' : ''}${beat}`;
+        }
+        return `${step.on ? (step.accent ? 'on accent' : 'on') : ''}${beat}`;
     };
 
     return html`<div class="step-editor">
@@ -55,7 +92,7 @@ export function PluginStepEditor({ name, label, value, onChange, lengthParam, al
             ${displaySteps.map((step, i) => {
                 const slotNote = slotNotes ? slotNotes[i] : null;
                 return html`
-                <div class="step-cell ${step.on ? (step.accent ? 'on accent' : 'on') : ''} ${i % 4 === 0 ? 'beat' : ''}" key=${i}>
+                <div class="step-cell ${cellClass(step, i)}" key=${i}>
                     <div class="step-head" onclick=${() => toggleStep(i)}></div>
                     <${MiniWheel} value=${step.offset || 0}
                         onChange=${(v) => { tickFeedback(); setOffset(i, v); }} />

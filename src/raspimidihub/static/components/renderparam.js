@@ -17,6 +17,7 @@ import { PluginChannelSelect } from './channelselect.js';
 import { PluginGroup } from './group.js';
 import { PluginLayoutGrid } from './layoutgrid.js';
 import { PluginTrackerGrid } from './trackergrid.js';
+import { PluginPatternStrip } from './patternstrip.js';
 import { DisplayMeter, DisplayScope } from './display.js';
 
 // =======================================================================
@@ -72,7 +73,9 @@ export function renderParam(param, values, onChange, allValues, displayCtx) {
                 value=${val || []} onChange=${onChange}
                 lengthParam=${param.length_param} allValues=${allValues}
                 defaultOn=${param.default_on}
-                slotNotesParam=${param.slot_notes_param} />`;
+                slotNotesParam=${param.slot_notes_param}
+                overrideMode=${param.override_mode}
+                algoUnderlayParam=${param.algo_underlay_param} />`;
         case 'curveeditor':
             return html`<${PluginCurveEditor} name=${param.name} label=${param.label}
                 value=${val} onChange=${onChange} />`;
@@ -115,6 +118,15 @@ export function renderParam(param, values, onChange, allValues, displayCtx) {
             // is no longer needed here.
             return html`<${PluginTrackerGrid} param=${param} values=${values}
                 onChange=${onChange} displayCtx=${displayCtx} />`;
+        case 'patternstrip':
+            // Normally the play page renders the strip OUTSIDE the
+            // pageable param list (fixed-bottom slot). This case
+            // keeps the strip working when it appears in any other
+            // render context (e.g. the device-detail panel) — same
+            // tap-to-switch behaviour, just inline.
+            return html`<${PluginPatternStrip} name=${param.name}
+                value=${val} onChange=${onChange}
+                count=${param.count || 8} />`;
         default:
             return html`<div style="color:var(--text-dim);font-size:12px">Unknown: ${param.type}</div>`;
     }

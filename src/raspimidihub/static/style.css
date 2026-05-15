@@ -106,11 +106,39 @@ body {
     padding-bottom: 72px; /* space for bottom nav */
     overflow-y: auto;
 }
-/* When the Controller page is the active route, suppress vertical
-   scrolling on .main so that finger drags on knobs/wheels can't slide
-   the page, and so the horizontal-swipe gesture for switching
-   instances has unambiguous axis ownership. */
-.main:has(> .controller-page) { overflow: hidden; }
+/* Controller page used to suppress vertical scrolling on .main to
+   keep knob drags from sliding the page. Cell-level
+   stopPropagation on touchstart already gives controls exclusive
+   axis ownership for drags that start on a knob/wheel/fader, so
+   restoring scroll here is safe and lets denser / taller
+   controller layouts overflow on shorter screens. */
+.main:has(> .controller-page) { overflow-y: auto; }
+.pattern-strip {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    gap: 4px;
+}
+.pattern-strip-btn {
+    background: var(--surface);
+    border: 1px solid rgba(255,255,255,0.08);
+    color: var(--text-dim);
+    padding: 6px 0;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: background 80ms, color 80ms, border-color 80ms;
+}
+.pattern-strip-btn.active {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+    box-shadow: 0 0 6px rgba(233,69,96,0.4);
+}
+.pattern-strip-btn:hover:not(.active) {
+    background: var(--surface2);
+    color: var(--text);
+}
 
 /* --- Bottom Nav --- */
 .bottom-nav {
@@ -263,6 +291,14 @@ body {
     left: 0;
     background: var(--surface);
     z-index: 1;
+    /* Smooth interpolation as JS updates max-width on scroll — keeps
+       the shrink animation from looking janky. */
+    transition: max-width 80ms linear;
+}
+.matrix th.row-header .row-header-label {
+    display: inline-block;
+    vertical-align: middle;
+    overflow: hidden;
 }
 .matrix th.corner-header {
     position: sticky;
@@ -2110,6 +2146,20 @@ body {
 .step-head::after { content: ''; width: 8px; height: 8px; border-radius: 50%; background: rgba(255,255,255,0.1); }
 .step-cell.on .step-head::after { background: var(--accent); box-shadow: 0 0 4px rgba(233,69,96,0.3); opacity: 0.6; }
 .step-cell.on.accent .step-head::after { background: #ff6b82; box-shadow: 0 0 8px rgba(255,107,130,0.8); opacity: 1; }
+
+/* Override-mode (Euclidean): four head states cycled by tapping.
+   `alg-on` is the default state when the algorithm wants this step
+   on — a subdued underlay tint that previews the generator without
+   forcing anything. `force-on` / `force-on.accent` / `force-off`
+   are the three explicit override states the user steps through. */
+.step-cell.alg-on { background: rgba(233,69,96,0.05); }
+.step-cell.alg-on .step-head::after { background: rgba(233,69,96,0.4); opacity: 0.5; }
+.step-cell.force-on { background: rgba(233,69,96,0.15); border-color: var(--accent); }
+.step-cell.force-on.beat { border-color: #ff6b82; }
+.step-cell.force-on .step-head::after { background: var(--accent); box-shadow: 0 0 4px rgba(233,69,96,0.3); opacity: 0.85; }
+.step-cell.force-on.accent .step-head::after { background: #ff6b82; box-shadow: 0 0 8px rgba(255,107,130,0.8); opacity: 1; }
+.step-cell.force-off { background: rgba(255,255,255,0.02); border-color: rgba(255,255,255,0.06); opacity: 0.45; }
+.step-cell.force-off .step-head::after { background: rgba(255,255,255,0.2); box-shadow: none; }
 /* Per-slot note label, shown only by Arpeggiator's `programmed`
    pattern (sibling param `step_slot_notes` populates it). Empty
    slots render an empty div so all cells stay the same height. */

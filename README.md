@@ -45,7 +45,7 @@ See all screenshots in [docs/screenshots/](docs/screenshots/). The full **[User 
 - **Loop prevention** and **multi-port devices** fully supported
 
 ### Virtual Instruments and Plugins
-- **15 built-in routing plugins** that appear as MIDI devices in the matrix, plus **2 play-surface plugins** (Arpeggiator and Tracker) on the fullscreen Play tab
+- **15 built-in routing plugins** that appear as MIDI devices in the matrix, plus **3 play-surface plugins** (Arpeggiator, Tracker and Euclidean) on the fullscreen Play tab
 - **Plugins start unconnected** -- route them manually for precise control
 - **Custom UI controls** -- wheels, faders, knobs, XY pads, toggles, step editors, curve editors, scopes, meters
 - **MIDI clock sync** -- plugins can sync to external clock or generate their own
@@ -56,7 +56,7 @@ See all screenshots in [docs/screenshots/](docs/screenshots/). The full **[User 
 
 ### Built-in Plugins
 
-15 routing-graph plugins -- add them under **Add → Plugin**. The Arpeggiator and Tracker live under **Add → Play** instead and are documented in the **Play Surfaces** section below.
+15 routing-graph plugins -- add them under **Add → Plugin**. The Arpeggiator, Tracker and Euclidean live under **Add → Play** instead and are documented in the **Play Surfaces** section below.
 
 | Plugin | Description |
 |--------|-------------|
@@ -99,7 +99,7 @@ Plugins on the **Play** bottom-nav tab (alongside Controllers). They route in th
 
 **Arpeggiator**
 - **Pattern + Rate** as wide wheels at the top of the play surface for one-finger live tweaks; **Steps / Accent Vel. / Gate % / Octaves** as a row of shapers; **Step Pattern** grid below for per-step on/off + offset + accent
-- **Six pattern modes** -- up / down / up-down / random / as-played / `programmed` (live step-sequencer: keypresses write the next-to-fire slot, chord-spread on simultaneous presses, slots persist while keys / pedal are held)
+- **Seven pattern modes** -- up / down / up-down / random / as-played / `programmed` (live step-sequencer: keypresses write the next-to-fire slot, chord-spread on simultaneous presses, slots persist while keys / pedal are held) / `chord` (every held note fires simultaneously each step)
 - **Sustain pedal (CC 64)** acts as temporary Hold -- released keys keep arping until pedal lift
 - **Trigger Note** range (Base..Base+15) sets the Rate live without arpeggiating, so a hardware aux key flips tempo divisions
 - **CC automation** -- CC 74 → Rate, CC 75 → Gate %
@@ -113,6 +113,19 @@ Plugins on the **Play** bottom-nav tab (alongside Controllers). They route in th
 - **Live recording** -- play notes / move CCs in time with playback and they land on the currently-sounding row. Cursor stays put while playing; step-record at cursor when stopped
 - **Keyboard entry** -- q..u for white keys + 2/3/5/6/7 for black keys (QWERTY and QWERTZ both work via physical-key code); Space toggles play; Shift held + cursor extends a sub-cell selection; Cut / Copy / Paste with half-compatibility check
 - **Clock master** -- Send Clock generates an internal 24-PPQ at the configured BPM; Send Transport forwards START / STOP / CONTINUE; Pattern Ctrl Ch reserves a MIDI channel for hands-free pattern switching
+
+**Euclidean**
+- **Bjorklund distribution** -- Pulses / Steps / Rotate generate evenly-spaced hits (E(4,16) is four-on-the-floor; E(3,8) is the tresillo; E(5,8) is the cinquillo)
+- **Window wave** -- a sine threshold (Phase / Cycles / Open) masks which steps are allowed to fire; Open=100 is transparent, Open=0 closes the gate
+- **Three-layer pattern model** -- algorithm + window wave + per-step manual overrides on top (default / FORCE_ON / FORCE_ON+accent / FORCE_OFF). Default cells render a subdued underlay tint to preview what the generator would do
+- **Six pattern modes** -- up / down / up-down / random / as-played / chord (every held note fires simultaneously each step)
+- **Internal Scale + Root** -- 9 scales (major / minor / dorian / mixolydian / pentatonic / blues / harmonic m / whole tone / chromatic) quantise the output; chromatic is the identity pass-through
+- **Tune Spread + Snap** -- random per-step transpose, with snap presets (free / octaves / 5ths+oct.) that bias toward consonant intervals before the scale quantiser
+- **Fade In / Fade Out** -- velocity ramps over N firing steps at the start of a phrase and after every key is released; live velocity-envelope strip beneath the grid
+- **Jitter** -- per-step micro-timing humanisation, re-rolled every step
+- **Pattern Trigger** range (Base..Base+6) picks the Pattern wheel live from a hardware key
+- **CC automation** -- full block CC 70..88 (skipping CC 84) covers every play-surface knob; CC 74 / CC 75 stay Arp-consistent
+- **Polyrhythm** -- two instances on the same Master Clock with co-prime pulse / step counts
 
 ### Bluetooth MIDI (BLE-MIDI)
 - **Pair, connect, disconnect, forget** any BLE-MIDI peripheral from the matrix UI -- Add Device → Bluetooth → Scan
