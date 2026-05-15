@@ -119,7 +119,12 @@ body {
    sibling (the bottom pattern strip) sits at the visible bottom
    instead of below the fold. */
 .main:has(> .play-page) { overflow: hidden; }
-.controller-page.play-page {
+/* `.main .controller-page.play-page` has specificity (0,3,0) so it
+   beats the density-small override at `:root.density-small
+   .controller-page` (0,2,1). Without this bump the small-density
+   negative-margin / padding-bottom bleed trick re-applies and the
+   flex chain below sits 1-2 cm short of the actual bottom. */
+.main .controller-page.play-page {
     /* Override the default .controller-page bleed-through trick
        (margin-bottom: -72px; padding-bottom: 80px) so the flex
        chain below cleanly fills .main's content area. The page
@@ -135,7 +140,7 @@ body {
     flex-direction: column;
     overflow: hidden;
 }
-.controller-page.play-page .controller-bar { flex: 0 0 auto; }
+.main .controller-page.play-page .controller-bar { flex: 0 0 auto; }
 .play-surface-wrap {
     flex: 1;
     min-height: 0;

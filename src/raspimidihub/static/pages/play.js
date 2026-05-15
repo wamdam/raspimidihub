@@ -49,6 +49,7 @@ function PlaySurface({ instance, pluginData, pluginDisplays, clockPosition }) {
     }, [pluginData?.params]);
 
     const pagerRef = useRef(null);
+    const contentRef = useRef(null);
     const [canUp, setCanUp] = useState(false);
     const [canDown, setCanDown] = useState(false);
     const usePager = pluginData ? needsPager(pluginData.params_schema) : false;
@@ -56,25 +57,29 @@ function PlaySurface({ instance, pluginData, pluginDisplays, clockPosition }) {
     useEffect(() => {
         if (!usePager) return;
         const el = pagerRef.current;
-        if (!el) return;
+        const inner = contentRef.current;
+        if (!el || !inner) return;
         let raf = 0;
         const update = () => {
             raf = 0;
             const top = el.scrollTop;
             const maxScroll = el.scrollHeight - el.clientHeight;
             setCanUp(top > 4);
-            setCanDown(top < maxScroll - 4);
+            setCanDown(maxScroll > 4 && top < maxScroll - 4);
         };
         const onScroll = () => {
             if (raf) return;
             raf = requestAnimationFrame(update);
         };
         el.addEventListener('scroll', onScroll, { passive: true });
-        // ResizeObserver catches viewport changes (rotate, density)
-        // AND content changes (slot loads change which params fit).
+        // Observe the inner content wrapper (rather than the pager
+        // itself or just its first child) so any in-place size
+        // change — step count grew, slot load brought in a different
+        // grid length, a Group expanded — re-evaluates the button
+        // visibility immediately.
         const ro = new ResizeObserver(update);
-        ro.observe(el);
-        if (el.firstChild) ro.observe(el.firstChild);
+        ro.observe(inner);
+        ro.observe(el);  // viewport-size changes (rotate, density)
         update();
         return () => {
             el.removeEventListener('scroll', onScroll);
@@ -115,10 +120,15 @@ function PlaySurface({ instance, pluginData, pluginDisplays, clockPosition }) {
     // Pattern strip renders inline at the end of the param flow (the
     // plugin already lists it last in `params`). Pagination buttons
     // float at the top / bottom of the visible viewport, conditional
-    // on overflow in that direction.
+    // on overflow in that direction. The inner `.play-pager-content`
+    // wrapper exists for the ResizeObserver — it picks up content
+    // height changes (step count, slot loads) that wouldn't fire on
+    // a per-child observer.
     return html`<div class="play-surface-wrap">
         <div class="play-pager" ref=${pagerRef}>
-            ${renderParamList(pluginData.params_schema, pluginParams, onPluginParamChange, displayCtx)}
+            <div class="play-pager-content" ref=${contentRef}>
+                ${renderParamList(pluginData.params_schema, pluginParams, onPluginParamChange, displayCtx)}
+            </div>
         </div>
         ${canUp ? html`<button class="play-page-btn up"
             onclick=${() => pageBy(-1)}>↑ More</button>` : null}
