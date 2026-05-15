@@ -20,6 +20,8 @@
 
 import { useEffect, useRef, useState } from '../lib/hooks.module.js';
 import { html, tickFeedback } from './common.js';
+import { PluginWheel } from './wheel.js';
+import { PluginChannelSelect } from './channelselect.js';
 
 const ANY_CHANNEL_LABEL = 'Any';
 
@@ -45,7 +47,6 @@ export function CcBinding({ open, onClose }) {
     const [collisions, setCollisions] = useState([]);
     const [learning, setLearning] = useState(false);
     const learnIdRef = useRef(null);
-    const ccInputRef = useRef(null);
 
     // Reset state when the popup opens for a new param.
     useEffect(() => {
@@ -209,9 +210,6 @@ export function CcBinding({ open, onClose }) {
 
     if (!open) return null;
 
-    const channelOpts = [html`<option value="">Any</option>`];
-    for (let i = 0; i < 16; i++) channelOpts.push(html`<option value=${i}>${i + 1}</option>`);
-
     const collisionLine = collisions.length === 0
         ? null
         : collisions.length <= 3
@@ -221,6 +219,27 @@ export function CcBinding({ open, onClose }) {
                 `${c.instance_name} → ${c.param_label}`).join(', ')} · +${collisions.length - 2} more</div>`;
 
     const isCleared = binding && (binding.cc === null || binding.cc === undefined);
+
+    // Bridge our nullable {ch, cc} state to the wheel components, which
+    // always carry a value:
+    //   ch = null  ↔  channel wheel at 0 ("Any")
+    //   ch = N      ↔  channel wheel at N + 1 (wire 0..15 = labels 1..16)
+    // cc = null shows the wheel at the default (or 0) but flags the
+    // "Cleared" state above; touching the wheel un-clears.
+    const chWheelVal = (binding && binding.ch !== null && binding.ch !== undefined)
+        ? binding.ch + 1 : 0;
+    const ccWheelVal = (binding && binding.cc !== null && binding.cc !== undefined)
+        ? binding.cc : (defaultCc !== null ? defaultCc : 0);
+
+    const onChWheel = (_n, v) => {
+        const ch = v === 0 ? null : v - 1;
+        setBinding({ ch, cc: binding ? binding.cc : null });
+        refreshCollisions(open, binding ? binding.cc : null, ch);
+    };
+    const onCcWheel = (_n, v) => {
+        setBinding({ ch: binding ? binding.ch : null, cc: v });
+        refreshCollisions(open, v, binding ? binding.ch : null);
+    };
 
     return html`
         <div class="cc-bind-bg" onclick=${doClose}
@@ -236,28 +255,15 @@ export function CcBinding({ open, onClose }) {
                     ${defaultCc !== null && html`<span class="cc-bind-default">  ·  default: Ch Any · CC ${defaultCc}</span>`}
                 </div>
 
-                <div class="cc-bind-fields">
-                    <label class="cc-bind-field">
-                        <span>Channel</span>
-                        <select value=${binding && binding.ch !== null && binding.ch !== undefined ? String(binding.ch) : ''}
-                            onchange=${(e) => {
-                                const v = e.target.value;
-                                setBinding({ ch: v === '' ? null : parseInt(v, 10), cc: binding ? binding.cc : null });
-                            }}>
-                            ${channelOpts}
-                        </select>
-                    </label>
-                    <label class="cc-bind-field">
-                        <span>CC #</span>
-                        <input ref=${ccInputRef} type="number" min="0" max="127"
-                            value=${binding && binding.cc !== null && binding.cc !== undefined ? String(binding.cc) : ''}
-                            placeholder="—"
-                            oninput=${(e) => {
-                                const v = e.target.value;
-                                const cc = v === '' ? null : Math.max(0, Math.min(127, parseInt(v, 10) || 0));
-                                setBinding({ ch: binding ? binding.ch : null, cc });
-                            }} />
-                    </label>
+                <div class="cc-bind-fields ${isCleared ? 'cleared' : ''}">
+                    <div class="cc-bind-field">
+                        <${PluginChannelSelect} name="_cc_bind_ch" label="Channel"
+                            value=${chWheelVal} allowAny=${true} onChange=${onChWheel} />
+                    </div>
+                    <div class="cc-bind-field">
+                        <${PluginWheel} name="_cc_bind_cc" label="CC #"
+                            min=${0} max=${127} value=${ccWheelVal} onChange=${onCcWheel} />
+                    </div>
                 </div>
 
                 <div class="cc-bind-actions">

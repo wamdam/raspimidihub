@@ -312,23 +312,19 @@ body {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 10px;
+    align-items: end;
 }
 .cc-bind-field {
     display: flex;
-    flex-direction: column;
-    gap: 4px;
-    font-size: 12px;
-    color: var(--text-dim);
+    justify-content: center;
 }
-.cc-bind-field select,
-.cc-bind-field input {
-    background: var(--surface2, #2a2a2a);
-    color: var(--text);
-    border: 1px solid var(--surface3, #333);
-    border-radius: 6px;
-    padding: 8px 10px;
-    font: inherit;
-    font-size: 14px;
+/* When the binding is cleared (cc=null), dim the CC wheel so the
+ * popup signals that no CC currently drives the param. Any wheel
+ * touch un-clears (handled in JS); the dim treatment is purely
+ * visual feedback. The channel wheel stays full-opacity — channel
+ * is orthogonal to the cleared state. */
+.cc-bind-fields.cleared .cc-bind-field:nth-child(2) {
+    opacity: 0.45;
 }
 .cc-bind-actions {
     display: flex;
