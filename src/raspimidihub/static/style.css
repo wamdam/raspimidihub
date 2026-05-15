@@ -1459,14 +1459,6 @@ body {
     align-items: center;
     margin-top: 4px;
 }
-.tracker-pattern-label {
-    font-size: 10px;
-    letter-spacing: 0.08em;
-    color: var(--text-muted, #888);
-    text-transform: uppercase;
-    user-select: none;
-    -webkit-user-select: none;
-}
 .tracker-pattern-slots {
     display: flex;
     flex: 1 1 auto;

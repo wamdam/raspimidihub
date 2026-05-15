@@ -149,7 +149,7 @@ export function PluginPatternRow({
                 onpointercancel=${onPointerLeave}
                 oncontextmenu=${onContextMenu(idx)}
                 aria-label=${`Pattern ${idx + 1}${isEmpty ? ' (empty)' : ''}`}
-                title=${`Pattern ${idx + 1}${isEmpty ? ' — empty' : ''}\nTap: ${playing ? 'queue switch' : 'load'}\nShift+Tap: switch now\nLong-press: copy/clear`}>${idx + 1}</button>
+                title=${`Pattern ${idx + 1}${isEmpty ? ' — empty' : ''}\nTap: ${playing ? 'queue switch' : 'load'}\nShift+Tap: switch now\nLong-press: copy/clear`}>P${idx + 1}</button>
             ${menu}
         </div>`;
     };
@@ -158,7 +158,6 @@ export function PluginPatternRow({
     for (let i = 0; i < total; i++) slots.push(renderSlot(i));
 
     return html`<div class="tracker-pattern-row">
-        <div class="tracker-pattern-label">PATTERN</div>
         <div class="tracker-pattern-slots">${slots}</div>
     </div>`;
 }
