@@ -28,7 +28,7 @@ metadata.yaml                                  pandoc title block
 10-filters-and-mappings.md
 11-plugins.md
 12-controllers.md
-13-tracker.md
+13-play-surfaces.md
 14-bluetooth-midi.md
 15-saving-and-exporting-configs.md
 16-settings.md

@@ -15,64 +15,37 @@ automation work -- is in chapter 11.
 
 ## Arpeggiator
 
-Plays the held notes as a pattern with a step sequencer on top.
-Lives on the **Play** tab alongside the Tracker (`SURFACE_KIND =
-"play"`), and is also routable in the matrix like any other plugin
--- add it from **Add → Play** rather than **Add → Plugin**.
+Detailed surface-and-workflow reference: chapter 13. Plugin-level
+metadata:
 
-The **Play** surface puts the live controls in one fullscreen
-panel: **Pattern** and **Rate** are wide wheels at the top so a
-finger flick on stage moves them; the four shapers
-(**Steps / Accent Vel. / Gate % / Octaves**) sit in one row above
-the step grid; the **Step Pattern** editor fills the bottom for
-per-step on/off, offset and accent. The setup-only parameters
-(channel filters, trigger-note plumbing, sync mode + BPM) live in
-the device-detail panel under the **Setup** group -- touched on
-initial wiring, never during a set.
+| Trait | Value |
+|-------|-------|
+| Name | Arpeggiator |
+| Description | Plays held notes as a pattern with a step sequencer |
+| Surface | Play tab (`SURFACE_KIND = "play"`); add from **Add → Play** |
+| Pattern modes | up / down / up-down / random / as-played / programmed / chord (7) |
+| Rate range | 4/1 / 4/1T / 2/1 / ... / 1/16T / 1/32 (15 values) |
+| Steps per pattern | 1..32 |
+| Octaves | 1..4 |
+| Patterns per instance | 8 numbered slots (see chapter 13) |
 
 | Surface | Parameter | Type | Range | Default |
 |---------|-----------|------|-------|---------|
-| Play    | **Pattern** | Wheel (wide) | up / down / up-down / random / as-played / programmed / chord | up |
-| Play    | **Rate** | Wheel (wide) | 4/1 / 4/1T / 2/1 / ... / 1/16T / 1/32 (15 values) | 1/8 |
+| Play    | **Pattern** | Wheel (wide) | 7 modes (see above) | up |
+| Play    | **Rate** | Wheel (wide) | 15 values | 1/8 |
 | Play    | **Steps** | Wheel | 1--32 | 8 |
-| Play    | **Accent Vel.** | Knob | 0--127 (added to step velocity) | 30 |
+| Play    | **Accent Vel.** | Knob | 0--127 | 30 |
 | Play    | **Gate %** | Wheel | 10--100 | 80 |
 | Play    | **Octaves** | Wheel | 1--4 | 1 |
 | Play    | **Step Pattern** | StepEditor | per-step on/off + offset + accent | all-on, offset 0 |
-| Play    | **Patterns** | PatternStrip | bottom-of-surface P1--P8 bank selector | slot 1 active |
+| Play    | **Patterns** | PatternStrip | end-of-surface P1--P8 bank | slot 1 active |
 | Setup   | **Arp Ch** | ChannelSelect | 1--16 or any | any |
 | Setup   | **Sync** | Radio | free / tempo / transport | transport |
 | Setup   | **BPM** (visible when Sync = free) | Wheel | 40--300 | 120 |
-| Setup   | **Ctrl Ch** | Wheel | Off / 1--16 (reserves a channel for slot switching) | Off |
+| Setup   | **Ctrl Ch** | Wheel | Off / 1--16 | Off |
 | Setup   | **P1..P8** (visible when Ctrl Ch is on) | NoteSelect ×8 | one learnable trigger note per slot | C2..G2 (36..43) |
 
-**Pattern modes.** `up` / `down` / `up-down` / `random` /
-`as-played` are the standard held-note arpeggiator behaviours.
-`programmed` is the live step-sequencer mode added in v3.0.5: each
-keypress writes the next-to-fire step slot; multiple presses
-between ticks fan into consecutive slots (chord-spread); slots
-persist while any key or the sustain pedal is held. `chord` fires
-every held note simultaneously each step -- the per-step offset,
-accent and gate apply to the whole burst, and `Octaves > 1`
-doubles the chord into the higher octaves.
-
-**Pattern bank.** The strip below the step grid (P1..P8) is an
-8-slot pattern bank. Each slot carries a snapshot of every
-play-surface param (Pattern, Rate, Steps, Accent Vel., Gate,
-Octaves, Step Pattern grid). Tap a slot to switch -- the change
-is immediate, and held notes plus sustain state survive the
-switch, so a slot change can rewrite the pattern under a chord
-held with the pedal. Edits to any play-surface knob auto-write
-back to the active slot (no Store action), so the bank tracks
-your live working state. To switch from a hardware controller,
-set **Ctrl Ch** to a dedicated MIDI channel and
-MIDI-Learn the trigger note for each slot (P1..P8). All notes
-arriving on the Ctrl Ch are consumed -- they switch
-slots and never reach the arp's held-notes buffer.
-
-**CC automation.** Block CC 70..83 covers every play-surface
-knob, mirroring the Euclidean's mapping so a hardware controller
-wired for one drives the other.
+CC automation (mirrors the Euclidean for shared params):
 
 | CC | Parameter | CC | Parameter |
 |----|-----------|----|-----------|
@@ -81,21 +54,16 @@ wired for one drives the other.
 | 73 | Steps     | 83 | Accent Vel. |
 
 **Input.** Notes (held-note buffer), CC 64 (temporary Hold via
-sustain pedal -- released keys keep arping until pedal lift),
-CC 70..83 (parameter automation; see the CC table above), Clock
-+ Transport (when **Sync** is `tempo` or `transport`), and the
-8 learnable notes on **Ctrl Ch** when set (each picks a
-pattern slot; consumed, not arpeggiated).
+sustain pedal), CC 70..83 (parameter automation), Clock +
+Transport, and the 8 learnable notes on Ctrl Ch when set.
 **Output.** Notes (the arpeggiated stream). Aftertouch and Pitch
 Bend pass through unchanged.
-**Clock.** Consumes external clock when **Sync** is `tempo` (free-
-running advance per tick) or `transport` (advance only while
-external START..STOP is asserted); free-runs at **BPM** when
-**Sync** is `free`.
+**Clock.** Consumes external clock when Sync is `tempo` or
+`transport`; free-runs at BPM when Sync is `free`.
 
-![Arpeggiator play surface: Pattern + Rate wide wheels, four shapers, Step Pattern grid.](../screenshots/arpeggiator-play.png){width=42%}
+![Arpeggiator play surface.](../screenshots/arpeggiator-play.png){width=42%}
 
-![Arpeggiator device-detail panel: same play controls plus the Setup group.](../screenshots/09-plugin-arpeggiator.png){width=35%}
+![Arpeggiator device-detail panel.](../screenshots/09-plugin-arpeggiator.png){width=35%}
 
 ## CC LFO
 
@@ -176,33 +144,25 @@ Continue through.
 
 ## Euclidean
 
-Holds incoming notes and plays them as a Bjorklund-distributed
-pattern over the configured **Steps**. Lives on the **Play** tab
-alongside the Arpeggiator and Tracker (`SURFACE_KIND = "play"`);
-add it from **Add → Play**. Polyrhythm is two instances on the
-same clock with co-prime pulse / step counts.
+Detailed surface-and-workflow reference: chapter 13. Plugin-level
+metadata:
 
-The pattern is built in three layers. The **Euclidean** layer
-(Pulses / Steps / Rotate) distributes the active steps evenly.
-The **Window wave** layer (Phase / Cycles / Open) is a sine
-threshold that masks which steps are allowed to fire: **Phase**
-moves the wave's peak across the cycle, **Cycles** sets how many
-periods fit in one pattern cycle (0.5 / 1 / 2 / 3 / 4), and
-**Open** controls how much of the wave sits above the open
-threshold. **Open = 100** makes the layer transparent; **Open = 0**
-closes the gate entirely (manual overrides still work). The
-**Step grid** at the bottom lets the user override individual
-steps -- tap the head to cycle
-`default → FORCE_ON → FORCE_ON+accent → FORCE_OFF → default`.
-Default cells defer to the algorithm and display a subdued
-underlay tint when both layers agree the step should fire, so
-the user can see what the generator is doing before touching
-anything.
+| Trait | Value |
+|-------|-------|
+| Name | Euclidean |
+| Description | Held notes voiced through a Bjorklund-distributed step pattern |
+| Surface | Play tab (`SURFACE_KIND = "play"`); add from **Add → Play** |
+| Layers | Bjorklund + Window wave (sine threshold) + Manual override grid |
+| Pattern modes | up / down / up-down / random / as-played / chord (6) |
+| Rate range | 4/1 ... 1/32 (15 values, same as Arp) |
+| Steps per pattern | 1..32 |
+| Scales | major / minor / dorian / mixolydian / pentatonic / blues / harmonic m / whole tone / chromatic (9) |
+| Patterns per instance | 8 numbered slots (see chapter 13) |
 
 | Surface | Parameter | Type | Range | Default |
 |---------|-----------|------|-------|---------|
-| Play    | **Pattern** | Wheel (wide) | up / down / up-down / random / as-played / chord | up |
-| Play    | **Rate** | Wheel (wide) | 4/1 ... 1/32 (15 values, same as Arp) | 1/16 |
+| Play    | **Pattern** | Wheel (wide) | 6 modes (see above) | up |
+| Play    | **Rate** | Wheel (wide) | 15 values | 1/16 |
 | Play    | **Pulses** | Wheel | 0--32 (capped by Steps) | 4 |
 | Play    | **Steps** | Wheel | 1--32 | 16 |
 | Play    | **Rotate** | Wheel | -16--+16 | 0 |
@@ -211,65 +171,25 @@ anything.
 | Play    | **Cycles** | Wheel | 0.5 / 1 / 2 / 3 / 4 | 1 |
 | Play    | **Open** | Knob | 0--100 | 100 |
 | Play    | **Gate %** | Wheel | 10--100 | 80 |
-| Play    | **Accent Vel.** | Knob | 0--127 (added to step velocity) | 30 |
+| Play    | **Accent Vel.** | Knob | 0--127 | 30 |
 | Play    | **Fade In** | Wheel | 0--16 firing steps | 0 |
 | Play    | **Fade Out** | Wheel | 0--16 firing steps | 0 |
-| Play    | **Jitter %** | Knob | 0--100 (per-step micro-timing) | 0 |
-| Play    | **Tune Spread** | Knob | 0--100 (random transpose probability / size) | 0 |
+| Play    | **Jitter %** | Knob | 0--100 | 0 |
+| Play    | **Tune Spread** | Knob | 0--100 | 0 |
 | Play    | **Snap** | Wheel | free / octaves / 5ths+oct. | octaves |
-| Play    | **Scale** | Wheel | major / minor / dorian / mixolydian / pentatonic / blues / harmonic m / whole tone / chromatic | major |
+| Play    | **Scale** | Wheel | 9 scales (see above) | major |
 | Play    | **Root** | Wheel | C ... B | C |
 | Play    | **Step Pattern** | StepEditor (override mode) | per-step default / force-on / force-on+accent / force-off + offset | all default |
-| Play    | **Patterns** | PatternStrip | end-of-surface P1--P8 bank selector | slot 1 active |
+| Play    | **Patterns** | PatternStrip | end-of-surface P1--P8 bank | slot 1 active |
 | Setup   | **Arp Ch** | ChannelSelect | 1--16 or any | any |
 | Setup   | **Sync** | Radio | free / tempo / transport | transport |
 | Setup   | **BPM** (visible when Sync = free) | Wheel | 40--300 | 120 |
-| Setup   | **Retrig** | Button | reset the cycle on the first key of a phrase | on |
-| Setup   | **Ctrl Ch** | Wheel | Off / 1--16 (reserves a channel for slot switching) | Off |
+| Setup   | **Retrig** | Button | reset cycle on first key of a phrase | on |
+| Setup   | **Ctrl Ch** | Wheel | Off / 1--16 | Off |
 | Setup   | **P1..P8** (visible when Ctrl Ch is on) | NoteSelect ×8 | one learnable trigger note per slot | C2..G2 (36..43) |
 
-**Pitch modes.** `up` / `down` / `up-down` / `random` /
-`as-played` voice the held buffer one note per step. `chord`
-fires every held note simultaneously each step. Output is
-quantised to the internal **Scale + Root** (set `Scale = chromatic`
-for an identity pass-through).
-
-**Tune Spread + Snap.** Tune Spread is both the probability of a
-random transpose this step and the size of the jump. Snap
-pre-quantises the jump: `free` is any semitone within ±12;
-`octaves` is ±12 / ±24 / 0; `5ths+oct.` is ±5 / ±7 / ±12 /
-±19 / ±24 / 0. The Scale quantiser runs *after* the spread, so a
-fifths-and-octaves jump stays in scale by construction.
-
-**Fade In / Fade Out.** Velocity-ramp envelope around a phrase.
-Fade In ramps 0% → 100% over N **firing** steps when the pattern
-transitions from idle to playing (so the ramp time tracks the
-density of the pattern). Fade Out drains 100% → 0% over N firing
-steps after every key is released (or after sustain pedal lift),
-then silences. A key-on during a fade-out cancels it and snaps
-back to full.
-
-**Pattern bank.** The strip at the bottom of the play surface
-(P1..P8) is an 8-slot pattern bank. Each slot carries a snapshot
-of every play-surface param -- pattern mode, rate, the whole
-Bjorklund + window-wave setup, the step grid, scale + root, the
-spread and fade envelope. Tap a slot to switch -- the change is
-immediate, and held notes plus sustain state survive the switch,
-so the pattern can rewrite itself under a chord held with the
-pedal. Edits to any play-surface knob auto-write back to the
-active slot (no Store action), so the bank tracks live working
-state. To switch from a hardware controller, set
-**Ctrl Ch** to a dedicated MIDI channel and MIDI-Learn
-the trigger note for each slot (P1..P8). All notes arriving on
-the Ctrl Ch are consumed -- they switch slots and never
-reach the held-notes buffer.
-
-**CC automation.** Block CC 70..88 (skipping CC 84, GM
-Portamento Control) drives every play-surface knob, so any
-hardware controller wired for the Arpeggiator's CC 74 (Rate) and
-CC 75 (Gate) drives this plugin identically. Discrete-enum
-params (Pattern / Snap / Scale / Root) accept the same 0--127 CC
-form -- the host scales 0--127 across the param's min..max.
+CC automation (full block CC 70..88, skipping CC 84 = GM
+Portamento Control):
 
 | CC | Parameter | CC | Parameter |
 |----|-----------|----|-----------|
@@ -284,24 +204,18 @@ form -- the host scales 0--127 across the param's min..max.
 | 78 | Cycles     |    |    |
 | 79 | Rotate     |    |    |
 
-**Input.** Notes (held buffer), CC 64 (sustain pedal — holds the
-input chord across release), CC 70..83 / CC 85..88 (parameter
-automation), notes in the Pattern-Trigger range (consumed),
-Clock, Aftertouch, Pitch Bend.
+**Input.** Notes (held buffer), CC 64 (sustain pedal), CC 70..83
+/ CC 85..88 (parameter automation), 8 learnable notes on Ctrl Ch
+when set (each picks a pattern slot; consumed, not arpeggiated),
+Clock + Transport, Aftertouch, Pitch Bend.
 **Output.** Notes (Bjorklund-voiced, scale-quantised). Aftertouch
 and Pitch Bend pass through unchanged.
-**Clock.** Consumes external clock when **Sync** is `tempo` or
-`transport`; free-runs at **BPM** when **Sync** is `free`.
-**Display.** Envelope meter (0..127), live with the velocity ramp
-during a Fade In / Fade Out.
+**Clock.** Consumes external clock when Sync is `tempo` or
+`transport`; free-runs at BPM when Sync is `free`.
 
-Screenshots needed:
+![Euclidean play surface.](../screenshots/euclidean-play.png){width=42%}
 
-- `screenshots/euclidean-play.png` — fullscreen Play surface with
-  a populated step grid (default / FORCE_ON / accent / FORCE_OFF
-  cells all visible) and a non-zero Fade In ramp running.
-- `screenshots/euclidean-config.png` — device-detail panel with
-  the Setup group expanded.
+![Euclidean device-detail panel.](../screenshots/30-plugin-euclidean-config.png){width=35%}
 
 ## Hold
 

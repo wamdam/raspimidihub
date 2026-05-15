@@ -35,7 +35,7 @@ does not need to move. If the perf optimisation *is* user-visible
 | **A built-in plugin** (params, behaviour) | `11-plugins.md` (table + concept), `A-appendix-plugin-reference.md` (param table) |
 | **A new built-in plugin** | `11-plugins.md` (add table row, summary), new section in `A-appendix-plugin-reference.md` |
 | **A controller template** (cells, drop buttons) | `12-controllers.md`, `B-appendix-controller-reference.md` |
-| The Tracker | `13-tracker.md`, `A-appendix-plugin-reference.md` §A.14 |
+| Play surfaces (Tracker / Arpeggiator / Euclidean) | `13-play-surfaces.md`, `A-appendix-plugin-reference.md` (per-plugin param tables) |
 | Bluetooth pairing / bridge | `14-bluetooth-midi.md` |
 | Save / Load / Export / Import Config | `15-saving-and-exporting-configs.md`, `09-routing-matrix.md` §9.8 |
 | Settings page (cards, toggles) | `16-settings.md` |

@@ -204,9 +204,9 @@ The **Tracker**, the **Arpeggiator** and the **Euclidean** are
 *play-surface* plugins -- they live in the routing matrix like
 every other plugin but additionally render a fullscreen play
 surface on the **Play** tab in the bottom navigation. Find them
-under **Add → Play**. The Tracker has its own chapter (13);
-the Arpeggiator's and the Euclidean's surfaces and parameter
-references live in **Appendix A**.
+under **Add → Play**. All three share a dedicated chapter
+(chapter 13, "Play Surfaces") for their surface-and-workflow
+reference; their parameter tables live in **Appendix A**.
 
 ## User-Supplied Plugins
 
