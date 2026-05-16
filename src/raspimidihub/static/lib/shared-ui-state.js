@@ -35,6 +35,14 @@ export const SpectatorContext = createContext({
 
 export function useSharedUiState(key, initial) {
     const ctx = useContext(SpectatorContext);
+    // Hold the latest ctx in a ref so the returned setter keeps a
+    // stable identity across ctx changes. Without this, every
+    // useCallback in the codebase that wraps the setter and uses
+    // empty deps (e.g. openCcBinding in app.js) would capture the
+    // first-render ctx — whose broadcast() is the no-op default —
+    // and never broadcast even once the source becomes watched.
+    const ctxRef = useRef(ctx);
+    ctxRef.current = ctx;
     const [value, setValue] = useState(initial);
     const valRef = useRef(initial);
     valRef.current = value;
@@ -61,18 +69,18 @@ export function useSharedUiState(key, initial) {
     useEffect(() => {
         if (isSpectator) return undefined;
         const onRebroadcast = () => {
-            try { ctx.broadcast(`ui:${key}`, valRef.current); } catch {}
+            try { ctxRef.current.broadcast(`ui:${key}`, valRef.current); } catch {}
         };
         window.addEventListener('spectator-rebroadcast', onRebroadcast);
         return () => window.removeEventListener('spectator-rebroadcast', onRebroadcast);
-    }, [isSpectator, key, ctx]);
+    }, [isSpectator, key]);
 
     const setter = useCallback((v) => {
-        if (isSpectator) return;
+        if (ctxRef.current.kind === 'spectator') return;
         const next = typeof v === 'function' ? v(valRef.current) : v;
         setValue(next);
-        ctx.broadcast(`ui:${key}`, next);
-    }, [isSpectator, key, ctx]);
+        ctxRef.current.broadcast(`ui:${key}`, next);
+    }, [key]);
 
     return [value, setter];
 }

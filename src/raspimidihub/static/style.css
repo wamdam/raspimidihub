@@ -2590,6 +2590,23 @@ body {
     pointer-events: none;
     user-select: none;
 }
+/* Flex items default to `min-width: auto` (= min-content width), so a
+   wide-content child like the matrix would push .main past the
+   wrapper's fixed pixel width and the matrix's own overflow-x:auto
+   would never kick in (its parent would simply expand). min-width:0
+   alone wasn't enough — align-items:stretch still let .main grow to
+   fit its min-content. width:100% on the layout children pins them
+   to the wrapper's box so internal scrolling actually engages. */
+.spectator-app-wrap > * { min-width: 0; }
+.spectator-app-wrap > .header,
+.spectator-app-wrap > .main,
+.spectator-app-wrap > .midi-bar,
+.spectator-app-wrap > .bottom-nav,
+.spectator-app-wrap > .banner {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+}
 .spectator-touch-overlay {
     position: absolute;
     top: 0; left: 0;
