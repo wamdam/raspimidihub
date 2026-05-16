@@ -39,11 +39,17 @@ export function renderParam(param, values, onChange, allValues, displayCtx) {
     }
 
     // Bindable params (Wheel / Knob / Fader / Radio / NoteSelect /
-    // Button) take an `onBindRequest(paramName)` callback. It fires on
-    // long-press or right-click and opens the CcBinding popup at App
-    // level. The displayCtx ferries the instance id + open fn through
-    // every render path (config panel + play surface + controller).
-    const onBind = (displayCtx && displayCtx.openCcBinding && displayCtx.instanceId)
+    // Button) take an `onBindRequest(paramName)` callback. It fires
+    // on long-press or right-click and opens the CcBinding popup at
+    // App level.
+    //
+    // Opt-in only: the popup is wired only for params whose plugin
+    // author declared a `default_cc` on the dataclass. No declaration
+    // = no popup. This keeps setup-group params (Sync, Arp Ch, Ctrl
+    // Ch, BPM, Pattern Notes, ...) and other config knobs from
+    // surfacing the popup just because they happen to be a Wheel.
+    const optedIn = param.default_cc !== undefined && param.default_cc !== null;
+    const onBind = (optedIn && displayCtx && displayCtx.openCcBinding && displayCtx.instanceId)
         ? (paramName) => displayCtx.openCcBinding(displayCtx.instanceId, paramName)
         : undefined;
 

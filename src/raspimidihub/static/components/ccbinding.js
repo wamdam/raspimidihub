@@ -262,6 +262,8 @@ export function CcBinding({ open, onClose }) {
                     <button type="button" class="cc-bind-x" onclick=${doClose}>×</button>
                 </div>
 
+                <div class="cc-bind-subtitle">Incoming MIDI CC that drives this control.</div>
+
                 <div class="cc-bind-current">
                     Current: <strong>${binding ? fmtBinding(binding.ch, binding.cc) : '…'}</strong>
                     ${defaultCc !== null && html`<span class="cc-bind-default">  ·  default: Ch Any · CC ${defaultCc}</span>`}
