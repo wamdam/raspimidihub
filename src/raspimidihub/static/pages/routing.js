@@ -6,7 +6,7 @@
 import { useState, useEffect } from '../lib/hooks.module.js';
 import { html, api } from '../ui/common.js';
 import { useSSESubscription } from '../ui/sse-subscriptions.js';
-import { useSharedUiState } from '../lib/shared-ui-state.js';
+import { useSharedUiState } from '../lib/spectator/shared-ui-state.js';
 import { PluginIcon } from '../ui/icons.js';
 import { ConnectionMatrix } from './matrix.js';
 import { FilterPanel } from '../panels/filterpanel.js';
@@ -169,14 +169,18 @@ export function RoutingPage({ devices, connections, refresh, showToast, clockSou
         showToast('Mapping updated');
     };
 
-    const [saving, setSaving] = useState(false);
+    // saving / loading / panicState all surface in the matrix screen
+    // (the Save/Load buttons flip label, the panic button cycles
+    // colour) so they go through useSharedUiState — a spectator
+    // should see the source flashing "Saving…" or arming a panic.
+    const [saving, setSaving] = useSharedUiState('saving', false);
     const saveConfig = async () => {
         setSaving(true);
         await api('/config/save', { method: 'POST' });
         setSaving(false);
         showToast('Configuration saved');
     };
-    const [loading, setLoading] = useState(false);
+    const [loading, setLoading] = useSharedUiState('loading', false);
     const loadConfig = async () => {
         setLoading(true);
         await api('/config/load', { method: 'POST' });
@@ -186,7 +190,7 @@ export function RoutingPage({ devices, connections, refresh, showToast, clockSou
     };
     // Panic state machine: 'idle' → tap → 'soft' → tap → 'hard' (briefly, then back to idle)
     // Incoming MIDI Start resets to 'idle'. Hard auto-decays after 600ms.
-    const [panicState, setPanicState] = useState('idle');
+    const [panicState, setPanicState] = useSharedUiState('panicState', 'idle');
     const panic = async () => {
         const goingHard = panicState === 'soft';
         setPanicState(goingHard ? 'hard' : 'soft');

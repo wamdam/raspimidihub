@@ -9,7 +9,6 @@ import logging
 import os
 import socket
 import subprocess
-import time
 from pathlib import Path
 
 from . import __version__
@@ -32,7 +31,7 @@ from .update_flow import (
     read_status,
     write_status,
 )
-from .web import _SPECTATOR_STATE_EVENT, Request, Response, WebServer
+from .web import Request, Response, WebServer
 from .wifi import WifiManager
 
 INSTALL_DEB_SCRIPT = Path("/usr/local/bin/raspimidihub-install-deb")
@@ -365,7 +364,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
 
     # POST /api/sse/subscribe — set this connection's subscription set.
     # Body: {conn_id, events: [str], instances: [instance_id],
-    #        label?: str, spectate_target?: str | null}.
+    #        label?: str, ...feature extensions}.
     # The conn_id is the UUID the server sent as the `connection`
     # event right after the SSE handshake. Calling subscribe replaces
     # the existing subscription wholesale — the frontend's
@@ -373,13 +372,9 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
     # sends the merged set, so this endpoint is the single point of
     # truth for "what should this client receive".
     #
-    # `label` is an optional human-readable name for the connection,
-    # surfaced in /api/spectator/clients so a spectator can pick which
-    # device to mirror.
-    # `spectate_target` (when set) makes this connection a spectator
-    # of the given conn_id. The server updates the watchers_of map
-    # and emits spectator-watch-start to the source when the watcher
-    # count transitions 0→1.
+    # Feature modules can add keys to the body (e.g. spectator.py
+    # consumes `label` and `spectate_target`); those are handed off
+    # via subscribe_extensions registered on the WebServer instance.
     @server.route("POST", "/api/sse/subscribe")
     async def api_sse_subscribe(req: Request) -> Response:
         body = req.json
@@ -393,104 +388,12 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         instances = body.get("instances") or []
         conn.events = set(events)
         conn.instances = set(instances)
-        if "label" in body:
-            label = body.get("label") or ""
-            if isinstance(label, str):
-                conn.label = label[:64]  # cap absurd lengths
-        if "spectate_target" in body:
-            target = body.get("spectate_target")
-            if target == "" or target is None:
-                server.update_spectate_target(conn_id, None)
-            elif isinstance(target, str) and target in server._sse_connections:
-                server.update_spectate_target(conn_id, target)
-            else:
-                # Target conn_id doesn't exist — drop any prior spectate
-                # so we don't leak a watcher slot on a phantom source.
-                server.update_spectate_target(conn_id, None)
+        for ext in getattr(server, "_subscribe_extensions", ()):
+            try:
+                ext(conn, body)
+            except Exception:  # noqa: BLE001 — best-effort
+                pass
         return Response.json({"status": "ok"})
-
-    # GET /api/spectator/clients — list all SSE-connected clients that
-    # could be spectated. Used by the spectator picker and the
-    # "Spectate another device" list in Settings.
-    @server.route("GET", "/api/spectator/clients")
-    async def api_spectator_clients(req: Request) -> Response:
-        now = time.monotonic()
-        result = []
-        for cid, conn in server._sse_connections.items():
-            # Skip connections that are themselves spectators — listing
-            # them would be confusing (you can't spectate a spectator,
-            # and the picker would offer self-referential loops).
-            if conn.spectate_target:
-                continue
-            result.append({
-                "conn_id": cid,
-                "label": conn.label or "",
-                "last_seen": round(conn.last_seen, 3) if conn.last_seen else 0,
-                "age_sec": round(now - conn.last_seen, 1) if conn.last_seen else None,
-                "viewport": conn.viewport,
-            })
-        # Stable order: most-recently-seen first; unseen at the bottom.
-        result.sort(key=lambda x: -(x["last_seen"] or 0))
-        return Response.json({"clients": result})
-
-    # POST /api/spectator/state — source publishes one piece of UI
-    # state. Body: {conn_id, kind, value}. The server caches it under
-    # last_state[kind] (for late-joining spectators) and fans the
-    # event out to spectators of this conn_id via spectator-state.
-    # `kind` ∈ {route, viewport, scroll, density, touch, ui:<name>}.
-    # Touch is fire-and-forget (not cached) — replaying a stale touch
-    # frame after a reconnect would look weird.
-    @server.route("POST", "/api/spectator/state")
-    async def api_spectator_state(req: Request) -> Response:
-        body = req.json
-        conn_id = body.get("conn_id", "")
-        if not conn_id:
-            return Response.error("conn_id required")
-        conn = server._sse_connections.get(conn_id)
-        if conn is None:
-            return Response.error("connection not found", 404)
-        kind = body.get("kind", "")
-        if not isinstance(kind, str) or not kind:
-            return Response.error("kind required")
-        value = body.get("value")
-        conn.last_seen = time.monotonic()
-        # Cache viewport for the picker; cache other kinds (except
-        # touch) so late-joining spectators get a starting frame.
-        if kind == "viewport" and isinstance(value, dict):
-            conn.viewport = {
-                "w": int(value.get("w", 0) or 0),
-                "h": int(value.get("h", 0) or 0),
-            }
-        if kind != "touch":
-            if conn.last_state is None:
-                conn.last_state = {}
-            conn.last_state[kind] = value
-        await server.send_sse(_SPECTATOR_STATE_EVENT, {
-            "conn_id": conn_id,
-            "kind": kind,
-            "value": value,
-        })
-        return Response.json({"status": "ok"})
-
-    # GET /api/spectator/snapshot/<conn_id> — return the cached
-    # last_state for a source. Called by spectator pages on mount so
-    # they have a starting frame to render before the first live
-    # event arrives. Cheaper than a "replay last_state to me" SSE
-    # round-trip; clients can just GET-and-render.
-    @server.route("GET", "/api/spectator/snapshot/", exact=False)
-    async def api_spectator_snapshot(req: Request) -> Response:
-        target = req.path_param("/api/spectator/snapshot/")
-        if not target:
-            return Response.error("conn_id required")
-        conn = server._sse_connections.get(target)
-        if conn is None:
-            return Response.json({"state": {}, "exists": False})
-        return Response.json({
-            "state": conn.last_state or {},
-            "exists": True,
-            "label": conn.label or "",
-            "viewport": conn.viewport,
-        })
 
     # ================================================================
     # GET /api/devices — list MIDI devices

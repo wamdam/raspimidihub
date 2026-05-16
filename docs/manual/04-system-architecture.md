@@ -93,6 +93,45 @@ values via a tiny `lib/theme.js` helper so they reskin when the
 theme changes too. Adding a third theme is a matter of dropping
 one CSS file in the folder and adding a row to the manifest.
 
+### Spectator Mirroring
+
+The spectator feature -- where one browser tab or OBS Browser
+Source renders the same UI as another connected device -- lives
+in its own module so the core web layer doesn't have to know
+about it. Server side: `src/raspimidihub/spectator.py` owns the
+per-connection mirror state, the watcher map, the
+`spectator-state` fan-out filter, and the four
+`/api/spectator/*` routes. It plugs into `web.py` via three
+small extension points -- an SSE delivery filter
+(`add_sse_filter`), a connection-close hook
+(`add_disconnect_handler`), and an extension on
+`/api/sse/subscribe` (`add_subscribe_extension`). web.py and
+api.py do not contain the word "spectator" outside import lines.
+
+Client side: every spectator-specific module lives under
+`static/lib/spectator/` -- the `shared-ui-state` hook, the
+source broadcaster, the spectator view, and the touch-ripple
+overlay. Two opt-in surfaces remain visible in core code on
+purpose, so a developer adding a new overlay or scrollable
+container naturally sees the pattern:
+
+- Popovers that should mirror call `useSharedUiState(key, init)`
+  in place of `useState`. App-level overlays
+  (`contextMenu`, `ccBinding`, `cellBinding`) plus the
+  routing-page overlays (`filterConnId`, `showAddPlugin`) do
+  this; any new popover should follow suit.
+- Scrollable containers carry a `data-spectator-scroll="<key>"`
+  attribute. `.main` and the matrix wrapper do this; any new
+  internally-scrollable surface (a future tracker editor, an
+  inspector panel, …) should add the same attribute to be
+  mirrored automatically.
+
+The handful of integration lines in `app.js`
+(`SourceAppWrapper`, the `?spectate=` boot branch, the
+useSSE callback's watch-start / watch-stop handling) are
+clearly marked and pointer-comment back to
+`static/lib/spectator/`.
+
 ## Configuration Persistence
 
 Two filesystem locations hold the project state:

@@ -19,8 +19,8 @@
  * arcs per frame.
  */
 
-import { useEffect, useRef } from '../lib/hooks.module.js';
-import { html } from '../ui/common.js';
+import { useEffect, useRef } from '../hooks.module.js';
+import { html } from '../../ui/common.js';
 
 const DOWN_RIPPLE_MS = 600;   // expanding ring after a down/up
 const MOVE_DOT_MS = 280;      // dot trail after each move

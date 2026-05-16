@@ -27,9 +27,9 @@ import { RoutingPage } from './pages/routing.js';
 import { ControllerPage } from './pages/controller.js';
 import { PlayPage } from './pages/play.js';
 import { SettingsPage } from './pages/settings.js';
-import { SpectatorContext, useSharedUiState } from './lib/shared-ui-state.js';
-import { useSourceBroadcaster } from './lib/spectator-broadcast.js';
-import { SpectatorView } from './pages/spectate.js';
+import { SpectatorContext, useSharedUiState } from './lib/spectator/shared-ui-state.js';
+import { useSourceBroadcaster } from './lib/spectator/broadcast.js';
+import { SpectatorView } from './lib/spectator/view.js';
 
 // Header badge: "RaspiMIDIHub [● if stale] v2.0.9·a1b2c3d4". The red
 // dot is the only visual when the loaded JS bundle's build token
@@ -146,7 +146,7 @@ function App({ onSpectatorWatched, onRouteChange }) {
     const devicesRef = useRef([]);
     const connectionsRef = useRef([]);
     const [connections, setConnections] = useState([]);
-    const [toast, setToast] = useState('');
+    const [toast, setToast] = useSharedUiState('toast', '');
     const [configFallback, setConfigFallback] = useState(false);
     const [version, setVersion] = useState('');
     // Server's current build token vs the one this JS bundle was loaded

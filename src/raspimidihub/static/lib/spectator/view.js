@@ -23,12 +23,12 @@
  * a shared bus.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from '../lib/hooks.module.js';
-import { html } from '../ui/common.js';
-import { SpectatorContext } from '../lib/shared-ui-state.js';
-import { applyLayoutDensity } from '../components/common.js';
-import { setRouterExternalSource } from '../ui/router.js';
-import { TouchOverlay } from '../components/touchoverlay.js';
+import { useCallback, useEffect, useMemo, useRef, useState } from '../hooks.module.js';
+import { html } from '../../ui/common.js';
+import { SpectatorContext } from './shared-ui-state.js';
+import { applyLayoutDensity } from '../../components/common.js';
+import { setRouterExternalSource } from '../../ui/router.js';
+import { TouchOverlay } from './touchoverlay.js';
 
 const DEFAULT_ROUTE = {
     tab: 'routing', controllerId: null, playId: null, deviceId: null,

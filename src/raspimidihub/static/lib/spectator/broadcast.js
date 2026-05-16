@@ -18,9 +18,9 @@
  * useSharedUiState calls broadcast() for overlay state changes.
  */
 
-import { useCallback, useEffect, useMemo } from './hooks.module.js';
-import { getSSEConnectionId } from '../ui/sse-subscriptions.js';
-import { getLayoutDensity } from '../components/common.js';
+import { useCallback, useEffect, useMemo } from '../hooks.module.js';
+import { getSSEConnectionId } from '../../ui/sse-subscriptions.js';
+import { getLayoutDensity } from '../../components/common.js';
 
 // ~30 Hz floor for high-frequency signals. Scroll and touch ride the
 // same throttle — the spectator's monitor is the bottleneck anyway

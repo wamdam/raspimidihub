@@ -23,8 +23,8 @@
  * (spectator side).
  */
 
-import { createContext } from './preact.module.js';
-import { useCallback, useContext, useEffect, useRef, useState } from './hooks.module.js';
+import { createContext } from '../preact.module.js';
+import { useCallback, useContext, useEffect, useRef, useState } from '../hooks.module.js';
 
 export const SpectatorContext = createContext({
     kind: 'source',

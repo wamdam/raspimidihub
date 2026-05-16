@@ -38,19 +38,6 @@ MAX_SSE_CONNECTIONS = 30
 # by the event-type set.
 _PER_INSTANCE_EVENTS = frozenset({"plugin-param", "plugin-display"})
 
-# Spectator state-mirror event. Carries `conn_id` (the source whose
-# state changed) and is delivered only to connections whose
-# `spectate_target` matches — i.e. browsers watching that source.
-_SPECTATOR_STATE_EVENT = "spectator-state"
-
-# Events fanned out to a single recipient (the source) by direct
-# queue push, bypassing the events filter. Used to tell a source
-# "you are / are no longer being watched" so it can attach or detach
-# its broadcaster listeners. The dict carries the recipient conn_id
-# under `_target_conn` which send_sse_direct strips before encoding.
-_SPECTATOR_WATCH_START = "spectator-watch-start"
-_SPECTATOR_WATCH_STOP = "spectator-watch-stop"
-
 
 @dataclass
 class SSEConnection:
@@ -63,30 +50,16 @@ class SSEConnection:
     fan an event out to this client. Empty sets = receive nothing
     (intentional — every view must declare its interest).
 
-    Spectator-mode fields:
-    - `label`: optional human-readable name (e.g. "Living-room phone")
-      sent on /api/sse/subscribe. Surfaced via /api/spectator/clients
-      so a spectator can pick which device to mirror.
-    - `last_state`: cache of the latest published kind→value (route,
-      viewport, scroll, density, ui:<key>, touch). Replayed once to a
-      spectator on subscribe so it has a starting frame to render.
-    - `spectate_target`: when this connection is a spectator, the
-      conn_id of the source it watches. Drives the spectator-state
-      fan-out filter and the watchers_of map on the server.
-    - `last_seen`: monotonic timestamp updated when a source publishes
-      state. Surfaced in the client picker so users see whether the
-      device is recently active.
-    - `viewport`: most-recently-published {w, h} for this source,
-      surfaced in /api/spectator/clients."""
+    `label` is an optional human-readable name. The only general-
+    purpose extension field on the connection record; feature-
+    specific per-conn state (e.g. the spectator service's mirror
+    snapshot, target, viewport) lives in those modules' own maps,
+    not here."""
     conn_id: str
     queue: "asyncio.Queue"
     events: set[str]
     instances: set[str]
     label: str = ""
-    last_state: dict | None = None
-    spectate_target: str | None = None
-    last_seen: float = 0.0
-    viewport: dict | None = None
 
 
 SECURITY_HEADERS = {
@@ -172,13 +145,23 @@ class WebServer:
         # Kept for shutdown fan-out only — points to the same queue
         # objects held in _sse_connections.
         self._sse_queues: list[asyncio.Queue] = []
-        # For each source conn_id, the set of spectator conn_ids
-        # currently watching it. Empty → non-empty transitions trigger
-        # a spectator-watch-start event to the source (so the source
-        # attaches its broadcaster); non-empty → empty triggers
-        # spectator-watch-stop. update_spectate_target() is the only
-        # place that mutates this.
-        self._watchers_of: dict[str, set[str]] = defaultdict(set)
+        # Pluggable per-recipient filter hooks. Each entry takes
+        # (event, data) and returns either None (not my event,
+        # default events-set filter applies) or a predicate
+        # (conn -> bool) that decides per-recipient delivery.
+        # The spectator service registers one of these at startup;
+        # send_sse() consults them before falling back to the
+        # default. Keeps web.py free of feature-specific branches.
+        self._sse_filters: list[callable] = []
+        # Callbacks fired when an SSE connection closes; receives
+        # conn_id. Feature modules register handlers to clean up
+        # per-conn state they own (see add_disconnect_handler).
+        self._disconnect_handlers: list[callable] = []
+        # Extensions called after /api/sse/subscribe has applied the
+        # default events/instances. Each receives (conn, body) and
+        # may consume additional keys (e.g. spectator.py reads
+        # `label` and `spectate_target`). See add_subscribe_extension.
+        self._subscribe_extensions: list[callable] = []
         # SSE traffic meter — incremented per broadcast (one per send_sse,
         # not per recipient), sampled to _sse_per_sec each second by
         # runtime.loops.rate_meter so /api/system can report it cheaply.
@@ -212,6 +195,14 @@ class WebServer:
             return func
         return decorator
 
+    def add_sse_filter(self, fn) -> None:
+        """Register a pluggable per-recipient delivery filter. fn is
+        called as fn(event, data) and returns either None (default
+        events-set filter applies) or a predicate (conn -> bool)
+        that decides whether each subscriber should receive this
+        event. Used by spectator.py to handle 'spectator-state'."""
+        self._sse_filters.append(fn)
+
     async def send_sse(self, event: str, data: dict):
         """Broadcast an SSE event to clients subscribed to it.
 
@@ -223,6 +214,10 @@ class WebServer:
         receives nothing — every view must explicitly declare its
         interest via /api/sse/subscribe.
 
+        Plug-in filters registered via add_sse_filter() get first
+        say on events they care about; if none of them returns a
+        predicate, the default events-set filter applies.
+
         If a client's queue is full (slow / backgrounded tab), drop
         its oldest queued event and try again — the client stays
         subscribed; the freshest event wins.
@@ -230,19 +225,21 @@ class WebServer:
         msg = f"event: {event}\ndata: {json.dumps(data)}\n\n"
         self._sse_count_window += 1
         per_instance = event in _PER_INSTANCE_EVENTS
-        spectator_state = event == _SPECTATOR_STATE_EVENT
         instance_id = data.get("instance_id") if per_instance else None
-        # For spectator-state, the fan-out target is "any connection
-        # whose spectate_target equals data['conn_id']". data['conn_id']
-        # is the SOURCE that produced the state; recipients are
-        # spectators of that source.
-        spectated_source = data.get("conn_id") if spectator_state else None
+        # Plug-in filters: first one to claim the event decides
+        # per-recipient delivery for everyone.
+        custom_predicate = None
+        for fn in self._sse_filters:
+            p = fn(event, data)
+            if p is not None:
+                custom_predicate = p
+                break
         for conn in self._sse_connections.values():
             if per_instance:
                 if instance_id is None or instance_id not in conn.instances:
                     continue
-            elif spectator_state:
-                if conn.spectate_target != spectated_source:
+            elif custom_predicate is not None:
+                if not custom_predicate(conn):
                     continue
             else:
                 if event not in conn.events:
@@ -283,43 +280,19 @@ class WebServer:
             except asyncio.QueueFull:
                 pass
 
-    def update_spectate_target(self, spectator_id: str,
-                               new_target: str | None) -> None:
-        """Update which source `spectator_id` is watching, maintaining
-        the watchers_of map. Emits watch-start/stop to the source(s)
-        when their watcher-count transitions 0↔1.
+    def add_disconnect_handler(self, fn) -> None:
+        """Register a callback called with conn_id when an SSE
+        connection closes. Used by feature modules (e.g. spectator.py)
+        to clean up per-conn state without web.py having to know
+        about them."""
+        self._disconnect_handlers.append(fn)
 
-        Called from /api/sse/subscribe whenever a connection's
-        `spectate_target` changes (including → None when the spectator
-        stops watching). Also called on connection close for any
-        spectator that was watching something."""
-        conn = self._sse_connections.get(spectator_id)
-        old_target = conn.spectate_target if conn else None
-        if old_target == new_target:
-            return
-        if conn is not None:
-            conn.spectate_target = new_target
-        # Drop the old source's watcher entry, fire stop if it emptied.
-        if old_target:
-            watchers = self._watchers_of.get(old_target)
-            if watchers and spectator_id in watchers:
-                watchers.discard(spectator_id)
-                if not watchers:
-                    self._watchers_of.pop(old_target, None)
-                    # Fire-and-forget: the source may have disconnected
-                    # already; send_sse_direct is a no-op in that case.
-                    asyncio.create_task(self.send_sse_direct(
-                        old_target, _SPECTATOR_WATCH_STOP,
-                        {"conn_id": old_target}))
-        # Add the new source's watcher, fire start if this is the first.
-        if new_target:
-            watchers = self._watchers_of[new_target]
-            was_empty = not watchers
-            watchers.add(spectator_id)
-            if was_empty:
-                asyncio.create_task(self.send_sse_direct(
-                    new_target, _SPECTATOR_WATCH_START,
-                    {"conn_id": new_target}))
+    def add_subscribe_extension(self, fn) -> None:
+        """Register an extension run from /api/sse/subscribe after
+        events/instances are applied. Receives (conn, body) so feature
+        modules can consume extra request keys without forking the
+        subscribe handler."""
+        self._subscribe_extensions.append(fn)
 
     def sample_sse_rate(self) -> None:
         """Roll the broadcast-event counter into _sse_per_sec. Called once
@@ -466,24 +439,15 @@ class WebServer:
             pass
         finally:
             watcher.cancel()
-            # If this connection was spectating, release the watcher
-            # slot so the source can stop broadcasting if no one else
-            # is watching. Must happen before pop() so the
-            # update_spectate_target lookup finds the conn.
-            if conn.spectate_target:
-                self.update_spectate_target(conn_id, None)
-            # If anyone was spectating THIS connection (as a source),
-            # tell them their source went away. They'll show a
-            # "Disconnected" overlay until the source reconnects.
-            watchers = self._watchers_of.pop(conn_id, None)
-            if watchers:
-                msg_data = {"conn_id": conn_id}
-                for sid in watchers:
-                    other = self._sse_connections.get(sid)
-                    if other is not None:
-                        other.spectate_target = None
-                    asyncio.create_task(self.send_sse_direct(
-                        sid, "spectator-source-gone", msg_data))
+            # Notify feature modules so they can clean up any per-conn
+            # state they own (e.g. spectator's target / watchers map).
+            # Must run BEFORE the pop() so handlers can still look up
+            # the conn record if they want to.
+            for fn in self._disconnect_handlers:
+                try:
+                    fn(conn_id)
+                except Exception:  # noqa: BLE001 — best-effort cleanup
+                    pass
             self._sse_connections.pop(conn_id, None)
             if queue in self._sse_queues:
                 self._sse_queues.remove(queue)
