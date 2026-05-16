@@ -50,6 +50,23 @@ export function useSharedUiState(key, initial) {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isSpectator, key, ctx]);
 
+    // Source-side re-broadcast on watch-start. The broadcaster's
+    // POSTs only fire while watched, so any ui:* state changes that
+    // happened BEFORE a spectator joined left no trace on the server
+    // (broadcast was a no-op, snapshot cache stays empty). On
+    // watch-start the broadcaster dispatches a `spectator-rebroadcast`
+    // CustomEvent and every consumer re-emits its current value, so a
+    // late-joining spectator catches up on whatever popups / menus
+    // are already showing.
+    useEffect(() => {
+        if (isSpectator) return undefined;
+        const onRebroadcast = () => {
+            try { ctx.broadcast(`ui:${key}`, valRef.current); } catch {}
+        };
+        window.addEventListener('spectator-rebroadcast', onRebroadcast);
+        return () => window.removeEventListener('spectator-rebroadcast', onRebroadcast);
+    }, [isSpectator, key, ctx]);
+
     const setter = useCallback((v) => {
         if (isSpectator) return;
         const next = typeof v === 'function' ? v(valRef.current) : v;

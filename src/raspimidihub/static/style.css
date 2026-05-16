@@ -2574,10 +2574,21 @@ body {
  * events; the source-gone notice surfaces when the source closes.
  * ============================================================ */
 .spectator-app-wrap {
-    /* Sized via inline style; we just want a hard isolation so
-       the scaled subtree never bleeds into surrounding chrome. */
+    /* Sized via inline style; the flex column is critical — App's
+       .main relies on a flex parent to claim "remaining height" and
+       become the scroll container. Without it the whole subtree
+       renders as one tall column and scrolling never engages. */
+    display: flex;
+    flex-direction: column;
     background: var(--bg);
     contain: layout paint;
+    /* The mirror is view-only: clicks, drags, knob twists and wheel
+       scrolls must not drive the underlying engine (they'd race
+       against the source device and reach the API directly via the
+       knobs' onChange handlers). One root-level rule kills every
+       pointer interaction inside the mirrored tree. */
+    pointer-events: none;
+    user-select: none;
 }
 .spectator-touch-overlay {
     position: absolute;

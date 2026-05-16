@@ -49,6 +49,12 @@ export function SpectatorView({ clientId, showTouches, AppComponent }) {
     const routeRef = useRef(DEFAULT_ROUTE);
     const routeSubsRef = useRef(new Set());
     const uiSubsRef = useRef(new Map());           // 'ui:<key>' -> Set<cb>
+    // Latest received value for each ui:<key>, replayed when a
+    // consumer subscribes after the event has already arrived. Two
+    // races force this: (a) the snapshot may carry ui:* state but
+    // App isn't mounted yet so no subscribers exist, and (b) the
+    // source can publish between watch-start and our App mount.
+    const uiLatestRef = useRef(new Map());
     const targetScrollYRef = useRef(0);
     const touchPointsRef = useRef([]);
     // Our SSE conn_id; needed to POST /api/sse/subscribe with our
@@ -72,6 +78,8 @@ export function SpectatorView({ clientId, showTouches, AppComponent }) {
         } else if (kind === 'scroll') {
             const y = (value && value.y) || 0;
             targetScrollYRef.current = y;
+            // Apply now if .main exists; if App hasn't mounted yet a
+            // deferred effect (see below) re-applies from the ref.
             const main = document.querySelector('.spectator-app-wrap .main');
             if (main) main.scrollTop = y;
         } else if (kind === 'density') {
@@ -90,6 +98,9 @@ export function SpectatorView({ clientId, showTouches, AppComponent }) {
                 touchPointsRef.current.splice(0, touchPointsRef.current.length - 200);
             }
         } else if (kind && kind.startsWith('ui:')) {
+            // Cache the latest value so a subscriber that mounts AFTER
+            // this event still picks it up (via replay in subscribe()).
+            uiLatestRef.current.set(kind, value);
             const subs = uiSubsRef.current.get(kind);
             if (subs) for (const cb of subs) {
                 try { cb(value); } catch (err) { console.warn('ui sub:', err); }
@@ -172,6 +183,17 @@ export function SpectatorView({ clientId, showTouches, AppComponent }) {
         };
     }, [clientId, applyState]);
 
+    // After App mounts (snapshotLoaded → true), apply the most
+    // recently received scroll position from the ref. The first
+    // scroll event from the source typically lands before App
+    // mounts; without this catch-up the mirror would render at
+    // y=0 even though the source is scrolled.
+    useEffect(() => {
+        if (!snapshotLoaded) return;
+        const main = document.querySelector('.spectator-app-wrap .main');
+        if (main) main.scrollTop = targetScrollYRef.current;
+    }, [snapshotLoaded]);
+
     // Pick the largest uniform scale that fits the source viewport
     // into our window. Re-measure on window resize so OBS sources
     // and free-floating tabs both look right.
@@ -188,6 +210,11 @@ export function SpectatorView({ clientId, showTouches, AppComponent }) {
 
     // SpectatorContext value: register/unregister callbacks for
     // `ui:<key>` events so useSharedUiState consumers stay in sync.
+    // Subscribers may mount AFTER an event has already arrived
+    // (snapshot replay, or source publishing between watch-start
+    // and App mount). The replay-on-subscribe below covers that
+    // race; without it the first received value is silently
+    // dropped and popups never appear.
     const ctxValue = useMemo(() => ({
         kind: 'spectator',
         broadcast: () => {},
@@ -195,6 +222,10 @@ export function SpectatorView({ clientId, showTouches, AppComponent }) {
             let set = uiSubsRef.current.get(kind);
             if (!set) { set = new Set(); uiSubsRef.current.set(kind, set); }
             set.add(cb);
+            const last = uiLatestRef.current.get(kind);
+            if (last !== undefined) {
+                try { cb(last); } catch (err) { console.warn('ui replay:', err); }
+            }
         },
         unsubscribe: (kind, cb) => {
             const set = uiSubsRef.current.get(kind);

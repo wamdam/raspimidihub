@@ -63,6 +63,12 @@ export function useSourceBroadcaster({ watched, route }) {
     // for a feature that's all-on or all-off.
     useEffect(() => {
         if (!watched) return undefined;
+        // Ask every useSharedUiState consumer to re-emit its current
+        // value now that broadcasting is active. ui:* state changed
+        // before this moment never reached the wire (broadcast was a
+        // no-op, the snapshot cache stayed empty), so a late-joining
+        // spectator wouldn't see open menus / popups otherwise.
+        window.dispatchEvent(new CustomEvent('spectator-rebroadcast'));
         const cleanups = [];
 
         // Viewport — initial snapshot plus a resize listener. Phone
