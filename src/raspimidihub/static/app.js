@@ -10,7 +10,7 @@
  */
 
 import { render } from './lib/preact.module.js';
-import { useState, useEffect, useRef, useCallback, useContext } from './lib/hooks.module.js';
+import { useState, useEffect, useRef, useCallback } from './lib/hooks.module.js';
 import { html, api, useSSE, Toast, MidiBar, hardReload } from './ui/common.js';
 import { applyLayoutDensity, getLayoutDensity } from './components/common.js';
 import { ScrollAssist } from './components/scrollassist.js';
@@ -118,31 +118,16 @@ function loadTabSubState(tab) {
     } catch { return null; }
 }
 
-function App() {
+function App({ onSpectatorWatched, onRouteChange }) {
     const { route, navigate } = useRouter();
     const tab = route.tab;
-    // If App is mounted underneath a SpectatorView, the parent already
-    // provides a SpectatorContext of kind 'spectator'. We must NOT
-    // shadow it with our own source-side context (that would short-
-    // circuit the mirroring) and must NOT broadcast (the spectator
-    // is view-only). Detect via the inherited context.
-    const parentSpectatorCtx = useContext(SpectatorContext);
-    const isUnderSpectator = parentSpectatorCtx.kind === 'spectator';
-    // Spectator broadcasting: watched flips on/off based on
-    // spectator-watch-start / spectator-watch-stop SSE events the
-    // server emits whenever the watcher-count on our conn_id
-    // transitions empty↔non-empty. The broadcaster attaches its
-    // DOM listeners only while watched is true — devices that
-    // nobody is mirroring pay nothing.
-    const [spectatorWatched, setSpectatorWatched] = useState(false);
-    const sourceCtx = useSourceBroadcaster({
-        watched: isUnderSpectator ? false : spectatorWatched, route,
-    });
-    // Re-provide the parent ctx when we're a spectator child, so the
-    // useSharedUiState consumers in our tree see the spectator's
-    // subscribe/unsubscribe machinery rather than our own no-op
-    // source defaults.
-    const spectatorCtx = isUnderSpectator ? parentSpectatorCtx : sourceCtx;
+
+    // Publish route changes upward so SourceAppWrapper's broadcaster
+    // can mirror them. In spectator mode the prop is undefined and
+    // this is a no-op.
+    useEffect(() => {
+        if (onRouteChange) onRouteChange(route);
+    }, [route, onRouteChange]);
     const setTab = useCallback((t) => {
         // Capture where we're leaving FROM, then jump to the new
         // tab's remembered sub-state (or empty if nothing saved /
@@ -383,14 +368,14 @@ function App() {
                 };
             });
         }
-        if (type === 'spectator-watch-start') {
-            // A spectator just connected to us; the broadcaster attaches
-            // its listeners and starts pushing state. Re-firing while
-            // already watched is a no-op (useEffect dep stable).
-            setSpectatorWatched(true);
+        if (type === 'spectator-watch-start' && onSpectatorWatched) {
+            // A spectator just connected to us; SourceAppWrapper
+            // turns its broadcaster on. Re-firing while already
+            // watched is a no-op (useState dedup).
+            onSpectatorWatched(true);
         }
-        if (type === 'spectator-watch-stop') {
-            setSpectatorWatched(false);
+        if (type === 'spectator-watch-stop' && onSpectatorWatched) {
+            onSpectatorWatched(false);
         }
     }, (connected) => {
         setSseConnected(connected);
@@ -553,7 +538,6 @@ function App() {
     }
 
     return html`
-        <${SpectatorContext.Provider} value=${spectatorCtx}>
         <div class="header">
             <${VersionBadge} version=${version} loadedBuild=${loadedBuild} serverBuild=${serverBuild} />
             <div class="header-right">
@@ -589,8 +573,23 @@ function App() {
         <${ContextMenu} menu=${contextMenu} onClose=${closeContextMenu} />
         <${CcBinding} open=${ccBinding} onClose=${closeCcBinding} />
         <${CellBinding} open=${cellBinding} onClose=${closeCellBinding} />
-        </${SpectatorContext.Provider}>
     `;
+}
+
+// SourceAppWrapper exists for one reason: App needs to consume the
+// SpectatorContext from BEFORE its hooks run (useSharedUiState calls
+// useContext at the top of App, before App's own return-time
+// Provider would take effect). So the source-mode boot path wraps
+// App in this component, which provides the source-side context up
+// the tree. In spectator mode this wrapper is bypassed — SpectatorView
+// provides its own context above App directly.
+function SourceAppWrapper() {
+    const [watched, setWatched] = useState(false);
+    const [route, setRoute] = useState(null);
+    const sourceCtx = useSourceBroadcaster({ watched, route });
+    return html`<${SpectatorContext.Provider} value=${sourceCtx}>
+        <${App} onSpectatorWatched=${setWatched} onRouteChange=${setRoute} />
+    </${SpectatorContext.Provider}>`;
 }
 
 // Hygiene: prune stale per-device localStorage entries on app startup
@@ -622,5 +621,5 @@ if (_spectateParams) {
         showTouches=${_spectateParams.showTouches}
         AppComponent=${App} />`, document.getElementById('app'));
 } else {
-    render(html`<${App} />`, document.getElementById('app'));
+    render(html`<${SourceAppWrapper} />`, document.getElementById('app'));
 }
