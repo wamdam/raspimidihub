@@ -162,7 +162,7 @@ export function MiniWheel({ value, onChange }) {
     const display = value > 0 ? `+${value}` : `${value}`;
     return html`<div class="mini-wheel" ref=${containerRef}>
         <div class="mini-wheel-inner" style="display:flex;align-items:center;justify-content:center;height:100%">
-            <span style="font-size:9px;color:${value === 0 ? 'rgba(255,255,255,0.3)' : '#fff'};font-weight:${value !== 0 ? '700' : '400'}">${display}</span>
+            <span style="font-size:9px;color:${value === 0 ? 'var(--text-dim)' : 'var(--text)'};font-weight:${value !== 0 ? '700' : '400'}">${display}</span>
         </div>
     </div>`;
 }

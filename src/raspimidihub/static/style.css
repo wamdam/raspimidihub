@@ -1,19 +1,10 @@
-/* RaspiMIDIHub — Mobile-first CSS */
-
-:root {
-    --bg: #1a1a2e;
-    --surface: #16213e;
-    --surface2: #0f3460;
-    --accent: #e94560;
-    --accent2: #533483;
-    --text: #eee;
-    --text-dim: #999;
-    --success: #4caf50;
-    --warn: #ff9800;
-    --error: #f44336;
-    --radius: 8px;
-    --gap: 12px;
-}
+/* RaspiMIDIHub — Mobile-first CSS.
+ *
+ * Colour tokens live in themes/_tokens.css. Every colour in this
+ * file should resolve through a var(--…) call — anything stranded
+ * as a raw hex / rgba is a bug to be tokenised. The exceptions are
+ * keyframe-internal animation stops and a handful of one-off effect
+ * stops that aren't a theme axis. */
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -45,7 +36,7 @@ body {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    border-bottom: 1px solid var(--surface2);
+    border-bottom: 1px solid var(--surface-2);
     position: sticky;
     top: 0;
     z-index: 10;
@@ -72,11 +63,11 @@ body {
     width: 9px;
     height: 9px;
     border-radius: 50%;
-    background: var(--danger, #d33);
+    background: var(--danger);
     margin-left: 8px;
     cursor: pointer;
     vertical-align: middle;
-    box-shadow: 0 0 6px rgba(211, 51, 51, 0.5);
+    box-shadow: 0 0 6px var(--stale-dot-glow);
     animation: stale-pulse 1.4s ease-in-out infinite;
 }
 @keyframes stale-pulse {
@@ -129,12 +120,12 @@ body {
     border-radius: 50%;
     background: var(--accent);
     border: none;
-    color: #fff;
+    color: var(--text-on-accent);
     font-size: 18px;
     line-height: 1;
     cursor: pointer;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5),
-                0 0 0 1px rgba(255, 255, 255, 0.08) inset;
+    box-shadow: 0 4px 12px var(--shadow-toast),
+                0 0 0 1px var(--gloss-edge) inset;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -142,9 +133,9 @@ body {
     transition: background 120ms, transform 120ms, box-shadow 120ms;
 }
 .scroll-fab:hover {
-    background: #ff5b75;  /* one shade lighter than var(--accent) */
-    box-shadow: 0 6px 16px rgba(233, 69, 96, 0.45),
-                0 0 0 1px rgba(255, 255, 255, 0.12) inset;
+    background: var(--accent-hover);  /* one shade lighter than var(--accent) */
+    box-shadow: 0 6px 16px var(--accent-glow),
+                0 0 0 1px var(--border) inset;
 }
 .scroll-fab:active { transform: scale(0.92); }
 .scroll-fab-up   { top:    calc(var(--header-pad, 50px) + 8px); }
@@ -178,7 +169,7 @@ body {
     height: 32px;
     padding: 0;
     background: var(--surface);
-    border: 1px solid rgba(255,255,255,0.08);
+    border: 1px solid var(--gloss-edge);
     color: var(--text-dim);
     border-radius: 4px;
     font-family: inherit;
@@ -194,25 +185,25 @@ body {
 .pattern-bank-slot.empty {
     background: transparent;
     border-style: dashed;
-    color: var(--text-muted, #888);
+    color: var(--text-muted);
 }
 .pattern-bank-slot.selected {
     background: var(--accent);
-    color: #fff;
+    color: var(--text-on-accent);
     border-color: var(--accent);
-    box-shadow: 0 0 6px rgba(233, 69, 96, 0.4);
+    box-shadow: 0 0 6px var(--accent-glow-soft);
 }
 .pattern-bank-slot.selected.playing {
-    background: var(--accent-warm, var(--accent));
-    border-color: var(--accent-warm, var(--accent));
+    background: var(--accent-warm);
+    border-color: var(--accent-warm);
 }
 .pattern-bank-slot.queued {
-    border-color: var(--accent-warm, var(--accent));
-    color: var(--accent-warm, var(--accent));
+    border-color: var(--accent-warm);
+    color: var(--accent-warm);
     animation: pattern-bank-queue-blink 0.8s ease-in-out infinite;
 }
 .pattern-bank-slot:hover:not(.selected) {
-    background: var(--surface2);
+    background: var(--surface-2);
     color: var(--text);
 }
 @keyframes pattern-bank-queue-blink {
@@ -225,10 +216,10 @@ body {
     bottom: calc(100% + 4px);
     z-index: 10;
     min-width: 170px;
-    background: var(--surface, #1a1a1a);
-    border: 1px solid var(--surface2, #2a2a2a);
+    background: var(--surface);
+    border: 1px solid var(--surface-2);
     border-radius: 6px;
-    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
+    box-shadow: 0 6px 18px var(--shadow-toast);
     display: flex;
     flex-direction: column;
     padding: 4px;
@@ -245,9 +236,9 @@ body {
     padding: 8px 10px;
     cursor: pointer;
 }
-.pattern-bank-menu-item:hover { background: var(--surface2); }
-.pattern-bank-menu-item.danger { color: var(--accent, #e94560); }
-.pattern-bank-menu-item.danger:hover { background: rgba(233, 69, 96, 0.12); }
+.pattern-bank-menu-item:hover { background: var(--surface-2); }
+.pattern-bank-menu-item.danger { color: var(--accent); }
+.pattern-bank-menu-item.danger:hover { background: var(--accent-tint-hover); }
 
 /* --- CC Binding popup ---
  * Long-press / right-click on a Knob / Wheel / Fader / Radio /
@@ -259,17 +250,17 @@ body {
     position: fixed;
     inset: 0;
     z-index: 1200;
-    background: rgba(0, 0, 0, 0.55);
+    background: var(--overlay-bg);
     display: flex;
     align-items: center;
     justify-content: center;
     padding: 16px;
 }
 .cc-bind-modal {
-    background: var(--surface, #1a1a1a);
-    border: 1px solid var(--surface2, #2a2a2a);
+    background: var(--surface);
+    border: 1px solid var(--surface-2);
     border-radius: 10px;
-    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6);
+    box-shadow: 0 12px 32px var(--shadow-modal);
     width: 100%;
     max-width: 380px;
     padding: 14px 16px 12px;
@@ -337,9 +328,9 @@ body {
     gap: 6px;
 }
 .cc-bind-btn {
-    background: var(--surface2, #2a2a2a);
+    background: var(--surface-2);
     color: var(--text);
-    border: 1px solid var(--surface3, #333);
+    border: 1px solid var(--surface-3);
     border-radius: 6px;
     padding: 8px 12px;
     font: inherit;
@@ -347,11 +338,11 @@ body {
     cursor: pointer;
 }
 .cc-bind-btn:disabled { opacity: 0.45; cursor: default; }
-.cc-bind-btn:not(:disabled):hover { background: var(--surface3, #333); }
+.cc-bind-btn:not(:disabled):hover { background: var(--surface-3); }
 .cc-bind-btn.cc-bind-primary {
-    background: var(--accent, #e94560);
-    border-color: var(--accent, #e94560);
-    color: #fff;
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--text-on-accent);
     font-weight: 600;
 }
 .cc-bind-btn.cc-bind-primary:not(:disabled):hover { filter: brightness(1.1); }
@@ -359,14 +350,14 @@ body {
     color: var(--text-dim);
 }
 .cc-bind-btn.cc-bind-learning {
-    background: var(--accent, #e94560);
-    color: #fff;
-    border-color: var(--accent, #e94560);
+    background: var(--accent);
+    color: var(--text-on-accent);
+    border-color: var(--accent);
     flex: 1;
     animation: cc-bind-pulse 1.2s ease-in-out infinite;
 }
 @keyframes cc-bind-pulse {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(233, 69, 96, 0.45); }
+    0%, 100% { box-shadow: 0 0 0 0 var(--accent-glow); }
     50%      { box-shadow: 0 0 0 8px rgba(233, 69, 96, 0); }
 }
 .cc-bind-collisions {
@@ -374,7 +365,7 @@ body {
     color: var(--text-dim);
     line-height: 1.4;
     padding: 6px 8px;
-    background: var(--surface2, #2a2a2a);
+    background: var(--surface-2);
     border-radius: 6px;
     /* Reserve two lines so scrolling the CC wheel through values that
      * collide / don't collide doesn't bounce the layout below. The
@@ -399,7 +390,7 @@ body {
 .cc-bind-axis + .cc-bind-axis {
     margin-top: 6px;
     padding-top: 10px;
-    border-top: 1px solid var(--surface2, #2a2a2a);
+    border-top: 1px solid var(--surface-2);
 }
 .cc-bind-axis-label {
     font-size: 11px;
@@ -434,8 +425,8 @@ body {
     column-gap: 12px;
     row-gap: 2px;
     align-items: center;
-    background: var(--surface, #1a1a1a);
-    border: 1px solid var(--surface2, #2a2a2a);
+    background: var(--surface);
+    border: 1px solid var(--surface-2);
     border-radius: 8px;
     padding: 14px 16px;
     color: var(--text);
@@ -443,7 +434,7 @@ body {
     text-align: left;
     cursor: pointer;
 }
-.settings-hub-item:hover { background: var(--surface2); }
+.settings-hub-item:hover { background: var(--surface-2); }
 .settings-hub-title {
     grid-column: 1;
     grid-row: 1;
@@ -471,7 +462,7 @@ body {
 .settings-back {
     background: transparent;
     border: 0;
-    color: var(--accent, #e94560);
+    color: var(--accent);
     font: inherit;
     font-size: 14px;
     cursor: pointer;
@@ -493,7 +484,7 @@ body {
 .cc-map-table td {
     padding: 8px 6px;
     text-align: left;
-    border-bottom: 1px solid var(--surface2, #2a2a2a);
+    border-bottom: 1px solid var(--surface-2);
 }
 .cc-map-table th {
     font-size: 11px;
@@ -505,7 +496,7 @@ body {
 .cc-map-table tbody tr {
     cursor: pointer;
 }
-.cc-map-table tbody tr:hover { background: var(--surface2, #2a2a2a); }
+.cc-map-table tbody tr:hover { background: var(--surface-2); }
 .cc-map-table tr.cleared td { color: var(--text-dim); }
 .cc-map-table td:nth-child(3),
 .cc-map-table td:nth-child(4),
@@ -523,7 +514,7 @@ body {
     right: 0;
     background: var(--surface);
     display: flex;
-    border-top: 1px solid var(--surface2);
+    border-top: 1px solid var(--surface-2);
     z-index: 10;
 }
 .bottom-nav button {
@@ -567,7 +558,7 @@ body {
 /* --- Warning banner --- */
 .banner {
     background: var(--warn);
-    color: #000;
+    color: var(--text-on-warn);
     padding: 8px 16px;
     font-size: 13px;
     text-align: center;
@@ -591,28 +582,28 @@ body {
 }
 .btn:active { opacity: 0.7; }
 .btn:disabled { opacity: 0.4; cursor: not-allowed; }
-.btn-primary { background: var(--accent); color: #fff; }
+.btn-primary { background: var(--accent); color: var(--text-on-accent); }
 .btn-panic {
-    flex: 1; background: #7a1b1b; color: #fff; font-weight: 600;
-    border: 1px solid #a02424;
+    flex: 1; background: var(--panic-bg); color: var(--text-on-accent); font-weight: 600;
+    border: 1px solid var(--panic-border);
 }
-.btn-panic:active { background: #5a0e0e; }
+.btn-panic:active { background: var(--panic-active); }
 .btn-panic-soft {
-    border-color: #ff5050;
+    border-color: var(--panic-soft-border);
     animation: panic-pulse 1.2s ease-in-out infinite;
 }
 .btn-panic-hard {
-    background: #d02020;
-    border-color: #ff8080;
-    box-shadow: 0 0 12px 2px rgba(255, 80, 80, 0.8);
+    background: var(--panic-hard-bg);
+    border-color: var(--panic-hard-border);
+    box-shadow: 0 0 12px 2px var(--panic-glow);
 }
 @keyframes panic-pulse {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(255, 80, 80, 0.6); }
+    0%, 100% { box-shadow: 0 0 0 0 var(--panic-glow-medium); }
     50% { box-shadow: 0 0 0 6px rgba(255, 80, 80, 0); }
 }
-.btn-secondary { background: var(--surface2); color: var(--text); }
-.btn-danger { background: var(--error); color: #fff; }
-.btn-success { background: var(--success); color: #fff; }
+.btn-secondary { background: var(--surface-2); color: var(--text); }
+.btn-danger { background: var(--error); color: var(--text-on-accent); }
+.btn-success { background: var(--success); color: var(--text-on-accent); }
 .btn-block { width: 100%; }
 .btn-group {
     display: flex;
@@ -634,7 +625,7 @@ body {
 .matrix th, .matrix td {
     padding: 6px 4px;
     text-align: center;
-    border: 1px solid var(--surface2);
+    border: 1px solid var(--surface-2);
     font-size: 12px;
 }
 .matrix th {
@@ -710,7 +701,7 @@ body {
     width: 36px;
     height: 36px;
     border-radius: 6px;
-    border: 2px solid var(--surface2);
+    border: 2px solid var(--surface-2);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -724,7 +715,7 @@ body {
 }
 .matrix .cb.on::after {
     content: "\2713";
-    color: #fff;
+    color: var(--text-on-accent);
     font-size: 18px;
     font-weight: bold;
     line-height: 1;
@@ -793,7 +784,7 @@ body {
     width: 100%;
     padding: 10px 12px;
     background: var(--bg);
-    border: 1px solid var(--surface2);
+    border: 1px solid var(--surface-2);
     border-radius: 6px;
     color: var(--text);
     font-size: 14px;
@@ -829,7 +820,7 @@ body {
     border-radius: 20px;
     font-size: 13px;
     z-index: 100;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    box-shadow: 0 4px 12px var(--shadow-toast);
     animation: fadeInUp 0.3s;
 }
 @keyframes fadeInUp {
@@ -848,7 +839,7 @@ body {
 .filter-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(0,0,0,0.6);
+    background: var(--shadow-modal);
     z-index: 50;
     display: flex;
     align-items: flex-end;
@@ -870,14 +861,14 @@ body {
 .filter-panel .card {
     background:
         linear-gradient(180deg,
-            rgba(255, 255, 255, 0.05) 0%,
+            var(--gloss-faint) 0%,
             rgba(255, 255, 255, 0.01) 18%,
             rgba(0, 0, 0, 0.0) 50%,
             rgba(0, 0, 0, 0.18) 100%),
-        linear-gradient(180deg, #20253a 0%, #181a2a 100%);
+        linear-gradient(180deg, var(--filter-card-bg-start) 0%, var(--filter-card-bg-end) 100%);
     border: 1px solid rgba(255, 255, 255, 0.07);
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5),
-                inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    box-shadow: 0 2px 6px var(--shadow-toast),
+                inset 0 1px 0 var(--border-subtle),
                 inset 0 -1px 0 rgba(0, 0, 0, 0.4);
 }
 .panel-header {
@@ -939,7 +930,7 @@ body {
 .mapping-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(0,0,0,0.5);
+    background: var(--shadow-toast);
     z-index: 55;
     display: flex;
     align-items: flex-end;
@@ -962,7 +953,7 @@ body {
 }
 .ch-btn {
     min-height: 44px;
-    border: 2px solid var(--surface2);
+    border: 2px solid var(--surface-2);
     border-radius: 6px;
     background: var(--bg);
     color: var(--text-dim);
@@ -1011,8 +1002,8 @@ body {
     accent-color: var(--accent);
 }
 .matrix .cb.filtered {
-    background: var(--accent2);
-    border-color: var(--accent2);
+    background: var(--accent-2);
+    border-color: var(--accent-2);
 }
 .matrix .cb.offline-cell {
     opacity: 0.2;
@@ -1070,7 +1061,7 @@ body {
     animation: pulse 0.3s;
 }
 @keyframes pulse {
-    0% { background: var(--accent2); }
+    0% { background: var(--accent-2); }
     100% { background: var(--bg); }
 }
 .midi-monitor {
@@ -1081,7 +1072,7 @@ body {
 }
 .midi-event {
     padding: 2px 0;
-    border-bottom: 1px solid var(--surface2);
+    border-bottom: 1px solid var(--surface-2);
     color: var(--text-dim);
     white-space: nowrap;
     overflow: hidden;
@@ -1090,7 +1081,7 @@ body {
 
 /* --- Test sender --- */
 .btn-held {
-    background: var(--accent2) !important;
+    background: var(--accent-2) !important;
     animation: holdPulse 0.5s infinite alternate;
 }
 @keyframes holdPulse {
@@ -1109,8 +1100,8 @@ body {
 }
 .piano-key.white {
     width: 34px; min-width: 34px;
-    background: #f0f0f0;
-    border: 1px solid #999;
+    background: var(--piano-white);
+    border: 1px solid var(--piano-white-border);
     border-radius: 0 0 5px 5px;
     cursor: pointer;
     display: flex;
@@ -1127,19 +1118,19 @@ body {
     top: 0;
     width: 22px;
     height: 60%;
-    background: #222;
-    border: 1px solid #000;
+    background: var(--piano-black);
+    border: 1px solid var(--piano-black-border);
     border-radius: 0 0 3px 3px;
     transform: translateX(-50%);
     cursor: pointer;
     z-index: 2;
 }
 .piano-key.black.active {
-    background: var(--accent2);
+    background: var(--accent-2);
 }
 .piano-label {
     font-size: 9px;
-    color: #888;
+    color: var(--piano-label);
     pointer-events: none;
 }
 
@@ -1150,7 +1141,7 @@ body {
     left: 0;
     right: 0;
     background: var(--surface);
-    border-top: 1px solid var(--surface2);
+    border-top: 1px solid var(--surface-2);
     padding: 4px 10px;
     font-family: "SF Mono", "Fira Code", monospace;
     font-size: 11px;
@@ -1178,7 +1169,7 @@ body {
 }
 .midi-bar-r {
     text-align: right;
-    color: #b0b0b0;
+    color: var(--midi-bar-secondary);
     justify-content: flex-end;
 }
 .midi-bar-empty {
@@ -1296,8 +1287,8 @@ body {
 .wheel-label { font-size: 12px; color: var(--text-dim); }
 .btn-learn-inline {
     margin-top: 2px; padding: 2px 6px; font-size: 11px; line-height: 1.4;
-    border: 1px solid rgba(255,255,255,0.08); border-radius: 6px;
-    background: var(--surface2); color: var(--text);
+    border: 1px solid var(--gloss-edge); border-radius: 6px;
+    background: var(--surface-2); color: var(--text);
     cursor: pointer; width: 100%; min-height: 24px;
 }
 .btn-learn-inline:active { opacity: 0.7; }
@@ -1310,27 +1301,27 @@ body {
      * panel's stacking context and paint over a sticky panel-header
      * during scroll. */
     isolation: isolate;
-    background: linear-gradient(180deg, #080810 0%, #141420 8%, #1c1c30 20%, #222238 50%, #1c1c30 80%, #141420 92%, #080810 100%);
-    border: 1px solid rgba(255,255,255,0.04);
-    box-shadow: inset 0 3px 10px rgba(0,0,0,0.8), inset 0 -3px 10px rgba(0,0,0,0.8), 0 1px 2px rgba(255,255,255,0.03);
+    background: linear-gradient(180deg, var(--wheel-face-1) 0%, var(--wheel-face-2) 8%, var(--wheel-face-3) 20%, var(--wheel-face-4) 50%, var(--wheel-face-3) 80%, var(--wheel-face-2) 92%, var(--wheel-face-1) 100%);
+    border: 1px solid var(--wheel-rim);
+    box-shadow: inset 0 3px 10px var(--shadow-inset-deep), inset 0 -3px 10px var(--shadow-inset-deep), 0 1px 2px var(--gloss-highlight-soft);
 }
 .wheel-container:active { cursor: grabbing; }
 .wheel-inner { position: absolute; width: 100%; left: 0; will-change: transform; }
 .wheel-tick {
     height: 20px; display: flex; align-items: center; justify-content: center;
-    font-size: 11px; color: rgba(255,255,255,0.25); position: relative;
+    font-size: 11px; color: var(--wheel-tick-text); position: relative;
     font-variant-numeric: tabular-nums; user-select: none;
 }
-.wheel-tick::before { content: ''; position: absolute; left: 12px; right: 12px; top: 0; height: 1px; background: rgba(255,255,255,0.04); }
-.wheel-tick.active { color: #fff; font-weight: 700; font-size: 13px; text-shadow: 0 0 10px rgba(233,69,96,0.6); }
-.wheel-tick.near { color: rgba(255,255,255,0.45); font-size: 11px; }
+.wheel-tick::before { content: ''; position: absolute; left: 12px; right: 12px; top: 0; height: 1px; background: var(--wheel-tick-line); }
+.wheel-tick.active { color: var(--wheel-tick-text-active); font-weight: 700; font-size: 13px; text-shadow: 0 0 10px var(--wheel-active-glow); }
+.wheel-tick.near { color: var(--wheel-tick-text-near); font-size: 11px; }
 .wheel-container::after {
     content: ''; position: absolute; top: 50%; left: 0; width: 4px; height: 2px; margin-top: -1px;
     background: var(--accent); border-radius: 0 1px 1px 0; pointer-events: none; z-index: 2;
 }
 .wheel-container::before {
     content: ''; position: absolute; inset: 0;
-    background: radial-gradient(ellipse 160% 50% at 50% 50%, transparent 30%, rgba(0,0,0,0.85) 100%);
+    background: radial-gradient(ellipse 160% 50% at 50% 50%, transparent 30%, var(--wheel-edge-shadow) 100%);
     pointer-events: none; z-index: 1;
 }
 /* Mini wheel: half-height variant for dense edit panels.
@@ -1360,8 +1351,8 @@ body {
 .knob-container svg { width: 100%; height: 100%; display: block; }
 .knob-value {
     position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
-    font-size: 12px; font-weight: 700; color: #fff; font-variant-numeric: tabular-nums;
-    pointer-events: none; text-shadow: 0 0 6px rgba(0,0,0,0.6);
+    font-size: 12px; font-weight: 700; color: var(--knob-indicator); font-variant-numeric: tabular-nums;
+    pointer-events: none; text-shadow: 0 0 6px var(--knob-rim-shadow);
 }
 
 /* Fader */
@@ -1373,46 +1364,46 @@ body {
 /* Horizontal track */
 .fader-track {
     position: relative; height: 40px; width: 100%; border-radius: 6px;
-    background: linear-gradient(180deg, #08080e 0%, #10101a 30%, #181825 50%, #10101a 70%, #08080e 100%);
-    box-shadow: inset 0 2px 6px rgba(0,0,0,0.8), 0 1px 1px rgba(255,255,255,0.03);
-    border: 1px solid rgba(255,255,255,0.06); touch-action: none; cursor: pointer; overflow: visible;
+    background: linear-gradient(180deg, var(--fader-track-1) 0%, var(--fader-track-2) 30%, var(--fader-track-3) 50%, var(--fader-track-2) 70%, var(--fader-track-1) 100%);
+    box-shadow: inset 0 2px 6px var(--shadow-inset-deep), 0 1px 1px var(--gloss-highlight-soft);
+    border: 1px solid var(--border-subtle); touch-action: none; cursor: pointer; overflow: visible;
 }
 /* Center groove */
 .fader-track::before {
     content: ''; position: absolute; top: 50%; left: 12px; right: 12px; height: 2px; margin-top: -1px;
-    background: rgba(255,255,255,0.08); border-radius: 1px;
+    background: var(--gloss-edge); border-radius: 1px;
 }
 /* Tick marks */
 .fader-track::after {
     content: ''; position: absolute; top: 12px; bottom: 12px; left: 12px; right: 12px;
     background: repeating-linear-gradient(90deg,
-        rgba(255,255,255,0.05) 0px, rgba(255,255,255,0.05) 1px, transparent 1px, transparent 8%);
+        var(--gloss-faint) 0px, var(--gloss-faint) 1px, transparent 1px, transparent 8%);
     pointer-events: none;
 }
 /* Fader cap/thumb — mixer-style, sharp edges */
 .fader-thumb {
     position: absolute; top: 2px; width: 40px; height: 32px; border-radius: 0;
-    background: linear-gradient(90deg, #444 0%, #555 1px, #aaa 4px, #bbb 20%, #aaa 40%, #999 50%, #aaa 60%, #bbb 80%, #aaa 96%, #555 calc(100% - 1px), #444 100%);
-    box-shadow: 0 2px 5px rgba(0,0,0,0.7), inset 0 1px 0 rgba(255,255,255,0.25), inset 0 -1px 0 rgba(0,0,0,0.4);
+    background: linear-gradient(90deg, var(--fader-thumb-edge) 0%, var(--fader-thumb-band) 1px, var(--fader-thumb-light) 4px, var(--fader-thumb-bright) 20%, var(--fader-thumb-light) 40%, var(--fader-thumb-shade) 50%, var(--fader-thumb-light) 60%, var(--fader-thumb-bright) 80%, var(--fader-thumb-light) 96%, var(--fader-thumb-band) calc(100% - 1px), var(--fader-thumb-edge) 100%);
+    box-shadow: 0 2px 5px rgba(0,0,0,0.7), inset 0 1px 0 var(--gloss-bright), inset 0 -1px 0 rgba(0,0,0,0.4);
     z-index: 1;
     display: flex; align-items: center; justify-content: center;
-    border-top: 1px solid rgba(255,255,255,0.15);
-    border-bottom: 1px solid rgba(0,0,0,0.5);
-    border-left: 2px solid #333;
-    border-right: 2px solid #333;
+    border-top: 1px solid var(--gloss-line);
+    border-bottom: 1px solid var(--shadow-toast);
+    border-left: 2px solid var(--fader-thumb-side);
+    border-right: 2px solid var(--fader-thumb-side);
 }
 /* Vertical grip lines on thumb */
 .fader-thumb::before {
     content: ''; position: absolute; left: 50%; top: 12px; bottom: 12px; width: 1px; margin-left: -6px;
-    background: rgba(0,0,0,0.2);
-    box-shadow: 1px 0 0 rgba(255,255,255,0.12), 3px 0 0 rgba(0,0,0,0.15), 4px 0 0 rgba(255,255,255,0.1),
-                6px 0 0 rgba(0,0,0,0.15), 7px 0 0 rgba(255,255,255,0.1), 9px 0 0 rgba(0,0,0,0.15), 10px 0 0 rgba(255,255,255,0.1),
-                12px 0 0 rgba(0,0,0,0.12), 13px 0 0 rgba(255,255,255,0.08);
+    background: var(--shadow-weak);
+    box-shadow: 1px 0 0 var(--border), 3px 0 0 var(--shadow-faint), 4px 0 0 var(--gloss-mid),
+                6px 0 0 var(--shadow-faint), 7px 0 0 var(--gloss-mid), 9px 0 0 var(--shadow-faint), 10px 0 0 var(--gloss-mid),
+                12px 0 0 rgba(0,0,0,0.12), 13px 0 0 var(--gloss-edge);
 }
 /* Value text on thumb */
 .fader-thumb-val {
-    font-size: 11px; font-weight: 700; color: #333; font-variant-numeric: tabular-nums;
-    text-shadow: 0 1px 0 rgba(255,255,255,0.3);
+    font-size: 11px; font-weight: 700; color: var(--fader-thumb-value-text); font-variant-numeric: tabular-nums;
+    text-shadow: 0 1px 0 var(--border-hover);
     pointer-events: none;
 }
 /* Fill bar */
@@ -1426,11 +1417,11 @@ body {
 .fader-track.vertical::before { top: 12px; bottom: 12px; left: 50%; width: 2px; height: auto; right: auto; margin-left: -1px; margin-top: 0; }
 .fader-track.vertical::after {
     background: repeating-linear-gradient(180deg,
-        rgba(255,255,255,0.05) 0px, rgba(255,255,255,0.05) 1px, transparent 1px, transparent 8%);
+        var(--gloss-faint) 0px, var(--gloss-faint) 1px, transparent 1px, transparent 8%);
 }
 .fader-track.vertical .fader-thumb { top: auto; left: 4px; width: 40px; height: 28px; border-radius: 4px; }
 .fader-track.vertical .fader-thumb::before { top: 50%; left: 8px; right: 8px; height: 1px; margin-top: -2px;
-    box-shadow: 0 1px 0 rgba(255,255,255,0.2), 0 3px 0 rgba(0,0,0,0.2), 0 4px 0 rgba(255,255,255,0.15); }
+    box-shadow: 0 1px 0 var(--gloss-emphasis), 0 3px 0 var(--shadow-weak), 0 4px 0 var(--gloss-line); }
 .fader-track.vertical .fader-thumb-val { top: 2px; }
 .fader-track.vertical .fader-fill { left: 50%; bottom: 12px; width: 4px; height: auto; top: auto; margin-left: -2px; margin-top: 0; }
 
@@ -1482,8 +1473,8 @@ body {
 }
 .controller-arrow {
     width: 32px; height: 32px;
-    background: rgba(255,255,255,0.04);
-    border: 1px solid rgba(255,255,255,0.10);
+    background: var(--surface-hover);
+    border: 1px solid var(--gloss-mid);
     border-radius: 4px;
     color: var(--text);
     font-size: 18px; line-height: 1;
@@ -1493,8 +1484,8 @@ body {
 .controller-arrow:disabled { opacity: 0.3; cursor: not-allowed; }
 .controller-select {
     flex: 1; min-width: 0;
-    background: rgba(0,0,0,0.3);
-    border: 1px solid rgba(255,255,255,0.12);
+    background: var(--input-bg);
+    border: 1px solid var(--border);
     border-radius: 4px;
     color: var(--text);
     font-size: 14px;
@@ -1536,12 +1527,12 @@ body {
 }
 .tracker-header-label { color: var(--text-dim); font-size: 11px; margin: 0 4px 0 0; }
 .tracker-header-value { color: var(--text); font-weight: 500; }
-.tracker-page-idx { color: var(--accent, #5cf); font-weight: 600; min-width: 1ch; text-align: center; }
+.tracker-page-idx { color: var(--accent); font-weight: 600; min-width: 1ch; text-align: center; }
 .tracker-page-total { color: var(--text-dim); font-size: 11px; margin-left: 4px; }
 .tracker-page-btn {
-    background: var(--surface2, #2a2a2a);
+    background: var(--surface-2);
     color: var(--text);
-    border: 1px solid var(--surface2);
+    border: 1px solid var(--surface-2);
     border-radius: 4px;
     padding: 4px 8px;
     font-size: 11px;
@@ -1551,25 +1542,25 @@ body {
 }
 .tracker-page-btn[disabled] { opacity: 0.4; cursor: default; }
 .tracker-page-btn.active {
-    background: var(--accent, #357);
-    border-color: var(--accent, #5cf);
-    color: #fff;
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--text-on-accent);
 }
 /* Transport buttons — slightly larger + a green tint when actively
  * playing so the user can spot them at a glance from across a stage. */
 .tracker-transport-btn { padding: 4px 10px; font-weight: 600; }
 .tracker-transport-btn.active {
-    background: rgba(76, 175, 80, 0.35);
-    border-color: rgba(76, 175, 80, 0.7);
-    color: #fff;
+    background: var(--tracker-transport-active-bg);
+    border-color: var(--tracker-transport-active-border);
+    color: var(--tracker-transport-active-text);
 }
 /* Compact rate dropdown sitting next to the page controls. Native
  * <select> reskinned to fit the surrounding pill-button row instead
  * of the wide horizontal radio that the standard PluginRadio renders. */
 .tracker-rate-select {
-    background: var(--surface2, #2a2a2a);
+    background: var(--surface-2);
     color: var(--text);
-    border: 1px solid var(--surface2);
+    border: 1px solid var(--surface-2);
     border-radius: 4px;
     padding: 3px 6px;
     font-size: 11px;
@@ -1607,13 +1598,13 @@ body {
     min-width: max-content;
 }
 .tracker-track-header {
-    border-bottom: 1px solid var(--surface2);
+    border-bottom: 1px solid var(--surface-2);
     margin-bottom: 2px;
     color: var(--text-dim);
     letter-spacing: 0.5px;
 }
 .tracker-row { border-radius: 2px; }
-.tracker-row.cursor { background: rgba(80, 200, 255, 0.06); }
+.tracker-row.cursor { background: var(--tracker-cursor-bg); }
 
 /* Gutter — same width on header and data rows so the first cell
  * column lines up. Two hex digits ("0F", "1A", …) plus a touch of
@@ -1642,7 +1633,7 @@ body {
     flex: 0 0 1.5ch;
     width: 1.5ch;
     text-align: center;
-    color: var(--accent, #5cf);
+    color: var(--accent);
     font-weight: 700;
     font-variant-numeric: tabular-nums;
     overflow: hidden;
@@ -1651,7 +1642,7 @@ body {
  * looking at the gutter glyph — useful when the cursor isn't on
  * the same row. */
 .tracker-row.playing {
-    background: rgba(80, 200, 255, 0.10);
+    background: var(--tracker-row-playing-bg);
 }
 
 /* Voice columns — both header label and cell use the same flex
@@ -1664,7 +1655,7 @@ body {
     box-sizing: border-box;
 }
 .tracker-track-label.cursor {
-    color: var(--accent, #5cf);
+    color: var(--accent);
     font-weight: 600;
 }
 /* Channel suffix on each track label — dimmer than the track name
@@ -1701,12 +1692,12 @@ body {
  * below wins on the focused sub-cell (CSS source-order tie-break). */
 .tracker-cell-note.sel,
 .tracker-cell-cc.sel {
-    background: rgba(80, 200, 255, 0.22);
+    background: var(--tracker-cell-sel-bg);
 }
 .tracker-cell.focus-note .tracker-cell-note,
 .tracker-cell.focus-cc   .tracker-cell-cc {
-    background: var(--accent, #4af);
-    color: #000;
+    background: var(--accent);
+    color: var(--tracker-focus-text);
     font-weight: 500;
 }
 .tracker-help {
@@ -1787,9 +1778,9 @@ body {
    props so .empty / .queued / .playing modifiers apply. */
 .tracker-keypad-bottom > .pattern-bank { margin-top: 4px; }
 .tracker-keypad-action-btn {
-    background: var(--surface2, #2a2a2a);
+    background: var(--surface-2);
     color: var(--text);
-    border: 1px solid var(--surface2);
+    border: 1px solid var(--surface-2);
     border-radius: 4px;
     padding: 4px 12px;
     font-size: 12px;
@@ -1803,9 +1794,9 @@ body {
 /* Shift button glows accent while engaged so the user can see at a
  * glance whether the next cursor move will extend the selection. */
 .tracker-keypad-action-btn.active {
-    background: var(--accent, #4af);
-    border-color: var(--accent, #5cf);
-    color: #000;
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--tracker-focus-text);
     font-weight: 600;
 }
 .tracker-keypad-col {
@@ -1854,9 +1845,9 @@ body {
 .tracker-keypad-col .wheel-label,
 .tracker-keypad-col .knob-label { display: none; }
 .tracker-keypad-del {
-    background: var(--surface2, #2a2a2a);
+    background: var(--surface-2);
     color: var(--text);
-    border: 1px solid var(--surface2);
+    border: 1px solid var(--surface-2);
     border-radius: 4px;
     padding: 3px 10px;
     font-size: 11px;
@@ -1875,9 +1866,9 @@ body {
 }
 .tracker-arrow {
     width: 36px; height: 36px;
-    background: var(--surface2);
+    background: var(--surface-2);
     color: var(--text);
-    border: 1px solid var(--surface2);
+    border: 1px solid var(--surface-2);
     border-radius: 4px;
     font-size: 16px;
     cursor: pointer;
@@ -1911,8 +1902,8 @@ body {
 .dropbtn {
     position: relative;
     height: 56px;
-    background: linear-gradient(180deg, #2a2a30 0%, #16161a 100%);
-    border: 1px solid rgba(255,255,255,0.06);
+    background: linear-gradient(180deg, var(--drop-base-bg-start) 0%, var(--drop-base-bg-end) 100%);
+    border: 1px solid var(--border-subtle);
     border-radius: 6px;
     cursor: pointer;
     user-select: none;
@@ -1922,14 +1913,14 @@ body {
     align-items: center;
     justify-content: center;
     transition: background 0.15s, box-shadow 0.15s, border-color 0.15s;
-    box-shadow: inset 0 1px 2px rgba(0,0,0,0.6);
+    box-shadow: inset 0 1px 2px var(--shadow-modal);
     color: var(--accent);  /* used by the SVG ring's currentColor */
 }
 .dropbtn-label {
     font-size: 18px;
     font-weight: 700;
     letter-spacing: 2px;
-    color: rgba(220,220,220,0.45);
+    color: var(--drop-label-idle);
     text-shadow: none;
     z-index: 2;          /* above ring + press-fill */
     transition: color 0.15s, text-shadow 0.15s;
@@ -1939,7 +1930,7 @@ body {
     top: 4px; right: 6px;
     font-size: 10px;
     font-weight: 600;
-    color: rgba(255,170,90,0.55);
+    color: var(--drop-warm-border);
     letter-spacing: 0;
     pointer-events: none;
     z-index: 2;
@@ -1953,42 +1944,42 @@ body {
     top: 4px; left: 6px;
     width: 12px;
     height: 12px;
-    color: rgba(255,170,90,0.55);
+    color: var(--drop-warm-border);
     pointer-events: none;
     z-index: 2;
 }
 .dropbtn.scheduled .dropbtn-fadeicon,
 .dropbtn.scheduled .dropbtn-mode {
-    color: rgba(255,200,140,0.9);
+    color: var(--drop-mode-scheduled);
 }
 .dropbtn.armed {
-    border-color: rgba(255,170,90,0.55);
-    background: linear-gradient(180deg, #3a2330 0%, #1f1018 100%);
-    box-shadow: inset 0 1px 2px rgba(0,0,0,0.6), 0 0 12px rgba(255,160,80,0.36);
+    border-color: var(--drop-warm-border);
+    background: linear-gradient(180deg, var(--drop-armed-bg-start) 0%, var(--drop-armed-bg-end) 100%);
+    box-shadow: inset 0 1px 2px var(--shadow-modal), 0 0 12px var(--drop-glow-armed);
 }
 .dropbtn.armed .dropbtn-label {
-    color: #ffe0c0;
-    text-shadow: 0 0 6px rgba(255,160,80,0.6);
+    color: var(--drop-label-armed);
+    text-shadow: 0 0 6px var(--drop-armed-text-glow);
 }
 .dropbtn.scheduled {
-    border-color: rgba(255,170,90,0.85);
-    box-shadow: inset 0 1px 2px rgba(0,0,0,0.6), 0 0 18px rgba(255,160,80,0.55);
+    border-color: var(--drop-warm-border-hot);
+    box-shadow: inset 0 1px 2px var(--shadow-modal), 0 0 18px var(--drop-glow-scheduled);
 }
-.dropbtn.scheduled .dropbtn-mode { color: rgba(255,200,140,0.9); }
+.dropbtn.scheduled .dropbtn-mode { color: var(--drop-mode-scheduled); }
 .dropbtn.firing,
 .dropbtn.flashing {
-    background: linear-gradient(180deg, #ffaa55 0%, #ff8833 100%);
-    border-color: rgba(255,200,140,0.7);
-    box-shadow: 0 0 16px rgba(255,160,80,0.8), inset 0 1px 2px rgba(255,255,255,0.2);
+    background: linear-gradient(180deg, var(--drop-firing-bg-start) 0%, var(--drop-firing-bg-end) 100%);
+    border-color: var(--drop-warm-border-firing);
+    box-shadow: 0 0 16px var(--drop-glow-firing), inset 0 1px 2px var(--gloss-emphasis);
 }
 .dropbtn.firing .dropbtn-label,
 .dropbtn.flashing .dropbtn-label {
-    color: #1a0808;
+    color: var(--drop-label-firing);
     text-shadow: none;
 }
 .dropbtn.pressing {
     transform: translateY(1px);
-    box-shadow: inset 0 2px 4px rgba(0,0,0,0.8);
+    box-shadow: inset 0 2px 4px var(--shadow-inset-deep);
 }
 .dropbtn-ring {
     /* Always-rendered N-segment ring. Two visual states:
@@ -2018,8 +2009,8 @@ body {
     /* Neon glow under and around the strokes. Combined with the
      * brighter SEGMENT_COLOR_LIT_ACTIVE in JS, the ring reads as
      * "lit / armed". */
-    filter: drop-shadow(0 0 3px rgba(255,200,140,0.85))
-            drop-shadow(0 0 8px rgba(255,160,80,0.55));
+    filter: drop-shadow(0 0 3px var(--drop-glow-active-outer))
+            drop-shadow(0 0 8px var(--drop-glow-scheduled));
     transform-origin: center;
     animation: dropbtn-ring-pulse 600ms cubic-bezier(0.05, 0.8, 0.2, 1.0) forwards;
 }
@@ -2037,14 +2028,14 @@ body {
      * the button's centre with no compensating shift back). */
     0% {
         transform: translate(-50%, -50%) scale(1.10);
-        filter: drop-shadow(0 0 6px rgba(255,220,170,1.00))
-                drop-shadow(0 0 14px rgba(255,180,100,0.85))
-                drop-shadow(0 0 22px rgba(255,140,60,0.45));
+        filter: drop-shadow(0 0 6px var(--drop-ring-pulse-1))
+                drop-shadow(0 0 14px var(--drop-ring-pulse-2))
+                drop-shadow(0 0 22px var(--drop-ring-pulse-3));
     }
     100% {
         transform: translate(-50%, -50%) scale(1.00);
-        filter: drop-shadow(0 0 3px rgba(255,200,140,0.55))
-                drop-shadow(0 0 6px rgba(255,160,80,0.25));
+        filter: drop-shadow(0 0 3px var(--drop-ring-rest-1))
+                drop-shadow(0 0 6px var(--cell-edit-learning-on-bg));
     }
 }
 .dropbtn-pressfill {
@@ -2054,9 +2045,9 @@ body {
      * schedule ring on top.  */
     position: absolute;
     left: 0; right: 0; bottom: 0;
-    background: rgba(255,170,90,0.32);
-    border-top: 1px solid rgba(255,200,140,0.6);
-    box-shadow: 0 0 8px rgba(255,160,80,0.5);
+    background: var(--drop-pressfill-bg);
+    border-top: 1px solid var(--drop-pressfill-top-border);
+    box-shadow: 0 0 8px var(--drop-glow-pressfill);
     pointer-events: none;
     transition: none;
     z-index: 1;          /* above ring, below label */
@@ -2073,8 +2064,8 @@ body {
 .dropbtn-edit {
     display: flex; flex-direction: column; gap: 6px;
     padding: 8px 10px;
-    background: rgba(255,170,90,0.06);
-    border: 1px solid rgba(255,170,90,0.18);
+    background: var(--drop-edit-bg);
+    border: 1px solid var(--drop-warm-border-soft);
     border-radius: 6px;
 }
 .dropbtn-edit-row {
@@ -2086,13 +2077,13 @@ body {
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    color: rgba(255,200,140,0.85);
+    color: var(--drop-glow-active-outer);
     min-width: 56px;
 }
 .dropbtn-edit-name {
     flex: 1 1 auto; min-width: 0;
-    background: rgba(0,0,0,0.3);
-    border: 1px solid rgba(255,255,255,0.12);
+    background: var(--input-bg);
+    border: 1px solid var(--border);
     border-radius: 3px;
     color: var(--text);
     font-size: 13px;
@@ -2102,7 +2093,7 @@ body {
 .dropbtn-edit-name:focus {
     outline: none;
     border-color: var(--accent);
-    background: rgba(0,0,0,0.5);
+    background: var(--shadow-toast);
 }
 .dropbtn-edit-controls {
     /* All four configurables (Fire wheel, Trigger Note wheel, Sync
@@ -2151,16 +2142,16 @@ body {
     position: relative;
     aspect-ratio: 1;
     width: 100%;
-    background: linear-gradient(135deg, #15151c 0%, #0a0a10 100%);
-    border: 1px solid rgba(255,255,255,0.08);
+    background: linear-gradient(135deg, var(--xypad-bg-1) 0%, var(--xypad-bg-2) 100%);
+    border: 1px solid var(--gloss-edge);
     border-radius: 4px;
     cursor: crosshair;
     touch-action: none;
-    box-shadow: inset 0 1px 3px rgba(0,0,0,0.6);
+    box-shadow: inset 0 1px 3px var(--shadow-modal);
 }
 .xypad-axis-x, .xypad-axis-y {
     position: absolute;
-    background: rgba(255,255,255,0.05);
+    background: var(--gloss-faint);
     pointer-events: none;
 }
 .xypad-axis-x { left: 0; right: 0; top: 50%; height: 1px; }
@@ -2199,8 +2190,8 @@ body {
 .layout-grid-wrap { display: flex; flex-direction: column; align-items: stretch; gap: 6px; }
 .layout-edit-toggle {
     align-self: flex-end;
-    background: rgba(255,255,255,0.04);
-    border: 1px solid rgba(255,255,255,0.10);
+    background: var(--surface-hover);
+    border: 1px solid var(--gloss-mid);
     border-radius: 4px;
     color: var(--text-dim);
     font-size: 11px;
@@ -2209,13 +2200,13 @@ body {
     padding: 4px 10px;
     cursor: pointer;
 }
-.layout-edit-toggle:hover { color: var(--text); border-color: rgba(255,255,255,0.2); }
+.layout-edit-toggle:hover { color: var(--text); border-color: var(--gloss-emphasis); }
 .layout-edit-done {
     align-self: stretch;
     background: var(--accent);
-    border: 1px solid rgba(255,255,255,0.18);
+    border: 1px solid var(--border-strong);
     border-radius: 4px;
-    color: #1a0808;
+    color: var(--drop-label-firing);
     font-size: 13px;
     font-weight: 600;
     text-transform: uppercase;
@@ -2239,13 +2230,13 @@ body {
 .cell-edit {
     display: flex; flex-direction: column; gap: 6px;
     padding: 8px 10px;
-    background: rgba(80, 130, 200, 0.08);
-    border: 1px solid rgba(120, 170, 220, 0.20);
+    background: var(--cell-edit-bg);
+    border: 1px solid var(--cell-edit-border);
     border-radius: 6px;
 }
 .cell-edit.learning {
-    border-color: rgba(255,180,100,0.7);
-    background: rgba(255,160,80,0.10);
+    border-color: var(--cell-edit-learning-border);
+    background: var(--cell-edit-learning-bg);
 }
 .cell-edit-row {
     display: flex; flex-direction: row; align-items: center; gap: 8px;
@@ -2289,8 +2280,8 @@ body {
     letter-spacing: 0.5px;
 }
 .cell-edit-name, .cell-edit-num {
-    background: rgba(0,0,0,0.3);
-    border: 1px solid rgba(255,255,255,0.12);
+    background: var(--input-bg);
+    border: 1px solid var(--border);
     border-radius: 3px;
     color: var(--text);
     font-size: 13px;
@@ -2309,12 +2300,12 @@ body {
 .cell-edit-name:focus, .cell-edit-num:focus {
     outline: none;
     border-color: var(--accent);
-    background: rgba(0,0,0,0.5);
+    background: var(--shadow-toast);
 }
 .cell-edit-select {
     flex: 0 0 auto;
-    background: rgba(0,0,0,0.3);
-    border: 1px solid rgba(255,255,255,0.12);
+    background: var(--input-bg);
+    border: 1px solid var(--border);
     border-radius: 3px;
     color: var(--text);
     font-size: 13px;
@@ -2324,15 +2315,15 @@ body {
 .cell-edit-select:focus {
     outline: none;
     border-color: var(--accent);
-    background: rgba(0,0,0,0.5);
+    background: var(--shadow-toast);
 }
 .cell-edit-learn {
     flex: 0 0 auto;
     margin-left: auto;
     height: 30px;
     padding: 0 12px;
-    background: rgba(0,0,0,0.3);
-    border: 1px solid rgba(255,255,255,0.18);
+    background: var(--input-bg);
+    border: 1px solid var(--border-strong);
     border-radius: 3px;
     color: var(--text-dim);
     font-size: 12px;
@@ -2348,25 +2339,25 @@ body {
     width: 30px;
     height: 30px;
     padding: 0;
-    background: rgba(0,0,0,0.3);
-    border: 1px solid rgba(255,255,255,0.18);
+    background: var(--input-bg);
+    border: 1px solid var(--border-strong);
     border-radius: 3px;
     color: var(--text-dim);
     font-size: 16px;
     line-height: 1;
     cursor: pointer;
 }
-.cell-edit-swap:hover { color: var(--text); border-color: rgba(255,255,255,0.3); }
-.cell-edit-learn:hover { color: var(--text); border-color: rgba(255,255,255,0.3); }
+.cell-edit-swap:hover { color: var(--text); border-color: var(--border-hover); }
+.cell-edit-learn:hover { color: var(--text); border-color: var(--border-hover); }
 .cell-edit-learn.on {
-    background: rgba(255,160,80,0.25);
-    border-color: rgba(255,180,100,0.7);
-    color: #ffe0c0;
+    background: var(--cell-edit-learning-on-bg);
+    border-color: var(--cell-edit-learning-border);
+    color: var(--drop-label-armed);
     animation: cell-edit-learn-pulse 1.2s ease-in-out infinite;
 }
 @keyframes cell-edit-learn-pulse {
     0%, 100% { box-shadow: 0 0 0 rgba(255,160,80,0); }
-    50%      { box-shadow: 0 0 8px rgba(255,160,80,0.7); }
+    50%      { box-shadow: 0 0 8px var(--cell-edit-learning-glow); }
 }
 
 /* Radio group */
@@ -2374,13 +2365,13 @@ body {
 .radio-group .radio-label { font-size: 12px; color: var(--text-dim); }
 .radio-options { display: flex; flex-wrap: wrap; gap: 6px; }
 .radio-opt {
-    padding: 7px 14px; background: var(--bg); border: 1px solid var(--surface2); border-radius: 6px;
+    padding: 7px 14px; background: var(--bg); border: 1px solid var(--surface-2); border-radius: 6px;
     color: var(--text-dim); font-size: 13px; font-weight: 500; cursor: pointer;
     transition: background 0.15s, border-color 0.15s, color 0.15s; user-select: none;
     -webkit-user-select: none;
     -webkit-touch-callout: none;
 }
-.radio-opt.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.radio-opt.active { background: var(--accent); border-color: var(--accent); color: var(--text-on-accent); }
 
 /* Rubber push button */
 .btn-group-param { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; margin-bottom: 12px; }
@@ -2388,8 +2379,8 @@ body {
     /* Height matches .wheel-container (52px) so a row of mixed
      * buttons + wheels in a plugin config aligns visually. */
     width: 80px; height: 52px; border-radius: 4px; border: none; cursor: pointer;
-    background: linear-gradient(180deg, #2a2a2a 0%, #222 30%, #1a1a1a 60%, #151515 100%);
-    box-shadow: 0 3px 6px rgba(0,0,0,0.5), inset 0 1px 1px rgba(255,255,255,0.06);
+    background: linear-gradient(180deg, var(--rubber-bg-1) 0%, var(--rubber-bg-2) 30%, var(--rubber-bg-3) 60%, var(--rubber-bg-4) 100%);
+    box-shadow: 0 3px 6px var(--shadow-toast), inset 0 1px 1px var(--border-subtle);
     position: relative; display: flex; flex-direction: column; align-items: center;
     justify-content: center; gap: 6px; touch-action: none;
     transition: box-shadow 0.1s, transform 0.1s;
@@ -2402,16 +2393,16 @@ body {
 }
 .rubber-btn:active, .rubber-btn.pressed {
     transform: translateY(1px);
-    box-shadow: 0 1px 3px rgba(0,0,0,0.5), inset 0 1px 2px rgba(0,0,0,0.3);
+    box-shadow: 0 1px 3px var(--shadow-toast), inset 0 1px 2px var(--input-bg);
 }
 .rubber-btn .btn-led {
     width: 8px; height: 8px; border-radius: 50%;
-    background: #333; transition: background 0.15s, box-shadow 0.15s;
+    background: var(--rubber-led-off); transition: background 0.15s, box-shadow 0.15s;
 }
-.rubber-btn.active .btn-led.green { background: #4caf50; box-shadow: 0 0 8px #4caf50; }
-.rubber-btn.active .btn-led.yellow { background: #ff9800; box-shadow: 0 0 8px #ff9800; }
-.rubber-btn.active .btn-led.red { background: #f44336; box-shadow: 0 0 8px #f44336; }
-.rubber-btn.active .btn-led.blue { background: #2196f3; box-shadow: 0 0 8px #2196f3; }
+.rubber-btn.active .btn-led.green { background: var(--success); box-shadow: 0 0 8px var(--success); }
+.rubber-btn.active .btn-led.yellow { background: var(--warn); box-shadow: 0 0 8px var(--warn); }
+.rubber-btn.active .btn-led.red { background: var(--error); box-shadow: 0 0 8px var(--error); }
+.rubber-btn.active .btn-led.blue { background: var(--info-blue); box-shadow: 0 0 8px var(--info-blue); }
 .rubber-btn .btn-text { font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; }
 /* Mini rubber-btn: half-height to pair with mini wheels in dense
  * edit panels. */
@@ -2424,30 +2415,68 @@ body {
 .step-editor { padding-bottom: 4px; }
 .step-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 3px; }
 .step-cell {
-    border-radius: 5px; background: var(--bg); border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 5px;
+    /* Dark-mode default: a slightly-darker-than-page well so the
+     * cell reads as recessed against --bg. Light mode overrides
+     * to --surface. */
+    background: #161629;
+    border: 1px solid var(--border-subtle);
     display: flex; flex-direction: column; align-items: center; justify-content: center;
     padding: 6px 0; position: relative; min-height: 70px;
+    /* box-sizing so alg-on's dashed border (and the light-mode
+     * 2px variant) lay out at the same outer dimensions as the
+     * solid-border states. Without this, alg-on cells render
+     * wider than their siblings and the row mis-aligns. */
+    box-sizing: border-box;
 }
-.step-cell.on { background: rgba(233,69,96,0.15); border-color: var(--accent); }
-.step-cell.on.beat { border-color: #ff6b82; }
+/* "On" with no accent: neutral grey wash. The brand pink is
+ * reserved for accent / beat steps so it actually pops when it
+ * does appear. Same rule covers Arpeggiator's plain .on and
+ * Euclidean's .force-on. */
+.step-cell.on,
+.step-cell.force-on {
+    background: var(--gloss-mid);
+    border-color: var(--gloss-emphasis);
+}
+/* Accent / beat variants light up pink. */
+.step-cell.on.beat,
+.step-cell.on.accent,
+.step-cell.force-on.beat,
+.step-cell.force-on.accent {
+    background: rgba(233, 69, 96, 0.50);
+    border-color: var(--step-beat-accent);
+}
 .step-head { width: 100%; height: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; user-select: none; }
-.step-head::after { content: ''; width: 8px; height: 8px; border-radius: 50%; background: rgba(255,255,255,0.1); }
-.step-cell.on .step-head::after { background: var(--accent); box-shadow: 0 0 4px rgba(233,69,96,0.3); opacity: 0.6; }
-.step-cell.on.accent .step-head::after { background: #ff6b82; box-shadow: 0 0 8px rgba(255,107,130,0.8); opacity: 1; }
+.step-head::after { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--gloss-mid); }
+.step-cell.on .step-head::after,
+.step-cell.force-on .step-head::after {
+    background: var(--accent);
+    box-shadow: 0 0 4px var(--accent-glow-weak);
+    opacity: 0.85;
+}
+.step-cell.on.accent .step-head::after,
+.step-cell.force-on.accent .step-head::after {
+    background: var(--step-beat-accent);
+    box-shadow: 0 0 8px var(--step-beat-glow);
+    opacity: 1;
+}
 
 /* Override-mode (Euclidean): four head states cycled by tapping.
    `alg-on` is the default state when the algorithm wants this step
-   on — a subdued underlay tint that previews the generator without
+   on — a dashed pink outline previews the generator without
    forcing anything. `force-on` / `force-on.accent` / `force-off`
    are the three explicit override states the user steps through. */
-.step-cell.alg-on { background: rgba(233,69,96,0.05); }
-.step-cell.alg-on .step-head::after { background: rgba(233,69,96,0.4); opacity: 0.5; }
-.step-cell.force-on { background: rgba(233,69,96,0.15); border-color: var(--accent); }
-.step-cell.force-on.beat { border-color: #ff6b82; }
-.step-cell.force-on .step-head::after { background: var(--accent); box-shadow: 0 0 4px rgba(233,69,96,0.3); opacity: 0.85; }
-.step-cell.force-on.accent .step-head::after { background: #ff6b82; box-shadow: 0 0 8px rgba(255,107,130,0.8); opacity: 1; }
-.step-cell.force-off { background: rgba(255,255,255,0.02); border-color: rgba(255,255,255,0.06); opacity: 0.45; }
-.step-cell.force-off .step-head::after { background: rgba(255,255,255,0.2); box-shadow: none; }
+.step-cell.alg-on {
+    background: rgba(233, 69, 96, 0.06);
+    border: 1px dashed rgba(233, 69, 96, 0.55);
+}
+.step-cell.alg-on .step-head::after { background: var(--accent-glow-soft); opacity: 0.5; }
+.step-cell.force-off {
+    background: #0e0e1f;
+    border-color: var(--surface-hover);
+    opacity: 0.50;
+}
+.step-cell.force-off .step-head::after { background: var(--gloss-emphasis); box-shadow: none; }
 /* Per-slot note label, shown only by Arpeggiator's `programmed`
    pattern (sibling param `step_slot_notes` populates it). Empty
    slots render an empty div so all cells stay the same height. */
@@ -2462,19 +2491,19 @@ body {
     white-space: nowrap;
     overflow: hidden;
 }
-.step-cell.on .step-slot-note { color: #fff; }
+.step-cell.on .step-slot-note { color: var(--text-on-accent); }
 .mini-wheel {
     width: 38px; height: 40px; overflow: hidden; border-radius: 4px;
-    background: linear-gradient(180deg, #080810 0%, #181828 50%, #080810 100%);
-    box-shadow: inset 0 1px 4px rgba(0,0,0,0.6); position: relative;
-    touch-action: none; cursor: grab; border: 1px solid rgba(255,255,255,0.04); margin: 1px 0;
+    background: linear-gradient(180deg, var(--mini-wheel-bg-1) 0%, var(--mini-wheel-bg-2) 50%, var(--mini-wheel-bg-1) 100%);
+    box-shadow: inset 0 1px 4px var(--shadow-modal); position: relative;
+    touch-action: none; cursor: grab; border: 1px solid var(--surface-hover); margin: 1px 0;
 }
 
 /* Curve editor */
 .curve-group { margin-bottom: 16px; }
 .curve-canvas-wrap {
     position: relative; width: 100%; max-width: 280px; aspect-ratio: 1;
-    margin: 8px auto; background: var(--bg); border: 1px solid rgba(255,255,255,0.08);
+    margin: 8px auto; background: var(--bg); border: 1px solid var(--gloss-edge);
     border-radius: 8px; overflow: hidden; touch-action: none; cursor: crosshair;
 }
 .curve-canvas-wrap canvas { width: 100%; height: 100%; }
@@ -2502,7 +2531,7 @@ body {
 .rate-meter {
     position: absolute; bottom: 1px; left: 2px; right: 2px;
     height: 2px; border-radius: 1px;
-    background: rgba(255,255,255,0.06); overflow: hidden;
+    background: var(--border-subtle); overflow: hidden;
 }
 .rate-bar { height: 100%; border-radius: 1px; transition: width 0.8s ease-out; }
 
@@ -2510,16 +2539,16 @@ body {
 .dev-icon { width: 18px; height: 18px; vertical-align: middle; flex-shrink: 0; }
 .dev-icon svg { width: 18px; height: 18px; display: block; }
 .dev-icon.din { color: var(--text-dim); }
-.dev-icon.bt { color: #4488ff; }
-.dev-icon.plugin { color: #4dd9c0; display: inline-flex; }
-.dev-icon.plugin svg { color: #4dd9c0; }
+.dev-icon.bt { color: var(--info-bt); }
+.dev-icon.plugin { color: var(--info-plugin); display: inline-flex; }
+.dev-icon.plugin svg { color: var(--info-plugin); }
 
 /* Virtual device name color */
-.dev-name-plugin { color: #4dd9c0; }
-.matrix .plugin-row { color: #4dd9c0; }
-.matrix .plugin-col { color: #4dd9c0; }
-.matrix .bt-row { color: #4488ff; }
-.matrix .bt-col { color: #4488ff; }
+.dev-name-plugin { color: var(--info-plugin); }
+.matrix .plugin-row { color: var(--info-plugin); }
+.matrix .plugin-col { color: var(--info-plugin); }
+.matrix .bt-row { color: var(--info-bt); }
+.matrix .bt-col { color: var(--info-bt); }
 
 /* Device list offline dot */
 .dot.offline { background: #555 !important; }

@@ -140,10 +140,10 @@ connections regardless of the **MIDI Routing** choice.
 
 ## Display
 
-Three toggles and a layout selector, all marked **(this device
-only)** in the heading -- every Display preference is browser-
-local; nothing on this card travels with **Save / Export
-Config**.
+Three toggles, a layout selector and a theme picker, all marked
+**(this device only)** in the heading -- every Display preference
+is browser-local; nothing on this card travels with **Save /
+Export Config**.
 
 - **MIDI activity bar** -- shows or hides the persistent
   two-source activity bar above the bottom navigation.
@@ -160,6 +160,19 @@ Config**.
   more content fits on a 360-px-wide phone. The same hub can
   render in Default on a tablet and Small on a phone without one
   overriding the other.
+- **Theme** -- a dropdown listing every theme present in
+  `themes/manifest.json`. **Dark** is the default night-rig look;
+  **Light** flips every surface, control and play-pad to a
+  bright daytime look. The choice is browser-local, persists
+  across reloads, and seeds the PWA status-bar colour so the
+  mobile chrome matches the theme on the next page load.
+  First-time visitors with no saved preference inherit their
+  OS's `prefers-color-scheme` setting. The picker hides itself
+  if only one theme is installed.
+
+`Screenshots needed: 16-settings-display-light.png` -- the
+Display sub-page rendered in light theme, showing the new Theme
+dropdown.
 
 ## Stats
 

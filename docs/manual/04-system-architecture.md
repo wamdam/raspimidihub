@@ -78,6 +78,21 @@ talking to the Pi over two channels:
 The web UI runs on the Pi, but the *rendering* happens on your
 phone or tablet. The Pi does not need a display of its own.
 
+### Themes
+
+Every colour the UI paints is declared as a CSS custom property
+in `static/themes/_tokens.css`. Each installed theme is one CSS
+file in `static/themes/` that overrides a subset of those tokens
+inside a `[data-theme="<id>"]` block; missing tokens fall through
+to the dark default. The Settings → Display picker reads
+`static/themes/manifest.json` at runtime and writes the chosen
+id to `<html data-theme="…">` and to the browser's local
+storage. Canvas-painting surfaces (the Display scope, the curve
+editor, the drop-button ring segments) read the live token
+values via a tiny `lib/theme.js` helper so they reskin when the
+theme changes too. Adding a third theme is a matter of dropping
+one CSS file in the folder and adding a row to the manifest.
+
 ## Configuration Persistence
 
 Two filesystem locations hold the project state:

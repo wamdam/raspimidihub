@@ -4,6 +4,22 @@ User-visible changes. Short tagged one-liners, no code or commit
 hashes. Tags: Added, Improved, Fix, Changed, Removed.
 
 
+2026-05-16 — Version 4.2.0
+
+A light theme, and the design-token system that makes more themes
+cheap to add. Every colour the UI paints now resolves through a
+named CSS variable; theme files override the variables they care
+about and leave the rest to the dark default. Adding a third
+theme costs one CSS file and one manifest row.
+
+- Added: Light theme — Settings → Display → Theme picker. Bright daytime look across surfaces, controls and play pads; wheels become pale brushed-aluminium with dark values and a subtle rolling-cylinder shadow, knobs go white with dark indicators and a pink LED ring, faders ride pure-white tracks with pale chrome thumbs, drop buttons sit on pale neutral / warm-pale idle backgrounds, sequencer pads use a grey-pink hierarchy (grey wash for plain "on" steps, pink only for accented / beat steps) plus dashed pink outline for Euclidean's algorithm-suggested cells.
+- Added: Dark theme — explicit selection (the previously hard-coded look is now one of two installed themes). First-time visitors with no saved preference inherit their OS's `prefers-color-scheme`; the choice persists in browser localStorage and updates the PWA status-bar colour to match.
+- Added: `themes/_tokens.css` — single source of truth for every colour the UI paints. Three semantic groups (semantic palette, component tokens, decorative / physical-object tokens) with comments documenting each token's role.
+- Added: `themes/manifest.json` + `lib/theme.js` runtime — manifest lists every installed theme; `token()` helper lets canvas-painting surfaces (Display scope, curve editor, drop-button ring segments) read the live token values so they reskin too.
+- Improved: Style.css fully tokenised — the ~156 hardcoded hex / rgba literals across the stylesheet have been replaced with `var(--…)` calls. Visible change in dark mode: none. Future-theme cost: one file.
+- Improved: JS-side colour literals in knob.js, display.js, curveeditor.js, dropbuttonrow.js, stepeditor.js and matrix.js routed through the same token vocabulary via inline `style="…: var(--…)"` for SVG and the `token()` helper for canvas paint.
+
+
 2026-05-16 — Version 4.1.0
 
 User-bindable MIDI CC for every plugin control and every controller cell. Long-press (touch) or right-click (mouse) opens a popup with the current binding, a MIDI Learn button, manual Channel + CC wheels, Reset to factory, and Clear. Settings gains a hub of sub-pages with a new Plugin Control Mappings table listing every CC binding across every instance.

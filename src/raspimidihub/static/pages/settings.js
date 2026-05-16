@@ -14,6 +14,7 @@ import { UPDATE_LABELS } from '../state/constants.js';
 import { getSoundsEnabled, setSoundsEnabled,
          getLayoutDensity, setLayoutDensity, DENSITY_OPTIONS,
          getScrollAssist, setScrollAssist } from '../components/common.js';
+import { getTheme, setTheme, listThemes } from '../lib/theme.js';
 
 function NetworkCard({ iface, showToast }) {
     const [method, setMethod] = useState(iface.method || 'auto');
@@ -860,6 +861,11 @@ function SettingsDisplay({ showMidiBar, toggleMidiBar }) {
     const [soundsOn, setSoundsOn] = useState(getSoundsEnabled());
     const [density, setDensity] = useState(getLayoutDensity());
     const [scrollAssistOn, setScrollAssistOn] = useState(getScrollAssist());
+    const [theme, setThemeState] = useState(getTheme());
+    const [themes, setThemes] = useState(null);
+    useEffect(() => {
+        listThemes().then(m => setThemes(m.themes || []));
+    }, []);
     return html`
         <div class="card">
             <h3>Display <span style="color:var(--text-dim);font-size:11px;font-weight:400;margin-left:6px">(this device only)</span></h3>
@@ -886,6 +892,16 @@ function SettingsDisplay({ showMidiBar, toggleMidiBar }) {
                     ${DENSITY_OPTIONS.map(o => html`<option value=${o.value}>${o.label}</option>`)}
                 </select>
             </div>
+            ${themes && themes.length > 1 ? html`
+                <div class="form-group" style="margin-top:10px;margin-bottom:0">
+                    <label>Theme</label>
+                    <select data-testid="theme-select"
+                        value=${theme}
+                        onChange=${e => { setTheme(e.target.value); setThemeState(e.target.value); }}>
+                        ${themes.map(t => html`<option value=${t.id}>${t.name}</option>`)}
+                    </select>
+                </div>
+            ` : null}
         </div>
     `;
 }

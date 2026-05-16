@@ -4,6 +4,7 @@
 
 import { html, tickFeedback } from './common.js';
 import { useState, useEffect, useRef } from '../lib/hooks.module.js';
+import { token } from '../lib/theme.js';
 
 // =======================================================================
 // CURVE EDITOR — drawable 128-point curve with presets
@@ -32,7 +33,7 @@ export function PluginCurveEditor({ name, label, value, onChange }) {
         ctx.clearRect(0, 0, w, h);
 
         // Grid
-        ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+        ctx.strokeStyle = token('curve-grid-minor');
         ctx.lineWidth = 1;
         for (let i = 1; i < 4; i++) {
             const p = (i / 4) * w;
@@ -41,12 +42,12 @@ export function PluginCurveEditor({ name, label, value, onChange }) {
         }
 
         // Diagonal reference
-        ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+        ctx.strokeStyle = token('curve-grid-major');
         ctx.beginPath(); ctx.moveTo(0, h); ctx.lineTo(w, 0); ctx.stroke();
 
         // Curve
         const curve = curveRef.current;
-        ctx.strokeStyle = '#e94560';
+        ctx.strokeStyle = token('curve-stroke');
         ctx.lineWidth = 2;
         ctx.beginPath();
         for (let i = 0; i < 128; i++) {

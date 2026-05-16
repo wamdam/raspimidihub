@@ -201,8 +201,8 @@ export function PluginKnob({
         const a = ANGLE_MIN + t * (ANGLE_MAX - ANGLE_MIN);
         const [lx, ly] = angleToXY(a, RING_RADIUS);
         const lit = a <= litThreshold + 0.5;
-        leds.push(html`<circle cx=${lx} cy=${ly} r="2" fill=${lit ? 'var(--accent)' : 'rgba(255,255,255,0.12)'}
-            style=${lit ? 'filter: drop-shadow(0 0 3px var(--accent))' : ''} />`);
+        leds.push(html`<circle cx=${lx} cy=${ly} r="2" fill=${lit ? 'var(--accent)' : 'var(--border)'}
+            style=${lit ? 'filter: drop-shadow(0 0 3px var(--knob-led-glow))' : ''} />`);
     }
 
     return html`<div class="knob-group">
@@ -211,17 +211,17 @@ export function PluginKnob({
             <svg viewBox="-36 -36 72 72" xmlns="http://www.w3.org/2000/svg">
                 <defs>
                     <radialGradient id="knob-body" cx="0.35" cy="0.30" r="0.85">
-                        <stop offset="0%" stop-color="#5a5a6a" />
-                        <stop offset="40%" stop-color="#3a3a48" />
-                        <stop offset="100%" stop-color="#1a1a26" />
+                        <stop offset="0%"   style="stop-color: var(--knob-body-1)" />
+                        <stop offset="40%"  style="stop-color: var(--knob-body-2)" />
+                        <stop offset="100%" style="stop-color: var(--knob-body-3)" />
                     </radialGradient>
                 </defs>
                 ${leds}
                 <circle cx="0" cy="0" r=${KNOB_RADIUS} fill="url(#knob-body)"
-                    stroke="rgba(0,0,0,0.6)" stroke-width="1" />
+                    stroke="var(--knob-rim-shadow)" stroke-width="1" />
                 <line x1=${indX} y1=${indY} x2=${indEndX} y2=${indEndY}
-                    stroke="#fff" stroke-width="2.2" stroke-linecap="round"
-                    style="filter: drop-shadow(0 0 2px rgba(255,255,255,0.4))" />
+                    stroke="var(--knob-indicator)" stroke-width="2.2" stroke-linecap="round"
+                    style="filter: drop-shadow(0 0 2px rgba(255, 255, 255, 0.4))" />
             </svg>
             <div class="knob-value">${formatValue(val, displayFactor, unit, labels, min)}</div>
         </div>

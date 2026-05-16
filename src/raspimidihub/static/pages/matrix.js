@@ -84,7 +84,7 @@ export function RateMeter({ rate }) {
     if (!rate) return null;
     const max = 1000;
     const pct = Math.min(100, (rate / max) * 100);
-    const color = pct < 50 ? 'var(--success)' : pct < 80 ? '#f0ad4e' : 'var(--accent)';
+    const color = pct < 50 ? 'var(--success)' : pct < 80 ? 'var(--warn-soft)' : 'var(--accent)';
     return html`<div class="rate-meter" title="${rate} msg/s">
         <div class="rate-bar" style="width:${pct}%;background:${color}"></div>
     </div>`;

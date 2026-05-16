@@ -8,7 +8,30 @@
     <meta name="theme-color" content="#1a1a2e">
     <title>RaspiMIDIHub</title>
     <link rel="manifest" href="/manifest.json">
+    <link rel="stylesheet" href="/themes/_tokens.css?v=__VERSION__">
+    <link rel="stylesheet" href="/themes/light.css?v=__VERSION__">
     <link rel="stylesheet" href="/style.css?v=__VERSION__">
+    <script>
+        /* Apply the saved theme before any paint to avoid a
+         * dark-to-light flash. Reads localStorage first; if no
+         * preference is stored, follows the OS prefers-color-scheme.
+         * Also seeds the PWA status-bar colour so the mobile chrome
+         * doesn't flash the wrong shade on first load. The map below
+         * duplicates manifest.json's metaColor values — kept tiny so
+         * the bootstrap doesn't have to fetch JSON before paint. The
+         * full theme runtime (Settings dropdown, dynamic switching)
+         * lives in /lib/theme.js. */
+        (function () {
+            var saved = null;
+            try { saved = localStorage.getItem('raspimidihub.theme'); } catch (e) {}
+            var t = saved
+                || (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+            document.documentElement.setAttribute('data-theme', t);
+            var bootMetaColors = { dark: '#1a1a2e', light: '#f4f5f7' };
+            var meta = document.querySelector('meta[name="theme-color"]');
+            if (meta && bootMetaColors[t]) meta.setAttribute('content', bootMetaColors[t]);
+        })();
+    </script>
 </head>
 <body>
     <div id="app"></div>

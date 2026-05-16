@@ -1,0 +1,7 @@
+{
+    "themes": [
+        { "id": "dark",  "name": "Dark",  "metaColor": "#1a1a2e" },
+        { "id": "light", "name": "Light", "metaColor": "#f4f5f7" }
+    ],
+    "default": "dark"
+}

@@ -6,6 +6,13 @@ matrix, the plugin configuration panels, the controller surfaces,
 the Tracker, and the **Settings** page. Knowing how each control
 behaves once -- here -- pays off in every chapter that follows.
 
+Every control renders against the active theme (see chapter 16,
+**Settings → Display → Theme**). In dark mode they read as
+backlit studio gear -- charcoal wheels with bright values, chrome
+faders in dark wells. In light mode the same gestures sit on pale
+brushed-aluminium surfaces with dark values. The behaviour is
+identical; only the skin changes.
+
 ## Wheel
 
 A vertical scrollable drum, used for any value with discrete steps

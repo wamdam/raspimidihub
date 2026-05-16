@@ -1,0 +1,383 @@
+/* RaspiMIDIHub — theme token contract.
+ *
+ * Single source of truth for every colour the UI paints. Each theme
+ * file (dark.css, light.css, …) provides overrides for the tokens it
+ * cares about; missing tokens just fall through to the dark defaults
+ * declared here — CSS cascade handles theme completeness on its own,
+ * no runtime check needed.
+ *
+ * Group 1 — Semantic palette
+ *   Themeable. Every theme should override these or it won't really
+ *   feel like a different theme.
+ *
+ * Group 2 — Component tokens
+ *   Themeable, but more specialised. A "light" theme will want to
+ *   touch most of these; a "high-contrast" theme might leave the
+ *   warm-orange drop family alone and only repaint surfaces.
+ *
+ * Group 3 — Decorative / physical-object tokens
+ *   Represent real-world artefacts — chrome on a mixer fader, the
+ *   black-and-white keys of a piano, the cold red of a panic button.
+ *   These usually carry across themes unchanged. Listed here so theme
+ *   authors can override if they want, but most themes won't need to.
+ *
+ * The existing :root block at the top of style.css still declares the
+ * original 11 tokens (--bg, --surface, --surface2, …) and wins the
+ * cascade for those because it's loaded after this file. That's fine
+ * for step 1: we're only *introducing* the wider token set so the
+ * bulk replacement in step 2 has a target. style.css's :root block
+ * will be merged into this file when step 2 lands.
+ */
+
+:root {
+    /* === GROUP 1 — SEMANTIC PALETTE ============================== */
+
+    /* Backgrounds & surfaces. --bg is the page; --surface raises
+     * cards, header, bottom-nav; --surface-2 is the deepest
+     * navy (matrix borders, sticky-header underline); --surface-hover
+     * is the subtle tint on interactive rows. */
+    --bg:              #1a1a2e;
+    --surface:         #16213e;
+    --surface-2:       #0f3460;
+    /* --surface-3 is a neutral grey one rung above the navy ladder —
+     * used by interactive chips (cc-bind-btn border, hover wells)
+     * that want to read as "lifted" without picking up the brand
+     * navy. Lives outside the navy axis intentionally. */
+    --surface-3:       #333;
+    --surface-hover:   rgba(255, 255, 255, 0.04);
+    /* Filter-panel cards have a special brushed-metal panel feel —
+     * a soft top-edge highlight that fades to a darker base, like
+     * the housing on a piece of studio gear. The base gradient
+     * goes start → end vertically; light themes will typically
+     * replace these with a flat surface (the gradient effect
+     * doesn't translate). */
+    --filter-card-bg-start: #20253a;
+    --filter-card-bg-end:   #181a2a;
+
+    /* Text. --text is primary copy; --text-dim is metadata / hints;
+     * --text-muted is the third tier used by .pattern-bank empty
+     * slots and a few labels. --text-on-accent paints text that
+     * sits on top of an accent fill (chips, primary buttons). */
+    --text:            #eee;
+    --text-dim:        #999;
+    --text-muted:      #888;
+    --text-on-accent:  #fff;
+    --text-on-warn:    #000;
+
+    /* Borders. Four steps from barely-there to clearly-visible.
+     * --border-subtle: hairline on dark surfaces (rgba 0.06).
+     * --border:        normal panel/input edge (rgba 0.10–0.12).
+     * --border-strong: pressed/selected affordance (rgba 0.18).
+     * --border-hover:  hover-raised border (rgba 0.20–0.30). */
+    --border-subtle:   rgba(255, 255, 255, 0.06);
+    --border:          rgba(255, 255, 255, 0.12);
+    --border-strong:   rgba(255, 255, 255, 0.18);
+    --border-hover:    rgba(255, 255, 255, 0.30);
+
+    /* Inputs. Dark wells inside cards (text fields, selects). The
+     * focus variant deepens to signal the active state without
+     * needing a colourful outline. */
+    --input-bg:        rgba(0, 0, 0, 0.30);
+    --input-bg-focus:  rgba(0, 0, 0, 0.50);
+    --input-border:    rgba(255, 255, 255, 0.12);
+
+    /* Brand / accent. --accent is the primary action colour
+     * (matrix-cell on, active nav, primary button). --accent-2 is
+     * the deep purple used for filter-tinted cells, held buttons,
+     * pulse animations. --accent-warm is the orange used by the
+     * pattern-bank playing slot — separate token so themes can
+     * keep "playing" warm even if the brand colour changes. */
+    --accent:          #e94560;
+    /* --accent-hover is one shade lighter than --accent for the
+     * scroll-FAB hover state. Themes should pick a hover that
+     * reads as "brighter" than --accent, not "darker". */
+    --accent-hover:    #ff5b75;
+    --accent-2:        #533483;
+    --accent-warm:     #ff8833;
+
+    /* Glow / shadow tints from the accent family — needed in many
+     * box-shadow rules so animations stay coherent with the brand
+     * recolour when a theme changes --accent. */
+    --accent-glow:           rgba(233, 69, 96, 0.45);
+    --accent-glow-weak:      rgba(233, 69, 96, 0.30);
+    --accent-glow-strong:    rgba(233, 69, 96, 0.60);
+    --accent-glow-soft:      rgba(233, 69, 96, 0.40);
+    --accent-tint:           rgba(233, 69, 96, 0.15);
+    --accent-tint-soft:      rgba(233, 69, 96, 0.05);
+    --accent-tint-hover:     rgba(233, 69, 96, 0.12);
+
+    /* State semantics. --danger is the "something is wrong"
+     * indicator dot (stale-build); --error is the larger destructive
+     * button colour. Two tokens because their roles differ in
+     * loudness — a dot vs a full-bleed surface. */
+    --success:         #4caf50;
+    --warn:            #ff9800;
+    /* --warn-soft is the friendlier amber used by the matrix
+     * rate-meter for the "approaching limit" tier — distinct from
+     * --warn (full orange) which signals an outright problem. */
+    --warn-soft:       #f0ad4e;
+    --error:           #f44336;
+    --danger:          #d33;
+
+    /* Info accents. Used by the device list and matrix to tint
+     * Bluetooth and plugin (virtual) ports distinctly from physical
+     * ones — same purpose as a category colour. */
+    --info-bt:         #4488ff;
+    --info-plugin:     #4dd9c0;
+    --info-blue:       #2196f3;
+
+    /* Overlays. Modal / filter / mapping panel scrim depth. Tuned
+     * so a card sitting underneath stays readable but firmly
+     * receded. */
+    --overlay-bg:      rgba(0, 0, 0, 0.55);
+    --overlay-bg-soft: rgba(0, 0, 0, 0.50);
+
+    /* Shadows. Catalogued so themes can soften shadows in a light
+     * mode without hunting through every box-shadow rule. */
+    --shadow-modal:        rgba(0, 0, 0, 0.60);
+    --shadow-toast:        rgba(0, 0, 0, 0.50);
+    --shadow-card:         rgba(0, 0, 0, 0.50);
+    --shadow-inset-deep:   rgba(0, 0, 0, 0.80);
+    --shadow-inset-medium: rgba(0, 0, 0, 0.60);
+
+    /* Highlights on metallic / glass surfaces — the soft top edge
+     * that brushed-metal gradients use. Separate from --border-*
+     * because they paint with the inset-shadow trick, not as actual
+     * borders. The --gloss-* ladder mirrors the --border-* ladder
+     * but is reserved for decorative highlights inside gradients,
+     * box-shadow stacks, fader grip lines, etc. */
+    --gloss-highlight-soft:  rgba(255, 255, 255, 0.03);
+    --gloss-faint:           rgba(255, 255, 255, 0.05);
+    --gloss-highlight:       rgba(255, 255, 255, 0.06);
+    --gloss-edge:            rgba(255, 255, 255, 0.08);
+    --gloss-mid:             rgba(255, 255, 255, 0.10);
+    --gloss-line:            rgba(255, 255, 255, 0.15);
+    --gloss-emphasis:        rgba(255, 255, 255, 0.20);
+    --gloss-bright:          rgba(255, 255, 255, 0.25);
+
+    /* Shadow steps for soft tinted inner shadows / grip lines —
+     * counterparts to the --gloss-* ladder. */
+    --shadow-faint:          rgba(0, 0, 0, 0.15);
+    --shadow-weak:           rgba(0, 0, 0, 0.20);
+
+
+    /* === GROUP 2 — COMPONENT TOKENS ============================== */
+
+    /* Tracker (TrackerGrid). Selection / playing tints all derive
+     * from the cool blue used as a focus colour on the surface. The
+     * focused sub-cell uses --accent (the brand pink) so the user
+     * sees a strong colour change when they enter edit mode. */
+    --tracker-cursor-bg:        rgba(80, 200, 255, 0.06);
+    --tracker-row-playing-bg:   rgba(80, 200, 255, 0.10);
+    --tracker-cell-sel-bg:      rgba(80, 200, 255, 0.22);
+    --tracker-focus-text:       #000;
+    --tracker-transport-active-bg:     rgba(76, 175, 80, 0.35);
+    --tracker-transport-active-border: rgba(76, 175, 80, 0.70);
+    --tracker-transport-active-text:   #fff;
+
+    /* Drop button — warm orange family. Idle = muted grey panel;
+     * armed = warm amber tint; scheduled = brighter glow; firing =
+     * full orange burst. Every shade gets its own token because the
+     * ramp from idle→firing is finely tuned and a theme that
+     * recolours just one tier reads broken. */
+    --drop-base-bg-start:        #2a2a30;
+    --drop-base-bg-end:           #16161a;
+    --drop-armed-bg-start:        #3a2330;
+    --drop-armed-bg-end:          #1f1018;
+    --drop-firing-bg-start:       #ffaa55;
+    --drop-firing-bg-end:         #ff8833;
+    --drop-warm-border-soft:      rgba(255, 170, 90, 0.18);
+    --drop-warm-border:           rgba(255, 170, 90, 0.55);
+    --drop-warm-border-hot:       rgba(255, 170, 90, 0.85);
+    --drop-warm-border-firing:    rgba(255, 200, 140, 0.70);
+    --drop-glow-armed:            rgba(255, 160, 80, 0.36);
+    --drop-glow-scheduled:        rgba(255, 160, 80, 0.55);
+    --drop-glow-firing:           rgba(255, 160, 80, 0.80);
+    --drop-glow-pressfill:        rgba(255, 160, 80, 0.50);
+    --drop-pressfill-bg:          rgba(255, 170, 90, 0.32);
+    --drop-pressfill-top-border:  rgba(255, 200, 140, 0.60);
+    --drop-label-idle:            rgba(220, 220, 220, 0.45);
+    --drop-armed-text-glow:       rgba(255, 160,  80, 0.60);
+    --drop-glow-active-outer:     rgba(255, 200, 140, 0.85);
+    --drop-label-armed:           #ffe0c0;
+    --drop-label-firing:          #1a0808;
+    --drop-mode-color:            rgba(255, 170, 90, 0.55);
+    --drop-mode-scheduled:        rgba(255, 200, 140, 0.90);
+    --drop-edit-bg:               rgba(255, 170, 90, 0.06);
+    --drop-edit-border:           rgba(255, 170, 90, 0.18);
+    --drop-edit-tag:              rgba(255, 200, 140, 0.85);
+
+    /* Drop-button ring (DropButtonRow SVG segments + animation
+     * glow). The four shades drive both the JS-side
+     * SEGMENT_COLOR_* constants and the CSS drop-shadow keyframes;
+     * keeping them in one place means an alternate theme can
+     * recolour the whole drop family by overriding these tokens. */
+    --drop-ring-dim:              rgba(255, 170, 90, 0.10);
+    --drop-ring-lit:              rgba(255, 170, 90, 0.55);
+    --drop-ring-dim-active:       rgba(255, 170, 90, 0.22);
+    --drop-ring-lit-active:       rgba(255, 220, 170, 1.00);
+    --drop-ring-pulse-1:          rgba(255, 220, 170, 1.00);
+    --drop-ring-pulse-2:          rgba(255, 180, 100, 0.85);
+    --drop-ring-pulse-3:          rgba(255, 140,  60, 0.45);
+    --drop-ring-rest-1:           rgba(255, 200, 140, 0.55);
+    --drop-ring-rest-2:           rgba(255, 160,  80, 0.25);
+
+    /* Cell-edit (LayoutGrid edit-mode card). Cool blue for the
+     * idle edit state, warm orange when the cell is in MIDI Learn.
+     * Mirrors the cool / warm split the rest of the app uses for
+     * "configure" vs "armed". */
+    --cell-edit-bg:              rgba( 80, 130, 200, 0.08);
+    --cell-edit-border:          rgba(120, 170, 220, 0.20);
+    --cell-edit-learning-bg:     rgba(255, 160,  80, 0.10);
+    --cell-edit-learning-border: rgba(255, 180, 100, 0.70);
+    --cell-edit-learning-on-bg:      rgba(255, 160,  80, 0.25);
+    --cell-edit-learning-on-border:  rgba(255, 180, 100, 0.70);
+    --cell-edit-learning-on-text:    #ffe0c0;
+    --cell-edit-learning-glow:       rgba(255, 160,  80, 0.70);
+
+    /* Step editor (Arpeggiator / Euclidean). Beat accent is a
+     * brighter pink than --accent so quarter-note steps stand out
+     * inside the otherwise accent-coloured grid. */
+    --step-beat-accent:        #ff6b82;
+    --step-beat-glow:          rgba(255, 107, 130, 0.80);
+    --step-alg-tint:           rgba(233,  69,  96, 0.05);
+    --step-alg-head:           rgba(233,  69,  96, 0.40);
+    --step-force-on-tint:      rgba(233,  69,  96, 0.15);
+    --step-force-on-shadow:    rgba(233,  69,  96, 0.30);
+    --step-force-off-tint:     rgba(255, 255, 255, 0.02);
+    --step-head-dot-idle:      rgba(255, 255, 255, 0.10);
+    --step-head-dot-off:       rgba(255, 255, 255, 0.20);
+
+
+    /* === GROUP 3 — DECORATIVE / PHYSICAL-OBJECT TOKENS =========== */
+
+    /* These represent real-world things the UI mimics (the brushed
+     * metal of a mixer fader thumb, the black-and-white of a piano,
+     * the cold red of a panic button). Most themes leave them as
+     * they are — repainting them would make the UI feel "off" in a
+     * way users can't articulate. Listed here so they're not
+     * scattered across the stylesheet, not because they're meant to
+     * be theme-axes. */
+
+    /* Wheel (PluginWheel). Charcoal-to-purple-black gradient face,
+     * with a slight blue cast at the centre. Stays cold regardless
+     * of theme — these are physical-knob references. */
+    --wheel-face-1:            #080810;
+    --wheel-face-2:            #141420;
+    --wheel-face-3:            #1c1c30;
+    --wheel-face-4:            #222238;
+    --wheel-tick-text:         rgba(255, 255, 255, 0.25);
+    --wheel-tick-text-near:    rgba(255, 255, 255, 0.45);
+    --wheel-tick-text-active:  #fff;
+    --wheel-tick-line:         rgba(255, 255, 255, 0.04);
+    --wheel-edge-shadow:       rgba(0,   0,   0, 0.85);
+    --wheel-active-glow:       rgba(233,  69,  96, 0.60);
+    /* --wheel-rim is the thin outline around the wheel container.
+     * On dark it's a hairline-bright edge; on light it needs to be
+     * a visible dark line so the widget reads as a distinct
+     * cylinder against a pale card. */
+    --wheel-rim:               rgba(255, 255, 255, 0.04);
+
+    /* Knob — SVG body gradient + value text. The radial gradient
+     * stops are used inside knob.js, not just style.css, so they
+     * deserve tokens too. */
+    --knob-body-1:             #5a5a6a;
+    --knob-body-2:             #3a3a48;
+    --knob-body-3:             #1a1a26;
+    --knob-indicator:          #fff;
+    --knob-rim-shadow:         rgba(0, 0, 0, 0.60);
+    /* Glow colour for lit LEDs in the knob's ring. Tracks --accent
+     * in dark mode so the lit segments halo; light mode overrides
+     * to transparent (a glow on a white card reads as a smudge). */
+    --knob-led-glow:           var(--accent);
+
+    /* Fader — mixer-strip styling. Charcoal track, chrome thumb.
+     * Lots of stops because the thumb mimics machined aluminum with
+     * top/bottom highlights and grip lines. */
+    --fader-track-1:           #08080e;
+    --fader-track-2:           #10101a;
+    --fader-track-3:           #181825;
+    --fader-thumb-edge:        #444;
+    --fader-thumb-band:        #555;
+    --fader-thumb-light:       #aaa;
+    --fader-thumb-bright:      #bbb;
+    --fader-thumb-shade:       #999;
+    --fader-thumb-side:        #333;
+    --fader-thumb-value-text:  #333;
+
+    /* Rubber button — silicone-pad styling. Top-down gradient from
+     * a brighter cap to a pressed-in base, with an LED dot that
+     * picks up --success / --warn / --error when lit. */
+    --rubber-bg-1:             #2a2a2a;
+    --rubber-bg-2:             #222;
+    --rubber-bg-3:             #1a1a1a;
+    --rubber-bg-4:             #151515;
+    --rubber-led-off:          #333;
+
+    /* XY pad — dark glass surface. */
+    --xypad-bg-1:              #15151c;
+    --xypad-bg-2:              #0a0a10;
+    --xypad-axis-line:         rgba(255, 255, 255, 0.05);
+
+    /* Mini-wheel (StepEditor inline). Same family as the main
+     * wheel but condensed. */
+    --mini-wheel-bg-1:         #080810;
+    --mini-wheel-bg-2:         #181828;
+
+    /* Display (scope / LCD screen). Cold green-tinted glass.
+     * Used by display.js for the canvas paint and the SVG bezel
+     * gradient — must match across CSS and JS, hence tokens. */
+    --display-bezel-1:         #2a3a36;
+    --display-bezel-2:         #1c2826;
+    --display-bezel-3:         #0e1614;
+    --display-trace:           #4dd9c0;
+    --display-grid:            rgba(255, 255, 255, 0.08);
+    --display-bezel-stroke:    rgba(0, 0, 0, 0.50);
+    /* Glow colour for the DisplayMeter's lit ring LEDs. Tracks
+     * --success in dark mode; light mode overrides to transparent. */
+    --meter-led-glow:          var(--success);
+
+    /* Curve editor canvas. */
+    --curve-grid-major:        rgba(255, 255, 255, 0.10);
+    --curve-grid-minor:        rgba(255, 255, 255, 0.06);
+    --curve-stroke:            #e94560;
+
+    /* Piano keyboard — real-world ivory + ebony. Stay constant
+     * across themes by convention. */
+    --piano-white:             #f0f0f0;
+    --piano-white-border:      #999;
+    --piano-black:             #222;
+    --piano-black-border:      #000;
+    --piano-label:             #888;
+
+    /* Panic button — the deliberate "this is an emergency stop"
+     * red, distinct from --error. Soft-armed / hard-armed
+     * variations are visually escalating, like a real panic system. */
+    --panic-bg:                #7a1b1b;
+    --panic-border:            #a02424;
+    --panic-active:            #5a0e0e;
+    --panic-soft-border:       #ff5050;
+    --panic-hard-bg:           #d02020;
+    --panic-hard-border:       #ff8080;
+    --panic-glow:              rgba(255, 80, 80, 0.80);
+    --panic-glow-medium:       rgba(255, 80, 80, 0.60);
+
+    /* Stale-build dot — sits next to the app title when the
+     * running build has moved past this tab's load. Its colour ties
+     * to --danger so themes can recolour the warning channel. */
+    --stale-dot-glow:          rgba(211, 51, 51, 0.50);
+
+    /* MIDI activity bar — the dim metadata strip beside the
+     * accent-coloured event text. */
+    --midi-bar-secondary:      #b0b0b0;
+
+
+    /* === SHAPE TOKENS (not colour) =============================== */
+
+    /* Carried over from style.css's original :root block. Not theme
+     * axes per se, but they ride along with the rest of the design
+     * tokens so the whole vocabulary sits in one file. Themes
+     * almost never override these — but they can. */
+    --radius:          8px;
+    --gap:             12px;
+}

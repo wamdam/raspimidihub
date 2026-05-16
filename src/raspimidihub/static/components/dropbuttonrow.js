@@ -41,6 +41,7 @@ import { html, tickFeedback, thudFeedback, noteName } from './common.js';
 import { PluginWheel } from './wheel.js';
 import { PluginNoteSelect } from './noteselect.js';
 import { PluginButton } from './button.js';
+import { token } from '../lib/theme.js';
 
 // Visual tick rate while a clock is running. requestAnimationFrame
 // (~16 ms / 60 Hz on most browsers) keeps the dead-reckoned tick
@@ -489,8 +490,8 @@ function SmoothRing({ progress, beatNumber, buttonId }) {
     const cx = 20, cy = 20, r = 18;
     const stroke = 2.5;
     const sweep = 360 * clamp01(progress);
-    const dimColor = SEGMENT_COLOR_DIM_ACTIVE;
-    const litColor = SEGMENT_COLOR_LIT_ACTIVE;
+    const dimColor = segColor('drop-ring-dim-active');
+    const litColor = segColor('drop-ring-lit-active');
 
     function arcPath(startDeg, sweepDeg) {
         const sa = (startDeg - 90) * Math.PI / 180;
@@ -532,12 +533,14 @@ const MODE_SEGMENTS = {
 // Idle (no schedule active) — the ring's just-living-here ambient
 // colour. Distinctly more muted than the scheduled state so the
 // difference reads as "armed and counting down" vs "just waiting".
-const SEGMENT_COLOR_LIT = 'rgba(255,170,90,0.55)';
-const SEGMENT_COLOR_DIM = 'rgba(255,170,90,0.10)';
 // Active (scheduled) — neon-bright peach. CSS adds a drop-shadow
 // glow on `.dropbtn-ring.active` and a beat-aligned pulse animation.
-const SEGMENT_COLOR_LIT_ACTIVE = 'rgba(255,220,170,1.00)';
-const SEGMENT_COLOR_DIM_ACTIVE = 'rgba(255,170,90,0.22)';
+//
+// Read from CSS tokens on demand instead of hard-coded constants
+// so the segments pick up the active theme. token() returns the
+// LIVE computed value, so a theme switch at runtime reaches the
+// next paint without a reload.
+const segColor = (name) => token(name);
 
 // Discrete segmented ring. N equal arc segments around the button;
 // each is fully lit or fully dim. When scheduled the ring uses the
@@ -571,8 +574,8 @@ function SegmentedRing({ mode, progress, isScheduled, beatNumber, buttonId }) {
         return `M ${sx} ${sy} A ${r} ${r} 0 ${largeArc} 1 ${ex} ${ey}`;
     }
 
-    const litColor = isScheduled ? SEGMENT_COLOR_LIT_ACTIVE : SEGMENT_COLOR_LIT;
-    const dimColor = isScheduled ? SEGMENT_COLOR_DIM_ACTIVE : SEGMENT_COLOR_DIM;
+    const litColor = isScheduled ? segColor('drop-ring-lit-active') : segColor('drop-ring-lit');
+    const dimColor = isScheduled ? segColor('drop-ring-dim-active') : segColor('drop-ring-dim');
 
     const segs = [];
     for (let i = 0; i < totalSegs; i++) {

@@ -1,0 +1,411 @@
+/* Light theme. Activated by `<html data-theme="light">`.
+ *
+ * Strategy: invert the *semantic* tokens (surfaces, text, borders,
+ * inputs, shadows, gloss highlights) so the app reads as a light
+ * UI. Keep the brand accents and the *physical-object* tokens
+ * (wheels, knobs, faders, drop buttons, rubber buttons, piano,
+ * panic, etc.) unchanged — a knob is a dark object whether you're
+ * looking at it on a dark desk or a light one, and the warm-orange
+ * drop family is its own colour identity that shouldn't repaint
+ * just because the app surface flipped.
+ *
+ * That keeps the light theme cohesive (clear contrast, no shouting
+ * neon panels) AND keeps every play surface visually consistent
+ * with its dark-mode self.
+ */
+
+[data-theme="light"] {
+
+    /* === SEMANTIC PALETTE ======================================== */
+
+    /* Background ladder: very-pale neutral page, white cards, soft
+     * grey borders. The page is intentionally not pure white — a
+     * touch of warmth keeps it from feeling clinical and gives the
+     * white cards somewhere to "lift" off. */
+    --bg:              #f4f5f7;
+    --surface:         #ffffff;
+    --surface-2:       #d8dde4;
+    --surface-3:       #c4cad3;
+    --surface-hover:   rgba(0, 0, 0, 0.04);
+
+    /* Text. Primary copy reuses dark mode's --bg value (#1a1a2e) —
+     * gives a slight blue undertone instead of pure black, matches
+     * the brand's overall navy character. */
+    --text:            #1a1a2e;
+    --text-dim:        #5f6671;
+    --text-muted:      #8b919a;
+    /* --text-on-accent stays white (white on pink is white on pink). */
+    /* --text-on-warn stays black. */
+
+    /* Borders flip from white-on-dark to black-on-light. Slightly
+     * higher opacities than the dark counterparts because light
+     * surfaces need a touch more darkening to read at the same
+     * perceived weight. */
+    --border-subtle:   rgba(0, 0, 0, 0.08);
+    --border:          rgba(0, 0, 0, 0.14);
+    --border-strong:   rgba(0, 0, 0, 0.24);
+    --border-hover:    rgba(0, 0, 0, 0.36);
+
+    /* Inputs sit as soft wells in a card. Lighter than dark mode's
+     * deep-black wells; the focus state deepens slightly. */
+    --input-bg:        rgba(0, 0, 0, 0.05);
+    --input-bg-focus:  rgba(0, 0, 0, 0.10);
+    --input-border:    rgba(0, 0, 0, 0.20);
+
+    /* Accents stay. Brand pink, deep purple, accent-warm orange —
+     * these are the brand identity, theme-invariant. */
+    /* --accent, --accent-hover, --accent-2, --accent-warm  stay. */
+    /* --accent-glow* / --accent-tint* stay — outer glows on bright
+     * elements (pulsing buttons) read fine on light surfaces too. */
+
+    /* State semantics stay. Success green, warn orange, error red,
+     * danger red, warn-soft amber — all designed against neutrals
+     * and read against light bgs just as well as dark. */
+
+    /* Info accents — the bright teal `#4dd9c0` used for plugin
+     * (virtual) device names pops on dark navy but washes out on
+     * white. Darken to a deeper teal so it stays readable on a
+     * light card. Same value already used for --display-trace
+     * in light mode, keeping the brand teal consistent. */
+    --info-plugin:             #1a8c75;
+
+    /* Overlays (modal scrim, filter-panel backdrop) stay dark on
+     * BOTH themes — a scrim is always "make the page recede". A
+     * light-coloured scrim wouldn't read as a scrim. */
+
+    /* Shadows soften. A drop shadow under a card on a light bg
+     * should be a hint of depth, not a slab. */
+    --shadow-modal:        rgba(0, 0, 0, 0.20);
+    --shadow-toast:        rgba(0, 0, 0, 0.18);
+    --shadow-card:         rgba(0, 0, 0, 0.12);
+    --shadow-inset-deep:   rgba(0, 0, 0, 0.20);
+    --shadow-inset-medium: rgba(0, 0, 0, 0.12);
+    --shadow-faint:        rgba(0, 0, 0, 0.08);
+    --shadow-weak:         rgba(0, 0, 0, 0.10);
+
+    /* Gloss ladder flips. Dark theme used these as bright sparks on
+     * dark surfaces (highlights, brushed-metal top edges). Light
+     * theme uses them as soft inner depressions on light surfaces —
+     * black-on-light at proportionally higher opacities to match
+     * the perceived weight of the dark-mode equivalents. */
+    --gloss-highlight-soft:  rgba(0, 0, 0, 0.04);
+    --gloss-faint:           rgba(0, 0, 0, 0.06);
+    --gloss-highlight:       rgba(0, 0, 0, 0.08);
+    --gloss-edge:            rgba(0, 0, 0, 0.10);
+    --gloss-mid:             rgba(0, 0, 0, 0.14);
+    --gloss-line:            rgba(0, 0, 0, 0.20);
+    --gloss-emphasis:        rgba(0, 0, 0, 0.28);
+    --gloss-bright:          rgba(0, 0, 0, 0.36);
+
+    /* Stale-build dot keeps its red, but the glow softens against
+     * the lighter surrounding header. */
+    --stale-dot-glow:        rgba(211, 51, 51, 0.30);
+
+    /* MIDI bar secondary text: was a light grey (#b0b0b0) against
+     * the navy --surface header. On the white header of light mode
+     * we want a slightly darker mid-grey so it reads against white. */
+    --midi-bar-secondary:    #5f6671;
+
+
+    /* === COMPONENT TOKENS — selective light adjustments ========== */
+
+    /* Tracker cell selection / cursor tints. The cool blue worked
+     * well on dark; on white it'd be a bright sky-blue stripe. Pull
+     * them slightly toward higher opacity so the selection still
+     * reads. */
+    --tracker-cursor-bg:        rgba( 30, 110, 200, 0.10);
+    --tracker-row-playing-bg:   rgba( 30, 110, 200, 0.14);
+    --tracker-cell-sel-bg:      rgba( 30, 110, 200, 0.28);
+    /* --tracker-focus-text stays black (on pink accent fill — same
+     * contrast as in dark mode). */
+    /* Transport "playing" tint reuses success at slightly higher
+     * opacity so it doesn't disappear against white. */
+    --tracker-transport-active-bg:     rgba( 76, 175,  80, 0.30);
+    --tracker-transport-active-border: rgba( 76, 175,  80, 0.65);
+    /* --tracker-transport-active-text stays white (on green fill). */
+
+    /* Cell-edit (LayoutGrid edit-mode card). Cool blue idle, warm
+     * orange when armed for MIDI Learn. Pull opacities up slightly. */
+    --cell-edit-bg:              rgba( 30, 110, 200, 0.10);
+    --cell-edit-border:          rgba( 30, 110, 200, 0.30);
+
+    /* Step editor — accent tints on a light surface need a touch
+     * more opacity to read. */
+    --step-alg-tint:             rgba(233,  69,  96, 0.10);
+    --step-alg-head:             rgba(233,  69,  96, 0.45);
+    --step-force-on-tint:        rgba(233,  69,  96, 0.20);
+    --step-force-on-shadow:      rgba(233,  69,  96, 0.35);
+    --step-force-off-tint:       rgba(  0,   0,   0, 0.04);
+    --step-head-dot-idle:        rgba(  0,   0,   0, 0.12);
+    --step-head-dot-off:         rgba(  0,   0,   0, 0.20);
+
+
+    /* === GROUP 3 — DECORATIVE / PHYSICAL-OBJECT TOKENS =========== */
+
+    /* Light mode flips most of the "physical object" tokens too.
+     * The earlier instinct of "a knob is a dark object no matter
+     * what" produces a UI of dark widgets floating in a light void —
+     * not a light theme. Real light-mode synth software (Korg
+     * Wavestate Native, Arturia V-Collection's bright skins) uses
+     * pale brushed-aluminium controls with dark text. We follow
+     * that convention here.
+     *
+     * Kept dark even in light mode:
+     *   - Fader track (the channel-strip well is dark on real
+     *     mixers regardless of front-panel colour).
+     *   - Drop-button idle gradient (drops are a distinct dark
+     *     warm-orange affordance, not a generic control).
+     *   - Piano black keys (obviously).
+     *   - Panic button (the deliberate "stop" red).
+     */
+
+    /* Wheel face — variant L: pure white face with no vignette,
+     * just a thin dark rim. The cylindrical 3D illusion is
+     * intentionally dropped here in favour of a "paper chip" look
+     * that integrates cleanly with the rest of the light UI. */
+    --wheel-face-1:            #ffffff;
+    --wheel-face-2:            #ffffff;
+    --wheel-face-3:            #fafbfd;
+    --wheel-face-4:            #eef0f3;
+    --wheel-tick-text:         rgba(0, 0, 0, 0.55);
+    --wheel-tick-text-near:    rgba(0, 0, 0, 0.80);
+    --wheel-tick-text-active:  #1a1a2e;
+    --wheel-tick-line:         rgba(0, 0, 0, 0.10);
+    /* Top/bottom vignette so the wheel reads as a rolling
+     * cylinder. The `::before` radial gradient (overridden below)
+     * is a wide ellipse that paints only the top and bottom
+     * edges; left and right stay clear. Opacity 0.22 with the
+     * wide-band geometry gives a soft dome shape across the
+     * height of the face. */
+    --wheel-edge-shadow:       rgba(0, 0, 0, 0.22);
+    /* Active-tick glow off: a pink halo on white reads as a
+     * pinkish wash behind the text rather than a glow. Active
+     * tick still differentiates via larger size + bold weight +
+     * dark brand text colour. */
+    --wheel-active-glow:       transparent;
+    --wheel-rim:               rgba(0, 0, 0, 0.22);
+
+    /* Knob body — white radial gradient with a darker outer rim so
+     * the sphere illusion survives without depending on a heavy
+     * inner gradient. Matches variant L's "paper chip" aesthetic. */
+    --knob-body-1:             #ffffff;
+    --knob-body-2:             #f5f6f8;
+    --knob-body-3:             #c8cdd5;
+    --knob-indicator:          #1a1a2e;
+    --knob-rim-shadow:         rgba(0, 0, 0, 0.28);
+    /* Lit LEDs in the knob's ring stay filled with --accent (the
+     * pink dots are still visible), but the drop-shadow glow goes
+     * away — on a white card the halo reads as a smudge rather
+     * than as light. */
+    --knob-led-glow:           transparent;
+
+    /* Rubber button — white silicone pad. Top→bottom subtle
+     * gradient gives a hint of dome without going pale-grey. */
+    --rubber-bg-1:             #ffffff;
+    --rubber-bg-2:             #fafbfd;
+    --rubber-bg-3:             #f0f2f5;
+    --rubber-bg-4:             #dde0e6;
+    --rubber-led-off:          #d0d4da;
+
+    /* XY pad — white surface with a darker axis grid so the cross
+     * lines stay visible. */
+    --xypad-bg-1:              #ffffff;
+    --xypad-bg-2:              #f5f6f8;
+    --xypad-axis-line:         rgba(0, 0, 0, 0.14);
+
+    /* Mini wheel (inside step-editor cells). Mirrors the main
+     * wheel: white face, no vignette. */
+    --mini-wheel-bg-1:         #ffffff;
+    --mini-wheel-bg-2:         #fafbfd;
+
+    /* Display (scope / LCD meter). Flip to a pale tinted "off"
+     * screen aesthetic with darker grid + darker trace so the
+     * canvas paint stays visible on the light page background. */
+    --display-bezel-1:         #dde7e2;
+    --display-bezel-2:         #b8c8c1;
+    --display-bezel-3:         #92a39c;
+    --display-trace:           #1a8c75;
+    --display-grid:            rgba(0, 0, 0, 0.10);
+    --display-bezel-stroke:    rgba(0, 0, 0, 0.30);
+    --meter-led-glow:          transparent;
+
+    /* Curve editor — invert white grid lines to dark so they show
+     * against the pale canvas background. */
+    --curve-grid-minor:        rgba(0, 0, 0, 0.10);
+    --curve-grid-major:        rgba(0, 0, 0, 0.14);
+    /* --curve-stroke stays accent pink. */
+
+    /* Fader track — variant H: pure white channel-strip well with
+     * a sharper outer rim (handled by the .fader-track override
+     * below). Zero gradient → no shadow in the middle. */
+    --fader-track-1:           #ffffff;
+    --fader-track-2:           #ffffff;
+    --fader-track-3:           #ffffff;
+
+    /* Fader thumb — chrome stops re-tuned for light mode. The
+     * dark #444 / #555 edges that worked on a dark track read as
+     * "black bars" on a white track. Lift every stop one full
+     * brightness band so the thumb reads as actual chrome / pale
+     * aluminium, not a charcoal slider. Value text stays dark for
+     * legibility against the chrome peaks.
+     *
+     * --fader-thumb-shade is the 50%-stop in the horizontal
+     * gradient. In dark mode it's deliberately darker than the
+     * neighbouring "light" stop so the chrome cap has a subtle
+     * central shadow line; on pale chrome that same line reads as
+     * a vertical streak through the value number. Pin it to the
+     * same value as --fader-thumb-light so the centre stays
+     * uniform. */
+    --fader-thumb-edge:        #a4a8ae;
+    --fader-thumb-band:        #bcc0c6;
+    --fader-thumb-light:       #e0e3e8;
+    --fader-thumb-bright:      #f0f2f5;
+    --fader-thumb-shade:       #e0e3e8;
+    --fader-thumb-side:        #9aa0a8;
+    --fader-thumb-value-text:  #1a1a2e;
+
+    /* Drop buttons — idle / armed wells flip from dark gradient
+     * to pale neutral / pale warm, so the row reads as part of
+     * the light UI when nothing is scheduled. Firing bg stays
+     * the same bright orange (vivid on either theme). */
+    --drop-base-bg-start:      #eef0f3;
+    --drop-base-bg-end:        #dde0e6;
+    --drop-armed-bg-start:     #fce8d5;
+    --drop-armed-bg-end:       #f0d4b3;
+    /* Drop button label colours flip too: pale grey idle and
+     * cream-on-dark-wine armed both go invisible on the new pale
+     * bgs. */
+    --drop-label-idle:         rgba(0, 0, 0, 0.45);
+    --drop-label-armed:        #6e3a14;
+    /* --drop-label-firing stays — dark text on bright orange,
+     * works in both themes. */
+}
+
+
+/* ---- Per-component light-mode overrides --------------------------
+ *
+ * The filter-panel cards use a brushed-metal effect (multi-stop
+ * gradient + gloss + inset shadows) that is intrinsically a
+ * dark-mode aesthetic. In light mode, recreating "brushed metal"
+ * in pale tones reads as muddy; better to fall back to a clean
+ * white card with a soft drop shadow. Same selector specificity
+ * as the original style.css rule, scoped to [data-theme="light"]
+ * so dark mode keeps its housing-on-a-piece-of-studio-gear feel.
+ */
+[data-theme="light"] .filter-panel .card {
+    background: var(--surface);
+    border: 1px solid var(--border-subtle);
+    box-shadow: 0 2px 8px var(--shadow-card);
+}
+
+/* Fader well — sharper outer rim than the standard --border-subtle
+ * so the white channel reads as a distinct strip against the
+ * white card. Only the fader rim gets this stronger border;
+ * --border-subtle stays soft for the rest of the UI. */
+[data-theme="light"] .fader-track {
+    border-color: rgba(0, 0, 0, 0.22);
+}
+
+/* Wheel edge-vignette — wide soft dome at the top/bottom and
+ * NOTHING at the left/right (a wheel viewed from the front
+ * curves away top-and-bottom, not side-to-side). The ellipse is
+ * stretched extra-wide (200%) so the gradient touches the
+ * left/right edges of the wheel well inside its transparent
+ * zone. Vertical radius 55% + transparent stop 55% gives a wide
+ * soft fade spreading from the centre toward the top/bottom
+ * edges, so the cylinder feel comes through across the whole
+ * face instead of being squeezed into a thin edge band. */
+[data-theme="light"] .wheel-container::before {
+    background: radial-gradient(ellipse 200% 55% at 50% 50%, transparent 55%, var(--wheel-edge-shadow) 100%);
+}
+
+/* Hide the per-row divider lines inside the wheel — they read
+ * as "shadow on every line" on the bright face. The wheel's
+ * vertical scrolling value already distinguishes the rows. */
+[data-theme="light"] .wheel-tick::before {
+    display: none;
+}
+
+/* Fader thumb grip lines — the ::before pseudo-element draws
+ * fine horizontal scratches across the thumb (silver brushed-
+ * metal detail on a vertical fader, vertical lines on a
+ * horizontal one). On pale chrome they read as a dark stripe
+ * under the value number rather than as texture, so hide them
+ * in light mode entirely. */
+[data-theme="light"] .fader-thumb::before {
+    display: none;
+}
+
+/* Strip the ornamental shadows off the fader thumb itself. The
+ * base rule layers a drop shadow, an inset top highlight, an
+ * inset bottom shadow, AND a dark bottom border on top of the
+ * chrome gradient — together they paint a dark stripe under the
+ * value number. The chrome gradient and a thin neutral border
+ * are enough to define the cap on a bright track. */
+[data-theme="light"] .fader-thumb {
+    box-shadow: none;
+    border-top: 1px solid rgba(0, 0, 0, 0.12);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.12);
+}
+
+/* Wheel container — drop the inset wells that darkened the
+ * top/bottom inside of the bright face. The ::before vignette
+ * (already narrowed above) carries the cylinder illusion on its
+ * own; the additional inset box-shadows just made the wheel
+ * read heavy. */
+[data-theme="light"] .wheel-container {
+    box-shadow: none;
+}
+
+/* Drop button — remove the inset top shadow that mimicked depth
+ * on the dark idle gradient. On a pale idle bg it reads as a
+ * dirty band at the top edge. */
+[data-theme="light"] .dropbtn {
+    box-shadow: none;
+}
+
+/* Step-editor pads — Euclidean's four cyclable override states
+ * plus the default-off. Two design ideas combined:
+ *
+ *   - Variant 6's grey/pink hierarchy for the user-explicit
+ *     states. Plain "on" steps go grey so they read as active
+ *     but visually quiet; only accent / beat steps light up
+ *     pink. The brand colour earns its weight by being rare.
+ *
+ *   - Variant 4's dashed pink outline for alg-on. The dashed
+ *     border carries the "algorithm suggests" semantic — clearly
+ *     different from a solid-pink "user-set" state.
+ *
+ * Same rules cover Arpeggiator's .on / .on.beat since both
+ * surfaces share the .step-cell selector — the beat marker
+ * inherits the pink accent treatment automatically.
+ */
+[data-theme="light"] .step-cell {
+    background: var(--surface);
+    border-color: rgba(0, 0, 0, 0.06);
+}
+/* alg-on — algorithm suggests this step. Pale pink fill +
+ * dashed pink border reads as "you can adopt this or override it". */
+[data-theme="light"] .step-cell.alg-on {
+    background: rgba(233, 69, 96, 0.04);
+    border: 2px dashed rgba(233, 69, 96, 0.40);
+}
+/* on / force-on (no beat / no accent) — soft grey wash. */
+[data-theme="light"] .step-cell.on,
+[data-theme="light"] .step-cell.force-on {
+    background: rgba(0, 0, 0, 0.08);
+    border-color: rgba(0, 0, 0, 0.18);
+}
+/* on.beat / force-on.accent — pink lights up for the emphasised
+ * variant. */
+[data-theme="light"] .step-cell.on.beat,
+[data-theme="light"] .step-cell.force-on.accent {
+    background: rgba(233, 69, 96, 0.45);
+    border-color: var(--step-beat-accent);
+}
+/* force-off — user-locked off, dimmed. */
+[data-theme="light"] .step-cell.force-off {
+    background: var(--surface);
+    border-color: rgba(0, 0, 0, 0.10);
+    opacity: 0.45;
+}

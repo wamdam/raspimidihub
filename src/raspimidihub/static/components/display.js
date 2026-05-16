@@ -4,6 +4,7 @@
 
 import { html } from './common.js';
 import { useEffect, useRef } from '../lib/hooks.module.js';
+import { token } from '../lib/theme.js';
 
 // =======================================================================
 // Meter — read-only knob-style indicator. The LED arc reflects the live
@@ -34,8 +35,8 @@ export function DisplayMeter({ label, value, min, max }) {
         const a = ANGLE_MIN + t * (ANGLE_MAX - ANGLE_MIN);
         const [lx, ly] = angleToXY(a, RING_RADIUS);
         const lit = a <= angle + 0.5;
-        leds.push(html`<circle cx=${lx} cy=${ly} r="2" fill=${lit ? 'var(--success)' : 'rgba(255,255,255,0.10)'}
-            style=${lit ? 'filter: drop-shadow(0 0 3px var(--success))' : ''} />`);
+        leds.push(html`<circle cx=${lx} cy=${ly} r="2" fill=${lit ? 'var(--success)' : 'var(--gloss-mid)'}
+            style=${lit ? 'filter: drop-shadow(0 0 3px var(--meter-led-glow))' : ''} />`);
     }
 
     return html`<div class="knob-group meter-readonly">
@@ -44,14 +45,14 @@ export function DisplayMeter({ label, value, min, max }) {
             <svg viewBox="-36 -36 72 72" xmlns="http://www.w3.org/2000/svg">
                 <defs>
                     <radialGradient id="meter-body" cx="0.35" cy="0.30" r="0.85">
-                        <stop offset="0%" stop-color="#2a3a36" />
-                        <stop offset="40%" stop-color="#1c2826" />
-                        <stop offset="100%" stop-color="#0e1614" />
+                        <stop offset="0%"   style="stop-color: var(--display-bezel-1)" />
+                        <stop offset="40%"  style="stop-color: var(--display-bezel-2)" />
+                        <stop offset="100%" style="stop-color: var(--display-bezel-3)" />
                     </radialGradient>
                 </defs>
                 ${leds}
                 <circle cx="0" cy="0" r=${KNOB_RADIUS} fill="url(#meter-body)"
-                    stroke="rgba(0,0,0,0.5)" stroke-width="1" />
+                    stroke="var(--display-bezel-stroke)" stroke-width="1" />
                 <line x1=${indX} y1=${indY} x2=${indEndX} y2=${indEndY}
                     stroke="var(--success)" stroke-width="2" stroke-linecap="round"
                     style="filter: drop-shadow(0 0 2px var(--success))" />
@@ -86,13 +87,13 @@ export function DisplayScope({ label, value, min, max, duration }) {
         ctx.clearRect(0, 0, w, ht);
 
         // Grid: center line
-        ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+        ctx.strokeStyle = token('display-grid');
         ctx.lineWidth = 1;
         ctx.beginPath(); ctx.moveTo(0, ht / 2); ctx.lineTo(w, ht / 2); ctx.stroke();
 
         // Waveform
         if (h.length < 2) return;
-        ctx.strokeStyle = '#4dd9c0';
+        ctx.strokeStyle = token('display-trace');
         ctx.lineWidth = 2;
         ctx.beginPath();
         for (let i = 0; i < h.length; i++) {
@@ -113,7 +114,7 @@ export function DisplayScope({ label, value, min, max, duration }) {
         </div>
         <div style="flex:1;position:relative">
             <canvas ref=${canvasRef} width="200" height="50"
-                style="width:100%;height:50px;border-radius:4px;background:var(--bg);border:1px solid rgba(255,255,255,0.06)"></canvas>
+                style="width:100%;height:50px;border-radius:4px;background:var(--bg);border:1px solid var(--border-subtle)">
             <span style="position:absolute;bottom:2px;right:4px;font-size:9px;color:var(--text-dim)">${dur}s</span>
         </div>
         </div>
