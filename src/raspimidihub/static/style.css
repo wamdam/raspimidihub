@@ -2345,6 +2345,8 @@ body {
     padding: 7px 14px; background: var(--bg); border: 1px solid var(--surface2); border-radius: 6px;
     color: var(--text-dim); font-size: 13px; font-weight: 500; cursor: pointer;
     transition: background 0.15s, border-color 0.15s, color 0.15s; user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
 }
 .radio-opt.active { background: var(--accent); border-color: var(--accent); color: #fff; }
 
@@ -2359,6 +2361,12 @@ body {
     position: relative; display: flex; flex-direction: column; align-items: center;
     justify-content: center; gap: 6px; touch-action: none;
     transition: box-shadow 0.1s, transform 0.1s;
+    /* Suppress the OS long-press text-selection / copy menu on
+     * mobile — the button's own long-press gesture opens the
+     * binding popup, the selection callout would interrupt it. */
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
 }
 .rubber-btn:active, .rubber-btn.pressed {
     transform: translateY(1px);
