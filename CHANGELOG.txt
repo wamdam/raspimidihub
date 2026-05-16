@@ -6,7 +6,19 @@ hashes. Tags: Added, Improved, Fix, Changed, Removed.
 
 Unreleased
 
-- Added: Spectator mirroring (Settings → Spectator mirroring). A per-device URL `/?spectate=<conn_id>&touches=1` re-renders the chosen device's UI in another tab or OBS Browser Source, driven by the source's broadcast UI state — viewport, scroll, route, layout density, context-menu and CC-binding popup, plus a touch-ripple overlay. Source devices stay dormant until at least one spectator opens the URL, so the feature costs nothing on phones nobody is mirroring. CEF inside OBS renders the app natively, no video encoding, sub-frame latency.
+A non-intrusive way to mirror any connected device's UI into a
+browser tab or OBS Browser Source. Useful for showcase videos
+where you want the audience to see exactly what the phone is
+doing — including touches — but with crisp text and full
+resolution at any output size. No video encoding on the device:
+the chosen browser re-renders the app natively, driven by a
+small per-source broadcast of UI state. Source devices stay
+dormant until at least one spectator opens the URL.
+
+- Added: Spectator mirroring — open `/?spectate=<conn_id>&touches=1` to render the chosen device's UI live. Mirrors viewport, scroll position (vertical .main + horizontal matrix, plus the device-detail panel), the current page/route, layout density, theme, every popup (context menu, CC-binding popup with live wheel values, Cell-binding popup, Plugin Control Mappings rows), and the bottom-bar toast / Save Config button state. A touch-ripple overlay (`&touches=1`) paints the source's pointer trail onto the mirror in real time.
+- Added: Spectator presentation knobs — `&frame=1` wraps the mirror in a phone bezel, `&chroma=#hex` paints a chroma-key-friendly backdrop around it (magenta / green / any colour), `&tilt-x=<deg>` / `&tilt-y=<deg>` rotate the framed device in 3D. A floating control panel on the spectator URL has sliders, a colour picker, and a Copy URL button; drag anywhere on the background to live-adjust the tilt. The control panel auto-fades on inactivity so OBS captures stay clean.
+- Added: Settings → Spectator mirroring sub-section — set this device's name (shown in other tabs' picker), copy its spectator URL, and see a live list of other connected clients to mirror.
+- Improved: Architecture — the feature lives in its own server module (`spectator.py`) and client folder (`static/lib/spectator/`), plugged into the core via three small extension points on WebServer (SSE filter, disconnect hook, subscribe extension). web.py and api.py contain zero spectator-specific code outside their import lines. See manual chapter 4 (System Architecture) for the integration points and the opt-in conventions developers need to know.
 
 
 2026-05-16 — Version 4.2.0
