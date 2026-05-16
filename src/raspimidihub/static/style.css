@@ -2518,6 +2518,19 @@ body {
 .param-row .fader-group { margin-bottom: 12px; width: 100%; min-width: 0; }
 .param-row .btn-group-param { margin-bottom: 12px; min-width: 0; }
 .param-row .wheel-container { width: 100%; }
+/* Knob defaults to 72px square (its own --max-width). In a
+ * .param-row that mixes knobs and wheels (Euclidean, Arpeggiator,
+ * etc.) the 72px knob is 20px taller than the 52px wheel, which
+ * (a) makes the knob look "low" relative to its row-mates and
+ * (b) forces the whole row 18px taller, leaving empty space
+ * under every wheel in the row. Cap the knob's max-width to the
+ * wheel height so all controls in the row share the same vertical
+ * extent. Vertically centre as a belt-and-braces in case any cell
+ * winds up taller than the knob. Controller / LayoutGrid pages
+ * use `.layout-cell .knob-container` instead and keep their full
+ * 72 px size. */
+.param-row .knob-container { max-width: 52px; }
+.param-row .knob-group { align-self: center; }
 /* Wide wheels in an inline row keep their fixed 120 px face — the
  * 100%-of-cell rule above would otherwise expand them to fill a
  * span-2 cell entirely (no padding around the wheel). 120 px is
