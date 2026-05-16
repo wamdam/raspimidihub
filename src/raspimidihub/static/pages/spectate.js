@@ -55,7 +55,12 @@ export function SpectatorView({ clientId, showTouches, AppComponent }) {
     // App isn't mounted yet so no subscribers exist, and (b) the
     // source can publish between watch-start and our App mount.
     const uiLatestRef = useRef(new Map());
-    const targetScrollYRef = useRef(0);
+    // Latest scroll position per scrollable container (keyed by the
+    // source's `data-spectator-scroll` attribute). Held as a ref so
+    // we can re-apply after App mounts — the source typically
+    // publishes its scroll before .main / .matrix exist on the
+    // spectator's DOM.
+    const scrollByKeyRef = useRef(new Map());
     const touchPointsRef = useRef([]);
     // Our SSE conn_id; needed to POST /api/sse/subscribe with our
     // spectate_target. Set when the EventSource emits `connection`.
@@ -76,12 +81,19 @@ export function SpectatorView({ clientId, showTouches, AppComponent }) {
                 setViewport({ w: value.w, h: value.h });
             }
         } else if (kind === 'scroll') {
-            const y = (value && value.y) || 0;
-            targetScrollYRef.current = y;
-            // Apply now if .main exists; if App hasn't mounted yet a
-            // deferred effect (see below) re-applies from the ref.
-            const main = document.querySelector('.spectator-app-wrap .main');
-            if (main) main.scrollTop = y;
+            if (!value) return;
+            // New format carries a `key` matching the source's
+            // `data-spectator-scroll` attribute so each scrollable
+            // container (.main, .matrix, …) mirrors independently.
+            // The y-only legacy shape is treated as key='main' for
+            // forward-compatible snapshot replay.
+            const key = value.key || 'main';
+            const x = value.x || 0;
+            const y = value.y || 0;
+            scrollByKeyRef.current.set(key, { x, y });
+            const el = document.querySelector(
+                `.spectator-app-wrap [data-spectator-scroll="${key}"]`);
+            if (el) { el.scrollTop = y; el.scrollLeft = x; }
         } else if (kind === 'density') {
             applyLayoutDensity(value || 'default');
         } else if (kind === 'touch') {
@@ -183,15 +195,27 @@ export function SpectatorView({ clientId, showTouches, AppComponent }) {
         };
     }, [clientId, applyState]);
 
-    // After App mounts (snapshotLoaded → true), apply the most
-    // recently received scroll position from the ref. The first
-    // scroll event from the source typically lands before App
-    // mounts; without this catch-up the mirror would render at
-    // y=0 even though the source is scrolled.
+    // After App mounts (and on every route change inside it), apply
+    // the most recently received scroll position to each scrollable
+    // container. The first scroll events from the source typically
+    // land before .main / .matrix exist on the spectator's DOM;
+    // without this catch-up the mirror would render at the wrong
+    // scroll position. We also re-run when routeRef changes via a
+    // small tick — incoming route changes swap the matrix in/out.
     useEffect(() => {
-        if (!snapshotLoaded) return;
-        const main = document.querySelector('.spectator-app-wrap .main');
-        if (main) main.scrollTop = targetScrollYRef.current;
+        if (!snapshotLoaded) return undefined;
+        const apply = () => {
+            for (const [key, pos] of scrollByKeyRef.current) {
+                const el = document.querySelector(
+                    `.spectator-app-wrap [data-spectator-scroll="${key}"]`);
+                if (el) { el.scrollTop = pos.y; el.scrollLeft = pos.x; }
+            }
+        };
+        // Apply on mount, then again after rAF so route-swap mounts
+        // (matrix shows up after switching to /routing) get caught.
+        apply();
+        const raf = requestAnimationFrame(apply);
+        return () => cancelAnimationFrame(raf);
     }, [snapshotLoaded]);
 
     // Pick the largest uniform scale that fits the source viewport

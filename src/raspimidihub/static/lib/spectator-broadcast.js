@@ -64,12 +64,19 @@ export function useSourceBroadcaster({ watched, route }) {
     useEffect(() => {
         if (!watched) return undefined;
         // Ask every useSharedUiState consumer to re-emit its current
-        // value now that broadcasting is active. ui:* state changed
-        // before this moment never reached the wire (broadcast was a
-        // no-op, the snapshot cache stayed empty), so a late-joining
-        // spectator wouldn't see open menus / popups otherwise.
-        window.dispatchEvent(new CustomEvent('spectator-rebroadcast'));
+        // value now that broadcasting is active. Effects run in mount
+        // order and this broadcaster effect runs BEFORE the consumer
+        // effects in the same commit — dispatching synchronously hits
+        // zero listeners. setTimeout(0) defers the dispatch to the
+        // next task, after every consumer's useEffect has registered
+        // its 'spectator-rebroadcast' listener. ui:* state changed
+        // before this moment never reached the wire otherwise, so a
+        // late-joining spectator wouldn't see open menus / popups.
+        const rebroadcastTimer = setTimeout(() => {
+            window.dispatchEvent(new CustomEvent('spectator-rebroadcast'));
+        }, 0);
         const cleanups = [];
+        cleanups.push(() => clearTimeout(rebroadcastTimer));
 
         // Viewport — initial snapshot plus a resize listener. Phone
         // rotation, soft-keyboard pop, fullscreen entry all trigger
@@ -82,38 +89,52 @@ export function useSourceBroadcaster({ watched, route }) {
         window.addEventListener('resize', onResize);
         cleanups.push(() => window.removeEventListener('resize', onResize));
 
-        // Scroll on .main — the matrix's scroll container. Throttled
-        // to ~30 Hz via a single trailing-edge timer so a fast swipe
-        // ships at most ~30 frames/s, not a burst per scroll tick.
-        const main = document.querySelector('.main');
-        let scrollTimer = null;
-        let lastSentY = -1;
-        let lastSentAt = 0;
-        const flushScroll = () => {
-            scrollTimer = null;
-            if (!main) return;
-            const y = main.scrollTop;
-            if (y === lastSentY) return;
-            lastSentY = y;
-            lastSentAt = performance.now();
-            postState('scroll', { y });
+        // Scroll — window-level capture catches scroll events on any
+        // element. We identify scrollable containers by the
+        // `data-spectator-scroll` attribute (set on .main, the matrix
+        // wrapper, etc.) and broadcast {key, x, y} so the spectator
+        // can find the same element and mirror its scroll. Throttled
+        // per key at ~30 Hz via a trailing-edge timer.
+        const lastSent = new Map();   // key -> { x, y, at }
+        const pending = new Map();    // key -> timer id
+        const flushScroll = (key, el) => {
+            pending.delete(key);
+            const x = el.scrollLeft, y = el.scrollTop;
+            const prev = lastSent.get(key);
+            if (prev && prev.x === x && prev.y === y) return;
+            lastSent.set(key, { x, y, at: performance.now() });
+            postState('scroll', { key, x, y });
         };
-        const onScroll = () => {
-            const dt = performance.now() - lastSentAt;
+        const onAnyScroll = (e) => {
+            const el = e.target;
+            if (!el || el.nodeType !== 1) return;
+            const key = el.getAttribute && el.getAttribute('data-spectator-scroll');
+            if (!key) return;
+            const prev = lastSent.get(key);
+            const dt = prev ? performance.now() - prev.at : Infinity;
             const delay = Math.max(0, TICK_MS - dt);
-            if (scrollTimer == null) scrollTimer = setTimeout(flushScroll, delay);
+            if (!pending.has(key)) {
+                pending.set(key, setTimeout(() => flushScroll(key, el), delay));
+            }
         };
-        if (main) {
-            main.addEventListener('scroll', onScroll, { passive: true });
-            cleanups.push(() => {
-                main.removeEventListener('scroll', onScroll);
-                if (scrollTimer != null) clearTimeout(scrollTimer);
-            });
-            // Initial position so the spectator opens at the right
-            // place even if the source hasn't scrolled since load.
-            postState('scroll', { y: main.scrollTop });
-            lastSentY = main.scrollTop;
-            lastSentAt = performance.now();
+        // The scroll event doesn't bubble, but it DOES propagate in
+        // the capture phase — so a single window-level listener with
+        // capture:true catches scroll on every element in the tree.
+        window.addEventListener('scroll', onAnyScroll, { capture: true, passive: true });
+        cleanups.push(() => {
+            window.removeEventListener('scroll', onAnyScroll, { capture: true });
+            for (const t of pending.values()) clearTimeout(t);
+            pending.clear();
+        });
+        // Initial snapshot for every scrollable container present at
+        // attach time. Late-mounted ones (after route changes) emit
+        // their position via their first scroll event; an explicit
+        // initial isn't required for them.
+        for (const el of document.querySelectorAll('[data-spectator-scroll]')) {
+            const key = el.getAttribute('data-spectator-scroll');
+            const x = el.scrollLeft, y = el.scrollTop;
+            lastSent.set(key, { x, y, at: performance.now() });
+            postState('scroll', { key, x, y });
         }
 
         // Touch / pointer — window-level capture so events fire even

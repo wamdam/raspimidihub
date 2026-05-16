@@ -562,7 +562,7 @@ function App() {
             </div>
         </div>
         ${configFallback && html`<div class="banner">Config unreadable — using default all-to-all routing. Save to fix.</div>`}
-        <div class="main ${showMidiBar ? 'with-midi-bar' : ''}">${page}<${ScrollAssist} /></div>
+        <div class="main ${showMidiBar ? 'with-midi-bar' : ''}" data-spectator-scroll="main">${page}<${ScrollAssist} /></div>
         ${showMidiBar && html`<${MidiBar} events=${midiEvents} />`}
         <nav class="bottom-nav">
             <button class=${tab === 'routing' ? 'active' : ''} onclick=${() => setTab('routing')}>
