@@ -611,7 +611,18 @@ const _spectateParams = (() => {
         const p = new URLSearchParams(window.location.search);
         const cid = p.get('spectate');
         if (!cid) return null;
-        return { clientId: cid, showTouches: p.get('touches') === '1' };
+        const num = (k) => {
+            const v = p.get(k);
+            return v == null || v === '' ? 0 : Number(v) || 0;
+        };
+        return {
+            clientId: cid,
+            showTouches: p.get('touches') === '1',
+            frame: p.get('frame') === '1',
+            tiltX: num('tilt-x'),
+            tiltY: num('tilt-y'),
+            chroma: p.get('chroma') || '',
+        };
     } catch { return null; }
 })();
 
@@ -619,6 +630,10 @@ if (_spectateParams) {
     render(html`<${SpectatorView}
         clientId=${_spectateParams.clientId}
         showTouches=${_spectateParams.showTouches}
+        frame=${_spectateParams.frame}
+        tiltX=${_spectateParams.tiltX}
+        tiltY=${_spectateParams.tiltY}
+        chroma=${_spectateParams.chroma}
         AppComponent=${App} />`, document.getElementById('app'));
 } else {
     render(html`<${SourceAppWrapper} />`, document.getElementById('app'));

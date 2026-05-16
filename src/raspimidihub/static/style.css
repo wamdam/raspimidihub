@@ -2573,6 +2573,153 @@ body {
  * The touch overlay paints fading ripples from incoming pointer
  * events; the source-gone notice surfaces when the source closes.
  * ============================================================ */
+/* Full-window chroma backdrop. Optional `chroma` URL param sets the
+   colour inline (so OBS can chroma-key it out). Default to the
+   regular dark background so the unconfigured spectator looks like
+   it always did. */
+.spectator-root {
+    position: fixed;
+    inset: 0;
+    background: var(--bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    perspective: 1500px;
+    touch-action: none;       /* drag-to-tilt without the browser scrolling */
+    overflow: hidden;
+}
+.spectator-stage {
+    transform-style: preserve-3d;
+    will-change: transform;
+    transition: transform 0.18s ease-out;
+    /* Let pointer events fall through to .spectator-root so the
+       drag-to-tilt works wherever the user clicks (including on
+       the framed mirror). The control panel re-enables pointer-
+       events on itself so its sliders / buttons stay interactive. */
+    pointer-events: none;
+}
+.spectator-frame { pointer-events: none; }
+/* Optional phone bezel. Off by default — the unframed spectator is
+   the same naked feed as before. When `frame=1` is set, a dark
+   rounded-corner housing wraps the mirror, with a speaker slot at
+   the top and a home-indicator bar at the bottom. The bezel sizes
+   live in FRAME_BEZEL in view.js — keep them in sync. */
+.spectator-frame {
+    position: relative;
+    box-sizing: content-box;
+}
+.spectator-frame.with-frame {
+    background: linear-gradient(180deg, #1a1a1a 0%, #050505 100%);
+    padding: 22px 8px 26px 8px;
+    border-radius: 38px;
+    box-shadow:
+        inset 0 0 0 1px rgba(255,255,255,0.06),
+        inset 0 0 0 2px #2a2a2a,
+        0 30px 80px rgba(0,0,0,0.55);
+}
+.spectator-frame.with-frame .spectator-app-wrap {
+    border-radius: 4px;
+}
+.spectator-frame.with-frame::before {
+    content: "";
+    position: absolute;
+    top: 9px; left: 50%; transform: translateX(-50%);
+    width: 72px; height: 5px;
+    background: #050505;
+    border-radius: 3px;
+    box-shadow: inset 0 1px 1px rgba(0,0,0,0.8);
+}
+.spectator-frame.with-frame::after {
+    content: "";
+    position: absolute;
+    bottom: 11px; left: 50%; transform: translateX(-50%);
+    width: 110px; height: 4px;
+    background: rgba(255,255,255,0.18);
+    border-radius: 2px;
+}
+/* Floating control panel. Auto-fades to opacity 0 after inactivity
+   (view.js sets a 2.5s timer on pointermove); OBS Browser Source
+   never delivers pointer events to its captured page, so once the
+   panel fades it stays invisible in the recording. */
+.spectator-controls {
+    position: fixed;
+    top: 12px; right: 12px;
+    background: rgba(10, 10, 14, 0.78);
+    color: #d6d6d6;
+    padding: 10px 12px;
+    border-radius: 10px;
+    font-size: 12px;
+    z-index: 1500;
+    width: 220px;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    transition: opacity 0.35s ease-out;
+    pointer-events: auto;
+    user-select: none;
+    box-shadow: 0 12px 32px rgba(0,0,0,0.45);
+}
+.spectator-controls-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 6px 0;
+    flex-wrap: wrap;
+}
+.spectator-controls-row > label {
+    flex: 1;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: #aaa;
+}
+.spectator-controls-row > label > input[type="checkbox"] {
+    margin-right: 6px;
+}
+.spectator-controls-row > input[type="range"] {
+    flex: 1 1 100%;
+    min-width: 0;
+}
+.spectator-controls-row > input[type="color"] {
+    width: 32px;
+    height: 26px;
+    padding: 0;
+    border: 1px solid rgba(255,255,255,0.18);
+    border-radius: 4px;
+    background: transparent;
+    cursor: pointer;
+}
+.spectator-controls-row > button {
+    flex: 1;
+    padding: 5px 8px;
+    font-size: 12px;
+    background: rgba(255,255,255,0.08);
+    color: #ddd;
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 6px;
+    cursor: pointer;
+}
+.spectator-controls-row > button:hover {
+    background: rgba(255,255,255,0.14);
+}
+.spectator-chip {
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    border: 1px solid rgba(255,255,255,0.25);
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 11px;
+    color: rgba(255,255,255,0.7);
+    background: transparent;
+}
+.spectator-controls-hint {
+    font-size: 10px;
+    color: #888;
+    margin-top: 6px;
+    line-height: 1.3;
+}
 .spectator-app-wrap {
     /* Sized via inline style; the flex column is critical — App's
        .main relies on a flex parent to claim "remaining height" and

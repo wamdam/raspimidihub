@@ -41,11 +41,28 @@ const DEFAULT_VIEWPORT = { w: 412, h: 915 };  // a typical phone portrait
 // Without this, App renders the default route, then re-renders when
 // the snapshot lands — visually jarring and sometimes leaks a click
 // of "wrong view" through the OBS recording.
-export function SpectatorView({ clientId, showTouches, AppComponent }) {
+// Phone-frame bezel sizes (CSS pixels in source-viewport space).
+// Tweak these and the scale-to-fit picks up new dimensions for free.
+const FRAME_BEZEL = { top: 22, right: 8, bottom: 26, left: 8 };
+
+export function SpectatorView({
+    clientId, showTouches, AppComponent,
+    frame: initialFrame, tiltX: initialTiltX, tiltY: initialTiltY,
+    chroma: initialChroma,
+}) {
     const [snapshotLoaded, setSnapshotLoaded] = useState(false);
     const [sourceGone, setSourceGone] = useState(false);
     const [viewport, setViewport] = useState(DEFAULT_VIEWPORT);
     const [scale, setScale] = useState(1);
+    // Presentation knobs configurable via URL params and the floating
+    // config panel. Drag on the background updates tilt live; the URL
+    // is rewritten via replaceState so the result is shareable into
+    // an OBS Browser Source.
+    const [frame, setFrame] = useState(!!initialFrame);
+    const [tiltX, setTiltX] = useState(initialTiltX || 0);
+    const [tiltY, setTiltY] = useState(initialTiltY || 0);
+    const [chroma, setChroma] = useState(initialChroma || '');
+    const [controlsVisible, setControlsVisible] = useState(true);
     const routeRef = useRef(DEFAULT_ROUTE);
     const routeSubsRef = useRef(new Set());
     const uiSubsRef = useRef(new Map());           // 'ui:<key>' -> Set<cb>
@@ -218,19 +235,94 @@ export function SpectatorView({ clientId, showTouches, AppComponent }) {
         return () => cancelAnimationFrame(raf);
     }, [snapshotLoaded]);
 
-    // Pick the largest uniform scale that fits the source viewport
-    // into our window. Re-measure on window resize so OBS sources
-    // and free-floating tabs both look right.
+    // Pick the largest uniform scale that fits the (optionally
+    // framed) source viewport into our window. Re-measure on window
+    // resize and when frame toggles so OBS sources, free-floating
+    // tabs and frame on/off all look right.
     useEffect(() => {
         const compute = () => {
-            const sx = window.innerWidth / viewport.w;
-            const sy = window.innerHeight / viewport.h;
-            setScale(Math.min(sx, sy));
+            const w = viewport.w + (frame ? FRAME_BEZEL.left + FRAME_BEZEL.right : 0);
+            const h = viewport.h + (frame ? FRAME_BEZEL.top + FRAME_BEZEL.bottom : 0);
+            const sx = window.innerWidth / w;
+            const sy = window.innerHeight / h;
+            // Tilt eats some headroom — apply a small safety factor
+            // so a 30° tilt doesn't clip the corners outside the
+            // viewport. cos(30°) ≈ 0.87; keep it simple and clamp.
+            const tiltCost = Math.cos(Math.abs(tiltX) * Math.PI / 180) *
+                             Math.cos(Math.abs(tiltY) * Math.PI / 180);
+            setScale(Math.min(sx, sy) * Math.max(0.5, tiltCost));
         };
         compute();
         window.addEventListener('resize', compute);
         return () => window.removeEventListener('resize', compute);
-    }, [viewport.w, viewport.h]);
+    }, [viewport.w, viewport.h, frame, tiltX, tiltY]);
+
+    // Mirror the live presentation knobs back to the URL via
+    // replaceState so the same configuration survives a refresh and
+    // can be pasted into OBS verbatim.
+    useEffect(() => {
+        try {
+            const url = new URL(window.location.href);
+            const set = (k, v) => { if (v) url.searchParams.set(k, v); else url.searchParams.delete(k); };
+            set('frame', frame ? '1' : '');
+            set('tilt-x', tiltX ? String(Math.round(tiltX)) : '');
+            set('tilt-y', tiltY ? String(Math.round(tiltY)) : '');
+            set('chroma', chroma || '');
+            window.history.replaceState({}, '', url.toString());
+        } catch {}
+    }, [frame, tiltX, tiltY, chroma]);
+
+    // Auto-hide the config panel after inactivity so OBS captures
+    // stay clean. Mouse / touch movement reveals it again. OBS
+    // doesn't send pointer events to its Browser Source, so once it
+    // fades out it stays hidden in the captured feed.
+    useEffect(() => {
+        let hideTimer = null;
+        const reveal = () => {
+            setControlsVisible(true);
+            if (hideTimer) clearTimeout(hideTimer);
+            hideTimer = setTimeout(() => setControlsVisible(false), 2500);
+        };
+        reveal();
+        window.addEventListener('pointermove', reveal);
+        window.addEventListener('pointerdown', reveal);
+        return () => {
+            if (hideTimer) clearTimeout(hideTimer);
+            window.removeEventListener('pointermove', reveal);
+            window.removeEventListener('pointerdown', reveal);
+        };
+    }, []);
+
+    // Background-drag to tilt. Pointer events on the chroma area
+    // (outside the framed mirror) become a rotateX/rotateY drag.
+    // Up/down → rotateX (peek over), left/right → rotateY.
+    const dragRef = useRef(null);
+    const onRootPointerDown = (e) => {
+        // Ignore drags that start inside the config panel itself.
+        if (e.target.closest && e.target.closest('.spectator-controls')) return;
+        dragRef.current = {
+            sx: e.clientX, sy: e.clientY,
+            startX: tiltX, startY: tiltY,
+            id: e.pointerId,
+        };
+        e.currentTarget.setPointerCapture(e.pointerId);
+    };
+    const onRootPointerMove = (e) => {
+        const d = dragRef.current;
+        if (!d || d.id !== e.pointerId) return;
+        // ~0.3 deg per pixel feels natural; clamp to ±35° so the frame
+        // never folds past the camera plane.
+        const ry = Math.max(-35, Math.min(35, d.startY + (e.clientX - d.sx) * 0.3));
+        const rx = Math.max(-35, Math.min(35, d.startX - (e.clientY - d.sy) * 0.3));
+        setTiltX(rx);
+        setTiltY(ry);
+    };
+    const onRootPointerUp = (e) => {
+        if (dragRef.current && dragRef.current.id === e.pointerId) {
+            dragRef.current = null;
+            try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {}
+        }
+    };
 
     // SpectatorContext value: register/unregister callbacks for
     // `ui:<key>` events so useSharedUiState consumers stay in sync.
@@ -266,21 +358,96 @@ export function SpectatorView({ clientId, showTouches, AppComponent }) {
 
     const wrapStyle = (
         `width:${viewport.w}px;height:${viewport.h}px;` +
-        `transform:scale(${scale});transform-origin:0 0;` +
-        `position:absolute;top:0;left:0;overflow:hidden`
+        `position:relative;overflow:hidden`
     );
+    // .spectator-stage carries the fit-scale AND the user-configurable
+    // tilt. Centred via flexbox on the root so the centred origin
+    // keeps the framed device pinned no matter how it's rotated.
+    const stageStyle = (
+        `transform:scale(${scale}) rotateX(${tiltX}deg) rotateY(${tiltY}deg);` +
+        `transform-origin:50% 50%;`
+    );
+    // chroma value passes through verbatim — accepts "#ff00ff" /
+    // "magenta" / "rgb(...)" / etc. Empty string means default
+    // (the existing dark backdrop); chroma-keying isn't requested.
+    const rootStyle = chroma ? `background:${chroma}` : '';
 
     return html`
         <${SpectatorContext.Provider} value=${ctxValue}>
-            <div class="spectator-app-wrap" style=${wrapStyle}>
-                <${AppComponent} />
-                ${showTouches && html`<${TouchOverlay}
-                    pointsRef=${touchPointsRef}
-                    width=${viewport.w} height=${viewport.h} />`}
+            <div class="spectator-root" style=${rootStyle}
+                onpointerdown=${onRootPointerDown}
+                onpointermove=${onRootPointerMove}
+                onpointerup=${onRootPointerUp}
+                onpointercancel=${onRootPointerUp}>
+                <div class="spectator-stage" style=${stageStyle}>
+                    <div class="spectator-frame ${frame ? 'with-frame' : ''}">
+                        <div class="spectator-app-wrap" style=${wrapStyle}>
+                            <${AppComponent} />
+                            ${showTouches && html`<${TouchOverlay}
+                                pointsRef=${touchPointsRef}
+                                width=${viewport.w} height=${viewport.h} />`}
+                        </div>
+                    </div>
+                </div>
+                <${SpectatorControls}
+                    visible=${controlsVisible}
+                    frame=${frame} setFrame=${setFrame}
+                    tiltX=${tiltX} setTiltX=${setTiltX}
+                    tiltY=${tiltY} setTiltY=${setTiltY}
+                    chroma=${chroma} setChroma=${setChroma}
+                    onReset=${() => { setTiltX(0); setTiltY(0); }} />
+                ${sourceGone && html`<div class="spectator-source-gone">
+                    Source disconnected. Waiting for it to come back…
+                </div>`}
             </div>
-            ${sourceGone && html`<div class="spectator-source-gone">
-                Source disconnected. Waiting for it to come back…
-            </div>`}
         </${SpectatorContext.Provider}>
     `;
+}
+
+// Floating control panel. Hidden in OBS captures (auto-fades on
+// inactivity, never reappears because OBS doesn't deliver pointer
+// events to its Browser Source). When opened directly in a browser
+// tab the user can tweak every knob and copy the resulting URL —
+// the configuration round-trips through URL params via replaceState.
+function SpectatorControls({
+    visible, frame, setFrame,
+    tiltX, setTiltX, tiltY, setTiltY,
+    chroma, setChroma, onReset,
+}) {
+    const copyUrl = async () => {
+        try { await navigator.clipboard.writeText(window.location.href); } catch {}
+    };
+    const presets = ['', '#ff00ff', '#00ff00', '#000000'];
+    return html`<div class="spectator-controls" style="opacity:${visible ? 1 : 0}">
+        <div class="spectator-controls-row">
+            <label><input type="checkbox" checked=${frame}
+                onChange=${e => setFrame(e.target.checked)} /> Phone frame</label>
+        </div>
+        <div class="spectator-controls-row">
+            <label>Tilt X <span>${Math.round(tiltX)}°</span></label>
+            <input type="range" min="-35" max="35" value=${tiltX}
+                onInput=${e => setTiltX(Number(e.target.value))} />
+        </div>
+        <div class="spectator-controls-row">
+            <label>Tilt Y <span>${Math.round(tiltY)}°</span></label>
+            <input type="range" min="-35" max="35" value=${tiltY}
+                onInput=${e => setTiltY(Number(e.target.value))} />
+        </div>
+        <div class="spectator-controls-row">
+            <label>Chroma</label>
+            <input type="color" value=${chroma || '#ff00ff'}
+                onInput=${e => setChroma(e.target.value)} />
+            ${presets.map(p => html`<button class="spectator-chip"
+                style=${p ? `background:${p}` : ''}
+                title=${p || 'default'}
+                onclick=${() => setChroma(p)}>${p ? '' : '×'}</button>`)}
+        </div>
+        <div class="spectator-controls-row">
+            <button onclick=${onReset}>Reset tilt</button>
+            <button onclick=${copyUrl}>Copy URL</button>
+        </div>
+        <div class="spectator-controls-hint">
+            Drag the background to tilt. Settings persist in the URL.
+        </div>
+    </div>`;
 }

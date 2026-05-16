@@ -26,6 +26,7 @@
 import { useEffect, useRef, useState } from '../lib/hooks.module.js';
 import { html, tickFeedback } from './common.js';
 import { PluginWheel } from './wheel.js';
+import { useSharedUiState } from '../lib/spectator/shared-ui-state.js';
 
 async function api(path, opts) {
     const r = await fetch(path, opts);
@@ -41,9 +42,13 @@ export function CellBinding({ open, onClose }) {
     //   XY pad:  { x: {channel, cc}, y: {channel, cc} }
     // The two-axis shape keeps the rendering path uniform — axis 'y'
     // is just hidden when null.
-    const [binding, setBinding] = useState(null);
+    // binding + learningAxis mirror to the spectator (the wheel values
+    // the user is editing, plus which axis is currently learning).
+    // defaults stays local — fixed on open from the factory layout;
+    // both sides fetch it identically.
+    const [binding, setBinding] = useSharedUiState('cellBindingDraft', null);
     const [defaults, setDefaults] = useState(null);
-    const [learningAxis, setLearningAxis] = useState(null);  // 'x' | 'y' | null
+    const [learningAxis, setLearningAxis] = useSharedUiState('cellLearningAxis', null);  // 'x' | 'y' | null
     const learnIdsRef = useRef({ x: null, y: null });
     // Full cell_bindings dict — Save merges back so other fields
     // (button On/Off, spring config) live through the round-trip.
