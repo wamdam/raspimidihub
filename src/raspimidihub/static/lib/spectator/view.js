@@ -150,6 +150,14 @@ export function SpectatorView({
         return () => setRouterExternalSource(null);
     }, []);
 
+    // Tag <body> so the spectator-only scrollbar-hide CSS engages.
+    // Scoped to mount/unmount so the source app (which shares this
+    // bundle) doesn't have its scrollbars suppressed.
+    useEffect(() => {
+        document.body.classList.add('spectator-mode');
+        return () => document.body.classList.remove('spectator-mode');
+    }, []);
+
     // Snapshot fetch + EventSource setup. Both gated by `clientId` so
     // that swapping targets via the picker re-runs cleanly.
     useEffect(() => {

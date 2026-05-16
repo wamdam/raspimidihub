@@ -2573,6 +2573,28 @@ body {
  * The touch overlay paints fading ripples from incoming pointer
  * events; the source-gone notice surfaces when the source closes.
  * ============================================================ */
+/* Spectator-mode hides scrollbars across the whole document. OBS's
+   CEF doesn't auto-hide scrollbars the way modern browsers do —
+   they show on any overflow-auto container (the document itself,
+   .main inside the mirror, the matrix wrapper) and bleed into the
+   recorded feed. Scrolling still works; only the visual track and
+   thumb are hidden. body.spectator-mode is toggled on by
+   SpectatorView's mount effect. */
+body.spectator-mode,
+body.spectator-mode #app {
+    overflow: hidden;
+    scrollbar-width: none;
+    margin: 0;
+}
+body.spectator-mode *::-webkit-scrollbar,
+body.spectator-mode *::-webkit-scrollbar-thumb,
+body.spectator-mode *::-webkit-scrollbar-track {
+    width: 0;
+    height: 0;
+    display: none;
+    background: transparent;
+}
+body.spectator-mode * { scrollbar-width: none; }
 /* Full-window chroma backdrop. Optional `chroma` URL param sets the
    colour inline (so OBS can chroma-key it out). Default to the
    regular dark background so the unconfigured spectator looks like
