@@ -2230,6 +2230,12 @@ body {
    field labels — much more legible than the previous one-row
    flat list at the cost of more vertical scrolling. */
 .layout-grid-editing { display: flex; flex-direction: column; gap: 6px; }
+.layout-grid-editing-hint {
+    font-size: 11px;
+    color: var(--text-dim);
+    line-height: 1.4;
+    margin: 0 0 4px;
+}
 .cell-edit {
     display: flex; flex-direction: column; gap: 6px;
     padding: 8px 10px;

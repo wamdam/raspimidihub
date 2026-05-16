@@ -1915,6 +1915,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
 
         _invalidate_instances_cache()
         engine.mark_dirty()
+        await server.send_sse("plugin-changed", {"instance_id": instance.id})
         data = engine._plugin_host.get_instance_data(instance.id)
         return Response.json(data, status=201)
 
@@ -2011,6 +2012,15 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
             engine._plugin_host.rename_instance(instance_id, body["name"])
             _invalidate_instances_cache()
             engine.mark_dirty()
+            # plugin-changed is the catch-all "instance metadata
+            # moved" signal — listeners that mirror the
+            # /api/plugins/instances or /api/plugins/cc-mappings
+            # result (the Settings → Plugin Control Mappings table,
+            # the bottom-nav controller picker, ...) refetch on
+            # this event. Rename touches inst.name which both
+            # endpoints carry; without the broadcast they'd hold a
+            # stale label until the next manual refresh.
+            await server.send_sse("plugin-changed", {"instance_id": instance_id})
         if "params" in body:
             engine._plugin_host.set_params(instance_id, body["params"])
             # set_params -> per-param notify -> _on_param_change closure
@@ -2071,4 +2081,5 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
 
         _invalidate_instances_cache()
         engine.mark_dirty()
+        await server.send_sse("plugin-changed", {"instance_id": instance_id})
         return Response.json({"status": "deleted"})
