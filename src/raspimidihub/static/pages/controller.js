@@ -25,7 +25,7 @@ import { usePluginParams } from '../ui/plugin-params.js';
 const SWIPE_MIN_PX = 50;
 const SWIPE_MAX_MS = 700;
 
-function ControllerSurface({ instance, pluginData, pluginDisplays, clockPosition, openCcBinding }) {
+function ControllerSurface({ instance, pluginData, pluginDisplays, clockPosition, openCcBinding, openCellBinding }) {
     const {
         params: pluginParams,
         setParams: setPluginParams,
@@ -58,13 +58,14 @@ function ControllerSurface({ instance, pluginData, pluginDisplays, clockPosition
         clockPosition,
         instanceId: instance.id,
         openCcBinding,
+        openCellBinding,
     };
     return html`<div class="controller-surface">
         ${renderParamList(pluginData.params_schema, pluginParams, onPluginParamChange, displayCtx)}
     </div>`;
 }
 
-export function ControllerPage({ pluginDisplays, showToast, selectedId, onSelect, onEditConfig, clockPosition, openCcBinding }) {
+export function ControllerPage({ pluginDisplays, showToast, selectedId, onSelect, onEditConfig, clockPosition, openCcBinding, openCellBinding }) {
     // Subscribe only to plugin events for the currently-selected
     // instance — that's the only plugin whose cells are visible. Also
     // grab transport-start so the surface can react to global play /
@@ -207,6 +208,7 @@ export function ControllerPage({ pluginDisplays, showToast, selectedId, onSelect
             pluginData=${pluginData && pluginData.id === selected.id ? pluginData : null}
             pluginDisplays=${pluginDisplays}
             clockPosition=${clockPosition}
-            openCcBinding=${openCcBinding} />
+            openCcBinding=${openCcBinding}
+            openCellBinding=${openCellBinding} />
     </div>`;
 }

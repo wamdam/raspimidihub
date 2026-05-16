@@ -16,6 +16,7 @@ import { applyLayoutDensity, getLayoutDensity } from './components/common.js';
 import { ScrollAssist } from './components/scrollassist.js';
 import { ContextMenu } from './ui/contextmenu.js';
 import { CcBinding } from './components/ccbinding.js';
+import { CellBinding } from './components/cellbinding.js';
 import { setSSEConnectionId, useSSESubscription } from './ui/sse-subscriptions.js';
 import { IconRouting, IconController, IconPlay, IconSettings, IconFullscreen, IconFullscreenExit } from './ui/icons.js';
 import { runStorageCleanup } from './ui/storage.js';
@@ -438,6 +439,45 @@ function App() {
     }, []);
     const closeCcBinding = useCallback(() => setCcBinding(null), []);
 
+    // Controller-cell binding popup. Parallel to openCcBinding but for
+    // LayoutGrid cells — those carry a symmetric (channel, cc) in
+    // `cell_bindings` rather than an entry in `cc_map`. Long-press on
+    // a controller cell on the Controller page routes here.
+    const [cellBinding, setCellBinding] = useState(null);
+    const openCellBinding = useCallback(async (instanceId, cellName) => {
+        try {
+            const inst = await api(`/plugins/instances/${encodeURIComponent(instanceId)}`);
+            // Find the cell's label in the LayoutGrid schema. The
+            // label may be overridden via the cell_labels dict; check
+            // that first, fall back to the schema label.
+            let cellLabel = cellName;
+            let labelsParam = null;
+            for (const p of inst.params_schema || []) {
+                if (p.type !== 'layoutgrid') continue;
+                labelsParam = p.labels_param || null;
+                for (const c of p.cells || []) {
+                    if ((c.param && c.param.name) === cellName) {
+                        cellLabel = (c.param && c.param.label) || cellName;
+                        break;
+                    }
+                }
+                break;
+            }
+            const overrides = (labelsParam && inst.params[labelsParam]) || {};
+            if (overrides[cellName]) cellLabel = overrides[cellName];
+            setCellBinding({
+                instanceId,
+                cellName,
+                cellLabel,
+                pluginName: inst.name || instanceId,
+            });
+        } catch (err) {
+            console.warn('openCellBinding lookup failed:', err);
+            setCellBinding({ instanceId, cellName, cellLabel: cellName, pluginName: instanceId });
+        }
+    }, []);
+    const closeCellBinding = useCallback(() => setCellBinding(null), []);
+
     let page;
     switch (tab) {
         case 'routing':
@@ -452,6 +492,7 @@ function App() {
                 onSelect=${setControllerId}
                 onEditConfig=${openControllerConfig}
                 openCcBinding=${openCcBinding}
+                openCellBinding=${openCellBinding}
                 clockPosition=${clockPosition} />`;
             break;
         case 'play':
@@ -506,6 +547,7 @@ function App() {
         <${Toast} message=${toast} />
         <${ContextMenu} menu=${contextMenu} onClose=${closeContextMenu} />
         <${CcBinding} open=${ccBinding} onClose=${closeCcBinding} />
+        <${CellBinding} open=${cellBinding} onClose=${closeCellBinding} />
     `;
 }
 

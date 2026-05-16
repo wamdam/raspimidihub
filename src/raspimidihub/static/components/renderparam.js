@@ -38,20 +38,29 @@ export function renderParam(param, values, onChange, allValues, displayCtx) {
         }
     }
 
-    // Bindable params (Wheel / Knob / Fader / Radio / NoteSelect /
-    // Button) take an `onBindRequest(paramName)` callback. It fires
-    // on long-press or right-click and opens the CcBinding popup at
-    // App level.
+    // Two routes for the long-press binding popup:
     //
-    // Opt-in only: the popup is wired only for params whose plugin
-    // author declared a `default_cc` on the dataclass. No declaration
-    // = no popup. This keeps setup-group params (Sync, Arp Ch, Ctrl
-    // Ch, BPM, Pattern Notes, ...) and other config knobs from
-    // surfacing the popup just because they happen to be a Wheel.
-    const optedIn = param.default_cc !== undefined && param.default_cc !== null;
-    const onBind = (optedIn && displayCtx && displayCtx.openCcBinding && displayCtx.instanceId)
-        ? (paramName) => displayCtx.openCcBinding(displayCtx.instanceId, paramName)
-        : undefined;
+    //   1) Controller cells (Knob/Fader/Button inside a LayoutGrid
+    //      play surface): displayCtx.openCellBinding is set by
+    //      LayoutGrid. Long-press opens the CellBinding popup, which
+    //      writes the symmetric (channel, cc) pair into the
+    //      controller's `cell_bindings` dict. No `default_cc` opt-in
+    //      required — every cell carries a binding by definition.
+    //
+    //   2) Plain plugin params (Arp Rate, CC LFO Freq, ...): the
+    //      plugin author signals "this is part of the performance CC
+    //      surface" by setting `default_cc` on the dataclass.
+    //      Without that marker, no popup fires — keeps setup-group
+    //      wheels (Sync, Arp Ch, Ctrl Ch, BPM, ...) silent.
+    let onBind;
+    if (displayCtx && displayCtx.openCellBinding && displayCtx.instanceId) {
+        onBind = (paramName) => displayCtx.openCellBinding(displayCtx.instanceId, paramName);
+    } else {
+        const optedIn = param.default_cc !== undefined && param.default_cc !== null;
+        onBind = (optedIn && displayCtx && displayCtx.openCcBinding && displayCtx.instanceId)
+            ? (paramName) => displayCtx.openCcBinding(displayCtx.instanceId, paramName)
+            : undefined;
+    }
 
     switch (param.type) {
         case 'wheel': {

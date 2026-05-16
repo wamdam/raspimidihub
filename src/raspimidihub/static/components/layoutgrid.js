@@ -232,6 +232,16 @@ export function PluginLayoutGrid({ param, values, onChange, displayCtx, renderPa
     }
 
     // Play mode: positioned grid of live cells.
+    //
+    // Each cell gets the cell-binding popup route via openCellBinding —
+    // long-pressing a knob/fader/button opens the same CellBinding modal
+    // as the plugin-control popup, but tied to the cell's symmetric
+    // (channel, cc) pair in cell_bindings. The bindings_param check
+    // gates the popup so LayoutGrids without a bindings surface
+    // (ui_demo) stay non-bindable.
+    const cellCtx = (param.bindings_param && displayCtx && displayCtx.openCellBinding)
+        ? displayCtx
+        : { ...(displayCtx || {}), openCellBinding: undefined };
     const gridStyle = `display:grid;grid-template-columns:repeat(${param.cols}, minmax(0, 1fr));grid-template-rows:repeat(${param.rows}, auto);gap:6px`;
     return html`<div class="layout-grid" style=${gridStyle}>
         ${param.cells.map((c) => {
@@ -252,7 +262,7 @@ export function PluginLayoutGrid({ param, values, onChange, displayCtx, renderPa
                     ? bindOv.spring_home : cellSpringHome;
             }
             return html`<div class="layout-cell" style=${cellStyle}>
-                ${renderParam(patched, values, onChange, values, displayCtx)}
+                ${renderParam(patched, values, onChange, values, cellCtx)}
             </div>`;
         })}
     </div>`;
