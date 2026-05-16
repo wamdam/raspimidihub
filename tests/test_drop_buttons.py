@@ -53,7 +53,6 @@ class _C(ControllerBase):
             cols=4, rows=1,
             labels_param="cell_labels",
             bindings_param="cell_bindings",
-            learn_param="cell_learn",
             cells=[
                 LayoutCell(Fader("f1", "F1", min=0, max=127, default=0,
                                  vertical=True), col=1, row=1, channel=0, cc=10),

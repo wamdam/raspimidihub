@@ -40,7 +40,7 @@ function normaliseSpringHome(v) {
 
 export function PluginLayoutGrid({ param, values, onChange, displayCtx, renderParam }) {
     const playOnly = !!(displayCtx && displayCtx.playOnly);
-    const hasConfigSurface = param.labels_param || param.bindings_param || param.learn_param;
+    const hasConfigSurface = param.labels_param || param.bindings_param;
 
     const labels = (param.labels_param && values[param.labels_param]) || {};
     const bindings = (param.bindings_param && values[param.bindings_param]) || {};
@@ -64,8 +64,9 @@ export function PluginLayoutGrid({ param, values, onChange, displayCtx, renderPa
     };
 
     // Config view — shown in the device-detail panel for any LayoutGrid
-    // that opted in by declaring labels_param / bindings_param /
-    // learn_param. Each cell becomes a multi-line card:
+    // that opted in by declaring labels_param or bindings_param. Each
+    // cell becomes a card with the name input and any per-type extras
+    // (button On/Off, XY spring config):
     //
     //   Knob   [name input]
     //   Ch [_]  CC [__]                              Learn

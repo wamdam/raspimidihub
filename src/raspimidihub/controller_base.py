@@ -33,8 +33,8 @@ class ControllerBase(PluginBase):
     Subclasses override metadata (NAME / DESCRIPTION / HELP / VERSION /
     AUTHOR) and `params`. `params` MUST contain exactly one LayoutGrid
     whose cells declare `channel` and `cc` defaults; the LayoutGrid
-    SHOULD point at sibling params named `cell_labels`, `cell_bindings`,
-    `cell_learn`, plus a `DropButtonRow` (whose auxiliary params are
+    SHOULD point at sibling params named `cell_labels` and
+    `cell_bindings`, plus a `DropButtonRow` (whose auxiliary params are
     `drop_states`, `drop_snapshots`, `drop_modes`, `drop_labels`,
     `drop_schedule`) for full functionality."""
 
@@ -63,12 +63,11 @@ class ControllerBase(PluginBase):
     # config: drop_states cycles through fire/capture/idle on every
     # press; drop_schedule holds whatever fire is currently scheduled;
     # drop_note_pressing is an SSE flag for the on-screen press-fill
-    # animation while a trigger note is held; cell_learn is a transient
-    # "next CC binds this cell" toggle. Captured snapshots, modes,
-    # labels, sync/fade flags, trigger-note bindings, theme, cell
-    # rename/rebind ARE config and stay outside this set.
+    # animation while a trigger note is held. Captured snapshots,
+    # modes, labels, sync/fade flags, trigger-note bindings, theme,
+    # cell rename/rebind ARE config and stay outside this set.
     _DROP_TRANSIENT_PARAMS = frozenset({
-        "drop_states", "drop_schedule", "drop_note_pressing", "cell_learn",
+        "drop_states", "drop_schedule", "drop_note_pressing",
     })
 
     def on_start(self):
@@ -90,7 +89,6 @@ class ControllerBase(PluginBase):
 
         self._param_values.setdefault("cell_labels", {})
         self._param_values.setdefault("cell_bindings", {})
-        self._param_values.setdefault("cell_learn", "")
         self._param_values.setdefault("bg", "Default")
         # Per-button drop state. Keys are stringified ids (0..N-1) so
         # the dicts round-trip cleanly through JSON.
@@ -291,35 +289,12 @@ class ControllerBase(PluginBase):
             self.send_cc(ch_y, cc_y, max(0, min(127, y)))
 
     def on_cc(self, channel, cc, value):
-        """MIDI Learn capture (if armed for a cell), else bidirectional
-        sync — silently update the matching cell, no OUT re-emit."""
-        learn_target = self._param_values.get("cell_learn") or ""
-        # XY pads have two independent axes — the learn target encodes
-        # which one with a ":x" / ":y" suffix; bare cell name = X axis
-        # (the legacy single-axis pads pick this branch unchanged).
-        learn_cell = learn_target
-        learn_axis = "x"
-        if ":" in learn_target:
-            learn_cell, _, suffix = learn_target.partition(":")
-            if suffix in ("x", "y"):
-                learn_axis = suffix
-        if learn_cell and learn_cell in self._defaults:
-            bindings = dict(self._param_values.get("cell_bindings") or {})
-            # Layer the captured axis on top of whatever was there;
-            # preserve every other field (the OTHER axis, on/off pair,
-            # spring config, ...) so toggling Learn doesn't blow away
-            # unrelated config.
-            prev = dict(bindings.get(learn_cell) or {})
-            if learn_axis == "y":
-                prev["channel_y"] = channel
-                prev["cc_y"] = cc
-            else:
-                prev["channel"] = channel
-                prev["cc"] = cc
-            bindings[learn_cell] = prev
-            self.set_param("cell_bindings", bindings)
-            self.set_param("cell_learn", "")
-            return
+        """Bidirectional sync — silently update any cell whose effective
+        (channel, cc) matches the incoming event. No OUT re-emit.
+
+        The dedicated MIDI Learn flow lives at the framework level now
+        (/api/cc-learn/start fires SSE cc_learn_result; the frontend
+        popup writes the binding via PATCH params.cell_bindings)."""
         for name in self._defaults:
             binding = self._effective_binding(name)
             if binding is None:

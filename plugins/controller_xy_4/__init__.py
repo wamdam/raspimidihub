@@ -65,7 +65,6 @@ external pads, or sequencer-driven drops."""
             cols=4, rows=5,
             labels_param="cell_labels",
             bindings_param="cell_bindings",
-            learn_param="cell_learn",
             cells=[
                 # Rows 1-2: two 2x2 XY pads.
                 LayoutCell(XYPad("xy1", "XY 1", default_x=64, default_y=64),

@@ -476,11 +476,9 @@ class LayoutGrid(StructuralParam):
     dispatcher — LayoutGrid is a structural container, not a value-
     holding param.
 
-    `labels_param` / `bindings_param` / `learn_param`: optional names of
-    sibling params holding per-cell user overrides — these ARE server-
-    stored (so renames + rebinds + Learn captures sync across browsers).
-    Edit-mode is purely local React state owned by the JS component, so
-    toggling "Edit cells" on one browser does NOT propagate.
+    `labels_param` / `bindings_param`: optional names of sibling
+    params holding per-cell user overrides — these ARE server-stored
+    (so renames + rebinds sync across browsers via SSE).
     """
     name: str
     label: str
@@ -489,7 +487,6 @@ class LayoutGrid(StructuralParam):
     cells: list = field(default_factory=list)  # list[LayoutCell]
     labels_param: str | None = None
     bindings_param: str | None = None
-    learn_param: str | None = None  # str-valued: "" idle, "<cell_name>" learning
 
     def to_dict(self) -> dict:
         d = {
@@ -517,8 +514,6 @@ class LayoutGrid(StructuralParam):
             d["labels_param"] = self.labels_param
         if self.bindings_param:
             d["bindings_param"] = self.bindings_param
-        if self.learn_param:
-            d["learn_param"] = self.learn_param
         return d
 
     def inner_params(self) -> list[Param]:
@@ -562,7 +557,7 @@ def schema_param_keys(params: list) -> set[str]:
       - Every `Param.name` (top-level + Group children + inside any
         StructuralParam container).
       - Every auxiliary-pointer attribute (any string attr ending in
-        `_param`, e.g. `labels_param`, `bindings_param`, `learn_param`,
+        `_param`, e.g. `labels_param`, `bindings_param`,
         `states_param`, `snapshots_param`, `modes_param`,
         `schedule_param`, `length_param`, …) — these point at sibling
         param names like `cell_labels`, `drop_states`, etc.

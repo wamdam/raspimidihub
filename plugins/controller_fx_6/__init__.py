@@ -59,7 +59,6 @@ external pads, or sequencer-driven drops."""
             cols=6, rows=5,
             labels_param="cell_labels",
             bindings_param="cell_bindings",
-            learn_param="cell_learn",
             cells=[
                 # Row 1: knobs A — ch 1, CC 16..21.
                 *[LayoutCell(Knob(f"fx{i}", f"FX{i+1}", min=0, max=127, default=64),
