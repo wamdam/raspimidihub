@@ -25,6 +25,8 @@ toggle) are called out in the relevant subsection.
 
 ## Plugin Control Mappings
 
+![Plugin Control Mappings sub-page: every CC binding across every plugin instance and every controller cell, one row each. Plugin params (Arpeggiator) and controller cells (Mixer 8) interleave; tap any row to open the matching popup.](../screenshots/31-settings-cc-bindings.png){width=48%}
+
 A scroll of rows, one per CC binding across every plugin instance
 on the Pi. Columns:
 

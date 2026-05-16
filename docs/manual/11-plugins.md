@@ -137,6 +137,8 @@ for on a play surface) can be bound to an incoming MIDI CC.
 **Long-press** the control on touch -- or **right-click** with a
 mouse -- and the binding popup opens.
 
+![The CcBinding popup over the Arpeggiator's Accent Vel. knob: title bar, "Incoming MIDI CC that drives this control." subtitle, Channel + CC wheels, MIDI Learn / Reset to default / Clear, Cancel / Save.](../screenshots/32-cc-bind-popup.png){width=48%}
+
 The popup shows:
 
 - **Current binding** -- the (channel, CC) the control currently

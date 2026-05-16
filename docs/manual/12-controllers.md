@@ -58,6 +58,10 @@ The label, button **On / Off** values, and XY-pad spring config
 live in the *plugin config* panel (section 12.7) -- not in the
 long-press popup, which is binding-only.
 
+![Long-press the Mixer 8 K1 knob — CellBinding popup with the "MIDI CC for this cell — touch emits, hardware mirrors." subtitle and the Channel + CC wheels.](../screenshots/33-cell-bind-popup.png){width=48%}
+
+![Long-press the XY 4 XY 1 pad — the same popup grows to two axis sections, each with its own Channel + CC wheels and its own MIDI Learn button.](../screenshots/34-cell-bind-popup-xy.png){width=48%}
+
 ## Drop Buttons
 
 Each controller has a row of four **drop buttons** above the play
