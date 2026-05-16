@@ -37,7 +37,7 @@ upper ch2 transpose 0 (piano). Left hand plays bass, right plays piano."""
         ]),
     ]
 
-    inputs = ["Notes", "CC#74 (split point)"]
+    inputs = ["Notes", "CC (long-press Split Point to bind)"]
     outputs = ["Notes (lower → ch A, upper → ch B)"]
 
     def _route(self, note):

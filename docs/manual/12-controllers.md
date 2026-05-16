@@ -41,16 +41,22 @@ universal:
   and an **Off** value. Knobs and faders send the dragged value;
   buttons toggle between On and Off; XY pads send two CCs (one
   per axis).
-- **Every cell is renameable** -- tap the label to edit inline.
-- **Every cell is MIDI-Learnable** -- a hardware control can drive
-  the on-screen cell, with the cell's CC then being forwarded to
-  the destination.
-- **XY pads have per-axis MIDI Learn** -- each axis captures
-  separately.
+- **Symmetric in / out** -- an incoming CC with the same (channel,
+  CC) silently mirrors the on-screen cell. Touch emits, hardware
+  mirrors -- one number, both directions.
+- **Long-press to rebind a cell** -- hold any cell on the
+  Controller page and the *cell-binding popup* opens. Pick a
+  channel + CC manually, MIDI-Learn from a hardware twist, or
+  **Reset to factory** to restore the template's wiring. Same
+  popup as the plugin-control popup (chapter 11.7), but the
+  binding is symmetric.
+- **XY pads have per-axis MIDI Learn** -- the cell-binding popup
+  grows to two axis sections (X / Y), each with its own
+  Channel + CC + Learn button. Save commits both axes at once.
 
-The configuration -- which CC, which channel, what name, what
-theme -- lives in the controller's *plugin config* panel,
-described in section 12.7.
+The label, button **On / Off** values, and XY-pad spring config
+live in the *plugin config* panel (section 12.7) -- not in the
+long-press popup, which is binding-only.
 
 ## Drop Buttons
 
@@ -160,13 +166,21 @@ The bottom of the tab shows the standard MIDI activity bar
 Tapping the pencil on the controller tab (or tapping the
 controller's row / column header in the routing matrix) opens the
 *plugin config* view. It is a flat list of every cell on the
-controller, each with:
+controller -- each card carries the parts of a cell's
+configuration that aren't part of the (channel, CC) binding:
 
-- **Ch** wheel (1--16)
-- **CC** wheel (0--127)
-- **On** wheel (the value sent on press / drag-end-up)
-- **Off** wheel (the value sent on release / drag-end-down)
-- **Learn** button (captures from hardware)
+- **Cell label** -- rename the on-screen text; blank to fall back
+  to the template default.
+- **Button On / Off values** (button cells only) -- the CC values
+  sent on press / release; a `↔` swap inverts them.
+- **XY pad spring config** (XY pad cells only) -- spring force
+  (0..127; 0 = off) and spring home (Bottom-left / Center) drive
+  the auto-release animation.
+
+The cell's MIDI binding (Channel, CC, Learn) is **not** here --
+long-press the cell on the Controller page for that. Settings →
+Plugin Control Mappings (chapter 16) lists every cell's current
+binding in a single table if you want a global view.
 
 Each of the four drop buttons gets its own card with:
 

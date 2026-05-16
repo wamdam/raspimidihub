@@ -59,7 +59,7 @@ vibrato to a synth pad without touching a physical controller."""
 
     cc_outputs = [1]
 
-    inputs = ["CC#74 (frequency)", "CC#75 (depth)", "Clock"]
+    inputs = ["CC (long-press Frequency / Depth to bind)", "Clock"]
     outputs = ["CC (configurable #)"]
 
     display_outputs = [

@@ -210,9 +210,10 @@ Routing example:
   [Keyboard]    → [Euclidean] → [Synth]
   [Master Clock] → [Euclidean]
 
-CC automation: CC 74 = Rate, CC 75 = Gate (Arp-consistent).
-Block CC 70..88 (skipping CC 84 / Portamento Control) covers every
-play-surface knob; see Appendix A for the full table."""
+CC automation: every play-surface knob is bindable. Long-press a
+control to pick a Channel + CC (or MIDI-Learn one). Factory
+defaults are shown in the popup; see Appendix A for the full
+default-CC table."""
 
     params = [
         # Top wide row — chosen on stage.
@@ -303,7 +304,7 @@ play-surface knob; see Appendix A for the full table."""
     inputs = [
         "Notes",
         "CC#64 (sustain pedal — temporarily holds the input chord)",
-        "CC#70..83, CC#85..88 (parameter automation; see HELP)",
+        "CC for any bound play-surface knob (long-press to bind)",
         "Ctrl Ch notes (set Pattern slot 1..8)",
         "Clock",
         "Aftertouch",

@@ -73,7 +73,7 @@ echoes that fade out on a lead synth line."""
         ]),
     ]
 
-    inputs = ["Notes", "CC#74 (delay time)", "CC#75 (repeats)", "Clock"]
+    inputs = ["Notes", "CC (long-press a knob to bind)", "Clock"]
     outputs = ["Notes (original + delayed)"]
 
     clock_divisions = _DELAY_RATES

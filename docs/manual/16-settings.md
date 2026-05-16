@@ -1,16 +1,56 @@
 # Settings
 
-The **Settings** tab is a single scroll containing every system-level
-configuration the appliance exposes. Each card is documented here in
-the order it appears on the page.
+The **Settings** tab is a hub of six sub-pages. The hub shows a card
+per sub-page; tapping a card opens it under a `< Settings / <title>`
+back-bar. The active sub-page is part of the URL
+(`/settings/<section>`) and the bottom-nav remembers your last
+sub-page across tab switches, same as Routing / Controller / Play.
 
-![The Settings tab, top of scroll: System card with live stats, WiFi card with the mode picker.](../screenshots/04-settings.png){width=42%}
+The six sub-pages:
+
+| Sub-page | What lives there |
+|---|---|
+| **Sys Info** | Live system stats (version, CPU, RAM, latency, IPs), **Reload App**, **Reboot Pi** |
+| **Network** | WiFi card with mode picker + home / AP credentials, USB-tether status, Ethernet config |
+| **MIDI** | Default routing for newly-plugged-in devices (all-to-all / disconnected) |
+| **Display** | Per-device browser preferences — activity bar, knob/wheel tick sounds, scroll-assist FABs, layout density |
+| **Update** | Check GitHub, manage stored versions, install |
+| **Plugin Control Mappings** | Flat editable table of every CC binding across every plugin instance and every controller cell |
 
 The dirty-state asterisk (chapter 6.4) does **not** track most
 Settings changes. WiFi credentials, ethernet config, and the AP
 password apply the moment you save them. The handful that *do* feed
 the dirty-state model (the default-routing choice; the activity-bar
 toggle) are called out in the relevant subsection.
+
+## Plugin Control Mappings
+
+A scroll of rows, one per CC binding across every plugin instance
+on the Pi. Columns:
+
+- **Plugin** -- the instance's display name (the one you set via
+  the matrix row header, or the spawn-time default).
+- **Param** -- the control's label. For controller cells: the
+  cell label as edited in the device-detail panel; XY pads expand
+  to two rows with `(X)` and `(Y)` suffixes.
+- **Ch** -- channel (`Any` or 1..16).
+- **CC** -- the CC number (or `—` for a cleared binding).
+
+Tap any row to open the same long-press popup you'd get on the
+control itself -- CcBinding for plugin params (chapter 11.7),
+CellBinding for controller cells (chapter 12). Edit, MIDI Learn,
+Reset to factory, Clear, Save. Cleared bindings render dimmed
+with `—` in the CC column.
+
+The table is live: any binding edit made from this page, from a
+long-press popup, or via the REST API broadcasts `cc_map_changed`
+SSE and the table refreshes within milliseconds. Renaming an
+instance also reflects immediately via `plugin-changed`.
+
+When there are no plugin instances yet, the page shows a
+placeholder pointing at the Routing tab's **Add** button. There's
+no "create" affordance here -- this is a viewer / editor over
+existing instances, not a way to spawn new ones.
 
 ## WiFi
 

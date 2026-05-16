@@ -13,6 +13,12 @@ The conceptual model of plugins -- how they fit into the routing
 matrix, how they are added and removed, how clock sync and CC
 automation work -- is in chapter 11.
 
+**CC defaults.** Where a parameter shows a `(CC N default)` note,
+that's the plugin author's factory binding -- the (Any channel,
+CC N) the param ships with. Users override per-instance via
+long-press → MIDI Learn (chapter 11.7); the default just tells
+you what to expect before any rebinding.
+
 ## Arpeggiator
 
 Detailed surface-and-workflow reference: chapter 13. Plugin-level

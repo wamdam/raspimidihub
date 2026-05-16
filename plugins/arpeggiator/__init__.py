@@ -190,8 +190,7 @@ active slot without arpeggiating."""
     cc_outputs = []
 
     inputs = ["Notes", "CC#64 (sustain pedal — temporarily holds arping notes)",
-              "CC#70 (pattern)", "CC#71 (octaves)", "CC#73 (steps)",
-              "CC#74 (rate)", "CC#75 (gate)", "CC#83 (accent vel.)",
+              "CC for any bound play-surface knob (long-press to bind)",
               "Pattern Ctrl Ch notes (set Pattern slot 1..8)",
               "Clock", "Aftertouch", "Pitch Bend"]
     outputs = ["Notes (arpeggiated)", "Aftertouch (pass-through)", "Pitch Bend (pass-through)"]
