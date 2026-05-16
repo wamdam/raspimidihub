@@ -6,6 +6,7 @@
 import { useState, useEffect } from '../lib/hooks.module.js';
 import { html, api } from '../ui/common.js';
 import { useSSESubscription } from '../ui/sse-subscriptions.js';
+import { useSharedUiState } from '../lib/spectator/shared-ui-state.js';
 import { PluginIcon } from '../ui/icons.js';
 import { ConnectionMatrix } from './matrix.js';
 import { FilterPanel } from '../panels/filterpanel.js';
@@ -19,8 +20,15 @@ export function RoutingPage({ devices, connections, refresh, showToast, clockSou
          'transport-start'],
         [],
     );
-    const [filterConnId, setFilterConnId] = useState(null);
-    const [showAddPlugin, setShowAddPlugin] = useState(false);
+    // filterConnId and showAddPlugin drive the two big in-page
+    // overlays (filter panel, add-plugin modal). Mirroring them via
+    // useSharedUiState lets a spectator see when the source opens
+    // those panels. The lists rendered inside them (plugin types,
+    // BT devices) are read-only API state and stay component-local
+    // — the spectator's view shows the modal frame but its lists
+    // will be empty unless the spectator separately fetches.
+    const [filterConnId, setFilterConnId] = useSharedUiState('filterConnId', null);
+    const [showAddPlugin, setShowAddPlugin] = useSharedUiState('showAddPlugin', false);
     const [pluginTypes, setPluginTypes] = useState({});
     const loadPluginTypes = () => { api('/plugins').then(setPluginTypes).catch(() => {}); };
     const addPlugin = async (typeName) => {
@@ -161,14 +169,18 @@ export function RoutingPage({ devices, connections, refresh, showToast, clockSou
         showToast('Mapping updated');
     };
 
-    const [saving, setSaving] = useState(false);
+    // saving / loading / panicState all surface in the matrix screen
+    // (the Save/Load buttons flip label, the panic button cycles
+    // colour) so they go through useSharedUiState — a spectator
+    // should see the source flashing "Saving…" or arming a panic.
+    const [saving, setSaving] = useSharedUiState('saving', false);
     const saveConfig = async () => {
         setSaving(true);
         await api('/config/save', { method: 'POST' });
         setSaving(false);
         showToast('Configuration saved');
     };
-    const [loading, setLoading] = useState(false);
+    const [loading, setLoading] = useSharedUiState('loading', false);
     const loadConfig = async () => {
         setLoading(true);
         await api('/config/load', { method: 'POST' });
@@ -178,7 +190,7 @@ export function RoutingPage({ devices, connections, refresh, showToast, clockSou
     };
     // Panic state machine: 'idle' → tap → 'soft' → tap → 'hard' (briefly, then back to idle)
     // Incoming MIDI Start resets to 'idle'. Hard auto-decays after 600ms.
-    const [panicState, setPanicState] = useState('idle');
+    const [panicState, setPanicState] = useSharedUiState('panicState', 'idle');
     const panic = async () => {
         const goingHard = panicState === 'soft';
         setPanicState(goingHard ? 'hard' : 'soft');

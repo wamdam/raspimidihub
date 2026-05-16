@@ -27,6 +27,9 @@ import { RoutingPage } from './pages/routing.js';
 import { ControllerPage } from './pages/controller.js';
 import { PlayPage } from './pages/play.js';
 import { SettingsPage } from './pages/settings.js';
+import { SpectatorContext, useSharedUiState } from './lib/spectator/shared-ui-state.js';
+import { useSourceBroadcaster } from './lib/spectator/broadcast.js';
+import { SpectatorView } from './lib/spectator/view.js';
 
 // Header badge: "RaspiMIDIHub [● if stale] v2.0.9·a1b2c3d4". The red
 // dot is the only visual when the loaded JS bundle's build token
@@ -115,9 +118,16 @@ function loadTabSubState(tab) {
     } catch { return null; }
 }
 
-function App() {
+function App({ onSpectatorWatched, onRouteChange }) {
     const { route, navigate } = useRouter();
     const tab = route.tab;
+
+    // Publish route changes upward so SourceAppWrapper's broadcaster
+    // can mirror them. In spectator mode the prop is undefined and
+    // this is a no-op.
+    useEffect(() => {
+        if (onRouteChange) onRouteChange(route);
+    }, [route, onRouteChange]);
     const setTab = useCallback((t) => {
         // Capture where we're leaving FROM, then jump to the new
         // tab's remembered sub-state (or empty if nothing saved /
@@ -136,7 +146,7 @@ function App() {
     const devicesRef = useRef([]);
     const connectionsRef = useRef([]);
     const [connections, setConnections] = useState([]);
-    const [toast, setToast] = useState('');
+    const [toast, setToast] = useSharedUiState('toast', '');
     const [configFallback, setConfigFallback] = useState(false);
     const [version, setVersion] = useState('');
     // Server's current build token vs the one this JS bundle was loaded
@@ -358,6 +368,15 @@ function App() {
                 };
             });
         }
+        if (type === 'spectator-watch-start' && onSpectatorWatched) {
+            // A spectator just connected to us; SourceAppWrapper
+            // turns its broadcaster on. Re-firing while already
+            // watched is a no-op (useState dedup).
+            onSpectatorWatched(true);
+        }
+        if (type === 'spectator-watch-stop' && onSpectatorWatched) {
+            onSpectatorWatched(false);
+        }
     }, (connected) => {
         setSseConnected(connected);
         if (connected) refresh();
@@ -400,16 +419,21 @@ function App() {
     // children just call `showContextMenu(x, y, items)` without knowing
     // about the menu's internals.
     const [clipboard, setClipboard] = useState(null);
-    const [contextMenu, setContextMenu] = useState(null);
+    // contextMenu / ccBinding / cellBinding flow through the
+    // spectator broadcast channel so a spectator mirrors the
+    // currently-open popover. JSON serialization strips menu-item
+    // onClick handlers — the spectator renders the menu but its
+    // clicks are inert (see ContextMenu's item.action guard).
+    const [contextMenu, setContextMenu] = useSharedUiState('contextMenu', null);
     const showContextMenu = useCallback((x, y, items) => {
         setContextMenu({ x, y, items });
-    }, []);
-    const closeContextMenu = useCallback(() => setContextMenu(null), []);
+    }, [setContextMenu]);
+    const closeContextMenu = useCallback(() => setContextMenu(null), [setContextMenu]);
 
     // CC binding popup state. Long-press / right-click on a bindable
     // control passes through `openCcBinding(instanceId, paramName)`
     // (threaded via displayCtx in renderparam.js).
-    const [ccBinding, setCcBinding] = useState(null);
+    const [ccBinding, setCcBinding] = useSharedUiState('ccBinding', null);
     const openCcBinding = useCallback(async (instanceId, paramName) => {
         // Look up the plugin's display name + param label so the
         // popup header reads "Arp 1 → Rate" instead of opaque IDs.
@@ -437,13 +461,13 @@ function App() {
             setCcBinding({ instanceId, paramName, paramLabel: paramName, pluginName: instanceId });
         }
     }, []);
-    const closeCcBinding = useCallback(() => setCcBinding(null), []);
+    const closeCcBinding = useCallback(() => setCcBinding(null), [setCcBinding]);
 
     // Controller-cell binding popup. Parallel to openCcBinding but for
     // LayoutGrid cells — those carry a symmetric (channel, cc) in
     // `cell_bindings` rather than an entry in `cc_map`. Long-press on
     // a controller cell on the Controller page routes here.
-    const [cellBinding, setCellBinding] = useState(null);
+    const [cellBinding, setCellBinding] = useSharedUiState('cellBinding', null);
     const openCellBinding = useCallback(async (instanceId, cellName) => {
         try {
             const inst = await api(`/plugins/instances/${encodeURIComponent(instanceId)}`);
@@ -476,7 +500,7 @@ function App() {
             setCellBinding({ instanceId, cellName, cellLabel: cellName, pluginName: instanceId });
         }
     }, []);
-    const closeCellBinding = useCallback(() => setCellBinding(null), []);
+    const closeCellBinding = useCallback(() => setCellBinding(null), [setCellBinding]);
 
     let page;
     switch (tab) {
@@ -522,7 +546,7 @@ function App() {
             </div>
         </div>
         ${configFallback && html`<div class="banner">Config unreadable — using default all-to-all routing. Save to fix.</div>`}
-        <div class="main ${showMidiBar ? 'with-midi-bar' : ''}">${page}<${ScrollAssist} /></div>
+        <div class="main ${showMidiBar ? 'with-midi-bar' : ''}" data-spectator-scroll="main">${page}<${ScrollAssist} /></div>
         ${showMidiBar && html`<${MidiBar} events=${midiEvents} />`}
         <nav class="bottom-nav">
             <button class=${tab === 'routing' ? 'active' : ''} onclick=${() => setTab('routing')}>
@@ -552,6 +576,22 @@ function App() {
     `;
 }
 
+// SourceAppWrapper exists for one reason: App needs to consume the
+// SpectatorContext from BEFORE its hooks run (useSharedUiState calls
+// useContext at the top of App, before App's own return-time
+// Provider would take effect). So the source-mode boot path wraps
+// App in this component, which provides the source-side context up
+// the tree. In spectator mode this wrapper is bypassed — SpectatorView
+// provides its own context above App directly.
+function SourceAppWrapper() {
+    const [watched, setWatched] = useState(false);
+    const [route, setRoute] = useState(null);
+    const sourceCtx = useSourceBroadcaster({ watched, route });
+    return html`<${SpectatorContext.Provider} value=${sourceCtx}>
+        <${App} onSpectatorWatched=${setWatched} onRouteChange=${setRoute} />
+    </${SpectatorContext.Provider}>`;
+}
+
 // Hygiene: prune stale per-device localStorage entries on app startup
 // so the per-origin store doesn't grow unboundedly across sessions.
 runStorageCleanup();
@@ -561,4 +601,40 @@ runStorageCleanup();
 // avoids a flash of the wrong spacing on app boot.
 applyLayoutDensity(getLayoutDensity());
 
-render(html`<${App} />`, document.getElementById('app'));
+// Spectator-mode boot branch. When ?spectate=<conn_id> is in the URL,
+// we render SpectatorView instead of the normal app — the view drives
+// App from a network-supplied route/state instead of from window
+// state, so OBS Browser Source (or any tab) can mirror a phone with
+// effectively zero latency. ?touches=1 enables the ripple overlay.
+const _spectateParams = (() => {
+    try {
+        const p = new URLSearchParams(window.location.search);
+        const cid = p.get('spectate');
+        if (!cid) return null;
+        const num = (k) => {
+            const v = p.get(k);
+            return v == null || v === '' ? 0 : Number(v) || 0;
+        };
+        return {
+            clientId: cid,
+            showTouches: p.get('touches') === '1',
+            frame: p.get('frame') === '1',
+            tiltX: num('tilt-x'),
+            tiltY: num('tilt-y'),
+            chroma: p.get('chroma') || '',
+        };
+    } catch { return null; }
+})();
+
+if (_spectateParams) {
+    render(html`<${SpectatorView}
+        clientId=${_spectateParams.clientId}
+        showTouches=${_spectateParams.showTouches}
+        frame=${_spectateParams.frame}
+        tiltX=${_spectateParams.tiltX}
+        tiltY=${_spectateParams.tiltY}
+        chroma=${_spectateParams.chroma}
+        AppComponent=${App} />`, document.getElementById('app'));
+} else {
+    render(html`<${SourceAppWrapper} />`, document.getElementById('app'));
+}

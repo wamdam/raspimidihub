@@ -22,6 +22,7 @@ import { useEffect, useRef, useState } from '../lib/hooks.module.js';
 import { html, tickFeedback } from './common.js';
 import { PluginWheel } from './wheel.js';
 import { PluginChannelSelect } from './channelselect.js';
+import { useSharedUiState } from '../lib/spectator/shared-ui-state.js';
 
 const ANY_CHANNEL_LABEL = 'Any';
 
@@ -42,10 +43,16 @@ async function api(path, opts) {
 
 export function CcBinding({ open, onClose }) {
     // open = null | { instanceId, paramName, paramLabel, pluginName }
-    const [binding, setBinding] = useState(null);   // {ch, cc}
+    // binding + learning mirror to the spectator so the wheel value
+    // the user is editing on the source shows on the OBS feed.
+    // defaultCc and collisions stay local — defaultCc is fixed on
+    // open, and collisions are recomputed by a useEffect below that
+    // re-fires whenever binding changes (so the spectator's local
+    // refresh stays in sync without an extra broadcast).
+    const [binding, setBinding] = useSharedUiState('ccBindingDraft', null);
     const [defaultCc, setDefaultCc] = useState(null);
     const [collisions, setCollisions] = useState([]);
-    const [learning, setLearning] = useState(false);
+    const [learning, setLearning] = useSharedUiState('ccLearning', false);
     const learnIdRef = useRef(null);
 
     // Reset state when the popup opens for a new param.
@@ -132,6 +139,17 @@ export function CcBinding({ open, onClose }) {
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
     }, [open]);
+
+    // Recompute collisions whenever binding changes. On the source
+    // this fires on every wheel turn (alongside the inline call in
+    // onChWheel / onCcWheel). On the spectator, where wheel turns
+    // arrive as binding state pushed from the network, this is the
+    // ONLY place collisions get refreshed — without it the
+    // "Also drives:" line would stay frozen at the initial value.
+    useEffect(() => {
+        if (!open || !binding) return;
+        refreshCollisions(open, binding.cc, binding.ch);
+    }, [open, binding]);
 
     async function refreshCollisions(o, cc, ch) {
         if (cc === null || cc === undefined) { setCollisions([]); return; }

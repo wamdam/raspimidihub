@@ -21,6 +21,12 @@
 
 import { useEffect, useMemo } from '../lib/hooks.module.js';
 
+const LABEL_KEY = 'raspimidihub:spectatorLabel';
+
+function readPersistedLabel() {
+    try { return localStorage.getItem(LABEL_KEY) || ''; } catch { return ''; }
+}
+
 class SubscriptionManager {
     constructor() {
         this.contributions = new Map(); // hook_id -> { events: Set, instances: Set }
@@ -28,12 +34,26 @@ class SubscriptionManager {
         this.flushTimer = null;
         this.lastSent = null; // last JSON we POSTed, to dedup
         this.nextId = 0;
+        // Optional human-readable label for this device, surfaced via
+        // /api/spectator/clients so spectators can pick which source
+        // to mirror. Read from localStorage at construction; can be
+        // updated at runtime via setSpectatorLabel().
+        this.label = readPersistedLabel();
     }
 
     setConnectionId(id) {
         if (this.connId === id) return;
         this.connId = id;
         this.lastSent = null; // a new connection — force a flush
+        this.scheduleFlush();
+    }
+
+    setLabel(label) {
+        const next = (label || '').slice(0, 64);
+        if (this.label === next) return;
+        this.label = next;
+        try { localStorage.setItem(LABEL_KEY, next); } catch {}
+        this.lastSent = null;
         this.scheduleFlush();
     }
 
@@ -76,6 +96,7 @@ class SubscriptionManager {
             conn_id: this.connId,
             events: [...events].sort(),
             instances: [...instances].sort(),
+            label: this.label,
         });
         if (body === this.lastSent) return;
         this.lastSent = body;
@@ -95,6 +116,25 @@ const manager = new SubscriptionManager();
 /** Called by App once with the conn_id received in the `connection` SSE event. */
 export function setSSEConnectionId(id) {
     manager.setConnectionId(id);
+}
+
+/** Read the active conn_id. Used by the spectator broadcaster to
+ * stamp outgoing /api/spectator/state POSTs. Returns null until the
+ * SSE handshake has produced one. */
+export function getSSEConnectionId() {
+    return manager.connId;
+}
+
+/** Current device label (the human-readable name surfaced in the
+ * spectator picker). Empty string when nothing has been set. */
+export function getSpectatorLabel() {
+    return manager.label || '';
+}
+
+/** Update this device's label. Persisted to localStorage; reflushed
+ * to the server via /api/sse/subscribe. */
+export function setSpectatorLabel(label) {
+    manager.setLabel(label);
 }
 
 /**

@@ -48,11 +48,18 @@ class SSEConnection:
     `events` and `instances` are the client's currently-active
     subscription set. send_sse() consults them to decide whether to
     fan an event out to this client. Empty sets = receive nothing
-    (intentional — every view must declare its interest)."""
+    (intentional — every view must declare its interest).
+
+    `label` is an optional human-readable name. The only general-
+    purpose extension field on the connection record; feature-
+    specific per-conn state (e.g. the spectator service's mirror
+    snapshot, target, viewport) lives in those modules' own maps,
+    not here."""
     conn_id: str
     queue: "asyncio.Queue"
     events: set[str]
     instances: set[str]
+    label: str = ""
 
 
 SECURITY_HEADERS = {
@@ -138,6 +145,23 @@ class WebServer:
         # Kept for shutdown fan-out only — points to the same queue
         # objects held in _sse_connections.
         self._sse_queues: list[asyncio.Queue] = []
+        # Pluggable per-recipient filter hooks. Each entry takes
+        # (event, data) and returns either None (not my event,
+        # default events-set filter applies) or a predicate
+        # (conn -> bool) that decides per-recipient delivery.
+        # The spectator service registers one of these at startup;
+        # send_sse() consults them before falling back to the
+        # default. Keeps web.py free of feature-specific branches.
+        self._sse_filters: list[callable] = []
+        # Callbacks fired when an SSE connection closes; receives
+        # conn_id. Feature modules register handlers to clean up
+        # per-conn state they own (see add_disconnect_handler).
+        self._disconnect_handlers: list[callable] = []
+        # Extensions called after /api/sse/subscribe has applied the
+        # default events/instances. Each receives (conn, body) and
+        # may consume additional keys (e.g. spectator.py reads
+        # `label` and `spectate_target`). See add_subscribe_extension.
+        self._subscribe_extensions: list[callable] = []
         # SSE traffic meter — incremented per broadcast (one per send_sse,
         # not per recipient), sampled to _sse_per_sec each second by
         # runtime.loops.rate_meter so /api/system can report it cheaply.
@@ -171,6 +195,14 @@ class WebServer:
             return func
         return decorator
 
+    def add_sse_filter(self, fn) -> None:
+        """Register a pluggable per-recipient delivery filter. fn is
+        called as fn(event, data) and returns either None (default
+        events-set filter applies) or a predicate (conn -> bool)
+        that decides whether each subscriber should receive this
+        event. Used by spectator.py to handle 'spectator-state'."""
+        self._sse_filters.append(fn)
+
     async def send_sse(self, event: str, data: dict):
         """Broadcast an SSE event to clients subscribed to it.
 
@@ -182,6 +214,10 @@ class WebServer:
         receives nothing — every view must explicitly declare its
         interest via /api/sse/subscribe.
 
+        Plug-in filters registered via add_sse_filter() get first
+        say on events they care about; if none of them returns a
+        predicate, the default events-set filter applies.
+
         If a client's queue is full (slow / backgrounded tab), drop
         its oldest queued event and try again — the client stays
         subscribed; the freshest event wins.
@@ -190,9 +226,20 @@ class WebServer:
         self._sse_count_window += 1
         per_instance = event in _PER_INSTANCE_EVENTS
         instance_id = data.get("instance_id") if per_instance else None
+        # Plug-in filters: first one to claim the event decides
+        # per-recipient delivery for everyone.
+        custom_predicate = None
+        for fn in self._sse_filters:
+            p = fn(event, data)
+            if p is not None:
+                custom_predicate = p
+                break
         for conn in self._sse_connections.values():
             if per_instance:
                 if instance_id is None or instance_id not in conn.instances:
+                    continue
+            elif custom_predicate is not None:
+                if not custom_predicate(conn):
                     continue
             else:
                 if event not in conn.events:
@@ -209,6 +256,43 @@ class WebServer:
                     q.put_nowait(msg)
                 except asyncio.QueueFull:
                     pass
+
+    async def send_sse_direct(self, conn_id: str, event: str, data: dict) -> None:
+        """Push an SSE event to a single recipient's queue, bypassing
+        the subscription filter. Used for targeted lifecycle messages
+        like spectator-watch-start/stop where the recipient is known
+        by conn_id rather than by event-type interest."""
+        conn = self._sse_connections.get(conn_id)
+        if conn is None:
+            return
+        msg = f"event: {event}\ndata: {json.dumps(data)}\n\n"
+        self._sse_count_window += 1
+        q = conn.queue
+        try:
+            q.put_nowait(msg)
+        except asyncio.QueueFull:
+            try:
+                q.get_nowait()
+            except asyncio.QueueEmpty:
+                pass
+            try:
+                q.put_nowait(msg)
+            except asyncio.QueueFull:
+                pass
+
+    def add_disconnect_handler(self, fn) -> None:
+        """Register a callback called with conn_id when an SSE
+        connection closes. Used by feature modules (e.g. spectator.py)
+        to clean up per-conn state without web.py having to know
+        about them."""
+        self._disconnect_handlers.append(fn)
+
+    def add_subscribe_extension(self, fn) -> None:
+        """Register an extension run from /api/sse/subscribe after
+        events/instances are applied. Receives (conn, body) so feature
+        modules can consume extra request keys without forking the
+        subscribe handler."""
+        self._subscribe_extensions.append(fn)
 
     def sample_sse_rate(self) -> None:
         """Roll the broadcast-event counter into _sse_per_sec. Called once
@@ -355,6 +439,15 @@ class WebServer:
             pass
         finally:
             watcher.cancel()
+            # Notify feature modules so they can clean up any per-conn
+            # state they own (e.g. spectator's target / watchers map).
+            # Must run BEFORE the pop() so handlers can still look up
+            # the conn record if they want to.
+            for fn in self._disconnect_handlers:
+                try:
+                    fn(conn_id)
+                except Exception:  # noqa: BLE001 — best-effort cleanup
+                    pass
             self._sse_connections.pop(conn_id, None)
             if queue in self._sse_queues:
                 self._sse_queues.remove(queue)

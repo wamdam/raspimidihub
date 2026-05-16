@@ -233,6 +233,17 @@ def _open_settings_cc_bindings(page) -> None:
     time.sleep(0.3)
 
 
+def _open_settings_spectator(page) -> None:
+    """Already at /settings/spectator — give the device-name field a
+    friendly label so the screenshot shows a realistic value rather
+    than a blank input, and wait briefly for the clients-list poll
+    to render the spectatable devices."""
+    label_input = page.locator(".card input[placeholder*='Living-room']")
+    if label_input.count() > 0:
+        label_input.first.fill("Phone")
+    time.sleep(0.5)  # let setSpectatorLabel re-flush via /api/sse/subscribe
+
+
 def build_scenes(target: str, instances: dict[str, dict]) -> list[dict]:
     """Materialise the scene list. URL paths reference the running
     Pi; client_ids are resolved per-scene from the demo instances we
@@ -249,6 +260,13 @@ def build_scenes(target: str, instances: dict[str, dict]) -> list[dict]:
         {"name": "31-settings-cc-bindings",
          "path": "/settings/cc-bindings",
          "setup": _open_settings_cc_bindings},
+        # Spectator mirroring sub-page (the picker + this device's
+        # spectator URL). The setup hook fills the device-name field
+        # so the screenshot shows a realistic label rather than the
+        # empty placeholder.
+        {"name": "36-settings-spectator",
+         "path": "/settings/spectator",
+         "setup": _open_settings_spectator},
     ]
     # Controller play-surface scenes. One per controller template,
     # path resolves to the instance's id; the file name is the

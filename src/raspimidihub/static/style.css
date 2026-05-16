@@ -2565,3 +2565,261 @@ body {
 
 /* Device list offline dot */
 .dot.offline { background: #555 !important; }
+
+/* ============================================================
+ * Spectator mode — mirroring a source device's UI into a tab or
+ * an OBS Browser Source. The wrapper renders the App at the
+ * source's pixel viewport and CSS-scales-to-fit our window.
+ * The touch overlay paints fading ripples from incoming pointer
+ * events; the source-gone notice surfaces when the source closes.
+ * ============================================================ */
+/* Spectator-mode hides scrollbars across the whole document. OBS's
+   CEF doesn't auto-hide scrollbars the way modern browsers do —
+   they show on any overflow-auto container (the document itself,
+   .main inside the mirror, the matrix wrapper) and bleed into the
+   recorded feed. Scrolling still works; only the visual track and
+   thumb are hidden. body.spectator-mode is toggled on by
+   SpectatorView's mount effect. */
+body.spectator-mode,
+body.spectator-mode #app {
+    overflow: hidden;
+    scrollbar-width: none;
+    margin: 0;
+}
+body.spectator-mode *::-webkit-scrollbar,
+body.spectator-mode *::-webkit-scrollbar-thumb,
+body.spectator-mode *::-webkit-scrollbar-track {
+    width: 0;
+    height: 0;
+    display: none;
+    background: transparent;
+}
+body.spectator-mode * { scrollbar-width: none; }
+/* Full-window chroma backdrop. Optional `chroma` URL param sets the
+   colour inline (so OBS can chroma-key it out). Default to the
+   regular dark background so the unconfigured spectator looks like
+   it always did. */
+.spectator-root {
+    position: fixed;
+    inset: 0;
+    background: var(--bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    perspective: 1500px;
+    touch-action: none;       /* drag-to-tilt without the browser scrolling */
+    overflow: hidden;
+}
+.spectator-stage {
+    transform-style: preserve-3d;
+    will-change: transform;
+    transition: transform 0.18s ease-out;
+    /* Let pointer events fall through to .spectator-root so the
+       drag-to-tilt works wherever the user clicks (including on
+       the framed mirror). The control panel re-enables pointer-
+       events on itself so its sliders / buttons stay interactive. */
+    pointer-events: none;
+}
+.spectator-frame { pointer-events: none; }
+/* Optional phone bezel. Off by default — the unframed spectator is
+   the same naked feed as before. When `frame=1` is set, a dark
+   rounded-corner housing wraps the mirror, with a speaker slot at
+   the top and a home-indicator bar at the bottom. The bezel sizes
+   live in FRAME_BEZEL in view.js — keep them in sync. */
+.spectator-frame {
+    position: relative;
+    box-sizing: content-box;
+}
+.spectator-frame.with-frame {
+    background: linear-gradient(180deg, #1a1a1a 0%, #050505 100%);
+    padding: 22px 8px 26px 8px;
+    border-radius: 38px;
+    box-shadow:
+        inset 0 0 0 1px rgba(255,255,255,0.06),
+        inset 0 0 0 2px #2a2a2a,
+        0 30px 80px rgba(0,0,0,0.55);
+}
+.spectator-frame.with-frame .spectator-app-wrap {
+    border-radius: 4px;
+}
+.spectator-frame.with-frame::before {
+    content: "";
+    position: absolute;
+    top: 9px; left: 50%; transform: translateX(-50%);
+    width: 72px; height: 5px;
+    background: #050505;
+    border-radius: 3px;
+    box-shadow: inset 0 1px 1px rgba(0,0,0,0.8);
+}
+.spectator-frame.with-frame::after {
+    content: "";
+    position: absolute;
+    bottom: 11px; left: 50%; transform: translateX(-50%);
+    width: 110px; height: 4px;
+    background: rgba(255,255,255,0.18);
+    border-radius: 2px;
+}
+/* Floating control panel. Auto-fades to opacity 0 after inactivity
+   (view.js sets a 2.5s timer on pointermove); OBS Browser Source
+   never delivers pointer events to its captured page, so once the
+   panel fades it stays invisible in the recording. */
+.spectator-controls {
+    position: fixed;
+    top: 12px; right: 12px;
+    background: rgba(10, 10, 14, 0.78);
+    color: #d6d6d6;
+    padding: 10px 12px;
+    border-radius: 10px;
+    font-size: 12px;
+    z-index: 1500;
+    width: 220px;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    transition: opacity 0.35s ease-out;
+    pointer-events: auto;
+    user-select: none;
+    box-shadow: 0 12px 32px rgba(0,0,0,0.45);
+}
+.spectator-controls-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 6px 0;
+    flex-wrap: wrap;
+}
+.spectator-controls-row > label {
+    flex: 1;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: #aaa;
+}
+.spectator-controls-row > label > input[type="checkbox"] {
+    margin-right: 6px;
+}
+.spectator-controls-row > input[type="range"] {
+    flex: 1 1 100%;
+    min-width: 0;
+}
+.spectator-controls-row > input[type="color"] {
+    width: 32px;
+    height: 26px;
+    padding: 0;
+    border: 1px solid rgba(255,255,255,0.18);
+    border-radius: 4px;
+    background: transparent;
+    cursor: pointer;
+}
+.spectator-controls-row > button {
+    flex: 1;
+    padding: 5px 8px;
+    font-size: 12px;
+    background: rgba(255,255,255,0.08);
+    color: #ddd;
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 6px;
+    cursor: pointer;
+}
+.spectator-controls-row > button:hover {
+    background: rgba(255,255,255,0.14);
+}
+.spectator-chip {
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    border: 1px solid rgba(255,255,255,0.25);
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 11px;
+    color: rgba(255,255,255,0.7);
+    background: transparent;
+}
+.spectator-controls-hint {
+    font-size: 10px;
+    color: #888;
+    margin-top: 6px;
+    line-height: 1.3;
+}
+.spectator-app-wrap {
+    /* Sized via inline style; the flex column is critical — App's
+       .main relies on a flex parent to claim "remaining height" and
+       become the scroll container. Without it the whole subtree
+       renders as one tall column and scrolling never engages. */
+    display: flex;
+    flex-direction: column;
+    background: var(--bg);
+    contain: layout paint;
+    /* The mirror is view-only: clicks, drags, knob twists and wheel
+       scrolls must not drive the underlying engine (they'd race
+       against the source device and reach the API directly via the
+       knobs' onChange handlers). One root-level rule kills every
+       pointer interaction inside the mirrored tree. */
+    pointer-events: none;
+    user-select: none;
+}
+/* Flex items default to `min-width: auto` (= min-content width), so a
+   wide-content child like the matrix would push .main past the
+   wrapper's fixed pixel width and the matrix's own overflow-x:auto
+   would never kick in (its parent would simply expand). min-width:0
+   alone wasn't enough — align-items:stretch still let .main grow to
+   fit its min-content. width:100% on the layout children pins them
+   to the wrapper's box so internal scrolling actually engages. */
+.spectator-app-wrap > * { min-width: 0; }
+.spectator-app-wrap > .header,
+.spectator-app-wrap > .main,
+.spectator-app-wrap > .midi-bar,
+.spectator-app-wrap > .bottom-nav,
+.spectator-app-wrap > .banner {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+/* Modal panels use `vh` units which resolve against the spectator's
+   actual browser viewport (e.g. 1080px), NOT the 915px-tall wrapper.
+   That makes the panel taller than the wrapper, anchored at flex-end
+   so the top clips off-screen and the user sees only the bottom.
+   Override to a percentage of the parent (.filter-overlay, which
+   fills the wrapper exactly because it's position:fixed inset:0
+   inside a transform-scaled containing block). */
+.spectator-app-wrap .filter-panel { max-height: 90%; }
+.spectator-touch-overlay {
+    position: absolute;
+    top: 0; left: 0;
+    pointer-events: none;
+    z-index: 1300;
+}
+.spectator-loading {
+    position: fixed; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--bg);
+    color: var(--text-dim);
+    font-size: 15px;
+}
+.spectator-source-gone {
+    position: fixed; left: 50%; bottom: 24px;
+    transform: translateX(-50%);
+    background: rgba(20, 20, 20, 0.92);
+    border: 1px solid var(--surface2);
+    border-radius: 8px;
+    padding: 10px 16px;
+    color: var(--text-dim);
+    font-size: 13px;
+    z-index: 1400;
+}
+
+/* Spectator-mirroring client list in Settings. */
+.spectator-clients {
+    list-style: none; margin: 0; padding: 0;
+}
+.spectator-clients li { margin: 6px 0; }
+.spectator-client-link {
+    display: flex; justify-content: space-between; align-items: baseline;
+    padding: 10px 12px; border-radius: 6px;
+    background: var(--surface); border: 1px solid var(--surface2);
+    color: var(--text); text-decoration: none;
+}
+.spectator-client-link:hover { background: var(--surface2); }
+.spectator-client-name { font-size: 15px; }
+.spectator-client-meta { font-size: 12px; color: var(--text-dim); }

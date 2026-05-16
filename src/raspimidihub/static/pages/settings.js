@@ -15,6 +15,7 @@ import { getSoundsEnabled, setSoundsEnabled,
          getLayoutDensity, setLayoutDensity, DENSITY_OPTIONS,
          getScrollAssist, setScrollAssist } from '../components/common.js';
 import { getTheme, setTheme, listThemes } from '../lib/theme.js';
+import { getSSEConnectionId, getSpectatorLabel, setSpectatorLabel } from '../ui/sse-subscriptions.js';
 
 function NetworkCard({ iface, showToast }) {
     const [method, setMethod] = useState(iface.method || 'auto');
@@ -990,6 +991,107 @@ function SettingsCcBindings({ openCcBinding, openCellBinding }) {
     `;
 }
 
+// --- Spectator mirroring --------------------------------------------
+//
+// Picks one source device to mirror into OBS or another tab. The list
+// is refreshed every 3 s from /api/spectator/clients. The current
+// device's own conn_id is filtered out (you can't usefully mirror
+// yourself); the rest become tappable links. The device-name field
+// at the top sets this connection's label so other devices see a
+// readable name instead of a UUID.
+function SettingsSpectator() {
+    const [label, setLabelState] = useState(() => getSpectatorLabel());
+    const [clients, setClients] = useState([]);
+    const [myConnId, setMyConnId] = useState(() => getSSEConnectionId());
+
+    useEffect(() => {
+        let cancelled = false;
+        const refresh = async () => {
+            try {
+                const r = await fetch('/api/spectator/clients');
+                const d = await r.json();
+                if (!cancelled) setClients(d.clients || []);
+            } catch {}
+            if (!cancelled) setMyConnId(getSSEConnectionId());
+        };
+        refresh();
+        const t = setInterval(refresh, 3000);
+        return () => { cancelled = true; clearInterval(t); };
+    }, []);
+
+    const onLabelChange = (v) => {
+        setLabelState(v);
+        setSpectatorLabel(v);
+    };
+
+    const myUrl = myConnId
+        ? `${window.location.origin}/?spectate=${encodeURIComponent(myConnId)}&touches=1`
+        : '';
+    const copyMyUrl = async () => {
+        if (!myUrl) return;
+        try { await navigator.clipboard.writeText(myUrl); } catch {}
+    };
+
+    const others = clients.filter(c => c.conn_id !== myConnId);
+
+    return html`
+        <div class="card">
+            <h3>This device</h3>
+            <div class="form-group">
+                <label>Name shown to spectators</label>
+                <input value=${label} placeholder="e.g. Living-room phone"
+                    onInput=${e => onLabelChange(e.target.value)} />
+            </div>
+            <div class="form-group">
+                <label>Spectator URL</label>
+                <input value=${myUrl} readonly
+                    style="font-family:var(--mono,monospace);font-size:12px" />
+            </div>
+            <div style="display:flex;gap:8px">
+                <button class="btn btn-primary btn-block"
+                    onclick=${copyMyUrl} disabled=${!myUrl}>Copy URL</button>
+                <a class="btn btn-block" target="_blank" rel="noopener"
+                    href=${myUrl || '#'} style=${myUrl ? '' : 'pointer-events:none;opacity:0.4'}>
+                    Open mirror →
+                </a>
+            </div>
+            <p style="font-size:12px;color:var(--text-dim);margin-top:10px">
+                Drop the URL into OBS Browser Source to stream this
+                device's UI. Mirroring stays dormant until someone
+                opens it, so it costs nothing when nobody is watching.
+            </p>
+        </div>
+        <div class="card">
+            <h3>Spectate another device</h3>
+            ${others.length === 0
+                ? html`<p style="color:var(--text-dim);font-size:13px">
+                    No other devices connected. Open the app on a
+                    phone or tablet over WiFi or USB and it will
+                    appear here.</p>`
+                : html`<ul class="spectator-clients">
+                    ${others.map(c => {
+                        const url = `/?spectate=${encodeURIComponent(c.conn_id)}&touches=1`;
+                        const name = c.label || c.conn_id.slice(0, 8);
+                        const age = c.age_sec;
+                        const ageStr = age == null ? 'never'
+                            : age < 5 ? 'live'
+                            : age < 60 ? `${Math.round(age)} s ago`
+                            : `${Math.round(age / 60)} min ago`;
+                        const vp = c.viewport
+                            ? `${c.viewport.w}×${c.viewport.h}` : '—';
+                        return html`<li key=${c.conn_id}>
+                            <a href=${url} target="_blank" rel="noopener"
+                                class="spectator-client-link">
+                                <span class="spectator-client-name">${name}</span>
+                                <span class="spectator-client-meta">${vp} · ${ageStr}</span>
+                            </a>
+                        </li>`;
+                    })}
+                </ul>`}
+        </div>
+    `;
+}
+
 // --- Hub + dispatcher -----------------------------------------------
 
 const SECTIONS = [
@@ -999,6 +1101,7 @@ const SECTIONS = [
     { key: 'display',     title: 'Display',                 hint: 'MIDI activity bar, sounds, scroll-assist, density' },
     { key: 'update',      title: 'Update',                  hint: 'Check GitHub, manage stored versions' },
     { key: 'cc-bindings', title: 'Plugin Control Mappings', hint: 'CC bindings across every plugin instance' },
+    { key: 'spectator',   title: 'Spectator mirroring',     hint: 'Stream this device into OBS, or mirror another device' },
 ];
 
 export function SettingsPage({ showToast, showMidiBar, toggleMidiBar,
@@ -1016,6 +1119,7 @@ export function SettingsPage({ showToast, showMidiBar, toggleMidiBar,
             case 'display':     body = html`<${SettingsDisplay} showMidiBar=${showMidiBar} toggleMidiBar=${toggleMidiBar} />`; break;
             case 'update':      body = html`<${SettingsUpdate} showToast=${showToast} onUpgradingChange=${setIsUpgrading} />`; break;
             case 'cc-bindings': body = html`<${SettingsCcBindings} openCcBinding=${openCcBinding} openCellBinding=${openCellBinding} />`; break;
+            case 'spectator':   body = html`<${SettingsSpectator} />`; break;
             default:            body = html`<div class="card"><p>Unknown section</p></div>`;
         }
         return html`

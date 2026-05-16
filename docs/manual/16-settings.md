@@ -23,6 +23,115 @@ password apply the moment you save them. The handful that *do* feed
 the dirty-state model (the default-routing choice; the activity-bar
 toggle) are called out in the relevant subsection.
 
+## Spectator mirroring
+
+![Settings → Spectator mirroring. The top card sets this device's name and copies its spectator URL; the bottom card lists other connected clients with one-tap mirror links.](../screenshots/36-settings-spectator.png){width=48%}
+
+A way to stream a device's UI into OBS (or another browser tab) with
+effectively zero latency, without screen-capture or `scrcpy`. Useful
+for showcase videos where you want viewers to see what the phone is
+doing -- including ripples where you tap -- but with crisp text and
+correct resolution regardless of the recording setup.
+
+The mechanism: every browser tab running RaspiMIDIHub already
+maintains an SSE connection. Spectator mode adds a *mirror* URL --
+`/?spectate=<conn_id>` -- that re-renders the same view as the
+target connection, driven by a small "current UI state" channel
+the source publishes (route, viewport, scroll, density, theme, all
+overlay state, the toast, touch points). OBS Browser Source loads
+that URL and CEF renders the app natively at any resolution -- no
+video encoding on the phone, no encode latency.
+
+### This device
+
+- **Name shown to spectators** -- a human-readable label that other
+  devices see in their list. Without a label they see only a short
+  UUID; with one they see "Living-room phone". Per-device,
+  persisted to localStorage. Empty is allowed.
+- **Spectator URL** -- the URL another tab or OBS should open to
+  mirror *this* device. Copy it via the button, or tap **Open
+  mirror →** to test it in a new tab. The copied URL already
+  includes the touch-ripple param `&touches=1`; remove it if you
+  prefer a feed without the pointer trail.
+
+The source device doesn't broadcast anything until a spectator
+opens the URL. The server tells the source the moment the watcher
+count goes from 0 to 1, the broadcaster attaches its DOM listeners,
+and the source starts publishing ~30 Hz updates of viewport / scroll
+/ touch / overlay state. When the spectator closes, the server tells
+the source again and the listeners detach. Result: zero CPU and zero
+bandwidth on phones nobody is mirroring.
+
+### Spectate another device
+
+A live list of every other RaspiMIDIHub tab currently connected to
+the Pi. Each row shows the device's label (or short UUID), its last
+known viewport size, and how recently it published state. Tapping
+opens the mirror URL in a new tab.
+
+The mirror tab opens at the source's viewport size, applies its
+density and theme, mirrors every popup (context menu, CC-binding
+popup with live wheel values, Cell-binding popup, Plugin Control
+Mappings), the matrix horizontal scroll, the bottom-bar toast, and
+the Save/Load/Panic button state. A touch overlay paints fading
+ripples where the source is being touched (`?touches=1`, on by
+default). If the source disconnects, the mirror shows a "Source
+disconnected" notice and waits for it to come back.
+
+### Presentation knobs
+
+The mirror URL accepts four optional query params that control how
+the mirror is *presented* (independent of what the source is showing):
+
+- **`frame=1`** -- wrap the mirrored screen in a stylised phone
+  bezel (rounded corners, speaker slot, home indicator). Default
+  off, so the unconfigured URL looks like a naked feed.
+- **`chroma=<color>`** -- paints the full-window backdrop *around*
+  the mirror in the given colour (`#ff00ff`, `magenta`, `#00ff00`,
+  any CSS colour). The frame and the mirror itself stay opaque, so
+  an OBS Chroma Key filter on this colour leaves the device cleanly
+  cut out. Default is the regular dark UI background -- chroma-key
+  not requested.
+- **`tilt-x=<deg>` / `tilt-y=<deg>`** -- rotate the framed device
+  in 3D. Useful for a perspective shot that doesn't look like a flat
+  webpage capture. Clamps at ±35°.
+
+These are wired to a floating control panel that appears in the
+top-right of the spectator URL: a frame on/off toggle, two tilt
+sliders, a chroma colour picker with magenta / green / black /
+default chips, **Reset tilt**, and **Copy URL**. The panel
+auto-fades after 2.5 s of pointer inactivity; OBS Browser Source
+doesn't deliver pointer events, so once the panel fades it stays
+invisible in the recorded feed.
+
+A faster way to set the tilt: just drag anywhere on the
+backdrop. The URL rewrites live (via `replaceState`) so the final
+adjusted view is shareable -- copy the URL after dragging and
+paste it into OBS.
+
+### Use in OBS
+
+1. Open the spectator URL in a regular browser tab. Adjust the
+   frame, tilt, and chroma until it looks the way you want.
+2. Click **Copy URL** (or just copy from the address bar).
+3. In OBS: **Sources → + → Browser**. Paste the URL. Set the
+   width and height to match your scene region (e.g. 1080×1920 for
+   a vertical phone capture).
+4. If you set a chroma colour, add a **Chroma Key** filter on the
+   Browser Source with the same colour and adjust similarity to
+   taste -- the device floats free of any background.
+
+Scrollbars are explicitly hidden across the whole spectator
+document so OBS's CEF doesn't paint them onto the captured feed.
+
+### Screenshots needed
+
+- `37-spectator-mirror.png`: the mirror URL itself, taken from a
+  desktop browser, showing the phone frame, a magenta chroma
+  backdrop, and a moderate tilt (e.g. `tilt-x=8`, `tilt-y=-12`).
+  The mirrored source should be on `/play/<arpeggiator-id>` so
+  the screenshot demonstrates the play surface inside the frame.
+
 ## Plugin Control Mappings
 
 ![Plugin Control Mappings sub-page: every CC binding across every plugin instance and every controller cell, one row each. Plugin params (Arpeggiator) and controller cells (Mixer 8) interleave; tap any row to open the matching popup.](../screenshots/31-settings-cc-bindings.png){width=48%}

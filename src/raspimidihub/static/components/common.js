@@ -82,6 +82,10 @@ export function setLayoutDensity(v) {
     if (!VALID_DENSITIES.has(v)) v = 'default';
     try { localStorage.setItem(DENSITY_KEY, v); } catch {}
     applyLayoutDensity(v);
+    // Notify subscribers (spectator broadcaster) without polling.
+    if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('layout-density-changed', { detail: v }));
+    }
 }
 export function applyLayoutDensity(v) {
     if (typeof document === 'undefined') return;

@@ -127,7 +127,7 @@ export function ContextMenu({ menu, onClose }) {
                     return html`<button key=${i}
                         data-testid=${'menu-item-' + (item.testId || item.label.toLowerCase().replace(/[^a-z0-9]+/g, '-'))}
                         disabled=${item.disabled}
-                        onclick=${() => { item.action(); onClose(); }}
+                        onclick=${() => { if (typeof item.action === 'function') item.action(); onClose(); }}
                         style="display:block;width:100%;text-align:left;
                                background:none;border:none;
                                color:${item.disabled ? 'var(--text-dim)' : (item.danger ? 'var(--danger)' : 'var(--text)')};

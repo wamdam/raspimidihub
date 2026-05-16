@@ -120,6 +120,19 @@ async def async_main() -> None:
     # Register API routes
     register_api(server, engine, config, wifi, bt)
 
+    # Spectator-mode mirroring service. Owns its own routes, per-conn
+    # state map, and watcher tracking; plugs into the WebServer via
+    # an SSE filter (for the spectator-state event), a subscribe
+    # extension (to consume label/spectate_target), and a disconnect
+    # handler (to clean up watcher slots). web.py / api.py stay free
+    # of any spectator-specific branches.
+    from .spectator import SpectatorService
+    spectator = SpectatorService(server)
+    server.add_sse_filter(spectator.event_filter)
+    server.add_disconnect_handler(spectator.on_disconnect)
+    server.add_subscribe_extension(spectator.apply_subscribe_extension)
+    spectator.register_routes()
+
     # Wire up LED and SSE to hotplug events
     def on_change():
         led.set_hotplug_blink(duration=2.0)

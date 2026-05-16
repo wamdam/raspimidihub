@@ -156,7 +156,7 @@ export function ConnectionMatrix({ devices, connections, showToast, clockSources
     }
 
     return html`
-        <div class="matrix">
+        <div class="matrix" data-spectator-scroll="matrix">
             <table>
                 <thead>
                     <tr>

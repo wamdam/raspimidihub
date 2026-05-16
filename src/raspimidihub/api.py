@@ -363,13 +363,18 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         })
 
     # POST /api/sse/subscribe — set this connection's subscription set.
-    # Body: {conn_id, events: [str], instances: [instance_id]}.
+    # Body: {conn_id, events: [str], instances: [instance_id],
+    #        label?: str, ...feature extensions}.
     # The conn_id is the UUID the server sent as the `connection`
     # event right after the SSE handshake. Calling subscribe replaces
     # the existing subscription wholesale — the frontend's
     # SubscriptionManager unions all active hooks' contributions and
     # sends the merged set, so this endpoint is the single point of
     # truth for "what should this client receive".
+    #
+    # Feature modules can add keys to the body (e.g. spectator.py
+    # consumes `label` and `spectate_target`); those are handed off
+    # via subscribe_extensions registered on the WebServer instance.
     @server.route("POST", "/api/sse/subscribe")
     async def api_sse_subscribe(req: Request) -> Response:
         body = req.json
@@ -383,6 +388,11 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         instances = body.get("instances") or []
         conn.events = set(events)
         conn.instances = set(instances)
+        for ext in getattr(server, "_subscribe_extensions", ()):
+            try:
+                ext(conn, body)
+            except Exception:  # noqa: BLE001 — best-effort
+                pass
         return Response.json({"status": "ok"})
 
     # ================================================================
