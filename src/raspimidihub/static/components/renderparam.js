@@ -132,7 +132,7 @@ export function renderParam(param, values, onChange, allValues, displayCtx) {
             return html`<${PluginXYPad} name=${param.name} label=${param.label}
                 min=${param.min} max=${param.max} value=${xy}
                 springForce=${param.spring_force} springHome=${param.spring_home}
-                onChange=${onChange} />`;
+                onChange=${onChange} onBindRequest=${onBind} />`;
         }
         case 'layoutgrid':
             return html`<${PluginLayoutGrid} param=${param} values=${values}

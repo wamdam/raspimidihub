@@ -388,6 +388,32 @@ body {
     opacity: 0.5;
     font-style: italic;
 }
+/* XY pad gets two stacked axis blocks; non-XY cells render a single
+ * unlabelled block. The axis-label sits above each block as a thin
+ * separator with the axis letter. */
+.cc-bind-axis {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.cc-bind-axis + .cc-bind-axis {
+    margin-top: 6px;
+    padding-top: 10px;
+    border-top: 1px solid var(--surface2, #2a2a2a);
+}
+.cc-bind-axis-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--text-dim);
+    font-weight: 600;
+}
+.cc-bind-axis-learn {
+    display: flex;
+}
+.cc-bind-axis-learn .cc-bind-btn {
+    flex: 1;
+}
 .cc-bind-footer {
     display: flex;
     justify-content: flex-end;
