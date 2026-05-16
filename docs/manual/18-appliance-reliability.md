@@ -20,9 +20,15 @@ A handful of paths *are* writable, on tmpfs (RAM) instead of SD:
 - `/var/log/` -- service logs.
 - `/run/` and `/tmp/` -- standard ephemeral paths.
 
-The boot partition (`/boot/firmware`) is writable on a different
-mount and is used for the BlueZ snapshot path (chapter 14.3).
-The main root remains read-only.
+The boot partition (`/boot/firmware`) is also mounted **read-only**
+in steady state. Anything that needs to land there -- Save Config,
+the BlueZ snapshot (chapter 14.3), a downloaded update deb -- runs
+the rw / write / sync / ro cycle itself: `mount -o remount,rw
+/boot/firmware`, write the file, `sync`, `mount -o remount,ro
+/boot/firmware`. The window is milliseconds and self-contained;
+between operations both filesystems are ro and a power yank can't
+hit a half-written file. The main root remains read-only throughout
+-- the remount cycle is on the boot partition only.
 
 For maintenance windows that need filesystem writes (manual
 package installs, custom tweaks):
@@ -46,8 +52,9 @@ service explicitly:
   no autosave that could be interrupted mid-write.
 - Uses atomic-replace on every config write (write to temp file,
   fsync, rename).
-- Snapshots BlueZ bonds to the writable boot partition on every
-  change, not periodically.
+- Snapshots BlueZ bonds to the boot partition on every change,
+  not periodically (using the same rw / write / ro cycle as
+  Save Config).
 - Restores BlueZ bonds from the snapshot on every boot before the
   routing service comes up.
 

@@ -124,11 +124,14 @@ PSU, or a plugin doing more work than expected in a callback.
 | `/var/log/` | tmpfs | Logs (cleared on reboot) |
 | `/var/lib/bluetooth/` | tmpfs | BlueZ pairing state (snapshotted to boot partition) |
 | `/tmp/` | tmpfs | Standard ephemeral |
-| `/boot/firmware/` | vfat, writable | Boot partition; persistent state lives here |
+| `/boot/firmware/` | vfat, read-only (rw on demand) | Boot partition; persistent state lives here |
 
-The two writable locations are tmpfs (volatile) and the boot
-partition (FAT32, persistent). The main root is read-only. See
-chapter 18 for the rationale and the `rw` / `ro` helpers.
+Both `/` and `/boot/firmware` are mounted read-only in steady
+state. Save Config (and the BlueZ snapshot, and the update
+downloader) briefly remounts `/boot/firmware` rw, writes the
+file, syncs, and remounts it ro -- the main root never gets
+remounted. Volatile state lives on tmpfs. See chapter 18 for
+the rationale and the `rw` / `ro` helpers.
 
 ## Power Budget
 

@@ -23,9 +23,14 @@ persistent location (chapter 4.7 describes the crash-safe save
 flow).
 
 Storing the persistent copy on the boot partition rather than the
-main root is deliberate: the main root is mounted read-only
-during normal operation (chapter 18.1), and the boot partition is
-writable by design.
+main root is deliberate. Both filesystems are mounted **read-only**
+in steady state (chapter 18.1); Save Config briefly remounts
+`/boot/firmware` rw, writes via `mv` (atomic on FAT32 when source
+and destination share a directory), syncs, and remounts it ro.
+The window is milliseconds and self-contained; the main root is
+never remounted. Putting the persistent copy on the boot partition
+keeps the rw remount confined to a small filesystem with no service
+state on it.
 
 ## The Top-Level Schema
 

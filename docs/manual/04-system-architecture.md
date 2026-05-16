@@ -93,9 +93,12 @@ flush to disk, rename). Pulling the power mid-edit cannot
 corrupt the persistent copy because the rename either completes
 or doesn't.
 
-The boot partition stays writable by design; the main root
-filesystem stays read-only during normal operation. Chapter 18
-documents the read-only model.
+Both filesystems are mounted **read-only** during normal
+operation -- the root and the boot partition alike. The save
+flow briefly remounts `/boot/firmware` rw to land the file (or
+the BlueZ snapshot, or a downloaded update deb), syncs, and
+remounts it ro again. The main root stays ro throughout.
+Chapter 18 documents the read-only model.
 
 ## The Reserved CPU
 

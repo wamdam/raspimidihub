@@ -41,9 +41,11 @@ on every BlueZ write (driven by an inotify watcher). Bonds survive
 reboots *and* immediate power-off -- the persistent appliance
 contract that the rest of the system extends to BLE-MIDI as well.
 
-The snapshot path is on the boot partition, which is writable by
-design (it carries the kernel and the cmdline). The main root
-remains read-only.
+The snapshot path is on the boot partition. The boot partition
+is mounted **read-only** in steady state; the bond-snapshot job
+briefly remounts it rw, writes the tarball, syncs, and remounts
+it ro. Same rw / write / ro cycle as Save Config (chapter 5).
+The main root remains read-only throughout.
 
 ## Auto-Reconnect on Boot
 
