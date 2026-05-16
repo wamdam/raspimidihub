@@ -79,6 +79,11 @@ class Wheel(Param):
     labels: list[str] = field(default_factory=list)  # if set, show labels[value-min] instead of number
     mini: bool = False  # half-height variant for dense edit panels
     wide: bool = False  # wider face (120 px vs 80 px) for long label strings
+    # Plugin-author default for the user-bindable MIDI CC popup. Seeds
+    # the instance cc_map with {ch: None, cc: default_cc} on creation;
+    # the user can override (or clear) via long-press on the control.
+    # None = no default binding; the param is still bindable manually.
+    default_cc: int | None = field(default=None, kw_only=True)
 
     def to_dict(self) -> dict:
         d = super().to_dict()
@@ -93,6 +98,8 @@ class Wheel(Param):
             d["mini"] = True
         if self.wide:
             d["wide"] = True
+        if self.default_cc is not None:
+            d["default_cc"] = self.default_cc
         return d
 
 
@@ -106,6 +113,7 @@ class Knob(Param):
     display_factor: float = 0
     unit: str = ""
     labels: list[str] = field(default_factory=list)
+    default_cc: int | None = field(default=None, kw_only=True)
 
     def to_dict(self) -> dict:
         d = super().to_dict()
@@ -116,6 +124,8 @@ class Knob(Param):
             d["display_factor"] = self.display_factor
         if self.unit:
             d["unit"] = self.unit
+        if self.default_cc is not None:
+            d["default_cc"] = self.default_cc
         return d
 
 
@@ -128,6 +138,7 @@ class Fader(Param):
     vertical: bool = False
     display_format: str = ""  # Python format string, e.g. "{:.1f} Hz" with display_factor
     display_factor: float = 0  # if >0, thumb shows value*factor formatted by display_format
+    default_cc: int | None = field(default=None, kw_only=True)
 
     def to_dict(self) -> dict:
         d = super().to_dict()
@@ -137,6 +148,8 @@ class Fader(Param):
             d["display_factor"] = self.display_factor
         if self.display_format:
             d["display_format"] = self.display_format
+        if self.default_cc is not None:
+            d["default_cc"] = self.default_cc
         return d
 
 
@@ -145,10 +158,13 @@ class Radio(Param):
     """Tap-to-select pill buttons."""
     options: list[str] = field(default_factory=list)
     default: str = ""
+    default_cc: int | None = field(default=None, kw_only=True)
 
     def to_dict(self) -> dict:
         d = super().to_dict()
         d.update({"options": self.options, "default": self.default})
+        if self.default_cc is not None:
+            d["default_cc"] = self.default_cc
         return d
 
 
@@ -198,11 +214,14 @@ class NoteSelect(Param):
     """Wheel with MIDI note names (C-2 to G8)."""
     default: int = 60  # Middle C
     learnable: bool = True  # show a MIDI Learn button below the wheel
+    default_cc: int | None = field(default=None, kw_only=True)
 
     def to_dict(self) -> dict:
         d = super().to_dict()
         d["default"] = self.default
         d["learnable"] = self.learnable
+        if self.default_cc is not None:
+            d["default_cc"] = self.default_cc
         return d
 
 
@@ -240,6 +259,7 @@ class Button(Param):
     color: str = "green"  # LED color: green, yellow, red, blue
     trigger: bool = False  # momentary fire-mode if True
     mini: bool = False  # half-height variant for dense edit panels
+    default_cc: int | None = field(default=None, kw_only=True)
 
     def to_dict(self) -> dict:
         d = super().to_dict()
@@ -247,6 +267,8 @@ class Button(Param):
                   "trigger": self.trigger})
         if self.mini:
             d["mini"] = True
+        if self.default_cc is not None:
+            d["default_cc"] = self.default_cc
         return d
 
 
@@ -454,11 +476,9 @@ class LayoutGrid(StructuralParam):
     dispatcher — LayoutGrid is a structural container, not a value-
     holding param.
 
-    `labels_param` / `bindings_param` / `learn_param`: optional names of
-    sibling params holding per-cell user overrides — these ARE server-
-    stored (so renames + rebinds + Learn captures sync across browsers).
-    Edit-mode is purely local React state owned by the JS component, so
-    toggling "Edit cells" on one browser does NOT propagate.
+    `labels_param` / `bindings_param`: optional names of sibling
+    params holding per-cell user overrides — these ARE server-stored
+    (so renames + rebinds sync across browsers via SSE).
     """
     name: str
     label: str
@@ -467,7 +487,6 @@ class LayoutGrid(StructuralParam):
     cells: list = field(default_factory=list)  # list[LayoutCell]
     labels_param: str | None = None
     bindings_param: str | None = None
-    learn_param: str | None = None  # str-valued: "" idle, "<cell_name>" learning
 
     def to_dict(self) -> dict:
         d = {
@@ -495,8 +514,6 @@ class LayoutGrid(StructuralParam):
             d["labels_param"] = self.labels_param
         if self.bindings_param:
             d["bindings_param"] = self.bindings_param
-        if self.learn_param:
-            d["learn_param"] = self.learn_param
         return d
 
     def inner_params(self) -> list[Param]:
@@ -540,7 +557,7 @@ def schema_param_keys(params: list) -> set[str]:
       - Every `Param.name` (top-level + Group children + inside any
         StructuralParam container).
       - Every auxiliary-pointer attribute (any string attr ending in
-        `_param`, e.g. `labels_param`, `bindings_param`, `learn_param`,
+        `_param`, e.g. `labels_param`, `bindings_param`,
         `states_param`, `snapshots_param`, `modes_param`,
         `schedule_param`, `length_param`, …) — these point at sibling
         param names like `cell_labels`, `drop_states`, etc.
@@ -602,6 +619,30 @@ def get_defaults(params: list) -> dict[str, Any]:
     return defaults
 
 
+# Param types eligible for user-bindable MIDI CC. The popup UI on the
+# frontend also gates by `default_cc` presence in the manifest — but the
+# backend side of the bind / learn / dispatch loop trusts only this set.
+BINDABLE_PARAM_TYPES = (Wheel, Knob, Fader, Radio, NoteSelect, Button)
+
+
+def get_default_cc_map(params: list) -> dict[str, dict]:
+    """Seed map for PluginBase.cc_map: walks params and emits an entry
+    for every bindable param that declares a `default_cc`. Channel is
+    None (= any channel) to match the channel-blind behaviour of the
+    old class-level cc_inputs dict.
+
+    Returned shape: `{param_name: {"ch": None, "cc": int}}`. Params
+    without a `default_cc` get no entry (the user can still bind them
+    via the popup; that adds the entry at edit time)."""
+    seed: dict[str, dict] = {}
+    for p in get_all_params(params):
+        if isinstance(p, BINDABLE_PARAM_TYPES):
+            dc = getattr(p, "default_cc", None)
+            if dc is not None:
+                seed[p.name] = {"ch": None, "cc": int(dc)}
+    return seed
+
+
 # ---------------------------------------------------------------------------
 # PluginBase — all plugins inherit from this
 # ---------------------------------------------------------------------------
@@ -625,8 +666,11 @@ class PluginBase:
     params: list = []
 
     # --- CC I/O declarations ---
-    cc_inputs: dict[int, str] = {}   # CC# -> param name
-    cc_outputs: list[int] = []       # CC numbers this plugin may send
+    # Outgoing CCs the plugin may emit. Documentary — surfaced in the
+    # device-detail header. Incoming CC bindings are user-editable per
+    # instance via `cc_map` (see __init__); declare per-param defaults
+    # on the Wheel / Knob / Fader / Radio / Button with `default_cc=`.
+    cc_outputs: list[int] = []
 
     # --- Human-readable I/O descriptions ---
     inputs: list[str] = []
@@ -658,6 +702,13 @@ class PluginBase:
     def __init__(self):
         self._param_values: dict[str, Any] = {}
         self._display_values: dict[str, Any] = {}
+        # User-bindable MIDI CC mapping, per-instance. Seeded from each
+        # param's `default_cc` declaration with `ch=None` (any channel);
+        # config-restore overlays the user's saved bindings on top.
+        # Shape: {param_name: {"ch": int | None, "cc": int | None}}.
+        # `cc=None` is a "cleared" entry — kept around so the seed
+        # default doesn't reappear after a reboot.
+        self.cc_map: dict[str, dict] = get_default_cc_map(type(self).params)
         # Param names whose changes should NOT mark the routing state
         # dirty. Used by Controller plugins so live-play motion (fader
         # / knob / XY positions, drop-button transient states like

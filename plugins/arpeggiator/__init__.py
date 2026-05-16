@@ -132,15 +132,15 @@ active slot without arpeggiating."""
         Wheel("pattern", "Pattern",
               min=0, max=len(_PATTERN_OPTIONS) - 1,
               labels=_PATTERN_OPTIONS, default=0,
-              wide=True, span=2, play_only=True),
+              wide=True, span=2, play_only=True, default_cc=70),
         Wheel("rate", "Rate",
               min=0, max=len(_RATE_OPTIONS) - 1,
               labels=_RATE_OPTIONS, default=_DEFAULT_RATE_IDX,
-              wide=True, span=2, play_only=True),
-        Wheel("step_count", "Steps", min=1, max=32, default=8, play_only=True),
-        Knob("accent_vel", "Accent Vel.", min=0, max=127, default=30, play_only=True),
-        Wheel("gate", "Gate %", min=10, max=100, default=80, play_only=True),
-        Wheel("octaves", "Octaves", min=1, max=4, default=1, play_only=True),
+              wide=True, span=2, play_only=True, default_cc=74),
+        Wheel("step_count", "Steps", min=1, max=32, default=8, play_only=True, default_cc=73),
+        Knob("accent_vel", "Accent Vel.", min=0, max=127, default=30, play_only=True, default_cc=83),
+        Wheel("gate", "Gate %", min=10, max=100, default=80, play_only=True, default_cc=75),
+        Wheel("octaves", "Octaves", min=1, max=4, default=1, play_only=True, default_cc=71),
         StepEditor("steps", "Step Pattern", length_param="step_count",
                    default_length=8, default_on=True, span=4,
                    slot_notes_param="step_slot_notes", play_only=True),
@@ -187,22 +187,10 @@ active slot without arpeggiating."""
         ], config_only=True),
     ]
 
-    # Block CC#70..83 — mirrors the Euclidean's shared-param
-    # mapping so a hardware controller wired for one plugin drives
-    # the matching knobs on the other.
-    cc_inputs = {
-        70: "pattern",
-        71: "octaves",
-        73: "step_count",
-        74: "rate",
-        75: "gate",
-        83: "accent_vel",
-    }
     cc_outputs = []
 
     inputs = ["Notes", "CC#64 (sustain pedal — temporarily holds arping notes)",
-              "CC#70 (pattern)", "CC#71 (octaves)", "CC#73 (steps)",
-              "CC#74 (rate)", "CC#75 (gate)", "CC#83 (accent vel.)",
+              "CC for any bound play-surface knob (long-press to bind)",
               "Pattern Ctrl Ch notes (set Pattern slot 1..8)",
               "Clock", "Aftertouch", "Pitch Bend"]
     outputs = ["Notes (arpeggiated)", "Aftertouch (pass-through)", "Pitch Bend (pass-through)"]

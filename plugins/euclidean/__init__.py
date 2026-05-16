@@ -210,53 +210,54 @@ Routing example:
   [Keyboard]    → [Euclidean] → [Synth]
   [Master Clock] → [Euclidean]
 
-CC automation: CC 74 = Rate, CC 75 = Gate (Arp-consistent).
-Block CC 70..88 (skipping CC 84 / Portamento Control) covers every
-play-surface knob; see Appendix A for the full table."""
+CC automation: every play-surface knob is bindable. Long-press a
+control to pick a Channel + CC (or MIDI-Learn one). Factory
+defaults are shown in the popup; see Appendix A for the full
+default-CC table."""
 
     params = [
         # Top wide row — chosen on stage.
         Wheel("pattern", "Pattern",
               min=0, max=len(_PATTERN_OPTIONS) - 1,
               labels=_PATTERN_OPTIONS, default=0,
-              wide=True, span=2, play_only=True),
+              wide=True, span=2, play_only=True, default_cc=70),
         Wheel("rate", "Rate",
               min=0, max=len(_RATE_OPTIONS) - 1,
               labels=_RATE_OPTIONS, default=_DEFAULT_RATE_IDX,
-              wide=True, span=2, play_only=True),
+              wide=True, span=2, play_only=True, default_cc=74),
 
         # Layer 1 — Euclidean distribution.
-        Wheel("pulses", "Pulses", min=0, max=32, default=4, play_only=True),
-        Wheel("steps",  "Steps",  min=1, max=32, default=16, play_only=True),
-        Wheel("rotate", "Rotate", min=-16, max=16, default=0, play_only=True),
-        Wheel("octaves", "Octaves", min=1, max=4, default=1, play_only=True),
+        Wheel("pulses", "Pulses", min=0, max=32, default=4, play_only=True, default_cc=72),
+        Wheel("steps",  "Steps",  min=1, max=32, default=16, play_only=True, default_cc=73),
+        Wheel("rotate", "Rotate", min=-16, max=16, default=0, play_only=True, default_cc=79),
+        Wheel("octaves", "Octaves", min=1, max=4, default=1, play_only=True, default_cc=71),
 
         # Layer 2 — Window wave (sine threshold mask).
-        Wheel("phase",  "Phase",  min=0, max=31, default=0, play_only=True),
+        Wheel("phase",  "Phase",  min=0, max=31, default=0, play_only=True, default_cc=77),
         Wheel("cycles", "Cycles",
               min=0, max=4, labels=["0.5", "1", "2", "3", "4"],
-              default=1, play_only=True),
-        Knob("open",    "Open",   min=0, max=100, default=100, play_only=True),
-        Wheel("gate",   "Gate %", min=10, max=100, default=80, play_only=True),
-        Knob("accent_vel", "Accent Vel.", min=0, max=127, default=30, play_only=True),
+              default=1, play_only=True, default_cc=78),
+        Knob("open",    "Open",   min=0, max=100, default=100, play_only=True, default_cc=76),
+        Wheel("gate",   "Gate %", min=10, max=100, default=80, play_only=True, default_cc=75),
+        Knob("accent_vel", "Accent Vel.", min=0, max=127, default=30, play_only=True, default_cc=83),
 
         # Envelope row.
-        Wheel("fade_in",  "Fade In",  min=0, max=16, default=0, play_only=True),
-        Wheel("fade_out", "Fade Out", min=0, max=16, default=0, play_only=True),
+        Wheel("fade_in",  "Fade In",  min=0, max=16, default=0, play_only=True, default_cc=80),
+        Wheel("fade_out", "Fade Out", min=0, max=16, default=0, play_only=True, default_cc=81),
 
         # Humanisation row.
-        Knob("jitter",      "Jitter %",    min=0, max=100, default=0, play_only=True),
-        Knob("tune_spread", "Tune Spread", min=0, max=100, default=0, play_only=True),
+        Knob("jitter",      "Jitter %",    min=0, max=100, default=0, play_only=True, default_cc=82),
+        Knob("tune_spread", "Tune Spread", min=0, max=100, default=0, play_only=True, default_cc=85),
         Wheel("spread_snap", "Snap",
               min=0, max=len(_SNAP_OPTIONS) - 1,
-              labels=_SNAP_OPTIONS, default=1, play_only=True),
+              labels=_SNAP_OPTIONS, default=1, play_only=True, default_cc=86),
 
         # Pitch quantiser (reuses Scale Remapper's catalogue).
         Wheel("scale", "Scale",
               min=0, max=len(_SCALE_OPTIONS) - 1,
-              labels=_SCALE_OPTIONS, default=0, play_only=True),
+              labels=_SCALE_OPTIONS, default=0, play_only=True, default_cc=87),
         Wheel("root", "Root", min=0, max=11, default=0,
-              labels=_NOTE_NAMES, play_only=True),
+              labels=_NOTE_NAMES, play_only=True, default_cc=88),
 
         # Layer 3 — override grid + per-step semitone offset.
         StepEditor("steps_grid", "Step Pattern",
@@ -298,38 +299,12 @@ play-surface knob; see Appendix A for the full table."""
         ], config_only=True),
     ]
 
-    # Full block CC 70..88 (skipping CC 84 = Portamento Control). The
-    # gate is exact: a CC number outside this dict is dropped before
-    # it can touch a param. Discrete-enum params (Pattern / Snap /
-    # Scale / Root) are integer-indexed Wheels — the host's
-    # _cc_to_param scales 0..127 to the param's min..max so a single
-    # 0..127 CC steps through every option.
-    cc_inputs = {
-        70: "pattern",
-        71: "octaves",
-        72: "pulses",
-        73: "steps",
-        74: "rate",        # ← Arp-consistent
-        75: "gate",        # ← Arp-consistent
-        76: "open",
-        77: "phase",
-        78: "cycles",
-        79: "rotate",
-        80: "fade_in",
-        81: "fade_out",
-        82: "jitter",
-        83: "accent_vel",
-        85: "tune_spread",
-        86: "spread_snap",
-        87: "scale",
-        88: "root",
-    }
     cc_outputs = []
 
     inputs = [
         "Notes",
         "CC#64 (sustain pedal — temporarily holds the input chord)",
-        "CC#70..83, CC#85..88 (parameter automation; see HELP)",
+        "CC for any bound play-surface knob (long-press to bind)",
         "Ctrl Ch notes (set Pattern slot 1..8)",
         "Clock",
         "Aftertouch",

@@ -15,6 +15,8 @@ import { html, api, useSSE, Toast, MidiBar, hardReload } from './ui/common.js';
 import { applyLayoutDensity, getLayoutDensity } from './components/common.js';
 import { ScrollAssist } from './components/scrollassist.js';
 import { ContextMenu } from './ui/contextmenu.js';
+import { CcBinding } from './components/ccbinding.js';
+import { CellBinding } from './components/cellbinding.js';
 import { setSSEConnectionId, useSSESubscription } from './ui/sse-subscriptions.js';
 import { IconRouting, IconController, IconPlay, IconSettings, IconFullscreen, IconFullscreenExit } from './ui/icons.js';
 import { runStorageCleanup } from './ui/storage.js';
@@ -92,7 +94,10 @@ function FullscreenButton() {
 // is preserved as an empty string, so reopening the tab honours
 // that close instead of springing the panel back open.
 const TAB_SUBKEY = {
-    routing: 'deviceId', controller: 'controllerId', play: 'playId',
+    routing: 'deviceId',
+    controller: 'controllerId',
+    play: 'playId',
+    settings: 'settingsSection',
 };
 function tabStorageKey(tab) { return `raspimidihub:lastIn:${tab}`; }
 function saveTabSubState(route) {
@@ -401,6 +406,78 @@ function App() {
     }, []);
     const closeContextMenu = useCallback(() => setContextMenu(null), []);
 
+    // CC binding popup state. Long-press / right-click on a bindable
+    // control passes through `openCcBinding(instanceId, paramName)`
+    // (threaded via displayCtx in renderparam.js).
+    const [ccBinding, setCcBinding] = useState(null);
+    const openCcBinding = useCallback(async (instanceId, paramName) => {
+        // Look up the plugin's display name + param label so the
+        // popup header reads "Arp 1 → Rate" instead of opaque IDs.
+        try {
+            const inst = await api(`/plugins/instances/${encodeURIComponent(instanceId)}`);
+            const findLabel = (items) => {
+                for (const p of items || []) {
+                    if (p.name === paramName) return p.label || p.name;
+                    if (p.type === 'group' && p.children) {
+                        const hit = findLabel(p.children);
+                        if (hit) return hit;
+                    }
+                }
+                return null;
+            };
+            const paramLabel = findLabel(inst.params_schema) || paramName;
+            setCcBinding({
+                instanceId,
+                paramName,
+                paramLabel,
+                pluginName: inst.name || instanceId,
+            });
+        } catch (err) {
+            console.warn('openCcBinding lookup failed:', err);
+            setCcBinding({ instanceId, paramName, paramLabel: paramName, pluginName: instanceId });
+        }
+    }, []);
+    const closeCcBinding = useCallback(() => setCcBinding(null), []);
+
+    // Controller-cell binding popup. Parallel to openCcBinding but for
+    // LayoutGrid cells — those carry a symmetric (channel, cc) in
+    // `cell_bindings` rather than an entry in `cc_map`. Long-press on
+    // a controller cell on the Controller page routes here.
+    const [cellBinding, setCellBinding] = useState(null);
+    const openCellBinding = useCallback(async (instanceId, cellName) => {
+        try {
+            const inst = await api(`/plugins/instances/${encodeURIComponent(instanceId)}`);
+            // Find the cell's label in the LayoutGrid schema. The
+            // label may be overridden via the cell_labels dict; check
+            // that first, fall back to the schema label.
+            let cellLabel = cellName;
+            let labelsParam = null;
+            for (const p of inst.params_schema || []) {
+                if (p.type !== 'layoutgrid') continue;
+                labelsParam = p.labels_param || null;
+                for (const c of p.cells || []) {
+                    if ((c.param && c.param.name) === cellName) {
+                        cellLabel = (c.param && c.param.label) || cellName;
+                        break;
+                    }
+                }
+                break;
+            }
+            const overrides = (labelsParam && inst.params[labelsParam]) || {};
+            if (overrides[cellName]) cellLabel = overrides[cellName];
+            setCellBinding({
+                instanceId,
+                cellName,
+                cellLabel,
+                pluginName: inst.name || instanceId,
+            });
+        } catch (err) {
+            console.warn('openCellBinding lookup failed:', err);
+            setCellBinding({ instanceId, cellName, cellLabel: cellName, pluginName: instanceId });
+        }
+    }, []);
+    const closeCellBinding = useCallback(() => setCellBinding(null), []);
+
     let page;
     switch (tab) {
         case 'routing':
@@ -414,6 +491,8 @@ function App() {
                 selectedId=${route.controllerId}
                 onSelect=${setControllerId}
                 onEditConfig=${openControllerConfig}
+                openCcBinding=${openCcBinding}
+                openCellBinding=${openCellBinding}
                 clockPosition=${clockPosition} />`;
             break;
         case 'play':
@@ -421,10 +500,16 @@ function App() {
                 selectedId=${route.playId}
                 onSelect=${setPlayId}
                 onEditConfig=${openPlayConfig}
+                openCcBinding=${openCcBinding}
                 clockPosition=${clockPosition} />`;
             break;
         case 'settings':
-            page = html`<${SettingsPage} showToast=${showToast} showMidiBar=${showMidiBar} toggleMidiBar=${toggleMidiBar} />`;
+            page = html`<${SettingsPage} showToast=${showToast}
+                showMidiBar=${showMidiBar} toggleMidiBar=${toggleMidiBar}
+                section=${route.settingsSection}
+                onNavigate=${(s) => navigate({ tab: 'settings', settingsSection: s })}
+                openCcBinding=${openCcBinding}
+                openCellBinding=${openCellBinding} />`;
             break;
     }
 
@@ -457,10 +542,13 @@ function App() {
             pluginDisplays=${pluginDisplays}
             clipboard=${clipboard} setClipboard=${setClipboard}
             showContextMenu=${showContextMenu}
+            openCcBinding=${openCcBinding}
             onJumpToController=${(instanceId) => navigate({ tab: 'controller', controllerId: instanceId })}
             onJumpToPlay=${(instanceId) => navigate({ tab: 'play', playId: instanceId })} />`}
         <${Toast} message=${toast} />
         <${ContextMenu} menu=${contextMenu} onClose=${closeContextMenu} />
+        <${CcBinding} open=${ccBinding} onClose=${closeCcBinding} />
+        <${CellBinding} open=${cellBinding} onClose=${closeCellBinding} />
     `;
 }
 

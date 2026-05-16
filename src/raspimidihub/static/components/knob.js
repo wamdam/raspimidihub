@@ -8,7 +8,7 @@
  * carries over.
  */
 
-import { html, tickFeedback, thudFeedback } from './common.js';
+import { html, tickFeedback, thudFeedback, makeLongPress } from './common.js';
 import { useState, useEffect, useRef } from '../lib/hooks.module.js';
 
 const N_LEDS = 13;
@@ -50,11 +50,13 @@ function formatValue(v, displayFactor, unit, labels, min) {
 
 export function PluginKnob({
     name, label, min, max, value, onChange,
-    displayFactor, unit, labels,
+    displayFactor, unit, labels, onBindRequest,
 }) {
     const containerRef = useRef(null);
     const onChangeRef = useRef(onChange);
     onChangeRef.current = onChange;
+    const onBindRef = useRef(onBindRequest);
+    onBindRef.current = onBindRequest;
     const s = useRef({ val: value, startY: 0, startVal: 0, animId: null }).current;
     const [val, setVal] = useState(value);
 
@@ -77,6 +79,13 @@ export function PluginKnob({
         }
 
         const ppu = pixelsPerUnit(min, max);
+        // Long-press → open the CC binding popup. If the user keeps
+        // their finger still for 500 ms the timer fires, the popup
+        // opens, and the in-flight drag is aborted (move handlers
+        // exit early via lp.moveDidFire).
+        const lp = makeLongPress(() => {
+            if (onBindRef.current) onBindRef.current(name);
+        });
 
         function applyMove(clientY) {
             const dy = s.startY - clientY;        // up = positive
@@ -98,6 +107,7 @@ export function PluginKnob({
             activeTouchId = t.identifier;
             s.startY = t.clientY;
             s.startVal = s.val;
+            lp.start(t.clientX, t.clientY);
             el.addEventListener('touchmove', onTouchMove, { passive: false });
             window.addEventListener('touchend', onTouchEnd);
             window.addEventListener('touchcancel', onTouchEnd);
@@ -106,13 +116,16 @@ export function PluginKnob({
             e.preventDefault();
             e.stopPropagation();
             const t = findTouch(e, activeTouchId);
-            if (t) applyMove(t.clientY);
+            if (!t) return;
+            if (lp.moveDidFire(t.clientX, t.clientY)) return;
+            applyMove(t.clientY);
         }
         function onTouchEnd(e) {
             if (e) e.stopPropagation();
             for (const t of e.changedTouches) {
                 if (t.identifier === activeTouchId) {
                     activeTouchId = null;
+                    lp.end();
                     el.removeEventListener('touchmove', onTouchMove);
                     window.removeEventListener('touchend', onTouchEnd);
                     window.removeEventListener('touchcancel', onTouchEnd);
@@ -123,16 +136,31 @@ export function PluginKnob({
 
         // --- Mouse path: separate from touch (no multitouch concerns).
         function onMouseDown(e) {
+            if (e.button === 2) return;  // right-click handled by onContextMenu
             e.preventDefault();
             s.startY = e.clientY;
             s.startVal = s.val;
-            const mm = (ev) => applyMove(ev.clientY);
+            lp.start(e.clientX, e.clientY);
+            const mm = (ev) => {
+                if (lp.moveDidFire(ev.clientX, ev.clientY)) {
+                    window.removeEventListener('mousemove', mm);
+                    window.removeEventListener('mouseup', mu);
+                    return;
+                }
+                applyMove(ev.clientY);
+            };
             const mu = () => {
+                lp.end();
                 window.removeEventListener('mousemove', mm);
                 window.removeEventListener('mouseup', mu);
             };
             window.addEventListener('mousemove', mm);
             window.addEventListener('mouseup', mu);
+        }
+
+        function onContextMenu(e) {
+            e.preventDefault();
+            if (onBindRef.current) onBindRef.current(name);
         }
 
         function onWheel(e) {
@@ -149,11 +177,13 @@ export function PluginKnob({
 
         el.addEventListener('touchstart', onTouchStart, { passive: false });
         el.addEventListener('mousedown', onMouseDown);
+        el.addEventListener('contextmenu', onContextMenu);
         el.addEventListener('wheel', onWheel, { passive: false });
         el.addEventListener('dblclick', onDblClick);
         return () => {
             el.removeEventListener('touchstart', onTouchStart);
             el.removeEventListener('mousedown', onMouseDown);
+            el.removeEventListener('contextmenu', onContextMenu);
             el.removeEventListener('wheel', onWheel);
             el.removeEventListener('dblclick', onDblClick);
         };

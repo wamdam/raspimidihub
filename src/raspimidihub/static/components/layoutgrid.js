@@ -1,21 +1,26 @@
 /**
  * PluginLayoutGrid — renders a positioned grid of cells (Knob / Fader /
  * Button / XYPad) on play surfaces, OR a flat config list (one row per
- * cell with name / channel / cc / on / off / Learn) in the device-
- * detail panel.
+ * cell with name / button On-Off / XY spring) in the device-detail
+ * panel.
  *
  * Mode is decided by `displayCtx.playOnly`:
  *
  *   - playOnly === true  → live positioned cells (Controller page).
  *   - playOnly !== true  → flat config list, IF the LayoutGrid declares
- *                          any of `labels_param` / `bindings_param` /
- *                          `learn_param`. Without those, falls back to
- *                          the live grid (used by `ui_demo`).
+ *                          `labels_param` / `bindings_param`. Without
+ *                          those, falls back to the live grid (used by
+ *                          `ui_demo`).
  *
- * Renames / rebinds / Learn captures all auto-save through the normal
- * onChange → PATCH pipeline; there's no separate Save button. The
- * server-stored `labels_param` / `bindings_param` / `learn_param`
- * propagate via SSE so other browsers see the changes immediately.
+ * As of Phase 4 of the CC-binding work, the per-cell (channel, cc) +
+ * MIDI Learn editor lives on the Controller page as a long-press
+ * popup (components/cellbinding.js). The device-detail flat list is
+ * now strictly for cell-level *extras* — labels, button On / Off
+ * values, XY-pad spring ergonomics — that don't fit the popup's
+ * binding-only scope.
+ *
+ * Renames / button On-Off / spring edits all auto-save through the
+ * normal onChange → PATCH pipeline; there's no separate Save button.
  */
 
 import { html } from './common.js';
@@ -35,11 +40,10 @@ function normaliseSpringHome(v) {
 
 export function PluginLayoutGrid({ param, values, onChange, displayCtx, renderParam }) {
     const playOnly = !!(displayCtx && displayCtx.playOnly);
-    const hasConfigSurface = param.labels_param || param.bindings_param || param.learn_param;
+    const hasConfigSurface = param.labels_param || param.bindings_param;
 
     const labels = (param.labels_param && values[param.labels_param]) || {};
     const bindings = (param.bindings_param && values[param.bindings_param]) || {};
-    const learnTarget = (param.learn_param && values[param.learn_param]) || '';
 
     const setLabel = (cellName, newLabel) => {
         if (!param.labels_param) return;
@@ -58,20 +62,11 @@ export function PluginLayoutGrid({ param, values, onChange, displayCtx, renderPa
         const next = { ...cur, [key]: value };
         onChange(param.bindings_param, { ...bindings, [cellName]: next });
     };
-    const toggleLearn = (cellName) => {
-        if (!param.learn_param) return;
-        onChange(param.learn_param, learnTarget === cellName ? '' : cellName);
-    };
-    const toggleLearnTarget = (target) => {
-        // XY pads pass "<cell>:y" to learn the Y axis; bare "<cell>" or
-        // "<cell>:x" lands on the X axis (server defaults to X).
-        if (!param.learn_param) return;
-        onChange(param.learn_param, learnTarget === target ? '' : target);
-    };
 
     // Config view — shown in the device-detail panel for any LayoutGrid
-    // that opted in by declaring labels_param / bindings_param /
-    // learn_param. Each cell becomes a multi-line card:
+    // that opted in by declaring labels_param or bindings_param. Each
+    // cell becomes a card with the name input and any per-type extras
+    // (button On/Off, XY spring config):
     //
     //   Knob   [name input]
     //   Ch [_]  CC [__]                              Learn
@@ -84,36 +79,22 @@ export function PluginLayoutGrid({ param, values, onChange, displayCtx, renderPa
     if (!playOnly && hasConfigSurface) {
         const TYPE_LABEL = { knob: 'Knob', fader: 'Fader', button: 'Button', wheel: 'Wheel', xypad: 'XY Pad' };
         return html`<div class="layout-grid-editing">
+            <p class="layout-grid-editing-hint">
+                Cell label and per-type extras. To rebind a cell's MIDI
+                channel and CC, long-press the cell on the Controller
+                page.
+            </p>
             ${param.cells.map((c) => {
                 const labelOv = labels[c.param.name];
                 const effectiveLabel = labelOv != null && labelOv !== '' ? labelOv : c.param.label;
                 const bindOv = bindings[c.param.name] || {};
-                const defCh = c.channel != null ? c.channel + 1 : null;
-                const defCc = c.cc;
-                const ovCh = (bindOv.channel != null && bindOv.channel !== '') ? bindOv.channel + 1 : null;
-                const ovCc = (bindOv.cc != null && bindOv.cc !== '') ? bindOv.cc : null;
-                const isLearning = learnTarget === c.param.name;
                 const isButton = c.param.type === 'button';
                 const isXYPad = c.param.type === 'xypad';
-                // Per-axis learn for XY pads: ':x' suffix → X, ':y' → Y,
-                // bare name → X (legacy). Highlights only the axis the
-                // user armed.
-                const isLearningX = isXYPad &&
-                    (learnTarget === c.param.name ||
-                     learnTarget === c.param.name + ':x');
-                const isLearningY = isXYPad &&
-                    learnTarget === c.param.name + ':y';
                 const typeLabel = TYPE_LABEL[c.param.type] || c.param.type;
                 const ovOn  = (bindOv.on  != null && bindOv.on  !== '') ? bindOv.on  : null;
                 const ovOff = (bindOv.off != null && bindOv.off !== '') ? bindOv.off : null;
-                const defCcY = c.cc_y;
-                const ovCcY = (bindOv.cc_y != null && bindOv.cc_y !== '') ? bindOv.cc_y : null;
-                // Y axis defaults to the X channel unless the schema set
-                // a separate channel_y or the user has overridden it.
-                const defChY = c.channel_y != null ? c.channel_y + 1 : null;
-                const ovChY = (bindOv.channel_y != null && bindOv.channel_y !== '') ? bindOv.channel_y + 1 : null;
-                const hasBindings = param.bindings_param && (defCh != null || defCc != null);
-                return html`<div class="cell-edit ${(isLearning || isLearningX || isLearningY) ? 'learning' : ''}">
+                const hasBindings = !!param.bindings_param;
+                return html`<div class="cell-edit">
                     <div class="cell-edit-row">
                         <span class="cell-edit-type">${typeLabel}</span>
                         <input class="cell-edit-name" type="text"
@@ -121,88 +102,39 @@ export function PluginLayoutGrid({ param, values, onChange, displayCtx, renderPa
                             placeholder=${c.param.label}
                             onInput=${(e) => setLabel(c.param.name, e.target.value)} />
                     </div>
-                    ${hasBindings && isXYPad ? html`
-                        <div class="cell-edit-row mini-controls">
-                            <span class="cell-edit-fieldlabel">X:</span>
-                            <${PluginWheel} mini name=${c.param.name + '_x_ch'} label="Ch"
-                                min=${1} max=${16}
-                                value=${ovCh != null ? ovCh : (defCh != null ? defCh : 1)}
-                                onChange=${(_, v) => setBinding(c.param.name, 'channel', v - 1)} />
-                            <${PluginWheel} mini name=${c.param.name + '_x_cc'} label="CC"
-                                min=${0} max=${127}
-                                value=${ovCc != null ? ovCc : (defCc != null ? defCc : 0)}
-                                onChange=${(_, v) => setBinding(c.param.name, 'cc', v)} />
-                            ${param.learn_param ? html`
-                                <button type="button" class="cell-edit-learn ${isLearningX ? 'on' : ''}"
-                                    title=${isLearningX ? 'Listening for X-axis CC — tap to cancel'
-                                        : 'Tap, then twist a hardware knob to capture the X-axis (channel, cc).'}
-                                    onclick=${() => toggleLearnTarget(c.param.name + ':x')}>${isLearningX ? 'Listening…' : 'Learn'}</button>` : null}
-                        </div>
-                        <div class="cell-edit-row mini-controls">
-                            <span class="cell-edit-fieldlabel">Y:</span>
-                            <${PluginWheel} mini name=${c.param.name + '_y_ch'} label="Ch"
-                                min=${1} max=${16}
-                                value=${ovChY != null ? ovChY : (defChY != null ? defChY : (ovCh != null ? ovCh : (defCh != null ? defCh : 1)))}
-                                onChange=${(_, v) => setBinding(c.param.name, 'channel_y', v - 1)} />
-                            <${PluginWheel} mini name=${c.param.name + '_y_cc'} label="CC"
-                                min=${0} max=${127}
-                                value=${ovCcY != null ? ovCcY : (defCcY != null ? defCcY : 0)}
-                                onChange=${(_, v) => setBinding(c.param.name, 'cc_y', v)} />
-                            ${param.learn_param ? html`
-                                <button type="button" class="cell-edit-learn ${isLearningY ? 'on' : ''}"
-                                    title=${isLearningY ? 'Listening for Y-axis CC — tap to cancel'
-                                        : 'Tap, then twist a hardware knob to capture the Y-axis (channel, cc).'}
-                                    onclick=${() => toggleLearnTarget(c.param.name + ':y')}>${isLearningY ? 'Listening…' : 'Learn'}</button>` : null}
-                        </div>
-                        ${(() => {
-                            const defForce = c.spring_force != null ? c.spring_force : 0;
-                            const defHome = c.spring_home != null ? c.spring_home : 'Bottom-left';
-                            const ovForce = (bindOv.spring_force != null && bindOv.spring_force !== '')
-                                ? bindOv.spring_force : null;
-                            const ovHome = (typeof bindOv.spring_home === 'string' && bindOv.spring_home !== '')
-                                ? bindOv.spring_home : null;
-                            const effForce = ovForce != null ? ovForce : defForce;
-                            const effHome = normaliseSpringHome(ovHome != null ? ovHome : defHome);
-                            // Home wheel: 2 ticks, each labelled. Storage stays
-                            // as the string "Bottom-left" / "Center" so old
-                            // saves still load; only the wheel↔string adapter
-                            // here knows the index mapping.
-                            const homeIdx = effHome === "Center" ? 1 : 0;
-                            return html`<div class="cell-edit-row spring-row mini-controls">
-                                <${PluginWheel} mini
-                                    name=${`${c.param.name}_spring_force`}
-                                    label="Spring Force"
-                                    min=${0}
-                                    max=${127}
-                                    value=${effForce}
-                                    onChange=${(_, v) => setBinding(c.param.name, 'spring_force', v)} />
-                                <${PluginWheel} mini
-                                    name=${`${c.param.name}_spring_home`}
-                                    label="Home"
-                                    min=${0}
-                                    max=${1}
-                                    value=${homeIdx}
-                                    tickLabel=${(v) => SPRING_HOME_OPTIONS[v] || ''}
-                                    onChange=${(_, v) => setBindingStr(c.param.name, 'spring_home',
-                                        SPRING_HOME_OPTIONS[v] || 'Bottom-left')} />
-                            </div>`;
-                        })()}
-                    ` : null}
-                    ${hasBindings && !isXYPad ? html`<div class="cell-edit-row mini-controls">
-                        <${PluginWheel} mini name=${c.param.name + '_ch'} label="Ch"
-                            min=${1} max=${16}
-                            value=${ovCh != null ? ovCh : (defCh != null ? defCh : 1)}
-                            onChange=${(_, v) => setBinding(c.param.name, 'channel', v - 1)} />
-                        <${PluginWheel} mini name=${c.param.name + '_cc'} label="CC"
-                            min=${0} max=${127}
-                            value=${ovCc != null ? ovCc : (defCc != null ? defCc : 0)}
-                            onChange=${(_, v) => setBinding(c.param.name, 'cc', v)} />
-                        ${param.learn_param ? html`
-                            <button type="button" class="cell-edit-learn ${isLearning ? 'on' : ''}"
-                                title=${isLearning ? 'Listening for incoming CC — tap to cancel'
-                                    : 'Tap, then twist a hardware knob to capture its (channel, cc)'}
-                                onclick=${() => toggleLearn(c.param.name)}>${isLearning ? 'Listening…' : 'Learn'}</button>` : null}
-                    </div>` : null}
+                    ${hasBindings && isXYPad ? (() => {
+                        const defForce = c.spring_force != null ? c.spring_force : 0;
+                        const defHome = c.spring_home != null ? c.spring_home : 'Bottom-left';
+                        const ovForce = (bindOv.spring_force != null && bindOv.spring_force !== '')
+                            ? bindOv.spring_force : null;
+                        const ovHome = (typeof bindOv.spring_home === 'string' && bindOv.spring_home !== '')
+                            ? bindOv.spring_home : null;
+                        const effForce = ovForce != null ? ovForce : defForce;
+                        const effHome = normaliseSpringHome(ovHome != null ? ovHome : defHome);
+                        // Home wheel: 2 ticks, each labelled. Storage
+                        // stays as the string "Bottom-left" / "Center"
+                        // so old saves still load; only the wheel↔string
+                        // adapter here knows the index mapping.
+                        const homeIdx = effHome === "Center" ? 1 : 0;
+                        return html`<div class="cell-edit-row spring-row mini-controls">
+                            <${PluginWheel} mini
+                                name=${`${c.param.name}_spring_force`}
+                                label="Spring Force"
+                                min=${0}
+                                max=${127}
+                                value=${effForce}
+                                onChange=${(_, v) => setBinding(c.param.name, 'spring_force', v)} />
+                            <${PluginWheel} mini
+                                name=${`${c.param.name}_spring_home`}
+                                label="Home"
+                                min=${0}
+                                max=${1}
+                                value=${homeIdx}
+                                tickLabel=${(v) => SPRING_HOME_OPTIONS[v] || ''}
+                                onChange=${(_, v) => setBindingStr(c.param.name, 'spring_home',
+                                    SPRING_HOME_OPTIONS[v] || 'Bottom-left')} />
+                        </div>`;
+                    })() : null}
                     ${isButton && hasBindings ? html`<div class="cell-edit-row mini-controls">
                         <${PluginWheel} mini name=${c.param.name + '_on'} label="On"
                             min=${0} max=${127}
@@ -217,8 +149,6 @@ export function PluginLayoutGrid({ param, values, onChange, displayCtx, renderPa
                             onclick=${() => {
                                 const curOn  = ovOn  != null ? ovOn  : 127;
                                 const curOff = ovOff != null ? ovOff : 0;
-                                // Setting both via two updates so each goes
-                                // through the same setBinding pipeline.
                                 const cur = bindings[c.param.name] || {};
                                 onChange(param.bindings_param, {
                                     ...bindings,
@@ -232,6 +162,16 @@ export function PluginLayoutGrid({ param, values, onChange, displayCtx, renderPa
     }
 
     // Play mode: positioned grid of live cells.
+    //
+    // Each cell gets the cell-binding popup route via openCellBinding —
+    // long-pressing a knob/fader/button opens the same CellBinding modal
+    // as the plugin-control popup, but tied to the cell's symmetric
+    // (channel, cc) pair in cell_bindings. The bindings_param check
+    // gates the popup so LayoutGrids without a bindings surface
+    // (ui_demo) stay non-bindable.
+    const cellCtx = (param.bindings_param && displayCtx && displayCtx.openCellBinding)
+        ? displayCtx
+        : { ...(displayCtx || {}), openCellBinding: undefined };
     const gridStyle = `display:grid;grid-template-columns:repeat(${param.cols}, minmax(0, 1fr));grid-template-rows:repeat(${param.rows}, auto);gap:6px`;
     return html`<div class="layout-grid" style=${gridStyle}>
         ${param.cells.map((c) => {
@@ -252,7 +192,7 @@ export function PluginLayoutGrid({ param, values, onChange, displayCtx, renderPa
                     ? bindOv.spring_home : cellSpringHome;
             }
             return html`<div class="layout-cell" style=${cellStyle}>
-                ${renderParam(patched, values, onChange, values, displayCtx)}
+                ${renderParam(patched, values, onChange, values, cellCtx)}
             </div>`;
         })}
     </div>`;

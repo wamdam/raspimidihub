@@ -66,7 +66,6 @@ external pads, or sequencer-driven drops."""
             cols=4, rows=5,
             labels_param="cell_labels",
             bindings_param="cell_bindings",
-            learn_param="cell_learn",
             cells=[
                 # Rows 1-4: 16 macros, 4 per row, ch 1 CC 16..31.
                 *[LayoutCell(

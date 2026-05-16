@@ -18,12 +18,14 @@
  */
 
 import { useEffect, useRef, useState } from '../lib/hooks.module.js';
-import { html, tickFeedback } from './common.js';
+import { html, tickFeedback, makeLongPress } from './common.js';
 
-export function PluginXYPad({ name, label, value, min, max, onChange, springForce, springHome }) {
+export function PluginXYPad({ name, label, value, min, max, onChange, springForce, springHome, onBindRequest }) {
     const padRef = useRef(null);
     const onChangeRef = useRef(onChange);
     onChangeRef.current = onChange;
+    const onBindRef = useRef(onBindRequest);
+    onBindRef.current = onBindRequest;
 
     const v = (value && typeof value === 'object') ? value : { x: 0, y: 0 };
     const lo = min ?? 0;
@@ -129,6 +131,13 @@ export function PluginXYPad({ name, label, value, min, max, onChange, springForc
             springRaf = requestAnimationFrame(tick);
         }
 
+        // Long-press → open the binding popup. Holding still on an XY
+        // pad opens the CellBinding modal; the in-flight drag is
+        // aborted via applyValue being skipped after lp.moveDidFire.
+        const lp = makeLongPress(() => {
+            if (onBindRef.current) onBindRef.current(name);
+        });
+
         // --- Touch path: pin to a single identifier so two-finger drags
         // on two XY pads track independently.
         let activeTouchId = null;
@@ -141,6 +150,7 @@ export function PluginXYPad({ name, label, value, min, max, onChange, springForc
             cancelSpring();
             const t = e.changedTouches[0];
             activeTouchId = t.identifier;
+            lp.start(t.clientX, t.clientY);
             applyMove(t.clientX, t.clientY);
             el.addEventListener('touchmove', onTouchMove, { passive: false });
             window.addEventListener('touchend', onTouchEnd);
@@ -149,13 +159,16 @@ export function PluginXYPad({ name, label, value, min, max, onChange, springForc
         function onTouchMove(e) {
             e.preventDefault(); e.stopPropagation();
             const t = findTouch(e, activeTouchId);
-            if (t) applyMove(t.clientX, t.clientY);
+            if (!t) return;
+            if (lp.moveDidFire(t.clientX, t.clientY)) return;
+            applyMove(t.clientX, t.clientY);
         }
         function onTouchEnd(e) {
             if (e) e.stopPropagation();
             for (const t of e.changedTouches) {
                 if (t.identifier === activeTouchId) {
                     activeTouchId = null;
+                    lp.end();
                     el.removeEventListener('touchmove', onTouchMove);
                     window.removeEventListener('touchend', onTouchEnd);
                     window.removeEventListener('touchcancel', onTouchEnd);
@@ -167,12 +180,23 @@ export function PluginXYPad({ name, label, value, min, max, onChange, springForc
 
         let mouseDragging = false;
         function onMouseDown(e) {
+            if (e.button === 2) return;  // right-click → onContextMenu
             e.preventDefault();
             cancelSpring();
             mouseDragging = true;
+            lp.start(e.clientX, e.clientY);
             applyMove(e.clientX, e.clientY);
-            const mm = (ev) => applyMove(ev.clientX, ev.clientY);
+            const mm = (ev) => {
+                if (lp.moveDidFire(ev.clientX, ev.clientY)) {
+                    window.removeEventListener('mousemove', mm);
+                    window.removeEventListener('mouseup', mu);
+                    mouseDragging = false;
+                    return;
+                }
+                applyMove(ev.clientX, ev.clientY);
+            };
             const mu = () => {
+                lp.end();
                 window.removeEventListener('mousemove', mm);
                 window.removeEventListener('mouseup', mu);
                 mouseDragging = false;
@@ -181,13 +205,19 @@ export function PluginXYPad({ name, label, value, min, max, onChange, springForc
             window.addEventListener('mousemove', mm);
             window.addEventListener('mouseup', mu);
         }
+        function onContextMenu(e) {
+            e.preventDefault();
+            if (onBindRef.current) onBindRef.current(name);
+        }
 
         el.addEventListener('touchstart', onTouchStart, { passive: false });
         el.addEventListener('mousedown', onMouseDown);
+        el.addEventListener('contextmenu', onContextMenu);
         return () => {
             cancelSpring();
             el.removeEventListener('touchstart', onTouchStart);
             el.removeEventListener('mousedown', onMouseDown);
+            el.removeEventListener('contextmenu', onContextMenu);
         };
     }, [name, lo, hi]);
 

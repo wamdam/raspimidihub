@@ -30,7 +30,6 @@ class _MiniPlugin(PluginBase):
             cols=2, rows=1,
             labels_param="cell_labels",
             bindings_param="cell_bindings",
-            learn_param="cell_learn",
             cells=[
                 LayoutCell(Knob("k0", "K0"), col=1, row=1),
                 LayoutCell(Button("b0", "B0"), col=2, row=1),
@@ -70,7 +69,6 @@ class TestSchemaParamKeys:
         keys = schema_param_keys(_MiniPlugin.params)
         assert "cell_labels" in keys
         assert "cell_bindings" in keys
-        assert "cell_learn" in keys
 
     def test_collects_drop_button_row_aux_pointers(self):
         keys = schema_param_keys(_MiniPlugin.params)

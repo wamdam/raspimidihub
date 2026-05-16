@@ -131,20 +131,48 @@ latency under one millisecond.
 
 ## CC Automation
 
-Some plugins accept incoming MIDI CCs as parameter automation
-directly -- the **Arpeggiator** and the **Euclidean**, for
-example, share a CC 70..88 block that covers every play-surface
-knob (CC 74 = **Rate**, CC 75 = **Gate** on both, so a hardware
-controller wired for one drives the matching knob on the other
-identically). The CC value is scaled to the parameter's full
-range and the on-screen control animates in real time as the
-hardware CC arrives. Touching the on-screen control while a CC
-is also moving the parameter produces a single resolved value,
-with no flicker between sources.
+Every plugin control that's part of its performance surface
+(Pattern, Rate, Gate, Steps, … -- the knobs you actually reach
+for on a play surface) can be bound to an incoming MIDI CC.
+**Long-press** the control on touch -- or **right-click** with a
+mouse -- and the binding popup opens.
 
-For parameters that the plugin does not accept directly, a **CC →
-CC** mapping at the routing level can rewrite the incoming CC
-number to one the plugin does accept.
+The popup shows:
+
+- **Current binding** -- the (channel, CC) the control currently
+  listens on. Channel can be "Any" (the wire channel doesn't
+  matter) or a specific 1..16; CC is 0..127. Cleared = no
+  binding; the control no longer responds to any CC.
+- **Plugin author's factory default** -- the (channel, CC) the
+  plugin was shipped with. "Reset to factory" snaps the popup
+  back to it.
+- **MIDI Learn** -- arms a 30-second listen for the next
+  incoming CC on any routed source. Twist a hardware knob; the
+  popup fills in (channel, CC). Cancel anytime.
+- **Save / Cancel** -- edits stay local until Save commits them
+  to the plugin's `cc_map` and broadcasts the change.
+
+The CC value is scaled to the parameter's full range and the
+on-screen control animates in real time as the hardware CC
+arrives. Touching the on-screen control while a CC is also
+moving the parameter produces a single resolved value, with no
+flicker between sources.
+
+Bindings are per *instance*: two Arpeggiators can carry the same
+factory default and be re-bound to different CCs without
+affecting each other. They persist in the saved config.
+
+**Discoverability** -- there is no longer a per-plugin "Arp = CC
+74" list in the device-detail panel or the plugin HELP. The
+popup itself is the discovery surface; if you want a global view,
+see **Settings → Plugin Control Mappings** for a flat table of
+every binding across every instance (chapter 16). Appendix A
+still lists each plugin's factory default CC for reference.
+
+For incoming CCs that the plugin doesn't have a binding for, a
+**CC → CC** mapping at the routing level can rewrite the CC
+number on the wire -- useful when the hardware controller can't
+send the CC you want and you'd rather not rebind every plugin.
 
 ## Live Display Outputs
 
@@ -189,7 +217,7 @@ One-line summaries. The detailed reference for each lives in
 | **CC Smoother** | Removes jitter from noisy CC inputs with configurable smoothing; dual scopes (in / out) |
 | **Chord Generator** | Input note triggers a chord (major / minor / 7th / custom intervals) with inversions |
 | **Clock Divider** | Emit one MIDI Clock for every N received (2..32) |
-| **Euclidean** | Held notes voiced through a Bjorklund-distributed step pattern; per-step manual overrides on top; chord mode; internal Scale + Root; Jitter, Tune Spread, Fade In / Out; full block CC automation. *Play-surface plugin* — added from **Add → Play** |
+| **Euclidean** | Held notes voiced through a Bjorklund-distributed step pattern; per-step manual overrides on top; chord mode; internal Scale + Root; Jitter, Tune Spread, Fade In / Out. *Play-surface plugin* — added from **Add → Play** |
 | **Hold** | Latch notes without a sustain pedal; chord-latch or per-note toggle; MIDI-Learn the release note |
 | **Master Clock** | Internal BPM clock with start/stop/continue, beat meter, bar counter |
 | **MIDI Delay** | Pre-scheduled echoes with feedback repeats and velocity decay; sync rate or free ms |

@@ -38,7 +38,8 @@ does not need to move. If the perf optimisation *is* user-visible
 | Play surfaces (Tracker / Arpeggiator / Euclidean) | `13-play-surfaces.md`, `A-appendix-plugin-reference.md` (per-plugin param tables) |
 | Bluetooth pairing / bridge | `14-bluetooth-midi.md` |
 | Save / Load / Export / Import Config | `15-saving-and-exporting-configs.md`, `09-routing-matrix.md` §9.8 |
-| Settings page (cards, toggles) | `16-settings.md` |
+| Settings page (hub, sub-pages, Plugin Control Mappings) | `16-settings.md` |
+| Long-press CC binding popup / `default_cc` semantics | `11-plugins.md` §"CC Automation", `12-controllers.md` "Play Surface" |
 | WiFi modes, captive portal, USB tether, update path | `17-connectivity-and-updates.md` |
 | Read-only FS, LEDs, watchdog, failure modes | `18-appliance-reliability.md` |
 | New REST endpoint, SSE event type, or API behaviour | `E-appendix-rest-and-sse-api.md` |

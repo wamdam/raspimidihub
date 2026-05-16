@@ -63,19 +63,17 @@ echoes that fade out on a lead synth line."""
         Group("Timing", [
             Button("sync", "Sync to Clock", color="green"),
             Fader("delay_ms", "Delay (ms)", min=10, max=2000, default=250,
-                  visible_when=("sync", False), span=3),
+                  visible_when=("sync", False), span=3, default_cc=74),
             Radio("rate", "Rate", _DELAY_RATES, default="1/8",
                   visible_when=("sync", True), span=3),
         ]),
         Group("Controls", [
-            Wheel("repeats", "Repeats", min=0, max=10, default=3),
+            Wheel("repeats", "Repeats", min=0, max=10, default=3, default_cc=75),
             Fader("vel_decay", "Vel Decay %", min=0, max=100, default=20, span=3),
         ]),
     ]
 
-    cc_inputs = {74: "delay_ms", 75: "repeats"}
-
-    inputs = ["Notes", "CC#74 (delay time)", "CC#75 (repeats)", "Clock"]
+    inputs = ["Notes", "CC (long-press a knob to bind)", "Clock"]
     outputs = ["Notes (original + delayed)"]
 
     clock_divisions = _DELAY_RATES

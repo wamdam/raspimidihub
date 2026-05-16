@@ -4,6 +4,20 @@ User-visible changes. Short tagged one-liners, no code or commit
 hashes. Tags: Added, Improved, Fix, Changed, Removed.
 
 
+2026-05-16 — Version 4.1.0
+
+User-bindable MIDI CC for every plugin control and every controller cell. Long-press (touch) or right-click (mouse) opens a popup with the current binding, a MIDI Learn button, manual Channel + CC wheels, Reset to factory, and Clear. Settings gains a hub of sub-pages with a new Plugin Control Mappings table listing every CC binding across every instance.
+
+- Added: User-bindable MIDI CC on Wheel / Knob / Fader / Radio / NoteSelect / Button / XYPad. Plugin authors opt in by setting `default_cc` on the param dataclass; users override per instance via long-press → popup. Channel (Any / 1..16) + CC (0..127), MIDI Learn captures the next inbound CC on any routed source with a 30 s timeout, Reset to default restores the plugin author's choice, Clear is durable across reboots. Same-CC collisions inside one instance are flagged but allowed — one hardware knob can drive multiple controls on purpose.
+- Added: Long-press cell binding on the Controller page. Each cell's symmetric (channel, cc) pair (touch emits, hardware mirrors) is editable from the cell itself; XY pads get an axis-split popup with a separate MIDI Learn for X and Y. Same popup is reachable by tapping any row in Settings → Plugin Control Mappings.
+- Added: Plugin Control Mappings sub-page in Settings — flat editable table of every CC binding across all plugins AND every controller cell. Rows route by kind: plugin params open the CcBinding popup, controller cells open the CellBinding popup. Live cc_map_changed / plugin-changed SSE keeps the table in sync as bindings move.
+- Added: Settings hub + sub-page navigation. Sys Info / Network / MIDI / Display / Update / Plugin Control Mappings are now distinct sub-pages under a `< Settings / <title>` back-bar. Per-tab sub-state remembers the last sub-page across bottom-nav switches. Reload App + Reboot Pi moved into Sys Info.
+- Improved: Plugin HELP popovers and the matrix-side device-detail panel no longer list per-plugin CC numbers — discovery moves to long-press. Appendix A still carries the factory default for each control.
+- Changed: Controller cells' (channel, cc) + MIDI Learn editor is gone from the device-detail panel. The panel keeps name rename, Button On / Off + swap, and XY pad spring config — the bits that aren't bindings.
+- Changed: Plugin instance rename via the device-detail panel now broadcasts `plugin-changed` SSE; listeners (Plugin Control Mappings, controller picker) refresh live instead of waiting on a manual refresh.
+- Removed: Per-plugin class-level `cc_inputs` dict. Defaults now live on the param dataclass via `default_cc=N`; runtime mapping lives in each instance's `cc_map`. Existing configs migrate transparently — missing `cc_map` falls back to the factory seed.
+
+
 2026-05-15 — Version 4.0.0
 
 A bigger release than the patch-level cadence the 3.1.x series ran on. Headline: the Euclidean play-surface plugin, an 8-slot pattern bank shared by every play-surface plugin, and a UI pass that touches the matrix, the play surfaces, the device-detail HELP popovers, and tab navigation.

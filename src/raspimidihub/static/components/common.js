@@ -120,3 +120,67 @@ export function noteName(n) { return `${NOTE_NAMES[n % 12]}${Math.floor(n / 12) 
 
 // Global touch lock: only one wheel active per touch
 export const _activeWheelTouch = new Map();
+
+// --- Long-press gesture helper -----------------------------------------
+//
+// Tiny state machine the bindable controls (Knob / Wheel / Fader /
+// Radio / Button) hook into to open the CC binding popup on a long
+// hold without breaking their existing drag / click handlers.
+//
+// Usage from inside a component's existing gesture handlers:
+//
+//   const lp = makeLongPress(() => onBindRequest(name));
+//   function onTouchStart(e) {
+//     ...existing code...
+//     lp.start(t.clientX, t.clientY);
+//   }
+//   function onTouchMove(e) {
+//     const t = findTouch(...);
+//     if (t) {
+//       if (lp.moveDidFire(t.clientX, t.clientY)) return; // popup opened
+//       applyMove(t.clientY);
+//     }
+//   }
+//   function onTouchEnd() { lp.end(); ...existing... }
+//
+// `slop` is the pixel radius the touch can drift before we decide it's
+// a drag rather than a hold — generous enough that hand jitter on a
+// phone doesn't cancel the timer, tight enough that a deliberate drag
+// is unambiguous.
+export function makeLongPress(fire, opts = {}) {
+    const ms = opts.ms || 500;
+    const slop = opts.slop || 8;
+    let timer = null;
+    let sx = 0, sy = 0;
+    let fired = false;
+    return {
+        start(x, y) {
+            sx = x; sy = y; fired = false;
+            if (timer) clearTimeout(timer);
+            timer = setTimeout(() => {
+                timer = null;
+                fired = true;
+                try { fire(); } catch (err) { console.warn('long-press fire:', err); }
+            }, ms);
+        },
+        // Call with each move coordinate. Returns true once the
+        // long-press has fired so the caller can abort its drag.
+        moveDidFire(x, y) {
+            if (fired) return true;
+            if (timer && Math.hypot(x - sx, y - sy) > slop) {
+                clearTimeout(timer);
+                timer = null;
+            }
+            return false;
+        },
+        end() {
+            if (timer) { clearTimeout(timer); timer = null; }
+            const f = fired;
+            fired = false;
+            return f;
+        },
+        // Did the gesture actually long-press (caller wants to suppress
+        // a follow-up click / value change on the same gesture)?
+        get fired() { return fired; },
+    };
+}

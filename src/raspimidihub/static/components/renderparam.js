@@ -38,6 +38,30 @@ export function renderParam(param, values, onChange, allValues, displayCtx) {
         }
     }
 
+    // Two routes for the long-press binding popup:
+    //
+    //   1) Controller cells (Knob/Fader/Button inside a LayoutGrid
+    //      play surface): displayCtx.openCellBinding is set by
+    //      LayoutGrid. Long-press opens the CellBinding popup, which
+    //      writes the symmetric (channel, cc) pair into the
+    //      controller's `cell_bindings` dict. No `default_cc` opt-in
+    //      required — every cell carries a binding by definition.
+    //
+    //   2) Plain plugin params (Arp Rate, CC LFO Freq, ...): the
+    //      plugin author signals "this is part of the performance CC
+    //      surface" by setting `default_cc` on the dataclass.
+    //      Without that marker, no popup fires — keeps setup-group
+    //      wheels (Sync, Arp Ch, Ctrl Ch, BPM, ...) silent.
+    let onBind;
+    if (displayCtx && displayCtx.openCellBinding && displayCtx.instanceId) {
+        onBind = (paramName) => displayCtx.openCellBinding(displayCtx.instanceId, paramName);
+    } else {
+        const optedIn = param.default_cc !== undefined && param.default_cc !== null;
+        onBind = (optedIn && displayCtx && displayCtx.openCcBinding && displayCtx.instanceId)
+            ? (paramName) => displayCtx.openCcBinding(displayCtx.instanceId, paramName)
+            : undefined;
+    }
+
     switch (param.type) {
         case 'wheel': {
             const df = param.display_factor;
@@ -48,26 +72,28 @@ export function renderParam(param, values, onChange, allValues, displayCtx) {
             return html`<${PluginWheel} name=${param.name} label=${param.label}
                 min=${param.min} max=${param.max} value=${val != null ? val : param.default}
                 onChange=${onChange} tickLabel=${tl}
-                mini=${param.mini} wide=${param.wide} />`;
+                mini=${param.mini} wide=${param.wide} onBindRequest=${onBind} />`;
         }
         case 'knob':
             return html`<${PluginKnob} name=${param.name} label=${param.label}
                 min=${param.min} max=${param.max} value=${val != null ? val : param.default}
                 displayFactor=${param.display_factor} unit=${param.unit} labels=${param.labels}
-                onChange=${onChange} />`;
+                onChange=${onChange} onBindRequest=${onBind} />`;
         case 'fader':
             return html`<${PluginFader} name=${param.name} label=${param.label}
                 min=${param.min} max=${param.max} value=${val != null ? val : param.default}
                 vertical=${param.vertical} onChange=${onChange}
-                displayFactor=${param.display_factor} displayFormat=${param.display_format} />`;
+                displayFactor=${param.display_factor} displayFormat=${param.display_format}
+                onBindRequest=${onBind} />`;
         case 'radio':
             return html`<${PluginRadio} name=${param.name} label=${param.label}
                 options=${param.options} value=${val != null ? val : param.default}
-                onChange=${onChange} />`;
+                onChange=${onChange} onBindRequest=${onBind} />`;
         case 'button':
             return html`<${PluginButton} name=${param.name} label=${param.label}
                 value=${val != null ? val : param.default} color=${param.color}
-                trigger=${param.trigger} mini=${param.mini} onChange=${onChange} />`;
+                trigger=${param.trigger} mini=${param.mini} onChange=${onChange}
+                onBindRequest=${onBind} />`;
         case 'stepeditor':
             return html`<${PluginStepEditor} name=${param.name} label=${param.label}
                 value=${val || []} onChange=${onChange}
@@ -82,7 +108,7 @@ export function renderParam(param, values, onChange, allValues, displayCtx) {
         case 'noteselect':
             return html`<${PluginNoteSelect} name=${param.name} label=${param.label}
                 value=${val != null ? val : param.default || 60} onChange=${onChange}
-                learnable=${param.learnable !== false} />`;
+                learnable=${param.learnable !== false} onBindRequest=${onBind} />`;
         case 'channelselect':
             return html`<${PluginChannelSelect} name=${param.name} label=${param.label}
                 value=${val != null ? val : (param.default != null ? param.default : 1)}
@@ -106,7 +132,7 @@ export function renderParam(param, values, onChange, allValues, displayCtx) {
             return html`<${PluginXYPad} name=${param.name} label=${param.label}
                 min=${param.min} max=${param.max} value=${xy}
                 springForce=${param.spring_force} springHome=${param.spring_home}
-                onChange=${onChange} />`;
+                onChange=${onChange} onBindRequest=${onBind} />`;
         }
         case 'layoutgrid':
             return html`<${PluginLayoutGrid} param=${param} values=${values}
@@ -244,12 +270,17 @@ export function renderParamList(params, values, onChange, displayCtx) {
     return result;
 }
 
-export function PluginConfigPanel({ instanceId, paramsSchema, params, onParamChange, inputs, outputs, ccInputs, displayOutputs, displayValues }) {
+export function PluginConfigPanel({ instanceId, paramsSchema, params, onParamChange, inputs, outputs, displayOutputs, displayValues, openCcBinding }) {
     // Plugin-config panel is always in config / flat-list mode now —
     // the live cell view lives on the Controller page exclusively. Auto-
     // saves on change like every other plugin param. No Save button.
     const bgChoice = ((params && params.bg) || 'Default').toString().toLowerCase();
-    const displayCtx = { outputs: displayOutputs, values: displayValues };
+    const displayCtx = {
+        outputs: displayOutputs,
+        values: displayValues,
+        instanceId,
+        openCcBinding,
+    };
     return html`<div class=${`plugin-config-preview bg-${bgChoice}`}>
         ${renderParamList(paramsSchema, params, onParamChange, displayCtx)}
 
@@ -257,11 +288,6 @@ export function PluginConfigPanel({ instanceId, paramsSchema, params, onParamCha
             <div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--surface2)">
                 <div style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--text-dim);margin-bottom:6px">Outputs</div>
                 <div style="font-size:12px;color:var(--text)">${outputs.join(', ')}</div>
-            </div>
-        `}
-        ${ccInputs && Object.keys(ccInputs).length > 0 && html`
-            <div style="margin-top:8px;font-size:11px;color:var(--text-dim)">
-                CC automation: ${Object.entries(ccInputs).map(([cc, param]) => `CC#${cc}\u2192${param}`).join(', ')}
             </div>
         `}
     </div>`;

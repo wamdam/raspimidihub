@@ -29,16 +29,15 @@ function paramsEqual(a, b) {
 // Walk a params schema and collect names of trigger-style params:
 //   - DropButtonRow
 //   - Button(trigger=true)
-//   - LayoutGrid.learn_param
 //   - TrackerGrid.cmd_play_param / cmd_stop_param (Play/Stop buttons
 //     in the play header — server fires the local transport then
 //     resets the bool back to false; without skipping the watchdog
 //     re-queue, the server's reset disagrees with our optimistic
 //     `true` and re-fires Play after IN_FLIGHT_RELEASE_MS).
 // These intentionally cycle their value on the server (fire -> idle,
-// learn -> "", drops.action -> 'idle'), so the frontend must NOT
-// optimistically commit OR run the watchdog re-queue — both would
-// fight the server's authoritative state.
+// drops.action -> 'idle'), so the frontend must NOT optimistically
+// commit OR run the watchdog re-queue — both would fight the
+// server's authoritative state.
 export function collectTriggerParams(schema) {
     const s = new Set();
     const walk = (items) => {
@@ -47,7 +46,6 @@ export function collectTriggerParams(schema) {
             if (p.type === 'group') walk(p.children);
             else if (p.type === 'layoutgrid') {
                 walk((p.cells || []).map((c) => c.param));
-                if (p.learn_param) s.add(p.learn_param);
             } else if (p.type === 'trackergrid') {
                 if (p.cmd_play_param) s.add(p.cmd_play_param);
                 if (p.cmd_stop_param) s.add(p.cmd_stop_param);

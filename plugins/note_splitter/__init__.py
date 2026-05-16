@@ -26,7 +26,7 @@ Example: Split at C4, lower ch1 transpose -12 (bass octave down),
 upper ch2 transpose 0 (piano). Left hand plays bass, right plays piano."""
 
     params = [
-        NoteSelect("split_point", "Split Point", default=60),
+        NoteSelect("split_point", "Split Point", default=60, default_cc=74),
         Group("Lower Zone", [
             ChannelSelect("lower_ch", "Channel", default=1),
             Wheel("lower_transpose", "Transpose", min=-48, max=48, default=0),
@@ -37,9 +37,7 @@ upper ch2 transpose 0 (piano). Left hand plays bass, right plays piano."""
         ]),
     ]
 
-    cc_inputs = {74: "split_point"}
-
-    inputs = ["Notes", "CC#74 (split point)"]
+    inputs = ["Notes", "CC (long-press Split Point to bind)"]
     outputs = ["Notes (lower → ch A, upper → ch B)"]
 
     def _route(self, note):

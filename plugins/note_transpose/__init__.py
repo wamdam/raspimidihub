@@ -18,12 +18,10 @@ Example: Set semitones=12 to transpose a keyboard up one octave, or
 set semitones=-7 to drop everything by a fifth."""
 
     params = [
-        Wheel("semitones", "Semitones", min=-48, max=48, default=0),
+        Wheel("semitones", "Semitones", min=-48, max=48, default=0, default_cc=74),
     ]
 
-    cc_inputs = {74: "semitones"}
-
-    inputs = ["Notes", "CC#74 (transpose)", "All other events (pass-through)"]
+    inputs = ["Notes", "CC (long-press Semitones to bind)", "All other events (pass-through)"]
     outputs = ["Notes (transposed)", "All other events (pass-through)"]
 
     def on_note_on(self, channel, note, velocity):

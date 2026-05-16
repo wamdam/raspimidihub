@@ -184,7 +184,7 @@ export function ScrollablePiano({ heldNotes, onNoteDown, onNoteUp, pianoKeys }) 
     </div>`;
 }
 
-export function DeviceDetailPanel({ device, onClose, showToast, refresh, pluginDisplays, onJumpToController, onJumpToPlay }) {
+export function DeviceDetailPanel({ device, onClose, showToast, refresh, pluginDisplays, onJumpToController, onJumpToPlay, openCcBinding }) {
     // While the panel is open we want plugin-param + plugin-display
     // events for THIS device's plugin instance (if it's a plugin) so
     // the inline param controls and meters / scopes update live.
@@ -477,9 +477,9 @@ export function DeviceDetailPanel({ device, onClose, showToast, refresh, pluginD
                             onParamChange=${onPluginParamChange}
                             inputs=${pluginData.inputs}
                             outputs=${pluginData.outputs}
-                            ccInputs=${pluginData.cc_inputs}
                             displayOutputs=${pluginData.display_outputs}
-                            displayValues=${displayValues} />
+                            displayValues=${displayValues}
+                            openCcBinding=${openCcBinding} />
                         ${pluginData.type === 'sysex_sender' && html`
                             <${SysExSenderControls}
                                 instanceId=${device.plugin_instance_id}

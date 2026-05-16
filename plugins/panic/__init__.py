@@ -23,17 +23,15 @@ Sends All Notes Off and All Sound Off on all 16 MIDI channels. Kills
 stuck notes instantly. Can be triggered from the UI or via a CC.
 
 Example: A stuck note is droning on your synth. Hit the Panic button
-or send CC#64 value 127 from a foot switch to silence everything.
-Keep this wired to your output as a safety net."""
+or wire a footswitch / pedal to the Panic! button via long-press →
+MIDI Learn. Keep this wired to your output as a safety net."""
 
     params = [
-        Button("trigger", "Panic!", color="red", trigger=True),
+        Button("trigger", "Panic!", color="red", trigger=True, default_cc=64),
         Wheel("trigger_cc", "Trigger CC #", min=0, max=127, default=64),
     ]
 
-    cc_inputs = {64: "trigger"}
-
-    inputs = ["CC#64 (trigger)"]
+    inputs = ["CC (long-press Panic! to bind)"]
     outputs = ["All Notes Off + All Sound Off on all channels"]
 
     def on_param_change(self, name, value):

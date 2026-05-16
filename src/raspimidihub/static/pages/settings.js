@@ -1,6 +1,11 @@
 /**
- * Settings page: system info, network/wifi cards, default-routing,
- * MIDI bar toggle, software update, reload, reboot.
+ * Settings page: hub + sub-pages.
+ *
+ * The hub is a card list of sub-page links (Sys Info, Network, MIDI,
+ * Display, Update, Plugin Control Mappings). Each sub-page renders
+ * with a `< Settings / <title>` back-bar; the active sub-page lives
+ * in the URL (`/settings/<section>`) and per-tab sub-state restores
+ * it when bouncing through other bottom-nav tabs.
  */
 
 import { useState, useEffect } from '../lib/hooks.module.js';
@@ -729,37 +734,25 @@ function UsbTetherCard() {
     `;
 }
 
-export function SettingsPage({ showToast, showMidiBar, toggleMidiBar }) {
-    const [ifaces, setIfaces] = useState([]);
+
+// --- Sub-pages -------------------------------------------------------
+//
+// Each sub-page is a self-contained component; the hub picks one based
+// on the URL section. The sub-pages reuse the existing card components
+// (WiFiCard, VersionsCard, etc.) — only the grouping into pages is new.
+
+// System Info sub-page — system stats, Reload, Reboot.
+function SettingsSysInfo({ showToast, isUpgrading }) {
     const [sys, setSys] = useState(null);
-    const [defaultRouting, setDefaultRouting] = useState('all');
-    const [isUpgrading, setIsUpgrading] = useState(false);
-    const [soundsOn, setSoundsOn] = useState(getSoundsEnabled());
-    const [density, setDensity] = useState(getLayoutDensity());
-    const [scrollAssistOn, setScrollAssistOn] = useState(getScrollAssist());
-    useEffect(() => { api('/network').then(setIfaces).catch(() => {}); }, []);
     useEffect(() => {
         let cancelled = false;
         const tick = () => {
-            api('/system').then(s => {
-                if (cancelled) return;
-                setSys(s);
-                setDefaultRouting(s.default_routing || 'all');
-            }).catch(() => {});
+            api('/system').then(s => { if (!cancelled) setSys(s); }).catch(() => {});
         };
         tick();
-        // Re-poll while Settings is open so the SSE/sec + load gauges
-        // tick live. 2s is slow enough not to add noticeable load,
-        // fast enough to feel responsive.
         const id = setInterval(tick, 2000);
         return () => { cancelled = true; clearInterval(id); };
     }, []);
-
-    const changeDefaultRouting = async (val) => {
-        setDefaultRouting(val);
-        await api('/system', { method: 'PATCH', body: JSON.stringify({ default_routing: val }) });
-        showToast('Default routing: ' + (val === 'all' ? 'all-to-all' : 'none'));
-    };
 
     const rebootPi = async () => {
         if (confirm('Reboot the Raspberry Pi?')) {
@@ -779,7 +772,7 @@ export function SettingsPage({ showToast, showMidiBar, toggleMidiBar }) {
                 <div class="stat-grid">
                     <div class="stat"><div class="label">Hostname</div><div class="value">${sys.hostname}</div></div>
                     <div class="stat"><div class="label">Version</div><div class="value">${sys.version}</div></div>
-                    <div class="stat"><div class="label">CPU Temp</div><div class="value">${sys.cpu_temp_c != null ? sys.cpu_temp_c + '\u00b0C' : '?'}</div></div>
+                    <div class="stat"><div class="label">CPU Temp</div><div class="value">${sys.cpu_temp_c != null ? sys.cpu_temp_c + '°C' : '?'}</div></div>
                     <div class="stat"><div class="label">Uptime</div><div class="value">${uptimeStr}</div></div>
                     ${sys.load1 != null && html`<div class="stat"><div class="label">Load (1m)</div><div class="value">${sys.load1}</div></div>`}
                     ${sys.cpu_percent != null && html`<div class="stat" title="Process CPU as percent-of-one-core. 100% = the asyncio loop has saturated one core (the failure mode that causes lag); >100% means plugin worker threads are summing in. Updated every second.">
@@ -787,28 +780,28 @@ export function SettingsPage({ showToast, showMidiBar, toggleMidiBar }) {
                         <div class="value">${sys.cpu_percent}%</div>
                     </div>`}
                     <div class="stat"><div class="label">RAM</div><div class="value">${sys.ram.available_mb || '?'} / ${sys.ram.total_mb || '?'} MB</div></div>
-                    ${sys.sse_per_sec != null && html`<div class="stat" title="Broadcast events/sec the server pushes to every connected browser. ×N is the number of currently subscribed clients - every event fans out to each, so total socket writes/sec is roughly events × clients.">
+                    ${sys.sse_per_sec != null && html`<div class="stat" title="Broadcast events/sec the server pushes to every connected browser.">
                         <div class="label">SSE / sec</div>
                         <div class="value">${sys.sse_per_sec}${sys.sse_clients ? html` <span style="color:var(--text-dim);font-size:11px">× ${sys.sse_clients} ${sys.sse_clients === 1 ? 'client' : 'clients'}</span>` : ''}</div>
                     </div>`}
-                    ${sys.sse_queue_depths && sys.sse_queue_depths.length > 0 && html`<div class="stat" title="Per-client SSE outbox depths (max 100). Non-zero means a tab is buffering and the server is fanning ahead of it - usually a phone with the screen off.">
+                    ${sys.sse_queue_depths && sys.sse_queue_depths.length > 0 && html`<div class="stat" title="Per-client SSE outbox depths (max 100).">
                         <div class="label">SSE backlog</div>
                         <div class="value">${sys.sse_queue_depths.join(' / ')}</div>
                     </div>`}
                     ${sys.latency_max && html`
-                        <div class="stat" title="asyncio scheduling lag: a healthy loop wakes 0-3 ms after a scheduled time. Spikes here mean the loop is busy and everything else is paced by it. The single best signal that something is wrong server-side.">
+                        <div class="stat" title="asyncio scheduling lag.">
                             <div class="label">Loop lag</div>
                             <div class="value">${sys.latency_max.loop_lag != null ? sys.latency_max.loop_lag + ' ms' : '—'}</div>
                         </div>
-                        <div class="stat" title="Time between an external MIDI event being read by the engine and its midi-activity SSE message being placed on every client outbox. Captures any per-event work + asyncio scheduling delay between the two.">
+                        <div class="stat" title="MIDI in to SSE out latency.">
                             <div class="label">MIDI in → SSE out</div>
                             <div class="value">${sys.latency_max.midi_in_sse_out != null ? sys.latency_max.midi_in_sse_out + ' ms' : '—'}</div>
                         </div>
-                        <div class="stat" title="Time spent in the userspace filter / mapping path for a forwarded MIDI event (kernel-routed direct subscriptions bypass userspace and are effectively zero - they don't show here). 0 ms when no filtered connection forwarded an event in the window.">
+                        <div class="stat" title="Userspace filter/mapping latency.">
                             <div class="label">MIDI in → MIDI out</div>
                             <div class="value">${sys.latency_max.midi_in_midi_out != null ? sys.latency_max.midi_in_midi_out + ' ms' : '—'}</div>
                         </div>
-                        <div class="stat" title="Time from PATCH-receive on a plugin instance to the first send_cc the plugin performs in response (within 100 ms window). Covers controller-page touches → MIDI-out latency on the server side.">
+                        <div class="stat" title="Plugin PATCH to send_cc latency.">
                             <div class="label">Control in → MIDI out</div>
                             <div class="value">${sys.latency_max.control_in_midi_out != null ? sys.latency_max.control_in_midi_out + ' ms' : '—'}</div>
                         </div>
@@ -819,11 +812,36 @@ export function SettingsPage({ showToast, showMidiBar, toggleMidiBar }) {
                 </div>
             </div>
         `}
+        <div class="card">
+            <button class="btn btn-secondary btn-block" style="margin-bottom:8px" onclick=${hardReload} disabled=${isUpgrading}>Reload App</button>
+            <button class="btn btn-danger btn-block" onclick=${rebootPi} disabled=${isUpgrading}>${isUpgrading ? 'Upgrade in progress...' : 'Reboot Pi'}</button>
+        </div>
+    `;
+}
+
+function SettingsNetwork({ showToast }) {
+    const [ifaces, setIfaces] = useState([]);
+    useEffect(() => { api('/network').then(setIfaces).catch(() => {}); }, []);
+    return html`
         <${WiFiCard} showToast=${showToast} />
         <${UsbTetherCard} />
         ${ifaces.filter(i => i.interface !== 'wlan0' && !/^(usb\d+|enx[0-9a-f]{12})$/.test(i.interface)).map(i => html`
             <${NetworkCard} iface=${i} showToast=${showToast} />
         `)}
+    `;
+}
+
+function SettingsMidi({ showToast }) {
+    const [defaultRouting, setDefaultRouting] = useState('all');
+    useEffect(() => {
+        api('/system').then(s => setDefaultRouting(s.default_routing || 'all')).catch(() => {});
+    }, []);
+    const changeDefaultRouting = async (val) => {
+        setDefaultRouting(val);
+        await api('/system', { method: 'PATCH', body: JSON.stringify({ default_routing: val }) });
+        showToast('Default routing: ' + (val === 'all' ? 'all-to-all' : 'none'));
+    };
+    return html`
         <div class="card">
             <h3>MIDI Routing</h3>
             <div class="form-group">
@@ -835,6 +853,14 @@ export function SettingsPage({ showToast, showMidiBar, toggleMidiBar }) {
             </div>
             <p style="font-size:11px;color:var(--text-dim)">When a new device is plugged in, should it be connected to all other devices automatically?</p>
         </div>
+    `;
+}
+
+function SettingsDisplay({ showMidiBar, toggleMidiBar }) {
+    const [soundsOn, setSoundsOn] = useState(getSoundsEnabled());
+    const [density, setDensity] = useState(getLayoutDensity());
+    const [scrollAssistOn, setScrollAssistOn] = useState(getScrollAssist());
+    return html`
         <div class="card">
             <h3>Display <span style="color:var(--text-dim);font-size:11px;font-weight:400;margin-left:6px">(this device only)</span></h3>
             <label class="msg-toggle">
@@ -861,10 +887,142 @@ export function SettingsPage({ showToast, showMidiBar, toggleMidiBar }) {
                 </select>
             </div>
         </div>
-        <${VersionsCard} showToast=${showToast} onUpdatingChange=${setIsUpgrading} />
+    `;
+}
+
+function SettingsUpdate({ showToast, onUpgradingChange }) {
+    return html`<${VersionsCard} showToast=${showToast} onUpdatingChange=${onUpgradingChange} />`;
+}
+
+// Plugin Control Mappings — flat editable table of every per-instance
+// CC binding. Row click opens the same CcBinding popup as long-press.
+// Live cc_map_changed SSE refreshes the table while the user edits.
+function SettingsCcBindings({ openCcBinding, openCellBinding }) {
+    const [rows, setRows] = useState(null);
+    const reload = async () => {
+        try {
+            const r = await api('/plugins/cc-mappings');
+            setRows(r.mappings || []);
+        } catch { setRows([]); }
+    };
+    useEffect(() => {
+        reload();
+        const es = new EventSource('/api/events');
+        const onConn = (e) => {
+            try {
+                const { conn_id } = JSON.parse(e.data);
+                if (!conn_id) return;
+                fetch('/api/sse/subscribe', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ conn_id, events: ['cc_map_changed', 'plugin-changed'], instances: [] }),
+                }).catch(() => {});
+            } catch {}
+        };
+        const onChange = () => reload();
+        es.addEventListener('connection', onConn);
+        es.addEventListener('cc_map_changed', onChange);
+        es.addEventListener('plugin-changed', onChange);
+        return () => es.close();
+    }, []);
+
+    if (rows === null) {
+        return html`<div class="card"><p style="color:var(--text-dim)">Loading...</p></div>`;
+    }
+    if (rows.length === 0) {
+        return html`<div class="card">
+            <h3>Plugin Control Mappings</h3>
+            <p style="color:var(--text-dim);font-size:13px">No plugin instances yet. Add one from the Routing tab to start binding controls to MIDI CC.</p>
+        </div>`;
+    }
+    const fmtCh = (ch) => ch === null || ch === undefined ? 'Any' : String(ch + 1);
+    const fmtCc = (cc) => cc === null || cc === undefined ? '—' : String(cc);
+    return html`
         <div class="card">
-            <button class="btn btn-secondary btn-block" style="margin-bottom:8px" onclick=${hardReload} disabled=${isUpgrading}>Reload App</button>
-            <button class="btn btn-danger btn-block" onclick=${rebootPi} disabled=${isUpgrading}>${isUpgrading ? 'Upgrade in progress...' : 'Reboot Pi'}</button>
+            <h3>Plugin Control Mappings</h3>
+            <p style="font-size:11px;color:var(--text-dim);margin-bottom:10px">
+                Every CC binding across all plugins. Tap a row to edit, MIDI-Learn, or clear.
+                Same popup as long-press on the control itself.
+            </p>
+            <table class="cc-map-table">
+                <thead><tr>
+                    <th>Plugin</th><th>Param</th><th>Ch</th><th>CC</th>
+                </tr></thead>
+                <tbody>
+                    ${rows.map(r => {
+                        // Cell rows open the CellBinding popup; param
+                        // rows open CcBinding. The popup itself shows
+                        // both axes for XY pads even if the table row
+                        // is just the X (or Y) axis — clicking either
+                        // axis row is equivalent.
+                        const onClick = r.kind === 'cell'
+                            ? () => openCellBinding && openCellBinding(r.instance_id, r.param)
+                            : () => openCcBinding && openCcBinding(r.instance_id, r.param);
+                        return html`
+                            <tr key=${`${r.instance_id}/${r.param}/${r.axis || ''}`}
+                                class=${(r.cc === null || r.cc === undefined) ? 'cleared' : ''}
+                                onclick=${onClick}>
+                                <td>${r.instance_name}</td>
+                                <td>${r.param_label}</td>
+                                <td>${fmtCh(r.ch)}</td>
+                                <td>${fmtCc(r.cc)}</td>
+                            </tr>`;
+                    })}
+                </tbody>
+            </table>
+        </div>
+    `;
+}
+
+// --- Hub + dispatcher -----------------------------------------------
+
+const SECTIONS = [
+    { key: 'sys-info',    title: 'Sys Info',                hint: 'Hostname, CPU, RAM, latency, Reload, Reboot' },
+    { key: 'network',     title: 'Network',                 hint: 'WiFi mode, AP password, USB tether, Ethernet' },
+    { key: 'midi',        title: 'MIDI',                    hint: 'Default routing for new devices' },
+    { key: 'display',     title: 'Display',                 hint: 'MIDI activity bar, sounds, scroll-assist, density' },
+    { key: 'update',      title: 'Update',                  hint: 'Check GitHub, manage stored versions' },
+    { key: 'cc-bindings', title: 'Plugin Control Mappings', hint: 'CC bindings across every plugin instance' },
+];
+
+export function SettingsPage({ showToast, showMidiBar, toggleMidiBar,
+                                section, onNavigate, openCcBinding, openCellBinding }) {
+    const [isUpgrading, setIsUpgrading] = useState(false);
+
+    if (section) {
+        const meta = SECTIONS.find(s => s.key === section);
+        const title = meta ? meta.title : section;
+        let body;
+        switch (section) {
+            case 'sys-info':    body = html`<${SettingsSysInfo} showToast=${showToast} isUpgrading=${isUpgrading} />`; break;
+            case 'network':     body = html`<${SettingsNetwork} showToast=${showToast} />`; break;
+            case 'midi':        body = html`<${SettingsMidi} showToast=${showToast} />`; break;
+            case 'display':     body = html`<${SettingsDisplay} showMidiBar=${showMidiBar} toggleMidiBar=${toggleMidiBar} />`; break;
+            case 'update':      body = html`<${SettingsUpdate} showToast=${showToast} onUpgradingChange=${setIsUpgrading} />`; break;
+            case 'cc-bindings': body = html`<${SettingsCcBindings} openCcBinding=${openCcBinding} openCellBinding=${openCellBinding} />`; break;
+            default:            body = html`<div class="card"><p>Unknown section</p></div>`;
+        }
+        return html`
+            <div class="settings-subnav">
+                <button class="settings-back" onclick=${() => onNavigate(null)}
+                    aria-label="Back to Settings">‹ Settings</button>
+                <span class="settings-subnav-title">${title}</span>
+            </div>
+            ${body}
+        `;
+    }
+
+    return html`
+        <div class="settings-hub">
+            ${SECTIONS.map(s => html`
+                <button class="settings-hub-item" key=${s.key}
+                    data-testid=${'settings-hub-' + s.key}
+                    onclick=${() => onNavigate(s.key)}>
+                    <span class="settings-hub-title">${s.title}</span>
+                    <span class="settings-hub-hint">${s.hint}</span>
+                    <span class="settings-hub-chev">›</span>
+                </button>
+            `)}
         </div>
     `;
 }
