@@ -215,6 +215,7 @@ One-line summaries. The detailed reference for each lives in
 
 | Plugin | Function |
 |--------|----------|
+| **Arpeggiator** | Held notes voiced as a step pattern; pattern modes (up, down, up-down, random, as-played, programmed, chord); per-step accent / offset / gate; sustain pedal acts as temporary Hold. *Play-surface plugin* — added from **Add → Play** |
 | **CC LFO** | CC waveforms (sine/triangle/square/saw/sample-and-hold); free or clock-sync up to 8 bars; live scope |
 | **CC Smoother** | Removes jitter from noisy CC inputs with configurable smoothing; dual scopes (in / out) |
 | **Chord Generator** | Input note triggers a chord (major / minor / 7th / custom intervals) with inversions |
@@ -229,6 +230,7 @@ One-line summaries. The detailed reference for each lives in
 | **Pitch CC** | Each Note On emits a pitch CC (base value ± semitones from a base note) then the Note On itself — chromatic playback for samplers like the Volca Sample that pitch via CC |
 | **Scale Remapper** | Quantizes notes to a scale (major / minor / pentatonic / blues / ...) with labelled root selector |
 | **SysEx Sender** | Upload a `.syx` file in the panel; bytes stream to the destination (256-byte chunks, ~5 ms gap; nothing saved) |
+| **Tracker** | Hex-numbered 8-voice step sequencer on a dedicated Play panel; per-track MIDI channel; notes / velocity / CC per cell; live recording; keyboard note entry; Cut/Copy/Paste with sub-cell selection. *Play-surface plugin* — added from **Add → Play** |
 | **Velocity Curve** | Drawable 128-point velocity response curve with shape presets |
 | **Velocity Equalizer** | Normalise velocity to a fixed value or compress the range |
 
