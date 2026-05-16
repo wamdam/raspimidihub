@@ -23,6 +23,64 @@ password apply the moment you save them. The handful that *do* feed
 the dirty-state model (the default-routing choice; the activity-bar
 toggle) are called out in the relevant subsection.
 
+## Spectator mirroring
+
+A way to stream a device's UI into OBS (or another browser tab) with
+effectively zero latency, without screen-capture or `scrcpy`. Useful
+for showcase videos where you want viewers to see what the phone is
+doing -- including ripples where you tap -- but with crisp text and
+correct resolution regardless of the recording setup.
+
+The mechanism: every browser tab running RaspiMIDIHub already
+maintains an SSE connection. Spectator mode adds a *mirror* URL --
+`/?spectate=<conn_id>&touches=1` -- that re-renders the same view as
+the target connection, driven by a small "current UI state" channel
+the source publishes (route, viewport, scroll, density, overlay
+state, touch points). OBS Browser Source loads that URL and CEF
+renders the app natively at any resolution -- no video encoding on
+the phone, no encode latency.
+
+### This device
+
+- **Name shown to spectators** -- a human-readable label that other
+  devices see in their list. Without a label they see only a short
+  UUID; with one they see "Living-room phone". Per-device,
+  persisted to localStorage. Empty is allowed.
+- **Spectator URL** -- the URL another tab or OBS should open to
+  mirror *this* device. Copy it via the button, or tap **Open
+  mirror →** to test it in a new tab.
+
+The source device doesn't broadcast anything until a spectator
+opens the URL. The server tells the source the moment the watcher
+count goes from 0 to 1, the broadcaster attaches its DOM listeners,
+and the source starts publishing ~30 Hz updates of viewport / scroll
+/ touch / overlay state. When the spectator closes, the server tells
+the source again and the listeners detach. Result: zero CPU and zero
+bandwidth on phones nobody is mirroring.
+
+### Spectate another device
+
+A live list of every other RaspiMIDIHub tab currently connected to
+the Pi. Each row shows the device's label (or short UUID), its last
+known viewport size, and how recently it published state. Tapping
+opens the mirror URL in a new tab.
+
+The mirror tab opens at the source's viewport size, applies its
+density and theme, mirrors its scroll position, and renders any
+context menu / CC-binding popup the source has open. A touch
+overlay paints fading ripples where the source is being touched
+(`?touches=1`, on by default). If the source disconnects, the mirror
+shows a "Source disconnected" notice and waits for it to come back.
+
+### Use in OBS
+
+Add a **Browser Source** in OBS, paste the spectator URL, set the
+width and height to your scene's region. CEF inside OBS renders the
+app at native resolution, so the captured frame is crisp even when
+the source phone has a small screen. The CSS `transform: scale()`
+on the wrapper picks the largest fit-the-frame multiplier
+automatically.
+
 ## Plugin Control Mappings
 
 ![Plugin Control Mappings sub-page: every CC binding across every plugin instance and every controller cell, one row each. Plugin params (Arpeggiator) and controller cells (Mixer 8) interleave; tap any row to open the matching popup.](../screenshots/31-settings-cc-bindings.png){width=48%}

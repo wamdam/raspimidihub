@@ -88,6 +88,12 @@ export function useSSE(onEvent, onConnChange, onConnectionId) {
             'clock-quarter', 'clock-position',
             'transport-start', 'cc-changes', 'panic',
             'plugin-changed', 'config-dirty',
+            // Spectator-mode lifecycle. Sources listen for watch-start /
+            // watch-stop / source-gone to know when to attach or detach
+            // their broadcaster. The spectator-state event is the live
+            // mirror payload, handled exclusively by the spectator page.
+            'spectator-watch-start', 'spectator-watch-stop',
+            'spectator-source-gone', 'spectator-state',
         ]) {
             es.addEventListener(ev, handler(ev));
         }

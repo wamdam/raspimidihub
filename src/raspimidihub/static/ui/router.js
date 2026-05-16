@@ -33,7 +33,22 @@ import { useEffect, useState, useCallback } from '../lib/hooks.module.js';
 const TABS = new Set(['routing', 'controller', 'play', 'settings']);
 const SETTINGS_SECTIONS = new Set([
     'sys-info', 'network', 'midi', 'display', 'update', 'cc-bindings',
+    'spectator',
 ]);
+
+// Optional external route source — set at boot by spectator mode to
+// drive the route from the network instead of window.location. When
+// non-null, useRouter() ignores popstate and navigate() is a no-op
+// (the spectator is view-only). The source contract:
+//
+//   { getRoute(): RouteShape,
+//     subscribe(cb): unsubscribe }
+//
+// The spectator entry page constructs one of these from the incoming
+// `spectator-state` events of kind 'route' and installs it before
+// the App tree renders.
+let _externalSource = null;
+export function setRouterExternalSource(src) { _externalSource = src; }
 
 export function parseURL() {
     let path = '/';
@@ -77,9 +92,16 @@ export function buildURL({ tab, controllerId, playId, deviceId, settingsSection 
 }
 
 export function useRouter() {
-    const [route, setRoute] = useState(parseURL);
+    const ext = _externalSource;
+    const [route, setRoute] = useState(() => ext ? ext.getRoute() : parseURL());
 
     useEffect(() => {
+        if (ext) {
+            // Mirror an external source: subscribe to its updates and
+            // discard window.location entirely. The source decides
+            // what the route is.
+            return ext.subscribe(setRoute);
+        }
         const onPop = () => setRoute(parseURL());
         window.addEventListener('popstate', onPop);
         return () => window.removeEventListener('popstate', onPop);
@@ -87,7 +109,10 @@ export function useRouter() {
 
     // Replace the initial URL so '/' becomes '/routing' (or whatever we
     // parsed) — gives back/forward something concrete to land on.
+    // Skipped under an external source: rewriting window.location would
+    // clobber the ?spectate=<id> query the spectator entry depends on.
     useEffect(() => {
+        if (ext) return;
         try {
             const url = buildURL(route);
             if (url !== window.location.pathname) {
@@ -98,6 +123,7 @@ export function useRouter() {
     }, []);
 
     const navigate = useCallback((next, opts = {}) => {
+        if (ext) return;  // spectator view is read-only
         const merged = {
             tab: next.tab !== undefined ? next.tab : 'routing',
             controllerId: next.controllerId !== undefined ? next.controllerId : null,

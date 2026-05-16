@@ -2565,3 +2565,56 @@ body {
 
 /* Device list offline dot */
 .dot.offline { background: #555 !important; }
+
+/* ============================================================
+ * Spectator mode — mirroring a source device's UI into a tab or
+ * an OBS Browser Source. The wrapper renders the App at the
+ * source's pixel viewport and CSS-scales-to-fit our window.
+ * The touch overlay paints fading ripples from incoming pointer
+ * events; the source-gone notice surfaces when the source closes.
+ * ============================================================ */
+.spectator-app-wrap {
+    /* Sized via inline style; we just want a hard isolation so
+       the scaled subtree never bleeds into surrounding chrome. */
+    background: var(--bg);
+    contain: layout paint;
+}
+.spectator-touch-overlay {
+    position: absolute;
+    top: 0; left: 0;
+    pointer-events: none;
+    z-index: 1300;
+}
+.spectator-loading {
+    position: fixed; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--bg);
+    color: var(--text-dim);
+    font-size: 15px;
+}
+.spectator-source-gone {
+    position: fixed; left: 50%; bottom: 24px;
+    transform: translateX(-50%);
+    background: rgba(20, 20, 20, 0.92);
+    border: 1px solid var(--surface2);
+    border-radius: 8px;
+    padding: 10px 16px;
+    color: var(--text-dim);
+    font-size: 13px;
+    z-index: 1400;
+}
+
+/* Spectator-mirroring client list in Settings. */
+.spectator-clients {
+    list-style: none; margin: 0; padding: 0;
+}
+.spectator-clients li { margin: 6px 0; }
+.spectator-client-link {
+    display: flex; justify-content: space-between; align-items: baseline;
+    padding: 10px 12px; border-radius: 6px;
+    background: var(--surface); border: 1px solid var(--surface2);
+    color: var(--text); text-decoration: none;
+}
+.spectator-client-link:hover { background: var(--surface2); }
+.spectator-client-name { font-size: 15px; }
+.spectator-client-meta { font-size: 12px; color: var(--text-dim); }

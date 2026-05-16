@@ -6,6 +6,7 @@
 import { useState, useEffect } from '../lib/hooks.module.js';
 import { html, api } from '../ui/common.js';
 import { useSSESubscription } from '../ui/sse-subscriptions.js';
+import { useSharedUiState } from '../lib/shared-ui-state.js';
 import { PluginIcon } from '../ui/icons.js';
 import { ConnectionMatrix } from './matrix.js';
 import { FilterPanel } from '../panels/filterpanel.js';
@@ -19,8 +20,15 @@ export function RoutingPage({ devices, connections, refresh, showToast, clockSou
          'transport-start'],
         [],
     );
-    const [filterConnId, setFilterConnId] = useState(null);
-    const [showAddPlugin, setShowAddPlugin] = useState(false);
+    // filterConnId and showAddPlugin drive the two big in-page
+    // overlays (filter panel, add-plugin modal). Mirroring them via
+    // useSharedUiState lets a spectator see when the source opens
+    // those panels. The lists rendered inside them (plugin types,
+    // BT devices) are read-only API state and stay component-local
+    // — the spectator's view shows the modal frame but its lists
+    // will be empty unless the spectator separately fetches.
+    const [filterConnId, setFilterConnId] = useSharedUiState('filterConnId', null);
+    const [showAddPlugin, setShowAddPlugin] = useSharedUiState('showAddPlugin', false);
     const [pluginTypes, setPluginTypes] = useState({});
     const loadPluginTypes = () => { api('/plugins').then(setPluginTypes).catch(() => {}); };
     const addPlugin = async (typeName) => {

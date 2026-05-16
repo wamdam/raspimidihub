@@ -1,0 +1,61 @@
+/**
+ * useSharedUiState — useState that mirrors across spectators.
+ *
+ * Some UI state lives in component-local useState today (context
+ * menu, CC-binding popup, Add-plugin overlay, BT panel). For
+ * spectator mode to show the same view as the source phone, those
+ * pieces need to cross the wire.
+ *
+ * One small abstraction layer keeps the source code idiomatic:
+ *
+ *   - Source side: wraps useState, calls ctx.broadcast on every
+ *     write. JSON-encoding strips any function-typed values (e.g.
+ *     menu item onClick handlers), so the wire payload is naturally
+ *     view-only.
+ *
+ *   - Spectator side: registers a subscriber that mirrors incoming
+ *     `ui:<key>` events into local state. The setter is a no-op —
+ *     spectator clicks don't drive UI state.
+ *
+ * The SpectatorContext default is a no-op source (broadcast does
+ * nothing). The actual broadcaster Provider lives in
+ * spectator-broadcast.js (source side) and pages/spectate.js
+ * (spectator side).
+ */
+
+import { createContext } from './preact.module.js';
+import { useCallback, useContext, useEffect, useRef, useState } from './hooks.module.js';
+
+export const SpectatorContext = createContext({
+    kind: 'source',
+    broadcast: () => {},
+    subscribe: () => {},
+    unsubscribe: () => {},
+});
+
+export function useSharedUiState(key, initial) {
+    const ctx = useContext(SpectatorContext);
+    const [value, setValue] = useState(initial);
+    const valRef = useRef(initial);
+    valRef.current = value;
+    const isSpectator = ctx.kind === 'spectator';
+
+    useEffect(() => {
+        if (!isSpectator) return undefined;
+        const cb = (v) => setValue(v == null ? initial : v);
+        ctx.subscribe(`ui:${key}`, cb);
+        return () => ctx.unsubscribe(`ui:${key}`, cb);
+        // initial intentionally excluded — re-subscribing on a literal
+        // initial-prop identity change would tear down on every render.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isSpectator, key, ctx]);
+
+    const setter = useCallback((v) => {
+        if (isSpectator) return;
+        const next = typeof v === 'function' ? v(valRef.current) : v;
+        setValue(next);
+        ctx.broadcast(`ui:${key}`, next);
+    }, [isSpectator, key, ctx]);
+
+    return [value, setter];
+}
