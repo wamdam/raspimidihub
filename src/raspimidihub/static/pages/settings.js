@@ -897,7 +897,7 @@ function SettingsUpdate({ showToast, onUpgradingChange }) {
 // Plugin Control Mappings — flat editable table of every per-instance
 // CC binding. Row click opens the same CcBinding popup as long-press.
 // Live cc_map_changed SSE refreshes the table while the user edits.
-function SettingsCcBindings({ openCcBinding }) {
+function SettingsCcBindings({ openCcBinding, openCellBinding }) {
     const [rows, setRows] = useState(null);
     const reload = async () => {
         try {
@@ -949,16 +949,25 @@ function SettingsCcBindings({ openCcBinding }) {
                     <th>Plugin</th><th>Param</th><th>Ch</th><th>CC</th>
                 </tr></thead>
                 <tbody>
-                    ${rows.map(r => html`
-                        <tr key=${`${r.instance_id}/${r.param}`}
-                            class=${(r.cc === null || r.cc === undefined) ? 'cleared' : ''}
-                            onclick=${() => openCcBinding && openCcBinding(r.instance_id, r.param)}>
-                            <td>${r.instance_name}</td>
-                            <td>${r.param_label}</td>
-                            <td>${fmtCh(r.ch)}</td>
-                            <td>${fmtCc(r.cc)}</td>
-                        </tr>
-                    `)}
+                    ${rows.map(r => {
+                        // Cell rows open the CellBinding popup; param
+                        // rows open CcBinding. The popup itself shows
+                        // both axes for XY pads even if the table row
+                        // is just the X (or Y) axis — clicking either
+                        // axis row is equivalent.
+                        const onClick = r.kind === 'cell'
+                            ? () => openCellBinding && openCellBinding(r.instance_id, r.param)
+                            : () => openCcBinding && openCcBinding(r.instance_id, r.param);
+                        return html`
+                            <tr key=${`${r.instance_id}/${r.param}/${r.axis || ''}`}
+                                class=${(r.cc === null || r.cc === undefined) ? 'cleared' : ''}
+                                onclick=${onClick}>
+                                <td>${r.instance_name}</td>
+                                <td>${r.param_label}</td>
+                                <td>${fmtCh(r.ch)}</td>
+                                <td>${fmtCc(r.cc)}</td>
+                            </tr>`;
+                    })}
                 </tbody>
             </table>
         </div>
@@ -977,7 +986,7 @@ const SECTIONS = [
 ];
 
 export function SettingsPage({ showToast, showMidiBar, toggleMidiBar,
-                                section, onNavigate, openCcBinding }) {
+                                section, onNavigate, openCcBinding, openCellBinding }) {
     const [isUpgrading, setIsUpgrading] = useState(false);
 
     if (section) {
@@ -990,7 +999,7 @@ export function SettingsPage({ showToast, showMidiBar, toggleMidiBar,
             case 'midi':        body = html`<${SettingsMidi} showToast=${showToast} />`; break;
             case 'display':     body = html`<${SettingsDisplay} showMidiBar=${showMidiBar} toggleMidiBar=${toggleMidiBar} />`; break;
             case 'update':      body = html`<${SettingsUpdate} showToast=${showToast} onUpgradingChange=${setIsUpgrading} />`; break;
-            case 'cc-bindings': body = html`<${SettingsCcBindings} openCcBinding=${openCcBinding} />`; break;
+            case 'cc-bindings': body = html`<${SettingsCcBindings} openCcBinding=${openCcBinding} openCellBinding=${openCellBinding} />`; break;
             default:            body = html`<div class="card"><p>Unknown section</p></div>`;
         }
         return html`

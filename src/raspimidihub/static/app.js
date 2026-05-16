@@ -508,7 +508,8 @@ function App() {
                 showMidiBar=${showMidiBar} toggleMidiBar=${toggleMidiBar}
                 section=${route.settingsSection}
                 onNavigate=${(s) => navigate({ tab: 'settings', settingsSection: s })}
-                openCcBinding=${openCcBinding} />`;
+                openCcBinding=${openCcBinding}
+                openCellBinding=${openCellBinding} />`;
             break;
     }
 

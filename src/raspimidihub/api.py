@@ -15,7 +15,6 @@ from . import __version__
 from .bluetooth import BluetoothMidi
 from .config import Config
 from .midi_engine import Connection, MidiEngine
-from .plugin_api import get_all_params, get_default_cc_map
 from .midi_filter import (
     ALL_CHANNELS,
     ALL_MSG_TYPES,
@@ -23,6 +22,7 @@ from .midi_filter import (
     MidiMapping,
     validate_new_mapping,
 )
+from .plugin_api import LayoutGrid, get_all_params, get_default_cc_map
 from .update_flow import (
     NoInternetError,
     UpdateFetcher,
@@ -541,6 +541,14 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
             # display_name comes from custom_names so a rename here
             # changes what /api/plugins/instances returns.
             _invalidate_instances_cache()
+            # plugin-changed SSE so subscribers (Settings → Plugin
+            # Control Mappings, the bottom-nav controller picker, ...)
+            # refresh their cached label. Plugin renames go through
+            # this path, not the /api/plugins/instances PATCH route.
+            if info.is_plugin:
+                await server.send_sse(
+                    "plugin-changed",
+                    {"instance_id": info.stable_id, "client_id": client_id})
             return Response.json({"status": "renamed", "name": name})
 
         # POST /api/devices/{client_id}/clock-source — toggle whether
@@ -1788,27 +1796,113 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         """Flat list of every per-instance CC binding across all plugins.
 
         Powers the Settings → Plugin Control Mappings sub-page (and any
-        client-side collision lookup). Returns each binding once,
-        including cleared entries (cc=None) so the page can show "—"
-        rather than re-seeding the default. Param labels are pulled
-        from the schema where available."""
+        client-side collision lookup). Returns one row per binding
+        from BOTH systems:
+
+          - `kind: "param"` — a plugin param's cc_map entry
+            (Arpeggiator's Rate, CC LFO's Freq, ...). ch can be null
+            ("any channel"); cc can be null (cleared / no binding).
+          - `kind: "cell"` — a controller cell's symmetric (channel,
+            cc). Non-XY cells emit one row; XY-pad cells emit two
+            (axis = "x" and axis = "y"). Effective binding =
+            user override from cell_bindings, falling back to the
+            LayoutCell's factory default.
+
+        The frontend dispatches click-to-edit on `kind` — cell rows
+        open the CellBinding popup, param rows open CcBinding."""
         if not engine._plugin_host:
             return Response.json({"mappings": []})
+        # Resolve user-facing names via the device registry (same path
+        # /api/plugins/instances uses). Plugin renames live in
+        # custom_names, not in PluginInstance.name, so without this
+        # the table would freeze at spawn-time labels.
+        registry = engine.device_registry
         rows = []
         for inst in engine._plugin_host.get_instances():
             cls = type(inst.plugin)
             label_for = {p.name: p.label for p in get_all_params(cls.params)
                          if getattr(p, "name", None)}
+            display_name = inst.name
+            client_id = inst.alsa_client.client_id if inst.alsa_client else None
+            if client_id is not None:
+                info = registry.get_by_client(client_id)
+                if info is not None and info.custom_name:
+                    display_name = info.custom_name
+            # 1) Plugin-param rows (cc_map).
             for param, binding in inst.plugin.cc_map.items():
                 rows.append({
+                    "kind": "param",
                     "instance_id": inst.id,
-                    "instance_name": inst.name,
+                    "instance_name": display_name,
                     "plugin_type": inst.plugin_type,
                     "param": param,
                     "param_label": label_for.get(param, param),
                     "ch": binding.get("ch"),
                     "cc": binding.get("cc"),
                 })
+            # 2) Controller-cell rows. Walk every LayoutGrid in the
+            #    schema; for each cell, compute the effective binding
+            #    from cell_bindings overrides + the LayoutCell factory
+            #    defaults. XY pads expand into two rows (x / y).
+            for top in cls.params:
+                grid = top if isinstance(top, LayoutGrid) else None
+                if grid is None or not grid.bindings_param:
+                    continue
+                cell_bindings = inst.plugin._param_values.get(
+                    grid.bindings_param) or {}
+                cell_labels = (inst.plugin._param_values.get(
+                    grid.labels_param) if grid.labels_param else {}) or {}
+                for cell in grid.cells:
+                    cname = cell.param.name
+                    ov = cell_bindings.get(cname) or {}
+                    label = cell_labels.get(cname) or cell.param.label or cname
+                    is_xy = cell.param.__class__.__name__ == "XYPad"
+                    if is_xy:
+                        fx_ch = cell.channel if cell.channel is not None else 0
+                        fx_cc = cell.cc if cell.cc is not None else 0
+                        fy_ch = cell.channel_y if cell.channel_y is not None else fx_ch
+                        fy_cc = cell.cc_y if cell.cc_y is not None else 0
+                        x_ch = ov.get("channel") if ov.get("channel") is not None else fx_ch
+                        x_cc = ov.get("cc") if ov.get("cc") is not None else fx_cc
+                        y_ch = ov.get("channel_y") if ov.get("channel_y") is not None else fy_ch
+                        y_cc = ov.get("cc_y") if ov.get("cc_y") is not None else fy_cc
+                        rows.append({
+                            "kind": "cell",
+                            "axis": "x",
+                            "instance_id": inst.id,
+                            "instance_name": display_name,
+                            "plugin_type": inst.plugin_type,
+                            "param": cname,
+                            "param_label": f"{label} (X)",
+                            "ch": x_ch,
+                            "cc": x_cc,
+                        })
+                        rows.append({
+                            "kind": "cell",
+                            "axis": "y",
+                            "instance_id": inst.id,
+                            "instance_name": display_name,
+                            "plugin_type": inst.plugin_type,
+                            "param": cname,
+                            "param_label": f"{label} (Y)",
+                            "ch": y_ch,
+                            "cc": y_cc,
+                        })
+                    else:
+                        f_ch = cell.channel if cell.channel is not None else 0
+                        f_cc = cell.cc if cell.cc is not None else 0
+                        cur_ch = ov.get("channel") if ov.get("channel") is not None else f_ch
+                        cur_cc = ov.get("cc") if ov.get("cc") is not None else f_cc
+                        rows.append({
+                            "kind": "cell",
+                            "instance_id": inst.id,
+                            "instance_name": display_name,
+                            "plugin_type": inst.plugin_type,
+                            "param": cname,
+                            "param_label": label,
+                            "ch": cur_ch,
+                            "cc": cur_cc,
+                        })
         return Response.json({"mappings": rows})
 
     @server.route("GET", "/api/plugins/icon/", exact=False)
