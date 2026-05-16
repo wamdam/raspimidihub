@@ -89,14 +89,19 @@ export function useSourceBroadcaster({ watched, route }) {
         window.addEventListener('resize', onResize);
         cleanups.push(() => window.removeEventListener('resize', onResize));
 
-        // Scroll — window-level capture catches scroll events on any
-        // element. We identify scrollable containers by the
-        // `data-spectator-scroll` attribute (set on .main, the matrix
-        // wrapper, etc.) and broadcast {key, x, y} so the spectator
-        // can find the same element and mirror its scroll. Throttled
-        // per key at ~30 Hz via a trailing-edge timer.
+        // Scroll — direct per-element listeners. Window-level scroll
+        // capture is unreliable across browsers (the scroll event
+        // doesn't bubble and some engines won't propagate it past
+        // the immediate target). Each scrollable container marks
+        // itself with `data-spectator-scroll="<key>"`; we attach a
+        // scroll listener to every such element present, and use a
+        // MutationObserver to catch elements added later when the
+        // user navigates between routes (e.g. the matrix appearing
+        // after switching back to the routing tab).
         const lastSent = new Map();   // key -> { x, y, at }
         const pending = new Map();    // key -> timer id
+        const attached = new WeakSet();
+        const onScrollFn = new WeakMap(); // element -> handler (for removal)
         const flushScroll = (key, el) => {
             pending.delete(key);
             const x = el.scrollLeft, y = el.scrollTop;
@@ -105,90 +110,153 @@ export function useSourceBroadcaster({ watched, route }) {
             lastSent.set(key, { x, y, at: performance.now() });
             postState('scroll', { key, x, y });
         };
-        const onAnyScroll = (e) => {
-            const el = e.target;
-            if (!el || el.nodeType !== 1) return;
-            const key = el.getAttribute && el.getAttribute('data-spectator-scroll');
-            if (!key) return;
-            const prev = lastSent.get(key);
-            const dt = prev ? performance.now() - prev.at : Infinity;
-            const delay = Math.max(0, TICK_MS - dt);
-            if (!pending.has(key)) {
-                pending.set(key, setTimeout(() => flushScroll(key, el), delay));
-            }
-        };
-        // The scroll event doesn't bubble, but it DOES propagate in
-        // the capture phase — so a single window-level listener with
-        // capture:true catches scroll on every element in the tree.
-        window.addEventListener('scroll', onAnyScroll, { capture: true, passive: true });
-        cleanups.push(() => {
-            window.removeEventListener('scroll', onAnyScroll, { capture: true });
-            for (const t of pending.values()) clearTimeout(t);
-            pending.clear();
-        });
-        // Initial snapshot for every scrollable container present at
-        // attach time. Late-mounted ones (after route changes) emit
-        // their position via their first scroll event; an explicit
-        // initial isn't required for them.
-        for (const el of document.querySelectorAll('[data-spectator-scroll]')) {
+        const attachScrollEl = (el) => {
+            if (attached.has(el)) return;
             const key = el.getAttribute('data-spectator-scroll');
+            if (!key) return;
+            attached.add(el);
+            const handler = () => {
+                const prev = lastSent.get(key);
+                const dt = prev ? performance.now() - prev.at : Infinity;
+                const delay = Math.max(0, TICK_MS - dt);
+                if (!pending.has(key)) {
+                    pending.set(key, setTimeout(() => flushScroll(key, el), delay));
+                }
+            };
+            onScrollFn.set(el, handler);
+            el.addEventListener('scroll', handler, { passive: true });
+            // Initial snapshot so a late spectator picks up the
+            // current position even if the user hasn't moved since.
             const x = el.scrollLeft, y = el.scrollTop;
             lastSent.set(key, { x, y, at: performance.now() });
             postState('scroll', { key, x, y });
+        };
+        // Attach to whatever exists at watch-start.
+        for (const el of document.querySelectorAll('[data-spectator-scroll]')) {
+            attachScrollEl(el);
         }
+        // Catch elements mounted later. The matrix unmounts when the
+        // user navigates away and remounts when they return.
+        const observer = new MutationObserver((mutations) => {
+            for (const m of mutations) {
+                for (const node of m.addedNodes) {
+                    if (node.nodeType !== 1) continue;
+                    if (node.hasAttribute && node.hasAttribute('data-spectator-scroll')) {
+                        attachScrollEl(node);
+                    }
+                    if (node.querySelectorAll) {
+                        for (const inner of node.querySelectorAll('[data-spectator-scroll]')) {
+                            attachScrollEl(inner);
+                        }
+                    }
+                }
+            }
+        });
+        observer.observe(document.body, { childList: true, subtree: true });
+        cleanups.push(() => {
+            observer.disconnect();
+            for (const t of pending.values()) clearTimeout(t);
+            pending.clear();
+            for (const el of document.querySelectorAll('[data-spectator-scroll]')) {
+                const h = onScrollFn.get(el);
+                if (h) el.removeEventListener('scroll', h);
+            }
+        });
 
         // Touch / pointer — window-level capture so events fire even
-        // when the target calls stopPropagation. We send `down` and
+        // when a target calls stopPropagation. We send `down` and
         // `up` immediately (edges matter for ripple animation) and
         // throttle `move` to TICK_MS.
+        //
+        // Two listener tracks:
+        //   - Pointer events for mouse + pen (where touch === false).
+        //   - Touch events for touchscreen. Pointer events stop
+        //     firing once the browser claims a touch gesture for
+        //     scrolling (it emits pointercancel and goes silent),
+        //     so we'd lose the ripple mid-swipe. Touch events keep
+        //     firing throughout the scroll, so we listen to those
+        //     directly on touchscreens.
         let lastMoveAt = 0;
         let moveTimer = null;
         let pendingMove = null;
-        const sendTouch = (kind, e) => {
+        const sendTouchPos = (kind, x, y, id) => {
             postState('touch', {
-                kind,
-                x: Math.round(e.clientX),
-                y: Math.round(e.clientY),
-                id: e.pointerId,
+                kind, x: Math.round(x), y: Math.round(y), id,
             });
         };
-        const onDown = (e) => sendTouch('down', e);
-        const onUp = (e) => {
+        const onDown = (kind, x, y, id) => sendTouchPos(kind, x, y, id);
+        const onUp = (x, y, id) => {
             if (moveTimer != null) { clearTimeout(moveTimer); moveTimer = null; pendingMove = null; }
-            sendTouch('up', e);
+            sendTouchPos('up', x, y, id);
         };
-        const onMove = (e) => {
-            // Filter out unpressed mouse hover noise — the user expects
-            // ripples only when the source is actively interacting.
-            if (e.pointerType === 'mouse' && !e.buttons) return;
+        const onMove = (x, y, id) => {
             const now = performance.now();
             const dt = now - lastMoveAt;
             if (dt >= TICK_MS) {
                 lastMoveAt = now;
-                sendTouch('move', e);
+                sendTouchPos('move', x, y, id);
                 return;
             }
-            // Trailing-edge: remember the latest move and flush at
-            // the next tick boundary. Coalesces a swipe into ~30 fps.
-            pendingMove = e;
+            pendingMove = { x, y, id };
             if (moveTimer != null) return;
             moveTimer = setTimeout(() => {
                 moveTimer = null;
                 if (!pendingMove) return;
                 lastMoveAt = performance.now();
-                sendTouch('move', pendingMove);
+                sendTouchPos('move', pendingMove.x, pendingMove.y, pendingMove.id);
                 pendingMove = null;
             }, TICK_MS - dt);
         };
-        window.addEventListener('pointerdown', onDown, { capture: true, passive: true });
-        window.addEventListener('pointermove', onMove, { capture: true, passive: true });
-        window.addEventListener('pointerup', onUp, { capture: true, passive: true });
-        window.addEventListener('pointercancel', onUp, { capture: true, passive: true });
+
+        // Pointer track — mouse and pen only. Touch pointer events
+        // would duplicate the touch-event track below, so skip them.
+        const onPointerDown = (e) => {
+            if (e.pointerType === 'touch') return;
+            onDown('down', e.clientX, e.clientY, e.pointerId);
+        };
+        const onPointerMove = (e) => {
+            if (e.pointerType === 'touch') return;
+            if (e.pointerType === 'mouse' && !e.buttons) return; // hover noise
+            onMove(e.clientX, e.clientY, e.pointerId);
+        };
+        const onPointerUp = (e) => {
+            if (e.pointerType === 'touch') return;
+            onUp(e.clientX, e.clientY, e.pointerId);
+        };
+        window.addEventListener('pointerdown', onPointerDown, { capture: true, passive: true });
+        window.addEventListener('pointermove', onPointerMove, { capture: true, passive: true });
+        window.addEventListener('pointerup', onPointerUp, { capture: true, passive: true });
+        window.addEventListener('pointercancel', onPointerUp, { capture: true, passive: true });
+
+        // Touch track — keeps firing during scroll so the ripple
+        // follows the finger even when the gesture turns into a pan.
+        const firstTouch = (e) => e.changedTouches && e.changedTouches[0];
+        const onTouchStart = (e) => {
+            const t = firstTouch(e); if (!t) return;
+            onDown('down', t.clientX, t.clientY, t.identifier);
+        };
+        const onTouchMove = (e) => {
+            const t = firstTouch(e); if (!t) return;
+            onMove(t.clientX, t.clientY, t.identifier);
+        };
+        const onTouchEnd = (e) => {
+            const t = firstTouch(e); if (!t) return;
+            onUp(t.clientX, t.clientY, t.identifier);
+        };
+        window.addEventListener('touchstart', onTouchStart, { capture: true, passive: true });
+        window.addEventListener('touchmove', onTouchMove, { capture: true, passive: true });
+        window.addEventListener('touchend', onTouchEnd, { capture: true, passive: true });
+        window.addEventListener('touchcancel', onTouchEnd, { capture: true, passive: true });
+
         cleanups.push(() => {
-            window.removeEventListener('pointerdown', onDown, { capture: true });
-            window.removeEventListener('pointermove', onMove, { capture: true });
-            window.removeEventListener('pointerup', onUp, { capture: true });
-            window.removeEventListener('pointercancel', onUp, { capture: true });
+            window.removeEventListener('pointerdown', onPointerDown, { capture: true });
+            window.removeEventListener('pointermove', onPointerMove, { capture: true });
+            window.removeEventListener('pointerup', onPointerUp, { capture: true });
+            window.removeEventListener('pointercancel', onPointerUp, { capture: true });
+            window.removeEventListener('touchstart', onTouchStart, { capture: true });
+            window.removeEventListener('touchmove', onTouchMove, { capture: true });
+            window.removeEventListener('touchend', onTouchEnd, { capture: true });
+            window.removeEventListener('touchcancel', onTouchEnd, { capture: true });
             if (moveTimer != null) clearTimeout(moveTimer);
         });
 
