@@ -170,18 +170,22 @@ Export Config**.
   OS's `prefers-color-scheme` setting. The picker hides itself
   if only one theme is installed.
 
-`Screenshots needed: 16-settings-display-light.png` -- the
-Display sub-page rendered in light theme, showing the new Theme
-dropdown.
+![Settings → Display in the **Light** theme, showing the Theme picker.](../screenshots/35-settings-display-light.png){width=42%}
+
+![Routing matrix in the Light theme. The same matrix as the dark mode shot in chapter 9, with white cards and dark navy text.](../screenshots/36-routing-light.png){width=42%}
+
+![Euclidean play surface in the Light theme. Wheels become pale brushed-aluminium with a soft top/bottom dome, knobs go white with dark indicators and a pink LED ring, and the step pattern uses a grey/pink hierarchy so the accented beats stand out.](../screenshots/37-euclidean-play-light.png){width=42%}
+
+![Controller (Mixer 8) in the Light theme. Faders ride pure-white tracks with pale chrome thumbs; the four drop-buttons stay warm-coloured so they remain a distinct affordance.](../screenshots/38-controller-mixer-8-light.png){width=42%}
 
 ## Stats
 
 A pocket-sized health dashboard. Live readouts:
 
 - **Loop lag** -- how long the asyncio loop took to run its last
-  cycle on the reserved CPU 3. Sub-millisecond is the normal
-  state; sustained values above a millisecond indicate something
-  unusual.
+  cycle on the reserved CPU 3. Around 2 ms is the normal state and
+  anything under 5 ms is fine; sustained values above 5 ms
+  indicate something is starving the loop.
 - **MIDI in → out latency** -- the time from a USB MIDI input
   event arriving to its corresponding output event leaving. Probed
   with a synthetic round-trip; the typical value is under 2 ms
