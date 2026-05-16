@@ -172,6 +172,67 @@ def _open_mapping_form_cc(page) -> None:
     time.sleep(0.3)
 
 
+def _fire_long_press(page, selector: str) -> None:
+    """Dispatch a synthetic touchstart + 700 ms hold + touchend on the
+    given selector, opening any long-press popup the element exposes.
+    Playwright's mouse helpers don't tick the 500 ms long-press timer
+    used by the bindable controls — touch events are the path the
+    component listens on."""
+    page.evaluate(
+        """(sel) => {
+            const el = document.querySelector(sel);
+            if (!el) throw new Error('long-press target missing: ' + sel);
+            const r = el.getBoundingClientRect();
+            const x = r.x + r.width / 2, y = r.y + r.height / 2;
+            const ts = (type) => new TouchEvent(type, {
+                bubbles: true, cancelable: true,
+                touches: type === 'touchend' ? [] : [
+                    new Touch({identifier: 1, target: el, clientX: x, clientY: y})],
+                targetTouches: type === 'touchend' ? [] : [
+                    new Touch({identifier: 1, target: el, clientX: x, clientY: y})],
+                changedTouches: [
+                    new Touch({identifier: 1, target: el, clientX: x, clientY: y})],
+            });
+            el.dispatchEvent(ts('touchstart'));
+            return new Promise((res) => setTimeout(() => {
+                el.dispatchEvent(ts('touchend'));
+                res();
+            }, 700));
+        }""",
+        selector,
+    )
+    page.wait_for_selector(".cc-bind-modal", timeout=2000)
+    time.sleep(0.3)
+
+
+def _open_cc_bind_popup_arp(page) -> None:
+    """Open the CcBinding popup over the Arpeggiator's Accent Vel.
+    knob — the play surface's only Knob. Pre-condition: page already
+    rendered to /play/<arp_id>."""
+    page.wait_for_selector(".knob-container", timeout=4000)
+    _fire_long_press(page, ".knob-container")
+
+
+def _open_cell_bind_popup_mixer(page) -> None:
+    """Open the CellBinding popup over Mixer 8's first cell (K1)."""
+    page.wait_for_selector(".layout-cell .knob-container", timeout=4000)
+    _fire_long_press(page, ".layout-cell .knob-container")
+
+
+def _open_cell_bind_popup_xy(page) -> None:
+    """Open the CellBinding popup over an XY pad (axis-split popup)."""
+    page.wait_for_selector(".xypad-pad", timeout=4000)
+    _fire_long_press(page, ".xypad-pad")
+
+
+def _open_settings_cc_bindings(page) -> None:
+    """Already at /settings/cc-bindings — just wait for the table.
+    Used as a setup hook so we can be sure the row data is loaded
+    before the capture (instead of catching the loading state)."""
+    page.wait_for_selector(".cc-map-table tbody tr", timeout=4000)
+    time.sleep(0.3)
+
+
 def build_scenes(target: str, instances: dict[str, dict]) -> list[dict]:
     """Materialise the scene list. URL paths reference the running
     Pi; client_ids are resolved per-scene from the demo instances we
@@ -181,6 +242,13 @@ def build_scenes(target: str, instances: dict[str, dict]) -> list[dict]:
     # config, not the 21-plugin demo population.
     scenes: list[dict] = [
         {"name": "04-settings", "path": "/settings"},
+        # 4.1.0: the Plugin Control Mappings sub-page in Settings.
+        # Captured after the demo population so the table has plenty
+        # of rows to show (plugin params + controller cells side by
+        # side).
+        {"name": "31-settings-cc-bindings",
+         "path": "/settings/cc-bindings",
+         "setup": _open_settings_cc_bindings},
     ]
     # Controller play-surface scenes. One per controller template,
     # path resolves to the instance's id; the file name is the
@@ -207,6 +275,25 @@ def build_scenes(target: str, instances: dict[str, dict]) -> list[dict]:
     # Euclidean play-surface — third SURFACE_KIND="play" plugin.
     if (eu := instances.get("euclidean")) is not None:
         scenes.append({"name": "euclidean-play", "path": f"/play/{eu['id']}"})
+    # 4.1.0: the long-press CcBinding popup, captured over the
+    # Arpeggiator's Accent Vel. knob. The plugin popup carries the
+    # subtitle "Incoming MIDI CC that drives this control." plus the
+    # collision strip; that's the canonical "user-bindable CC"
+    # screenshot.
+    if (arp := instances.get("arpeggiator")) is not None:
+        scenes.append({"name": "32-cc-bind-popup",
+                       "path": f"/play/{arp['id']}",
+                       "setup": _open_cc_bind_popup_arp})
+    # 4.1.0: the controller CellBinding popup (symmetric in/out).
+    if (mixer := instances.get("controller_mixer_8")) is not None:
+        scenes.append({"name": "33-cell-bind-popup",
+                       "path": f"/controller/{mixer['id']}",
+                       "setup": _open_cell_bind_popup_mixer})
+    # 4.1.0: the XY-pad CellBinding popup with X / Y axis sections.
+    if (xy := instances.get("controller_xy_4")) is not None:
+        scenes.append({"name": "34-cell-bind-popup-xy",
+                       "path": f"/controller/{xy['id']}",
+                       "setup": _open_cell_bind_popup_xy})
     # 05/07/08 need a real connection in the matrix so there is an
     # 'on' cell to click. We wire a transient one between two demo
     # plugins; setup_demo_plugins already wiped the live state and
