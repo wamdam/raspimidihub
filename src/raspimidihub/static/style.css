@@ -390,6 +390,100 @@ body {
     margin-top: 4px;
 }
 
+/* --- Settings hub + sub-nav --- */
+.settings-hub {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.settings-hub-item {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    grid-template-rows: auto auto;
+    column-gap: 12px;
+    row-gap: 2px;
+    align-items: center;
+    background: var(--surface, #1a1a1a);
+    border: 1px solid var(--surface2, #2a2a2a);
+    border-radius: 8px;
+    padding: 14px 16px;
+    color: var(--text);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+.settings-hub-item:hover { background: var(--surface2); }
+.settings-hub-title {
+    grid-column: 1;
+    grid-row: 1;
+    font-size: 15px;
+    font-weight: 600;
+}
+.settings-hub-hint {
+    grid-column: 1;
+    grid-row: 2;
+    font-size: 12px;
+    color: var(--text-dim);
+}
+.settings-hub-chev {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    font-size: 22px;
+    color: var(--text-dim);
+}
+.settings-subnav {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+.settings-back {
+    background: transparent;
+    border: 0;
+    color: var(--accent, #e94560);
+    font: inherit;
+    font-size: 14px;
+    cursor: pointer;
+    padding: 6px 8px;
+}
+.settings-subnav-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text);
+}
+
+/* --- Plugin Control Mappings table --- */
+.cc-map-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+.cc-map-table th,
+.cc-map-table td {
+    padding: 8px 6px;
+    text-align: left;
+    border-bottom: 1px solid var(--surface2, #2a2a2a);
+}
+.cc-map-table th {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-dim);
+    font-weight: 600;
+}
+.cc-map-table tbody tr {
+    cursor: pointer;
+}
+.cc-map-table tbody tr:hover { background: var(--surface2, #2a2a2a); }
+.cc-map-table tr.cleared td { color: var(--text-dim); }
+.cc-map-table td:nth-child(3),
+.cc-map-table td:nth-child(4),
+.cc-map-table th:nth-child(3),
+.cc-map-table th:nth-child(4) {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
 /* --- Bottom Nav --- */
 .bottom-nav {
     position: fixed;

@@ -1,10 +1,13 @@
 /**
  * Tiny router for the app's bookmarkable state:
  *
- *   - `tab`           — 'routing' | 'controller' | 'play' | 'settings'
- *   - `controllerId`  — selected instance on the Controller page
- *   - `playId`        — selected instance on the Play page
- *   - `deviceId`      — open device-detail panel on the Routing page
+ *   - `tab`             — 'routing' | 'controller' | 'play' | 'settings'
+ *   - `controllerId`    — selected instance on the Controller page
+ *   - `playId`          — selected instance on the Play page
+ *   - `deviceId`        — open device-detail panel on the Routing page
+ *   - `settingsSection` — active Settings sub-page ('sys-info', 'network',
+ *                         'midi', 'display', 'update', 'cc-bindings'),
+ *                         or null = the Settings hub itself.
  *
  * URL forms:
  *
@@ -15,7 +18,8 @@
  *   /controller/<instance_id>      → controller, that instance selected
  *   /play                          → play surface carousel
  *   /play/<instance_id>            → play, that surface selected
- *   /settings
+ *   /settings                      → settings hub
+ *   /settings/<section>            → settings sub-page
  *
  * `navigate({...})` pushes a new history entry; the browser back/forward
  * buttons fire popstate, the hook resyncs from window.location, and the
@@ -27,12 +31,18 @@
 import { useEffect, useState, useCallback } from '../lib/hooks.module.js';
 
 const TABS = new Set(['routing', 'controller', 'play', 'settings']);
+const SETTINGS_SECTIONS = new Set([
+    'sys-info', 'network', 'midi', 'display', 'update', 'cc-bindings',
+]);
 
 export function parseURL() {
     let path = '/';
     try { path = window.location.pathname || '/'; } catch {}
     const parts = path.replace(/^\/+/, '').split('/').filter(Boolean);
-    const route = { tab: 'routing', controllerId: null, playId: null, deviceId: null };
+    const route = {
+        tab: 'routing', controllerId: null, playId: null, deviceId: null,
+        settingsSection: null,
+    };
     if (parts.length === 0) return route;
     if (!TABS.has(parts[0])) return route;
     route.tab = parts[0];
@@ -42,11 +52,14 @@ export function parseURL() {
         route.controllerId = decodeURIComponent(parts[1]);
     } else if (route.tab === 'play' && parts[1]) {
         route.playId = decodeURIComponent(parts[1]);
+    } else if (route.tab === 'settings' && parts[1]
+            && SETTINGS_SECTIONS.has(parts[1])) {
+        route.settingsSection = parts[1];
     }
     return route;
 }
 
-export function buildURL({ tab, controllerId, playId, deviceId }) {
+export function buildURL({ tab, controllerId, playId, deviceId, settingsSection }) {
     const t = TABS.has(tab) ? tab : 'routing';
     if (t === 'routing') {
         return deviceId != null ? `/routing/d/${encodeURIComponent(deviceId)}` : '/routing';
@@ -56,6 +69,9 @@ export function buildURL({ tab, controllerId, playId, deviceId }) {
     }
     if (t === 'play') {
         return playId ? `/play/${encodeURIComponent(playId)}` : '/play';
+    }
+    if (t === 'settings') {
+        return settingsSection ? `/settings/${settingsSection}` : '/settings';
     }
     return `/${t}`;
 }
@@ -87,6 +103,7 @@ export function useRouter() {
             controllerId: next.controllerId !== undefined ? next.controllerId : null,
             playId: next.playId !== undefined ? next.playId : null,
             deviceId: next.deviceId !== undefined ? next.deviceId : null,
+            settingsSection: next.settingsSection !== undefined ? next.settingsSection : null,
         };
         const url = buildURL(merged);
         try {

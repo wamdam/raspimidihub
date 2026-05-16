@@ -93,7 +93,10 @@ function FullscreenButton() {
 // is preserved as an empty string, so reopening the tab honours
 // that close instead of springing the panel back open.
 const TAB_SUBKEY = {
-    routing: 'deviceId', controller: 'controllerId', play: 'playId',
+    routing: 'deviceId',
+    controller: 'controllerId',
+    play: 'playId',
+    settings: 'settingsSection',
 };
 function tabStorageKey(tab) { return `raspimidihub:lastIn:${tab}`; }
 function saveTabSubState(route) {
@@ -460,7 +463,11 @@ function App() {
                 clockPosition=${clockPosition} />`;
             break;
         case 'settings':
-            page = html`<${SettingsPage} showToast=${showToast} showMidiBar=${showMidiBar} toggleMidiBar=${toggleMidiBar} />`;
+            page = html`<${SettingsPage} showToast=${showToast}
+                showMidiBar=${showMidiBar} toggleMidiBar=${toggleMidiBar}
+                section=${route.settingsSection}
+                onNavigate=${(s) => navigate({ tab: 'settings', settingsSection: s })}
+                openCcBinding=${openCcBinding} />`;
             break;
     }
 
