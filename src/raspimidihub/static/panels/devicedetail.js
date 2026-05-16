@@ -398,7 +398,8 @@ export function DeviceDetailPanel({ device, onClose, showToast, refresh, pluginD
 
     return html`
         <div class="filter-overlay" onclick=${(e) => e.target.className === 'filter-overlay' && close()}>
-            <div class="filter-panel" ref=${el => panelRef.current = el} ...${swipe}>
+            <div class="filter-panel" data-spectator-scroll="device-detail"
+                ref=${el => panelRef.current = el} ...${swipe}>
                 <div class="panel-header">
                     <div class="panel-handle"></div>
                 </div>

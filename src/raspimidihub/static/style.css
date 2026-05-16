@@ -2607,6 +2607,14 @@ body {
     max-width: 100%;
     box-sizing: border-box;
 }
+/* Modal panels use `vh` units which resolve against the spectator's
+   actual browser viewport (e.g. 1080px), NOT the 915px-tall wrapper.
+   That makes the panel taller than the wrapper, anchored at flex-end
+   so the top clips off-screen and the user sees only the bottom.
+   Override to a percentage of the parent (.filter-overlay, which
+   fills the wrapper exactly because it's position:fixed inset:0
+   inside a transform-scaled containing block). */
+.spectator-app-wrap .filter-panel { max-height: 90%; }
 .spectator-touch-overlay {
     position: absolute;
     top: 0; left: 0;
