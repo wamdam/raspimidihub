@@ -20,11 +20,12 @@ chapter 10; this appendix is the lookup.
 |-----------|-------|-----------|--------------------|-------------|---------|---------------|
 | Src Ch | 1--16 or any | yes | yes | yes | yes | yes |
 | Dst Ch | 1--16 | yes | yes | yes | yes | yes (multi-select) |
-| Src note | 0--127 | yes | yes | yes | --- | --- |
+| Src note | 0--127 or Any | yes | yes | yes | --- | --- |
 | Dst note | 0--127 | --- | --- | yes | --- | --- |
 | CC# (source) | 0--127 | --- | --- | --- | yes | --- |
 | CC# (output) | 0--127 | yes | yes | --- | yes | --- |
-| On value | 0--127 | yes | --- | --- | --- | --- |
+| Value Source | Fixed / Velocity | yes | --- | --- | --- | --- |
+| On value | 0--127 | yes (Fixed only) | --- | --- | --- | --- |
 | Off value | 0--127 | yes | --- | --- | --- | --- |
 | Toggle A | 0--127 | --- | yes | --- | --- | --- |
 | Toggle B | 0--127 | --- | yes | --- | --- | --- |
@@ -33,6 +34,18 @@ chapter 10; this appendix is the lookup.
 | Out Min | 0--127 | --- | --- | --- | yes | --- |
 | Out Max | 0--127 | --- | --- | --- | yes | --- |
 | Pass through original event | bool | yes | yes | yes | yes | yes |
+
+**Src note = Any** (Note → CC, Note → CC toggle, Note → Note):
+turns the note match into a wildcard. Every incoming note on the
+selected source channel triggers the mapping; the destination
+note (for Note → Note) or CC (for Note → CC variants) stays
+fixed. Combined with **Value Source = Velocity** on Note → CC,
+this makes the whole keyboard act as a velocity-to-CC pedal.
+
+**Value Source = Velocity** (Note → CC only): the live note-on
+velocity (0--127) is sent as the CC value, replacing the
+**On value**. The **Off value** is still emitted on Note Off so
+the CC has a defined release state.
 
 ## Channel filter mask
 

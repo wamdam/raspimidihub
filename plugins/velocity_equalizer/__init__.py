@@ -23,17 +23,18 @@ volume -- ideal for triggering samples where dynamics are unwanted."""
         Radio("mode", "Mode", ["fixed", "compress", "expand"], default="fixed"),
         Group("Fixed", [
             Wheel("fixed_vel", "Velocity", min=1, max=127, default=100,
-                  visible_when=("mode", "fixed")),
+                  visible_when=("mode", "fixed"), default_cc=74),
         ]),
         Group("Range", [
             Wheel("out_min", "Min", min=1, max=127, default=60,
-                  visible_when=("mode", ["compress", "expand"])),
+                  visible_when=("mode", ["compress", "expand"]), default_cc=75),
             Wheel("out_max", "Max", min=1, max=127, default=120,
-                  visible_when=("mode", ["compress", "expand"])),
+                  visible_when=("mode", ["compress", "expand"]), default_cc=76),
         ]),
     ]
 
-    inputs = ["Notes", "All other events (pass-through)"]
+    inputs = ["Notes", "All other events (pass-through)",
+              "CC (long-press a Velocity / Min / Max wheel to bind)"]
     outputs = ["Notes (velocity adjusted)", "All other events (pass-through)"]
 
     def on_note_on(self, channel, note, velocity):

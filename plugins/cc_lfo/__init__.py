@@ -53,13 +53,13 @@ vibrato to a synth pad without touching a physical controller."""
             Wheel("cc_num", "CC #", min=0, max=127, default=1),
             Display("_scope", "Scope", display_name="level", span=2),
             Fader("depth", "Depth", min=0, max=127, default=127, span=4, default_cc=75),
-            Fader("center", "Center", min=0, max=127, default=64, span=4),
+            Fader("center", "Center", min=0, max=127, default=64, span=4, default_cc=76),
         ]),
     ]
 
     cc_outputs = [1]
 
-    inputs = ["CC (long-press Frequency / Depth to bind)", "Clock"]
+    inputs = ["CC (long-press any value control to bind)", "Clock"]
     outputs = ["CC (configurable #)"]
 
     display_outputs = [

@@ -28,10 +28,11 @@ The divider only counts clocks arriving on its IN port — it
 ignores any clock the system happens to see elsewhere."""
 
     params = [
-        Wheel("divide_by", "Divide by", min=2, max=32, default=2),
+        Wheel("divide_by", "Divide by", min=2, max=32, default=2, default_cc=74),
     ]
 
-    inputs = ["MIDI Clock", "Start / Continue / Stop", "All other events (pass-through)"]
+    inputs = ["MIDI Clock", "Start / Continue / Stop", "All other events (pass-through)",
+              "CC (long-press Divide by to bind)"]
     outputs = ["MIDI Clock (÷N)", "Start / Continue / Stop", "All other events (pass-through)"]
 
     def on_start(self):

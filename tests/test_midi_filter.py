@@ -149,6 +149,24 @@ class TestMappingSerialization:
         assert m2.dst_cc == 64
         assert m2.cc_on_value == 127
         assert m2.pass_through is True
+        # Default value source is "fixed" and shouldn't be persisted to
+        # keep on-disk configs unchanged for existing mappings.
+        assert m2.cc_value_source == "fixed"
+        assert "cc_value_source" not in d
+
+    def test_note_to_cc_velocity_roundtrip(self):
+        m = MidiMapping(
+            type=MappingType.NOTE_TO_CC,
+            src_note=None, dst_cc=11,
+            cc_value_source="velocity",
+            cc_off_value=0,
+        )
+        d = m.to_dict()
+        assert d["cc_value_source"] == "velocity"
+        assert d["src_note"] is None
+        m2 = MidiMapping.from_dict(d)
+        assert m2.cc_value_source == "velocity"
+        assert m2.src_note is None
 
     def test_cc_to_cc_roundtrip(self):
         m = MidiMapping(

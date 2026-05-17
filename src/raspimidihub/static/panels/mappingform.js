@@ -7,13 +7,24 @@ import { html, animateClose, useEscapeClose, useSwipeDismiss } from '../ui/commo
 import { MAPPING_TYPES, noteName } from '../state/constants.js';
 import { PluginRadio, PluginWheel, PluginNoteSelect, PluginButton } from '../plugin-controls.js';
 
+// "Any" when src_note is null/undefined (wildcard); the literal note name
+// otherwise. Kept here rather than in noteName itself because most callers
+// (drop buttons, tracker, plugin params) want a missing note to read as
+// blank or "Off", not "Any".
+const srcNoteLabel = (n) => (n == null ? 'Any' : noteName(n));
+
 export function mappingDesc(m) {
     const sch = m.src_channel != null ? `CH${m.src_channel + 1} ` : '';
     const dch = m.dst_channel != null ? `CH${m.dst_channel + 1} ` : sch;
     const pt = m.pass_through ? ' +thru' : '';
-    if (m.type === 'note_to_cc') return `${sch}${noteName(m.src_note)} \u2192 ${dch}CC${m.dst_cc} (${m.cc_on_value}/${m.cc_off_value})${pt}`;
-    if (m.type === 'note_to_cc_toggle') return `${sch}${noteName(m.src_note)} \u2192 ${dch}CC${m.dst_cc} toggle (${m.cc_on_value}/${m.cc_off_value})${pt}`;
-    if (m.type === 'note_to_note') return `${sch}${noteName(m.src_note)} \u2192 ${dch}${noteName(m.dst_note)}${pt}`;
+    if (m.type === 'note_to_cc') {
+        const vals = m.cc_value_source === 'velocity'
+            ? `vel/${m.cc_off_value}`
+            : `${m.cc_on_value}/${m.cc_off_value}`;
+        return `${sch}${srcNoteLabel(m.src_note)} \u2192 ${dch}CC${m.dst_cc} (${vals})${pt}`;
+    }
+    if (m.type === 'note_to_cc_toggle') return `${sch}${srcNoteLabel(m.src_note)} \u2192 ${dch}CC${m.dst_cc} toggle (${m.cc_on_value}/${m.cc_off_value})${pt}`;
+    if (m.type === 'note_to_note') return `${sch}${srcNoteLabel(m.src_note)} \u2192 ${dch}${noteName(m.dst_note)}${pt}`;
     if (m.type === 'cc_to_cc') return `${sch}CC${m.src_cc} (${m.in_range_min}-${m.in_range_max}) \u2192 ${dch}CC${m.dst_cc_num} (${m.out_range_min}-${m.out_range_max})${pt}`;
     if (m.type === 'channel_map') return `${sch || 'CH* '}\u2192 CH${m.dst_channel + 1}`;
     return m.type;
@@ -24,11 +35,16 @@ export function MappingFormOverlay({ onSubmit, onClose, editing, srcClientId }) 
     const close = () => animateClose(panelRef.current, onClose);
     const [type, setType] = useState(editing ? editing.type : 'note_to_cc');
     const [srcChannel, setSrcChannel] = useState(editing && editing.src_channel != null ? String(editing.src_channel) : '');
-    const [srcNote, setSrcNote] = useState(editing ? (editing.src_note || 60) : 60);
+    // src_note wheel uses -1 as the "Any" tick (mirrors the drop-button
+    // "Off" convention). Persisted as null on the wire.
+    const [srcNote, setSrcNote] = useState(editing
+        ? (editing.src_note != null ? editing.src_note : -1)
+        : 60);
     const [dstNote, setDstNote] = useState(editing ? (editing.dst_note != null ? editing.dst_note : 60) : 60);
     const [dstCc, setDstCc] = useState(editing ? (editing.dst_cc || 1) : 1);
     const [ccOnVal, setCcOnVal] = useState(editing ? (editing.cc_on_value != null ? editing.cc_on_value : 127) : 127);
     const [ccOffVal, setCcOffVal] = useState(editing ? (editing.cc_off_value != null ? editing.cc_off_value : 0) : 0);
+    const [ccValueSource, setCcValueSource] = useState(editing && editing.cc_value_source === 'velocity' ? 'velocity' : 'fixed');
     const [srcCc, setSrcCc] = useState(editing ? (editing.src_cc || 1) : 1);
     const [dstCcNum, setDstCcNum] = useState(editing ? (editing.dst_cc_num || 1) : 1);
     const [inMin, setInMin] = useState(editing ? (editing.in_range_min || 0) : 0);
@@ -101,11 +117,17 @@ export function MappingFormOverlay({ onSubmit, onClose, editing, srcClientId }) 
     const submit = () => {
         const m = { type, dst_channel: +dstChannel, pass_through: passThrough };
         if (srcChannel !== '') m.src_channel = +srcChannel;
+        // -1 on the wheel means "Any" — persist as null on the wire so
+        // the dispatcher treats the rule as a wildcard.
+        const srcNoteOnWire = +srcNote === -1 ? null : +srcNote;
         if (type === 'note_to_cc' || type === 'note_to_cc_toggle') {
-            m.src_note = +srcNote; m.dst_cc = +dstCc;
+            m.src_note = srcNoteOnWire; m.dst_cc = +dstCc;
             m.cc_on_value = +ccOnVal; m.cc_off_value = +ccOffVal;
+            if (type === 'note_to_cc' && ccValueSource === 'velocity') {
+                m.cc_value_source = 'velocity';
+            }
         } else if (type === 'note_to_note') {
-            m.src_note = +srcNote; m.dst_note = +dstNote;
+            m.src_note = srcNoteOnWire; m.dst_note = +dstNote;
         } else if (type === 'cc_to_cc') {
             m.src_cc = +srcCc; m.dst_cc_num = +dstCcNum;
             m.in_range_min = +inMin; m.in_range_max = +inMax;
@@ -142,15 +164,26 @@ export function MappingFormOverlay({ onSubmit, onClose, editing, srcClientId }) 
                 `}
                 ${(type === 'note_to_cc' || type === 'note_to_cc_toggle') && html`
                     <div style="display:flex;gap:12px;flex-wrap:wrap">
-                        <${PluginNoteSelect} name="srcNote" label="Src Note"
+                        <${PluginNoteSelect} name="srcNote" label="Src Note" min=${-1}
+                            formatValue=${(v) => v === -1 ? 'Any' : noteName(v)}
                             value=${srcNote} onChange=${w(setSrcNote)} />
                         <${PluginWheel} name="dstCc" label="Dst CC" min=${0} max=${127}
                             value=${dstCc} onChange=${w(setDstCc)} />
                     </div>
+                    ${type === 'note_to_cc' && html`
+                        <${PluginRadio} name="ccValueSource" label="Value Source"
+                            options=${['Fixed', 'Velocity']}
+                            value=${ccValueSource === 'velocity' ? 'Velocity' : 'Fixed'}
+                            onChange=${(_, v) => setCcValueSource(v === 'Velocity' ? 'velocity' : 'fixed')} />
+                    `}
                     <div style="display:flex;gap:12px;flex-wrap:wrap">
-                        <${PluginWheel} name="onVal" label="On Val" min=${0} max=${127}
-                            value=${ccOnVal} onChange=${w(setCcOnVal)} />
-                        <${PluginWheel} name="offVal" label="Off Val" min=${0} max=${127}
+                        ${!(type === 'note_to_cc' && ccValueSource === 'velocity') && html`
+                            <${PluginWheel} name="onVal" label="On Val" min=${0} max=${127}
+                                value=${ccOnVal} onChange=${w(setCcOnVal)} />
+                        `}
+                        <${PluginWheel} name="offVal"
+                            label=${type === 'note_to_cc' && ccValueSource === 'velocity' ? 'Release Val' : 'Off Val'}
+                            min=${0} max=${127}
                             value=${ccOffVal} onChange=${w(setCcOffVal)} />
                     </div>
                 `}
@@ -160,7 +193,8 @@ export function MappingFormOverlay({ onSubmit, onClose, editing, srcClientId }) 
                             value=${srcChannel === '' ? 0 : +srcChannel + 1}
                             tickLabel=${(v) => v === 0 ? 'Any' : v}
                             onChange=${(_, v) => { if (v === 0) setSrcChannel(''); else setSrcChannel(String(v - 1)); }} />
-                        <${PluginNoteSelect} name="srcNote" label="Src Note"
+                        <${PluginNoteSelect} name="srcNote" label="Src Note" min=${-1}
+                            formatValue=${(v) => v === -1 ? 'Any' : noteName(v)}
                             value=${srcNote} onChange=${w(setSrcNote)} />
                     </div>
                     <div style="display:flex;gap:12px;flex-wrap:wrap">
@@ -169,6 +203,11 @@ export function MappingFormOverlay({ onSubmit, onClose, editing, srcClientId }) 
                         <${PluginNoteSelect} name="dstNote" label="Dst Note"
                             value=${dstNote} onChange=${w(setDstNote)} />
                     </div>
+                    ${srcNote === -1 && html`
+                        <div style="font-size:12px;color:var(--text-dim);margin-top:-6px">
+                            Every incoming note will be remapped to ${noteName(dstNote)}.
+                        </div>
+                    `}
                 `}
                 ${type === 'cc_to_cc' && html`
                     <div style="display:flex;gap:12px;flex-wrap:wrap">
@@ -196,9 +235,9 @@ export function MappingFormOverlay({ onSubmit, onClose, editing, srcClientId }) 
                 `}
                 <div class="btn-group">
                     <button class="btn btn-primary" onclick=${submit}>${editing ? 'Save' : 'Add'}</button>
-                    ${!editing && html`<button class="btn btn-secondary ${learning ? 'btn-held' : ''}" onclick=${() => setLearning(true)}>
+                    <button class="btn btn-secondary ${learning ? 'btn-held' : ''}" onclick=${() => setLearning(true)}>
                         ${learning ? 'Listening...' : 'MIDI Learn'}
-                    </button>`}
+                    </button>
                 </div>
             </div>
         </div>

@@ -48,10 +48,27 @@ write_status "{\"step\":\"installing\",\"version\":\"$VER\"}"
 mount -o remount,rw / || true
 
 LOG=/tmp/raspimidihub-install-deb.log
+
+# Self-heal a previously-interrupted dpkg state. If a prior install
+# was killed mid-flight (a watchdog firing, a power cut, dpkg
+# restarting raspimidihub.service from under itself) the dpkg
+# database is left with unconfigured packages. Every subsequent
+# apt-get install then aborts before touching our deb with
+# "E: dpkg was interrupted, you must manually run 'dpkg --configure
+# -a' to correct the problem." Running it here is a no-op on a
+# clean system and the canonical Debian recovery on an interrupted
+# one, so the user never has to SSH in to unstick the appliance.
+if ! DEBIAN_FRONTEND=noninteractive dpkg --configure -a >"$LOG" 2>&1; then
+    mount -o remount,ro / || true
+    ERR=$(tail -c 600 "$LOG" | tr '\n' ' ' | sed 's/"/\\"/g')
+    write_status "{\"step\":\"error-install\",\"version\":\"$VER\",\"message\":\"dpkg recovery failed: $ERR\"}"
+    exit 1
+fi
+
 # `apt update` is best-effort: if it fails (offline, mirror down) we
 # still try the install — apt will use the cached indexes and may well
 # succeed for an offline downgrade where every dep is already there.
-apt-get update -q >"$LOG" 2>&1 || true
+apt-get update -q >>"$LOG" 2>&1 || true
 
 # DEBIAN_FRONTEND=noninteractive so dpkg never tries to prompt.
 # Recommends ARE pulled — that's how Bluetooth's python3-dbus-next

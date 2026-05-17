@@ -240,6 +240,18 @@ class TestNoteToNoteMatrix:
         err = validate_new_mapping([], m)
         assert err and "no effect" in err.lower()
 
+    def test_wildcard_src_note_to_same_note_allowed(self):
+        """src_note=None ("Any") never produces the same-note-same-channel
+        pointless case, even when src_channel==dst_channel and dst_note
+        happens to match a hypothetical literal value."""
+        m = MidiMapping(
+            type=MappingType.NOTE_TO_NOTE,
+            src_channel=0, src_note=None,
+            dst_channel=0, dst_note=60,
+        )
+        err = validate_new_mapping([], m)
+        assert err is None, err
+
 
 # ---------------------------------------------------------------------------
 # The exact regression the user hit

@@ -160,7 +160,7 @@ trigger the fallback.
 
 A console (USB keyboard + HDMI display, or SSH from another
 network with `ssh user@raspimidihub.local`) gives access to the
-underlying Pi OS. Two commands are commonly useful:
+underlying Pi OS. A few commands are commonly useful:
 
 - `sudo reset-wifi` -- forces AP mode with default credentials.
   Use when the WiFi state is wedged or when access to the unit
@@ -168,6 +168,12 @@ underlying Pi OS. Two commands are commonly useful:
 - `journalctl -u raspimidihub -e` -- tails the routing service
   log. Useful for diagnosing BLE issues, update failures, or any
   unexpected service restart.
+- `sudo mount -o remount,rw / && sudo dpkg --configure -a && sudo
+  mount -o remount,ro /` -- reconciles a half-applied dpkg state
+  if **Install** keeps failing with `E: dpkg was interrupted, you
+  must manually run 'dpkg --configure -a'`. Only relevant on
+  builds older than the one that runs the same recovery
+  automatically before every install.
 
 ## Updating the rosetup Package
 

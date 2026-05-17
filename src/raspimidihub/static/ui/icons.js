@@ -22,12 +22,21 @@ export const IconFullscreenExit = html`<svg width="18" height="18" viewBox="0 0 
 export const IconPlay = html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="5" width="18" height="2.5" rx="0.5"/><rect x="3" y="10.75" width="18" height="2.5" rx="0.5" fill="currentColor"/><rect x="3" y="16.5" width="18" height="2.5" rx="0.5"/></svg>`;
 export const IconSettings = html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v2m0 18v2m-9-11h2m16 0h2m-3.64-6.36l-1.42 1.42M6.06 17.94l-1.42 1.42m0-12.72l1.42 1.42m11.88 11.88l1.42 1.42"/></svg>`;
 
-// DIN MIDI connector icon (5-pin) for hardware devices
-export const IconDIN = html`<svg viewBox="0 0 20 20" class="dev-icon din"><circle cx="10" cy="10" r="8" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="6" cy="8" r="1.2" fill="currentColor"/><circle cx="14" cy="8" r="1.2" fill="currentColor"/><circle cx="10" cy="13" r="1.2" fill="currentColor"/><circle cx="7" cy="12" r="1.2" fill="currentColor"/><circle cx="13" cy="12" r="1.2" fill="currentColor"/></svg>`;
+// DIN MIDI connector icon (5-pin) for hardware devices.
+// Defined as a component (not a module-level vnode constant) so each
+// matrix row gets a fresh vnode — sharing one vnode object across
+// sibling positions can confuse Preact's diff when the parent list
+// reshuffles on device add/remove.
+export function IconDIN() {
+    return html`<svg viewBox="0 0 20 20" class="dev-icon din"><circle cx="10" cy="10" r="8" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="6" cy="8" r="1.2" fill="currentColor"/><circle cx="14" cy="8" r="1.2" fill="currentColor"/><circle cx="10" cy="13" r="1.2" fill="currentColor"/><circle cx="7" cy="12" r="1.2" fill="currentColor"/><circle cx="13" cy="12" r="1.2" fill="currentColor"/></svg>`;
+}
 
 // Bluetooth logo for BLE-MIDI devices. Standard "B" rune shape: vertical
 // spine + two crossing diagonals to the upper/lower right corners.
-export const IconBluetooth = html`<svg viewBox="0 0 20 20" class="dev-icon bt"><path d="M7 5 L13 15 L10 17 L10 3 L13 5 L7 15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+// Component form — see IconDIN for why.
+export function IconBluetooth() {
+    return html`<svg viewBox="0 0 20 20" class="dev-icon bt"><path d="M7 5 L13 15 L10 17 L10 3 L13 5 L7 15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+}
 
 // Plugin icon: fetched from /api/plugins/icon/{type} and injected inline so currentColor works.
 const _iconCache = {};
@@ -45,6 +54,6 @@ export function PluginIcon({ type }) {
 
 export function DeviceIcon({ device }) {
     if (device.is_plugin && device.plugin_type) return html`<${PluginIcon} type=${device.plugin_type} />`;
-    if (device.is_bluetooth) return IconBluetooth;
-    return IconDIN;
+    if (device.is_bluetooth) return html`<${IconBluetooth} />`;
+    return html`<${IconDIN} />`;
 }

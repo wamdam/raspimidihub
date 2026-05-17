@@ -583,3 +583,110 @@ class TestCcFanOut:
         assert cc_outputs[(2, 1)] == 127    # ch3 mod wheel
         assert cc_outputs[(9, 1)] == 127    # ch10 mod wheel
         assert cc_outputs[(3, 11)] == 127   # expression upper half
+
+
+class TestNoteToNoteWildcard:
+    """src_note=None matches any incoming note — fold a whole keyboard
+    onto a single pitch."""
+
+    def test_any_note_maps_to_dst(self):
+        mapping = MidiMapping(
+            type=MappingType.NOTE_TO_NOTE,
+            src_note=None, dst_note=60,
+        )
+        engine, fc, fwd_cc, fwd_ev = _make_engine_and_conn([mapping])
+        for incoming in (36, 60, 90, 127):
+            fwd_ev.clear()
+            ev = make_event(
+                MidiEventType.NOTEON, channel=0, note=incoming, velocity=100,
+                src_client=1, src_port=0, dst_client=128, dst_port=10,
+            )
+            engine.process_event(ev)
+            assert len(fwd_ev) == 1, f"input {incoming} not forwarded"
+            assert fwd_ev[0].data.note.note == 60, \
+                f"input {incoming} → {fwd_ev[0].data.note.note}, expected 60"
+
+    def test_wildcard_still_respects_src_channel(self):
+        """src_note wildcard does not also wildcard the channel — Src Ch
+        filtering still applies."""
+        mapping = MidiMapping(
+            type=MappingType.NOTE_TO_NOTE,
+            src_channel=0, src_note=None, dst_note=60,
+        )
+        engine, fc, fwd_cc, fwd_ev = _make_engine_and_conn([mapping])
+        ev = make_event(
+            MidiEventType.NOTEON, channel=5, note=42, velocity=100,
+            src_client=1, src_port=0, dst_client=128, dst_port=10,
+        )
+        engine.process_event(ev)
+        # Ch5 doesn't match src_channel=0, so the mapping is inert and
+        # the original event is forwarded untouched.
+        assert len(fwd_ev) == 1
+        assert fwd_ev[0].data.note.note == 42
+
+    def test_note_off_also_folds(self):
+        mapping = MidiMapping(
+            type=MappingType.NOTE_TO_NOTE,
+            src_note=None, dst_note=60,
+        )
+        engine, fc, fwd_cc, fwd_ev = _make_engine_and_conn([mapping])
+        ev = make_event(
+            MidiEventType.NOTEOFF, channel=0, note=42, velocity=0,
+            src_client=1, src_port=0, dst_client=128, dst_port=10,
+        )
+        engine.process_event(ev)
+        assert len(fwd_ev) == 1
+        assert fwd_ev[0].data.note.note == 60
+
+
+class TestNoteToCcVelocityValue:
+    """cc_value_source='velocity' sends the note-on velocity as the CC
+    value; cc_off_value still applies on release."""
+
+    def test_velocity_used_on_note_on(self):
+        mapping = MidiMapping(
+            type=MappingType.NOTE_TO_CC,
+            src_note=60, dst_cc=11,
+            cc_on_value=99,  # should be ignored when source=velocity
+            cc_off_value=0,
+            cc_value_source="velocity",
+        )
+        engine, fc, fwd_cc, fwd_ev = _make_engine_and_conn([mapping])
+        for vel in (1, 64, 100, 127):
+            fwd_cc.clear()
+            ev = make_event(
+                MidiEventType.NOTEON, channel=0, note=60, velocity=vel,
+                src_client=1, src_port=0, dst_client=128, dst_port=10,
+            )
+            engine.process_event(ev)
+            assert fwd_cc == [(0, 11, vel)], f"velocity {vel} → {fwd_cc}"
+
+    def test_note_off_uses_off_value(self):
+        mapping = MidiMapping(
+            type=MappingType.NOTE_TO_CC,
+            src_note=60, dst_cc=11,
+            cc_off_value=7,
+            cc_value_source="velocity",
+        )
+        engine, fc, fwd_cc, fwd_ev = _make_engine_and_conn([mapping])
+        ev = make_event(
+            MidiEventType.NOTEOFF, channel=0, note=60, velocity=0,
+            src_client=1, src_port=0, dst_client=128, dst_port=10,
+        )
+        engine.process_event(ev)
+        assert fwd_cc == [(0, 11, 7)]
+
+    def test_any_note_plus_velocity(self):
+        """Wildcard src_note + velocity source = any-keypress velocity → CC."""
+        mapping = MidiMapping(
+            type=MappingType.NOTE_TO_CC,
+            src_note=None, dst_cc=11,
+            cc_value_source="velocity",
+        )
+        engine, fc, fwd_cc, fwd_ev = _make_engine_and_conn([mapping])
+        ev = make_event(
+            MidiEventType.NOTEON, channel=0, note=42, velocity=88,
+            src_client=1, src_port=0, dst_client=128, dst_port=10,
+        )
+        engine.process_event(ev)
+        assert fwd_cc == [(0, 11, 88)]

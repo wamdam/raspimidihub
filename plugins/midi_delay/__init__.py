@@ -69,11 +69,11 @@ echoes that fade out on a lead synth line."""
         ]),
         Group("Controls", [
             Wheel("repeats", "Repeats", min=0, max=10, default=3, default_cc=75),
-            Fader("vel_decay", "Vel Decay %", min=0, max=100, default=20, span=3),
+            Fader("vel_decay", "Vel Decay %", min=0, max=100, default=20, span=3, default_cc=76),
         ]),
     ]
 
-    inputs = ["Notes", "CC (long-press a knob to bind)", "Clock"]
+    inputs = ["Notes", "CC (long-press any value control to bind)", "Clock"]
     outputs = ["Notes (original + delayed)"]
 
     clock_divisions = _DELAY_RATES

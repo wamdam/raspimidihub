@@ -22,11 +22,11 @@ Clock ticks continue regardless of transport state.
 Wire the Master Clock OUT to any device or plugin that needs clock."""
 
     params = [
-        Wheel("bpm", "BPM", min=20, max=300, default=120),
+        Wheel("bpm", "BPM", min=20, max=300, default=120, default_cc=74),
         Button("play", "Play", default=False, color="green"),
     ]
 
-    inputs = []
+    inputs = ["CC (long-press BPM to bind)"]
     outputs = ["MIDI Clock (24 PPQ), Start, Stop"]
 
     feeds_clock_bus = True  # pure generator — drives the global ClockBus

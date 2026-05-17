@@ -46,11 +46,11 @@ Example: Set type=minor, play C3, and get C-Eb-G simultaneously."""
             Radio("inversion", "Inversion", ["root", "1st", "2nd"], default="root"),
         ]),
         Group("Output", [
-            Wheel("vel_scale", "Added Note Vel %", min=10, max=100, default=90),
+            Wheel("vel_scale", "Added Note Vel %", min=10, max=100, default=90, default_cc=76),
         ]),
     ]
 
-    inputs = ["Notes"]
+    inputs = ["Notes", "CC (long-press Added Note Vel % to bind)"]
     outputs = ["Notes (chord)"]
 
     def on_start(self):

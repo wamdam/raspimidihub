@@ -69,7 +69,7 @@ export function MatrixHeader({ item, label, isPlugin, pluginType, isBluetooth, s
     const displayLabel = label ? midEllipsis(label, ROW_HEADER_CHARS) : '';
     return html`<th class="row-header ${online ? '' : 'offline'} ${isPlugin ? 'plugin-row' : ''} ${isBluetooth ? 'bt-row' : ''}" style="cursor:pointer;max-width:${ROW_HEADER_WIDTH}px"
         title="${label || ''}"
-        onClick=${trigger.onClick} onContextMenu=${trigger.onContextMenu}>${isPlugin ? html`<${PluginIcon} type=${pluginType} />` : html`<span class="dev-icon ${isBluetooth ? 'bt' : 'din'}" style="display:inline-flex;vertical-align:middle;margin-right:3px">${isBluetooth ? IconBluetooth : IconDIN}</span>`} <span class="row-header-label">${displayLabel}</span>${sendsClock ? html`<span key=${clockBeat || 0} class="clock-icon ${cls}" title="${title}"></span>` : ''}
+        onClick=${trigger.onClick} onContextMenu=${trigger.onContextMenu}>${isPlugin ? html`<${PluginIcon} type=${pluginType} />` : html`<span class="dev-icon ${isBluetooth ? 'bt' : 'din'}" style="display:inline-flex;vertical-align:middle;margin-right:3px">${isBluetooth ? html`<${IconBluetooth} />` : html`<${IconDIN} />`}</span>`} <span class="row-header-label">${displayLabel}</span>${sendsClock ? html`<span key=${clockBeat || 0} class="clock-icon ${cls}" title="${title}"></span>` : ''}
         <${RateMeter} rate=${midiRate} /></th>`;
 }
 
@@ -170,8 +170,16 @@ export function ConnectionMatrix({ devices, connections, showToast, clockSources
                 <tbody>
                     ${inputs.map(inp => {
                         const sendsClock = clockClientIds.includes(inp.client_id);
+                        // Stable per-port identity. Without a key here Preact
+                        // matches rows by position, so when a device is added
+                        // or removed the surviving rows shift up/down into
+                        // slots that previously held a different device — and
+                        // any component state inside (notably PluginIcon's
+                        // async-fetched SVG) gets carried over to the wrong
+                        // row, painting the wrong icon next to a fresh label.
+                        const rowKey = inp.client_id + ':' + inp.port_id;
                         return html`
-                        <tr>
+                        <tr key=${rowKey}>
                             <${MatrixHeader} item=${inp} label=${label(inp)} isPlugin=${inp.is_plugin} pluginType=${inp.plugin_type}
                                 isBluetooth=${inp.is_bluetooth}
                                 sendsClock=${sendsClock}
@@ -183,12 +191,13 @@ export function ConnectionMatrix({ devices, connections, showToast, clockSources
                                 showContextMenu=${showContextMenu}
                                 midiRate=${midiRates && midiRates[inp.client_id + ':' + inp.port_id]} />
                             ${outputs.map(out => {
-                                if (isSelf(inp, out)) return html`<td class="self"></td>`;
+                                const cellKey = out.client_id + ':' + out.port_id;
+                                if (isSelf(inp, out)) return html`<td key=${cellKey} class="self"></td>`;
                                 const offline = isOffline(inp, out);
                                 const conn = getConn(inp, out);
                                 const on = !!conn;
                                 const filtered = conn && (conn.filtered || (conn.mappings && conn.mappings.length > 0));
-                                return html`<${MatrixCell} on=${on} filtered=${filtered} offline=${offline}
+                                return html`<${MatrixCell} key=${cellKey} on=${on} filtered=${filtered} offline=${offline}
                                     getMenuItems=${() => getCellMenuItems ? getCellMenuItems(inp, out, conn) : []}
                                     showContextMenu=${showContextMenu} />`;
                             })}

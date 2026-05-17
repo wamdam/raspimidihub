@@ -29,15 +29,15 @@ upper ch2 transpose 0 (piano). Left hand plays bass, right plays piano."""
         NoteSelect("split_point", "Split Point", default=60, default_cc=74),
         Group("Lower Zone", [
             ChannelSelect("lower_ch", "Channel", default=1),
-            Wheel("lower_transpose", "Transpose", min=-48, max=48, default=0),
+            Wheel("lower_transpose", "Transpose", min=-48, max=48, default=0, default_cc=75),
         ]),
         Group("Upper Zone", [
             ChannelSelect("upper_ch", "Channel", default=2),
-            Wheel("upper_transpose", "Transpose", min=-48, max=48, default=0),
+            Wheel("upper_transpose", "Transpose", min=-48, max=48, default=0, default_cc=76),
         ]),
     ]
 
-    inputs = ["Notes", "CC (long-press Split Point to bind)"]
+    inputs = ["Notes", "CC (long-press Split Point / Transpose wheels to bind)"]
     outputs = ["Notes (lower → ch A, upper → ch B)"]
 
     def _route(self, note):

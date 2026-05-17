@@ -81,11 +81,11 @@ or clock-synced rate up to 8 bars; live scope display.
 | Waveform | **Wave** | Radio | sine / triangle / square / saw / s&h | sine |
 | Timing | **Sync to Clock** | Button | on / off | off |
 | Timing | **Rate** | Radio | 8 / 4 / 2 / 1 / 1/2 / 1/4 / 1/8 / 1/16 bars | 1 |
-| Timing | **Frequency** | Fader | 0.1--20.0 Hz (raw 1--200) | 0.5 Hz |
+| Timing | **Frequency** | Fader | 0.1--20.0 Hz (raw 1--200) | 0.5 Hz (CC 74 default) |
 | Output | **Channel** | ChannelSelect | 1--16 | 1 |
 | Output | **CC #** | Wheel | 0--127 | 1 |
-| Output | **Depth** | Fader | 0--127 | 127 |
-| Output | **Center** | Fader | 0--127 | 64 |
+| Output | **Depth** | Fader | 0--127 | 127 (CC 75 default) |
+| Output | **Center** | Fader | 0--127 | 64 (CC 76 default) |
 
 **Input.** Clock (when **Sync to Clock** is on).
 **Output.** CC (the LFO stream).
@@ -105,7 +105,7 @@ and output side by side -- makes the smoothing visible.
 |-----------|------|-------|---------|
 | **Input CC #** | Wheel | 0--127 | 1 |
 | **Output CC #** | Wheel | 0--127 | 1 |
-| **Smoothing** | Fader | 1--50 (interpolation window) | 10 |
+| **Smoothing** | Fader | 1--50 (interpolation window) | 10 (CC 76 default) |
 
 **Input.** CC at **Input CC #**.
 **Output.** CC at **Output CC #** with smoothed values.
@@ -124,7 +124,7 @@ voices can be softer than the played root.
 |-------|-----------|------|-------|---------|
 | Chord | **Type** | Radio | major / minor / 7th / minor 7th / major 7th / sus2 / sus4 / custom intervals | major |
 | Chord | **Inversion** | Radio | root / 1st / 2nd | root |
-| Output | **Added Note Vel %** | Wheel | 10--100 % | 90 |
+| Output | **Added Note Vel %** | Wheel | 10--100 % | 90 (CC 76 default) |
 
 **Input.** Notes.
 **Output.** Notes -- root + chord voices.
@@ -139,7 +139,7 @@ slow second device from a fast master clock.
 
 | Parameter | Type | Range | Default |
 |-----------|------|-------|---------|
-| **Divide by** | Wheel | 2--32 | 2 |
+| **Divide by** | Wheel | 2--32 | 2 (CC 74 default) |
 
 **Input.** Clock.
 **Output.** Clock at 1/N the input rate; passes Start / Stop /
@@ -265,7 +265,7 @@ bar counter.
 
 | Parameter | Type | Range | Default |
 |-----------|------|-------|---------|
-| **BPM** | Wheel | 20--300 | 120 |
+| **BPM** | Wheel | 20--300 | 120 (CC 74 default) |
 | **Play** | Button | on / off | off |
 
 **Input.** None (generator).
@@ -284,10 +284,10 @@ free-running milliseconds; per-repeat velocity decay.
 | Group | Parameter | Type | Range | Default |
 |-------|-----------|------|-------|---------|
 | Timing | **Sync to Clock** | Button | on / off | on |
-| Timing | **Delay (ms)** | Fader | 10--2000 ms | 250 |
+| Timing | **Delay (ms)** | Fader | 10--2000 ms | 250 (CC 74 default) |
 | Timing | **Rate** | Radio | 1/4 / 1/4T / 1/8 / 1/8T / 1/16 / 1/16T | 1/8 |
-| Controls | **Repeats** | Wheel | 0--10 | 3 |
-| Controls | **Vel Decay %** | Fader | 0--100 % | 20 |
+| Controls | **Repeats** | Wheel | 0--10 | 3 (CC 75 default) |
+| Controls | **Vel Decay %** | Fader | 0--100 % | 20 (CC 76 default) |
 
 **Input.** Notes.
 **Output.** Notes -- the original plus the scheduled echoes.
@@ -302,11 +302,11 @@ independent per-zone transpose.
 
 | Parameter | Type | Range | Default |
 |-----------|------|-------|---------|
-| **Split Point** | NoteSelect | 0--127 | C4 (60) |
+| **Split Point** | NoteSelect | 0--127 | C4 (60) (CC 74 default) |
 | Lower Zone -- **Channel** | ChannelSelect | 1--16 | 1 |
-| Lower Zone -- **Transpose** | Wheel | -48..+48 semitones | 0 |
+| Lower Zone -- **Transpose** | Wheel | -48..+48 semitones | 0 (CC 75 default) |
 | Upper Zone -- **Channel** | ChannelSelect | 1--16 | 2 |
-| Upper Zone -- **Transpose** | Wheel | -48..+48 semitones | 0 |
+| Upper Zone -- **Transpose** | Wheel | -48..+48 semitones | 0 (CC 76 default) |
 
 **Input.** Notes.
 **Output.** Notes routed to the lower or upper zone channel based
@@ -322,7 +322,7 @@ semitones.
 
 | Parameter | Type | Range | Default |
 |-----------|------|-------|---------|
-| **Semitones** | Wheel | -48..+48 | 0 |
+| **Semitones** | Wheel | -48..+48 | 0 (CC 74 default) |
 
 **Input.** Notes.
 **Output.** Notes -- shifted.
@@ -381,7 +381,7 @@ the root pitch and a radio for the scale type.
 | Parameter | Type | Range | Default |
 |-----------|------|-------|---------|
 | **Scale** | Radio | major / minor / harmonic minor / melodic minor / pentatonic major / pentatonic minor / blues / chromatic / ... | major |
-| **Root** | Wheel | 0--11 (note names) | C |
+| **Root** | Wheel | 0--11 (note names) | C (CC 74 default) |
 
 **Input.** Notes.
 **Output.** Notes snapped to the nearest in-scale pitch.
@@ -485,9 +485,9 @@ compressing / expanding the range.
 | Group | Parameter | Type | Range | Default |
 |-------|-----------|------|-------|---------|
 |  | **Mode** | Radio | fixed / compress / expand | fixed |
-| Fixed | **Velocity** | Wheel | 1--127 | 100 |
-| Range | **Min** | Wheel | 1--127 | 60 |
-| Range | **Max** | Wheel | 1--127 | 120 |
+| Fixed | **Velocity** | Wheel | 1--127 | 100 (CC 74 default) |
+| Range | **Min** | Wheel | 1--127 | 60 (CC 75 default) |
+| Range | **Max** | Wheel | 1--127 | 120 (CC 76 default) |
 
 **Input.** Notes.
 **Output.** Notes -- velocity adjusted.

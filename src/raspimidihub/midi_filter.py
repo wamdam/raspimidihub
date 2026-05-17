@@ -40,11 +40,18 @@ class MidiMapping:
     type: MappingType
     # Source matching
     src_channel: int | None = None   # None = any channel
-    # Note→CC fields
-    src_note: int | None = None      # Note number to match
+    # Note→CC + Note→Note fields. src_note is also reused here.
+    #   None = any note (wildcard). Useful with cc_value_source="velocity"
+    #   to turn every keypress into a CC sweep, or with NOTE_TO_NOTE to
+    #   fold a whole keyboard onto a single pitch.
+    src_note: int | None = None      # Note number to match, or None for any
     dst_cc: int | None = None        # CC number to output
-    cc_on_value: int = 127           # CC value when note on
-    cc_off_value: int = 0            # CC value when note off
+    cc_on_value: int = 127           # CC value when note on (cc_value_source=fixed)
+    cc_off_value: int = 0            # CC value when note off (always sent on release)
+    # Note→CC value source: "fixed" uses cc_on_value/cc_off_value; "velocity"
+    # forwards the note-on velocity (0-127) as the CC value and still uses
+    # cc_off_value on release so the CC has a defined off-state.
+    cc_value_source: str = "fixed"
     # Note→Note fields (shares src_note + src_channel + dst_channel)
     dst_note: int | None = None      # Note number to output
     # CC→CC fields
@@ -72,6 +79,8 @@ class MidiMapping:
             d["dst_cc"] = self.dst_cc
             d["cc_on_value"] = self.cc_on_value
             d["cc_off_value"] = self.cc_off_value
+            if self.type == MappingType.NOTE_TO_CC and self.cc_value_source != "fixed":
+                d["cc_value_source"] = self.cc_value_source
         elif self.type == MappingType.NOTE_TO_NOTE:
             d["src_note"] = self.src_note
             d["dst_note"] = self.dst_note
@@ -96,6 +105,8 @@ class MidiMapping:
             m.dst_cc = data.get("dst_cc")
             m.cc_on_value = data.get("cc_on_value", 127)
             m.cc_off_value = data.get("cc_off_value", 0)
+            if mtype == MappingType.NOTE_TO_CC:
+                m.cc_value_source = data.get("cc_value_source", "fixed")
         elif mtype == MappingType.NOTE_TO_NOTE:
             m.src_note = data.get("src_note")
             m.dst_note = data.get("dst_note")
@@ -150,7 +161,12 @@ def validate_new_mapping(existing: list["MidiMapping"],
 
     if new.type == MappingType.NOTE_TO_NOTE:
         eff_dst_ch = new.dst_channel if new.dst_channel is not None else new.src_channel
-        if new.src_channel == eff_dst_ch and new.src_note == new.dst_note:
+        # src_note=None is the wildcard "any note → dst_note"; that's a
+        # legitimate fold and never pointless. Only flag the literal
+        # same-note same-channel identity remap.
+        if (new.src_note is not None
+                and new.src_channel == eff_dst_ch
+                and new.src_note == new.dst_note):
             return "Same channel, same note — mapping has no effect"
 
     # --- Duplicate check against each existing mapping ---
@@ -513,11 +529,18 @@ class FilterEngine:
                 continue
 
             if mapping.type == MappingType.NOTE_TO_CC:
+                # src_note=None acts as a wildcard ("any note triggers this").
                 if ev_type in (MidiEventType.NOTEON, MidiEventType.NOTEOFF) and \
-                   mapping.src_note is not None and ev.data.note.note == mapping.src_note and \
+                   (mapping.src_note is None or ev.data.note.note == mapping.src_note) and \
                    mapping.dst_cc is not None:
                     is_on = (ev_type == MidiEventType.NOTEON and ev.data.note.velocity > 0)
-                    val = mapping.cc_on_value if is_on else mapping.cc_off_value
+                    if is_on and mapping.cc_value_source == "velocity":
+                        # Live velocity → CC value. cc_off_value is still
+                        # the release value so the CC has a defined idle
+                        # state when no keys are held.
+                        val = ev.data.note.velocity
+                    else:
+                        val = mapping.cc_on_value if is_on else mapping.cc_off_value
                     ch = mapping.dst_channel if mapping.dst_channel is not None else ev.channel
                     self._forward_cc(fc, ch, mapping.dst_cc, val)
                     if not mapping.pass_through:
@@ -542,8 +565,12 @@ class FilterEngine:
                             consumed = True
 
             elif mapping.type == MappingType.NOTE_TO_NOTE:
+                # src_note=None acts as a wildcard ("any note maps to dst_note").
+                # Folds an entire keyboard onto a single pitch — useful for
+                # triggering one sampler slot from any key, or building a
+                # one-finger drum trigger pad.
                 if ev_type in (MidiEventType.NOTEON, MidiEventType.NOTEOFF) and \
-                   mapping.src_note is not None and ev.data.note.note == mapping.src_note and \
+                   (mapping.src_note is None or ev.data.note.note == mapping.src_note) and \
                    mapping.dst_note is not None:
                     new_ev = SndSeqEvent.from_buffer_copy(ev)
                     new_ev.data.note.note = mapping.dst_note

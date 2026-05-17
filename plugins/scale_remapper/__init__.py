@@ -23,10 +23,11 @@ a grid controller always sound musical."""
     params = [
         Radio("scale", "Scale", list(SCALES.keys()), default="major"),
         Wheel("root", "Root", min=0, max=11, default=0,
-              labels=["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]),
+              labels=["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"],
+              default_cc=74),
     ]
 
-    inputs = ["Notes"]
+    inputs = ["Notes", "CC (long-press Root to bind)"]
     outputs = ["Notes (quantized to scale)"]
 
     def on_start(self):

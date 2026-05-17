@@ -93,8 +93,22 @@ Each Note On on the source produces one CC event at the
 **Off value**. Use case: a footswitch sends notes; you want it to
 send CC 64 (sustain) instead.
 
-Fields: source channel, note number, output channel, CC#, on
-value, off value.
+The **Src Note** wheel has an **Any** position at the top: pick
+it and every incoming note triggers the mapping, not just one
+specific pitch.
+
+The **Value Source** selector chooses how the On value is
+computed. With **Fixed** the literal On value is sent on every
+Note On (the default, useful for switch-style controllers). With
+**Velocity** the live key velocity (0--127) is sent as the CC
+value, giving you continuous expression from a velocity-sensitive
+key -- the **Off value** is still sent on key release so the CC
+has a defined idle state. Combined with **Src Note = Any** this
+turns the whole keyboard into a one-shot velocity-to-CC pedal.
+
+Fields: source channel, note number (or Any), output channel,
+CC#, value source (Fixed / Velocity), on value (Fixed only),
+off value.
 
 ### Note → CC (toggle)
 
@@ -127,7 +141,13 @@ Fan-out works the same way as on the other types: two Note → Note
 mappings with the same source but different destination channels
 layer one pad onto two voices.
 
-Fields: source channel, source note, destination channel,
+The **Src Note** wheel also exposes an **Any** position at the top.
+When selected, every incoming note on the source channel is folded
+onto the same destination note. Handy for triggering a single
+sample slot from any key on the keyboard, or for collapsing a
+multi-pad drum controller down to a single trigger lane.
+
+Fields: source channel, source note (or Any), destination channel,
 destination note.
 
 ### CC → CC
@@ -172,6 +192,11 @@ the source fields.
 The Learn timeout is around five seconds; if nothing is captured
 within that window, the button reverts on its own. A pulsing
 border on the field confirms which value just captured.
+
+Learn is available both when creating a new mapping and when
+editing an existing one -- handy when a hardware control's
+channel or CC# changes and an existing mapping needs to follow
+without retyping all the other fields.
 
 ## Pass Through the Original Event
 

@@ -32,7 +32,7 @@ of audible zipper noise."""
         Group("Settings", [
             Wheel("cc_in", "Input CC #", min=0, max=127, default=1),
             Wheel("cc_out", "Output CC #", min=0, max=127, default=1),
-            Fader("smoothing", "Smoothing", min=1, max=50, default=10, span=4),
+            Fader("smoothing", "Smoothing", min=1, max=50, default=10, span=4, default_cc=76),
             Display("_in_scope", "Input", display_name="input", span=2),
             Display("_out_scope", "Output", display_name="output", span=2),
         ]),
@@ -43,7 +43,7 @@ of audible zipper noise."""
         {"name": "output", "type": "scope", "label": "Output", "min": 0, "max": 127, "duration": 2},
     ]
 
-    inputs = ["CC (configurable #)"]
+    inputs = ["CC (configurable #)", "CC (long-press Smoothing to bind)"]
     outputs = ["CC (smoothed)"]
 
     def on_start(self):

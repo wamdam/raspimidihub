@@ -4,6 +4,25 @@ User-visible changes. Short tagged one-liners, no code or commit
 hashes. Tags: Added, Improved, Fix, Changed, Removed.
 
 
+2026-05-17 — Version 4.4.0
+
+Two ways to make mappings express more with fewer rules, and the
+long-press "Bind CC" popup is now reachable from regular plugin
+config panels, not just play and controller surfaces. Plus a pair
+of fixes for problems that bit the previous release: an Install
+button that wedged after any prior install was interrupted, and a
+class of matrix glitches where icons and labels drifted onto the
+wrong rows after devices were added or removed.
+
+- Added: Note → Note and Note → CC source-note wheels gain an **Any** tick at the top. Persisted as a null sentinel, dispatched as a wildcard. Folds an entire keyboard onto a single destination pitch (one-finger sampler trigger) or fires a CC on every keypress regardless of which key was hit.
+- Added: Note → CC mappings have a **Value Source** toggle — **Fixed** (current behaviour, On value sent on every Note On) or **Velocity**. In Velocity mode the live note-on velocity rides through as the CC value; the Off value still applies on release so the CC has a defined idle state. Combined with **Src Note = Any** this turns the whole keyboard into a velocity-to-CC expression pedal.
+- Added: More plugin-config controls accept CC bindings through the same long-press → "Bind CC" popup that has always worked on play surfaces. Newly bindable in the config panel: MIDI Delay's Vel Decay; CC LFO's Center; CC Smoother's Smoothing; Chord Generator's Added-Note Vel %; Clock Divider's Divide-by; Master Clock's BPM; Note Splitter's Lower / Upper Transpose; Scale Remapper's Root; Velocity Equalizer's Velocity / Min / Max. The dispatcher, persistence and Learn flow were already unified — only the plugin authors' `default_cc=<N>` declarations were missing.
+- Fix: MIDI Learn is now reachable when *editing* an existing mapping, not just when creating one. A hardware controller's channel or CC# can change without retyping every other field on the form.
+- Fix: Install button no longer fails permanently after a prior install was killed mid-flight. The install script runs `dpkg --configure -a` defensively before `apt-get install`, so a half-applied dpkg state reconciles automatically instead of surfacing as the cryptic "E: dpkg was interrupted, you must manually run 'dpkg --configure -a'" error on every subsequent attempt. No-op on a clean system.
+- Fix: Matrix row headers no longer show the wrong icon, a stale plugin SVG, or a missing label after devices are added or removed. Rows now carry a stable key derived from the port identity so Preact tracks them by device instead of by position; component state (notably PluginIcon's async-fetched SVG) no longer leaks between rows when the input list reshuffles. The hardware / Bluetooth icons are real components instead of shared module-level vnode constants, and a stale `transition: max-width` rule left over from the deleted scroll-aware shrink animation is gone.
+- Removed: UI Demo plugin — developer-only showcase of every UI control type, never documented in the manual, not useful in production configs.
+
+
 2026-05-17 — Version 4.3.0
 
 A non-intrusive way to mirror any connected device's UI into a
