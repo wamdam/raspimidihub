@@ -106,7 +106,8 @@ export function FilterPanel({ connId, filter, mappings, onClose, onApply, onMapp
 
     return html`
         <div class="filter-overlay" onclick=${(e) => e.target.className === 'filter-overlay' && close()}>
-            <div class="filter-panel" ref=${el => panelRef.current = el} ...${swipe}>
+            <div class="filter-panel" data-spectator-scroll="filter-panel"
+                 ref=${el => panelRef.current = el} ...${swipe}>
                 <div class="panel-header">
                     <div class="panel-handle"></div>
                 </div>

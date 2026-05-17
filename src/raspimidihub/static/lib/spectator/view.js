@@ -227,20 +227,65 @@ export function SpectatorView({
     // without this catch-up the mirror would render at the wrong
     // scroll position. We also re-run when routeRef changes via a
     // small tick — incoming route changes swap the matrix in/out.
+    //
+    // A MutationObserver then keeps watching the spectator-app-wrap
+    // for newly-mounted `[data-spectator-scroll]` containers and
+    // applies their cached scroll position the moment they appear.
+    // This is what makes conditionally-rendered overlays (the Add
+    // panel, the Filter mappings panel, the device-detail panel)
+    // mirror the source's scroll: those mount after the initial
+    // App-mount apply, often a tick after the scroll event reached
+    // applyState — without this observer the cached position sat
+    // in scrollByKeyRef forever and the overlay opened at 0,0.
     useEffect(() => {
         if (!snapshotLoaded) return undefined;
-        const apply = () => {
-            for (const [key, pos] of scrollByKeyRef.current) {
-                const el = document.querySelector(
-                    `.spectator-app-wrap [data-spectator-scroll="${key}"]`);
-                if (el) { el.scrollTop = pos.y; el.scrollLeft = pos.x; }
+        const applyOne = (el) => {
+            const key = el.getAttribute('data-spectator-scroll');
+            if (!key) return;
+            const pos = scrollByKeyRef.current.get(key);
+            if (!pos) return;
+            el.scrollTop = pos.y;
+            el.scrollLeft = pos.x;
+        };
+        const applyAll = () => {
+            for (const el of document.querySelectorAll(
+                    '.spectator-app-wrap [data-spectator-scroll]')) {
+                applyOne(el);
             }
         };
         // Apply on mount, then again after rAF so route-swap mounts
         // (matrix shows up after switching to /routing) get caught.
-        apply();
-        const raf = requestAnimationFrame(apply);
-        return () => cancelAnimationFrame(raf);
+        applyAll();
+        const raf = requestAnimationFrame(applyAll);
+
+        // Catch later mounts (conditional overlays, route changes
+        // inside App). Mirrors the source-side scroll-observer
+        // pattern in lib/spectator/broadcast.js.
+        const wrap = document.querySelector('.spectator-app-wrap');
+        let observer = null;
+        if (wrap) {
+            observer = new MutationObserver((mutations) => {
+                for (const m of mutations) {
+                    for (const node of m.addedNodes) {
+                        if (node.nodeType !== 1) continue;
+                        if (node.hasAttribute && node.hasAttribute('data-spectator-scroll')) {
+                            applyOne(node);
+                        }
+                        if (node.querySelectorAll) {
+                            for (const inner of node.querySelectorAll(
+                                    '[data-spectator-scroll]')) {
+                                applyOne(inner);
+                            }
+                        }
+                    }
+                }
+            });
+            observer.observe(wrap, { childList: true, subtree: true });
+        }
+        return () => {
+            cancelAnimationFrame(raf);
+            if (observer) observer.disconnect();
+        };
     }, [snapshotLoaded]);
 
     // Pick the largest uniform scale that fits the (optionally
