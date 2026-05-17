@@ -67,11 +67,32 @@ class PluginHarness:
         plugin._send_continue = lambda: self.sent.append(("continue",))
         plugin._send_sysex = lambda payload: (
             self.sent.append(("sysex", bytes(payload))) or len(payload))
+
+        self.scheduled: list[tuple] = []
+        plugin._send_note_on_at = lambda when, ch, n, v, tag=0: \
+            self.scheduled.append(("note_on", when, ch, n, v, tag))
+        plugin._send_note_off_at = lambda when, ch, n, tag=0: \
+            self.scheduled.append(("note_off", when, ch, n, tag))
+        plugin._send_cc_at = lambda when, ch, cc, v, tag=0: \
+            self.scheduled.append(("cc", when, ch, cc, v, tag))
+        plugin._send_pitchbend_at = lambda when, ch, v, tag=0: \
+            self.scheduled.append(("pitchbend", when, ch, v, tag))
+        plugin._send_aftertouch_at = lambda when, ch, v, tag=0: \
+            self.scheduled.append(("aftertouch", when, ch, v, tag))
+        plugin._send_program_change_at = lambda when, ch, p, tag=0: \
+            self.scheduled.append(("program_change", when, ch, p, tag))
+        plugin._send_clock_at = lambda when, tag=0: \
+            self.scheduled.append(("clock", when, tag))
+        self.cancelled_tags: list[int] = []
+        plugin._cancel_scheduled = lambda tag: self.cancelled_tags.append(tag)
+
         plugin._notify_param_change = lambda iid, name, val: None
         plugin._notify_display = lambda name, val: None
 
     def clear(self):
         self.sent.clear()
+        self.scheduled.clear()
+        self.cancelled_tags.clear()
 
     @property
     def note_ons(self) -> list[tuple]:

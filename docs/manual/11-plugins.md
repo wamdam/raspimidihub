@@ -222,6 +222,7 @@ One-line summaries. The detailed reference for each lives in
 | **Clock Divider** | Emit one MIDI Clock for every N received (2..32) |
 | **Euclidean** | Held notes voiced through a Bjorklund-distributed step pattern; per-step manual overrides on top; chord mode; internal Scale + Root; Jitter, Tune Spread, Fade In / Out. *Play-surface plugin* — added from **Add → Play** |
 | **Hold** | Latch notes without a sustain pedal; chord-latch or per-note toggle; MIDI-Learn the release note |
+| **Latency** | Adds a fixed ms delay (1--100 ms) to every event before forwarding; clock + transport pass through untouched. Compensates synths whose own MIDI-in lands the sound late |
 | **Master Clock** | Internal BPM clock with start/stop/continue, beat meter, bar counter |
 | **MIDI Delay** | Pre-scheduled echoes with feedback repeats and velocity decay; sync rate or free ms |
 | **Note Splitter** | Splits keyboard at a configurable note into two channels with per-zone transpose |

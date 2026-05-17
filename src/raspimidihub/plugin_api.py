@@ -739,6 +739,9 @@ class PluginBase:
         self._send_cc_at = None
         self._send_note_on_at = None
         self._send_note_off_at = None
+        self._send_pitchbend_at = None
+        self._send_aftertouch_at = None
+        self._send_program_change_at = None
         self._send_clock_at = None
         self._cancel_scheduled = None
         # Bulk SysEx output. Set by the host; the SysEx Sender plugin
@@ -958,6 +961,27 @@ class PluginBase:
             self._send_clock_at(when_monotonic, tag)
         elif self._send_clock:
             self._send_clock()
+
+    def send_pitchbend_at(self, when_monotonic: float, channel: int,
+                          value: int, tag: int = 0) -> None:
+        if self._send_pitchbend_at:
+            self._send_pitchbend_at(when_monotonic, channel, value, tag)
+        elif self._send_pitchbend:
+            self._send_pitchbend(channel, value)
+
+    def send_aftertouch_at(self, when_monotonic: float, channel: int,
+                           value: int, tag: int = 0) -> None:
+        if self._send_aftertouch_at:
+            self._send_aftertouch_at(when_monotonic, channel, value, tag)
+        elif self._send_aftertouch:
+            self._send_aftertouch(channel, value)
+
+    def send_program_change_at(self, when_monotonic: float, channel: int,
+                               program: int, tag: int = 0) -> None:
+        if self._send_program_change_at:
+            self._send_program_change_at(when_monotonic, channel, program, tag)
+        elif self._send_program_change:
+            self._send_program_change(channel, program)
 
     def cancel_scheduled(self, tag: int) -> None:
         """Remove all pending queued events tagged `tag` from this plugin's

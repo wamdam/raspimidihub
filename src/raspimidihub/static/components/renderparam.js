@@ -178,15 +178,21 @@ function applySpan(rendered, span) {
 export function renderParamGroup(items, values, onChange, displayCtx, cols) {
     const result = [];
     let inlineRun = [];
+    // Track the max span requested in the current run. A solo span=1 item
+    // is left unwrapped (preserves Note Transpose's bare wheel etc.); a
+    // solo item that asked for span>1 needs a param-row grid parent for
+    // its grid-column-span to take effect.
+    let inlineMaxSpan = 1;
     const rowStyle = cols && cols !== 4
         ? `grid-template-columns: repeat(${cols}, minmax(0, 1fr))`
         : null;
     const flushInline = () => {
         if (inlineRun.length === 0) return;
-        if (inlineRun.length === 1) result.push(inlineRun[0]);
+        if (inlineRun.length === 1 && inlineMaxSpan <= 1) result.push(inlineRun[0]);
         else if (rowStyle) result.push(html`<div class="param-row" style=${rowStyle}>${inlineRun}</div>`);
         else result.push(html`<div class="param-row">${inlineRun}</div>`);
         inlineRun = [];
+        inlineMaxSpan = 1;
     };
     const playOnly = !!(displayCtx && displayCtx.playOnly);
     for (const p of items) {
@@ -219,7 +225,10 @@ export function renderParamGroup(items, values, onChange, displayCtx, cols) {
         }
         const rendered = renderParam(p, values, onChange, values, displayCtx);
         if (!rendered) continue;
-        if (INLINE_TYPES.has(p.type)) inlineRun.push(applySpan(rendered, p.span));
+        if (INLINE_TYPES.has(p.type)) {
+            inlineRun.push(applySpan(rendered, p.span));
+            if (p.span && p.span > inlineMaxSpan) inlineMaxSpan = p.span;
+        }
         else { flushInline(); result.push(rendered); }
     }
     flushInline();
@@ -244,11 +253,15 @@ export function renderParamList(params, values, onChange, displayCtx) {
     }
     const result = [];
     let inlineRun = [];
+    // See renderParamGroup — a solo span>1 item needs a param-row grid
+    // parent for the column span to take effect; solo span=1 stays bare.
+    let inlineMaxSpan = 1;
     const flushInline = () => {
         if (inlineRun.length === 0) return;
-        if (inlineRun.length === 1) result.push(inlineRun[0]);
+        if (inlineRun.length === 1 && inlineMaxSpan <= 1) result.push(inlineRun[0]);
         else result.push(html`<div class="param-row">${inlineRun}</div>`);
         inlineRun = [];
+        inlineMaxSpan = 1;
     };
     for (const p of expanded) {
         if (p._isGroup) {
@@ -263,7 +276,10 @@ export function renderParamList(params, values, onChange, displayCtx) {
             // for grouped params, but top-level inline params (e.g. the
             // Arpeggiator's Pattern + Rate wheels) need the same path
             // so `span=2` actually widens the grid cell.
-            if (INLINE_TYPES.has(p.type)) inlineRun.push(applySpan(rendered, p.span));
+            if (INLINE_TYPES.has(p.type)) {
+                inlineRun.push(applySpan(rendered, p.span));
+                if (p.span && p.span > inlineMaxSpan) inlineMaxSpan = p.span;
+            }
             else { flushInline(); result.push(rendered); }
         }
     }

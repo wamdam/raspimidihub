@@ -4,6 +4,26 @@ User-visible changes. Short tagged one-liners, no code or commit
 hashes. Tags: Added, Improved, Fix, Changed, Removed.
 
 
+2026-05-17 — Version 4.5.0
+
+A new built-in plugin: **Latency**. The use case is synths that
+respond to MIDI with a few milliseconds of internal lag — the
+Digitone is one. Route a tight source (the Arpeggiator, the
+Tracker, a hardware controller) through Latency before that synth
+and dial the offset until the audio lands where you meant it to.
+Two supporting changes shipped alongside it: the plugin API gained
+the scheduled-send hooks for pitchbend / aftertouch / program
+change that had always been missing (the ALSA queue supported them
+the whole time; only the plugin-facing wrappers were absent), and
+a renderer bug where a solo full-width param wasn't getting a grid
+parent — its fader rendered as a tiny dial instead of spanning the
+row.
+
+- Added: **Latency** plugin — adds a fixed 1–100 ms delay to every MIDI event before forwarding, via the ALSA queue (sub-ms jitter under load). Compensates synths whose own MIDI-in lands the sound a few milliseconds late: route the Arpeggiator (or any tight source) through Latency before that synth so the audio lines up with the synth's internal sequencer. Clock and transport pass through immediately so the downstream sequencer doesn't drift. note_on / note_off are paired so a live fader move mid-note can't reorder them and strand the note.
+- Improved: plugin API gained scheduled-send hooks for **pitchbend, aftertouch, and program change** (`send_pitchbend_at`, `send_aftertouch_at`, `send_program_change_at`). The ALSA layer already supported them; the plugin-facing wrappers were missing — surfaced by the Latency plugin needing to schedule every message type uniformly.
+- Fix: a solo plugin param with `span > 1` now actually spans the row. The renderer was skipping the `param-row` grid wrapper when a group contained only one item, which meant the wrapped `grid-column: span N` div had no grid parent and the control rendered at its default narrow width. Single-cell solo params (Note Transpose's wheel, Clock Divider's wheel) are untouched.
+
+
 2026-05-17 — Version 4.4.5
 
 A pass through the Tracker's spectator-mirroring gaps, plus a

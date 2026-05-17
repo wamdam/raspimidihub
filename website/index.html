@@ -158,7 +158,7 @@
 
     <div class="feature-row">
       <div class="feature-text">
-        <h3>16 Built-in Plugins</h3>
+        <h3>19 Built-in Plugins</h3>
         <p>Virtual instruments and effects that appear as real MIDI devices in the routing matrix. Each plugin has its own custom interface with wheels, faders, toggles, step sequencers, and live scopes.</p>
         <ul class="feature-list">
           <li>Arpeggiator with step sequencer and accents</li>
@@ -265,6 +265,7 @@
           <li>24 PPQ clock with start/stop/continue</li>
           <li>Drop buttons fire CC snapshots sample-accurately ahead of beat 1</li>
           <li>MIDI Delay echoes pre-scheduled at note-on time</li>
+          <li>Latency plugin shifts a wire forward in time to compensate sluggish synths</li>
           <li>Live beat meter and bar counter</li>
         </ul>
       </div>
@@ -326,6 +327,10 @@
       <div class="plugin-card">
         <h4>MIDI Delay</h4>
         <p>Note delay with feedback repeats and velocity decay. Circular buffer architecture for rock-solid timing.</p>
+      </div>
+      <div class="plugin-card">
+        <h4>Latency</h4>
+        <p>Shift every MIDI event forward by 1&ndash;100&nbsp;ms to compensate synths whose own MIDI-in lands the sound late. ALSA-queue scheduled for sub-ms jitter; clock and transport pass through.</p>
       </div>
       <div class="plugin-card">
         <h4>Scale Remapper</h4>

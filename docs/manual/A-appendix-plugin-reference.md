@@ -257,6 +257,35 @@ release note acts as the off trigger for all held notes.
 
 ![Hold config panel.](../screenshots/22-plugin-hold.png){width=35%}
 
+## Latency
+
+Adds a fixed millisecond delay to every MIDI event before forwarding,
+via the ALSA kernel queue (sub-millisecond jitter under load).
+Compensates synths whose own MIDI-in processing lands the sound a few
+milliseconds after the message arrives -- route a tight source (the
+Arpeggiator, the Tracker, a hardware controller) through Latency
+before that synth so the audio lines up with the synth's internal
+sequencer.
+
+Clock and transport (Start / Stop / Continue) pass through
+immediately. Delaying them would shift the downstream synth's own
+sequencer and defeat the point of the plugin.
+
+The note-on / note-off pair is bookkept so a live fader move
+mid-note cannot reorder it -- the off reuses the offset captured at
+the matching on.
+
+| Parameter | Type | Range | Default |
+|-----------|------|-------|---------|
+| **Delay (ms)** | Fader | 1--100 ms | 10 (CC 74 default) |
+
+**Input.** All events.
+**Output.** All events (delayed) plus clock + transport (immediate).
+**Clock.** Pass-through (not delayed).
+
+*Screenshots needed:* `screenshots/XX-plugin-latency.png` showing the
+config panel with the single Delay (ms) fader.
+
 ## Master Clock
 
 Generates MIDI Clock from an internal BPM. Includes a transport
