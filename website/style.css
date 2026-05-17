@@ -154,6 +154,11 @@ a:hover { text-decoration: underline; }
   background: radial-gradient(ellipse at 50% 0%, rgba(233,69,96,0.08) 0%, transparent 60%);
   overflow: hidden;
 }
+/* In light mode the soft pink glows that frame the dark hero read
+   as muddy noise — strip them. The phones still pop on the clean
+   light backdrop. */
+:root[data-theme="light"] .hero { background: none; }
+:root[data-theme="light"] .hero-phones::before { display: none; }
 .hero-badge {
   display: inline-block;
   padding: 6px 16px;

@@ -197,6 +197,26 @@
 
     <div class="feature-row">
       <div class="feature-text">
+        <h3>Euclidean — Bjorklund Rhythm Generator</h3>
+        <p>Hold a chord, and the Euclidean voices it through a generated step pattern — the Bjorklund algorithm spreads N pulses as evenly as possible across M steps. Three stacked layers (algorithm, window wave, manual step grid) let you sculpt the result without leaving the play surface. Held notes can shift pitch in real time while the pattern keeps running.</p>
+        <ul class="feature-list">
+          <li>Pulses / Steps / Rotate sliders drive the Bjorklund generator; an underlay preview shows what the algorithm would do before you override anything</li>
+          <li>Window wave overlays a Phase / Cycles / Open sine threshold that gates the pattern over time</li>
+          <li>Four-state step grid per cell: default → FORCE_ON → FORCE_ON+accent → FORCE_OFF — hand-curate on top of the generator</li>
+          <li>Internal Scale + Root (9 scales incl. chromatic), Tune Spread + Snap, Jitter, Fade In / Out</li>
+          <li>8-slot pattern bank, MIDI-Learnable per slot, paired with the Tracker / Arp on the same Play surface</li>
+        </ul>
+      </div>
+      <div class="feature-phone">
+        <div class="phone">
+          <div class="phone-notch"></div>
+          <img src="screenshots/euclidean-play.png" data-light-src="screenshots/euclidean-play.png" data-dark-src="screenshots/euclidean-play-dark.png" alt="Euclidean play surface" loading="lazy">
+        </div>
+      </div>
+    </div>
+
+    <div class="feature-row reverse">
+      <div class="feature-text">
         <h3>Controllers — Tap-to-Play Surfaces</h3>
         <p>Fullscreen play surfaces (Mixer 8, FX 6, Performance 16, XY 4) that send CCs over MIDI in real time. Each cell is renameable, MIDI-Learnable, and themable. Four drop buttons per controller capture and replay snapshots, quantised to bar boundaries.</p>
         <ul class="feature-list">
@@ -218,7 +238,7 @@
       </div>
     </div>
 
-    <div class="feature-row reverse">
+    <div class="feature-row">
       <div class="feature-text">
         <h3>Test & Monitor</h3>
         <p>Every device gets a detail panel with a scrollable piano keyboard, CC slider, and live MIDI monitor. Test your setup without touching your gear.</p>
@@ -237,7 +257,7 @@
       </div>
     </div>
 
-    <div class="feature-row">
+    <div class="feature-row reverse">
       <div class="feature-text">
         <h3>Master Clock & Tight Timing</h3>
         <p>Internal BPM clock with start/stop transport drives every synced plugin and external synth from one place. Clock ticks are pre-scheduled through the kernel-side ALSA queue for sub-millisecond jitter even under heavy CPU load.</p>
@@ -256,7 +276,7 @@
       </div>
     </div>
 
-    <div class="feature-row reverse">
+    <div class="feature-row">
       <div class="feature-text">
         <h3>Velocity Curve Editor</h3>
         <p>Draw a custom 128-point velocity response curve to match your playing style or your hardware's quirks. Pick from preset shapes or freehand-draw your own — soft pads, hard drums, S-curves, anything in between.</p>
