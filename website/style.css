@@ -149,7 +149,12 @@ a:hover { text-decoration: underline; }
 
 /* === Hero === */
 .hero {
-  padding: 80px 0 40px;
+  /* Bottom padding has to clear the phone shadows — the front
+     phone's box-shadow is 0 30px 80px, so its effective extent
+     is ~110 px below the phone's bounds. Anything less than that
+     gets clipped by .hero { overflow: hidden } (which we keep so
+     the dark-mode pink glow doesn't bleed into the next section). */
+  padding: 80px 0 120px;
   text-align: center;
   background: radial-gradient(ellipse at 50% 0%, rgba(233,69,96,0.08) 0%, transparent 60%);
   overflow: hidden;
