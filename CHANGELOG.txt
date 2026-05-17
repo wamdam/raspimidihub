@@ -4,6 +4,17 @@ User-visible changes. Short tagged one-liners, no code or commit
 hashes. Tags: Added, Improved, Fix, Changed, Removed.
 
 
+2026-05-17 — Version 4.4.5
+
+A pass through the Tracker's spectator-mirroring gaps, plus a
+phone-only interaction bug where horizontal scrolling on a wide
+Tracker page would swipe to the next surface instead.
+
+- Fix: the Tracker's **shift-selection rectangle**, the **on-screen Shift key highlight**, and the multi-cell **transpose wheel position** now all mirror to spectators. They were the last pieces of Tracker UI still held in component-local state — the cursor, page, and note values already flowed through plugin params.
+- Fix: **horizontal scroll** of the Tracker step grid (when more voices than fit on the phone screen) now mirrors to spectators too. Tagged the scrollable area with `data-spectator-scroll` keyed per instance so multiple Tracker grids don't collide.
+- Fix: horizontally scrolling the Tracker grid on a phone no longer triggers the Play page's swipe-to-next-surface gesture. The page-level swipe handler now ignores touches that started inside the grid's own scroll container.
+
+
 2026-05-17 — Version 4.4.4
 
 Three fixes around drop-buttons and the spectator view. The

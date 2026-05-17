@@ -117,6 +117,13 @@ export function PlayPage({ pluginDisplays, showToast, selectedId, onSelect, onEd
     const onTouchStart = useCallback((e) => {
         const t = e.changedTouches && e.changedTouches[0];
         if (!t) return;
+        // Surfaces with their own horizontal-scroll gesture (the Tracker
+        // grid is the main one — wider than the phone when a Track has
+        // many voices) handle scrolling themselves; capturing the
+        // horizontal delta here would steal that scroll and swipe to
+        // the next surface instead.
+        if (e.target && e.target.closest
+                && e.target.closest('.tracker-grid-area')) return;
         swipeRef.current = { x: t.clientX, y: t.clientY, t: Date.now(), active: true };
     }, []);
     const onTouchEnd = useCallback((e) => {

@@ -20,6 +20,7 @@
 
 import { html } from '../ui/common.js';
 import { useCallback, useEffect, useRef, useState } from '../lib/hooks.module.js';
+import { useSharedUiState } from '../lib/spectator/shared-ui-state.js';
 import { PluginWheel } from './wheel.js';
 import { PluginKnob } from './knob.js';
 import { PluginPatternBank } from './patternbank.js';
@@ -363,12 +364,26 @@ export function PluginTrackerGrid({ param, values, onChange, displayCtx }) {
     // Selection rectangle is computed every render from anchor +
     // current cursor. shiftEngaged is true whenever the on-screen
     // Shift button OR keyboard Shift key is held.
-    const [anchor, setAnchor] = useState(null);
+    // Mirror anchor across spectators so the source's shift-selection
+    // rectangle (and the multi-cell transpose wheel that follows from
+    // it) shows up on OBS too. Cursor / page already mirror via the
+    // plugin's param values. The key base is reused below for the
+    // shift toggles and transpose-wheel position.
+    const stateKeyBase = `tracker:${displayCtx?.instanceId || 'na'}:${param.name}`;
+    const [anchor, setAnchor] = useSharedUiState(
+        `${stateKeyBase}:anchor`, null);
     const anchorRef = useRef(null);
     anchorRef.current = anchor;
 
-    const [keyboardShift, setKeyboardShift] = useState(false);
-    const [buttonShift, setButtonShift] = useState(false);
+    // Both halves of "Shift engaged" mirror to spectators so the
+    // on-screen Shift key shows highlighted in OBS whenever the
+    // source has it engaged (keyboard hold OR sticky button tap).
+    // The setter is a no-op on the spectator side — its own browser
+    // can't drive the source — but the value flows in via broadcast.
+    const [keyboardShift, setKeyboardShift] = useSharedUiState(
+        `${stateKeyBase}:keyboardShift`, false);
+    const [buttonShift, setButtonShift] = useSharedUiState(
+        `${stateKeyBase}:buttonShift`, false);
     const shiftEngaged = keyboardShift || buttonShift;
     const shiftEngagedRef = useRef(false);
     shiftEngagedRef.current = shiftEngaged;
@@ -621,7 +636,8 @@ export function PluginTrackerGrid({ param, values, onChange, displayCtx }) {
     // a delta (new - prev) to every real-pitch note inside the
     // rectangle. Resets to 0 when the selection clears or its
     // bounds change so a fresh selection always starts at 0.
-    const [transposeOffset, setTransposeOffset] = useState(0);
+    const [transposeOffset, setTransposeOffset] = useSharedUiState(
+        `${stateKeyBase}:transpose`, 0);
     const lastTransposeRef = useRef(0);
     // Identity key for the current selection so we know when to
     // reset the transpose tracker -- bounds change, anchor moves,
@@ -1296,7 +1312,8 @@ export function PluginTrackerGrid({ param, values, onChange, displayCtx }) {
 
     return html`<div class="trackergrid">
         ${header}
-        <div class="tracker-grid-area" ref=${gridRef}>
+        <div class="tracker-grid-area" ref=${gridRef}
+             data-spectator-scroll=${`tracker-grid-area:${displayCtx?.instanceId || 'na'}`}>
             ${trackHeader}
             ${stepRows}
         </div>
