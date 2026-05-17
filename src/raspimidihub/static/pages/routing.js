@@ -541,8 +541,7 @@ export function RoutingPage({ devices, connections, refresh, showToast, clockSou
         </div>
         ${showAddPlugin && html`
             <div class="filter-overlay" onclick=${(e) => e.target.className === 'filter-overlay' && setShowAddPlugin(false)}>
-                <div class="filter-panel" data-spectator-scroll="add-panel"
-                    style="max-height:80vh;overflow-y:auto">
+                <div class="filter-panel" data-spectator-scroll="add-panel">
                     <div class="panel-header"><div class="panel-handle"></div></div>
                     <div class="panel-header">
                         <h3>Add Device</h3>
