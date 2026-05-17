@@ -4,6 +4,19 @@ User-visible changes. Short tagged one-liners, no code or commit
 hashes. Tags: Added, Improved, Fix, Changed, Removed.
 
 
+2026-05-17 — Version 4.4.1
+
+Hot-fix for a CC LFO config panel that wouldn't accept input on
+anything other than the wheels. A `</canvas>` tag had gone
+missing in the light-theme tokenisation pass; htm / Preact then
+parsed the trailing `2s` duration label as canvas fallback
+content, the resulting DOM nested unintended siblings inside the
+`<canvas>`, and the malformed subtree intercepted pointer events
+on every Radio / Button / Fader in the panel.
+
+- Fix: CC LFO (and any future plugin shipping a `DisplayScope`) renders its scope inside a properly-closed `<canvas></canvas>` again. Faders, radios, buttons, and the Sync toggle all respond to taps and drags. Only CC LFO was affected — it's the sole built-in plugin using a scope display.
+
+
 2026-05-17 — Version 4.4.0
 
 Two ways to make mappings express more with fewer rules, and the
