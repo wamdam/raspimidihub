@@ -4,7 +4,7 @@ User-visible changes. Short tagged one-liners, no code or commit
 hashes. Tags: Added, Improved, Fix, Changed, Removed.
 
 
-Unreleased
+2026-05-17 — Version 4.3.0
 
 A non-intrusive way to mirror any connected device's UI into a
 browser tab or OBS Browser Source. Useful for showcase videos
