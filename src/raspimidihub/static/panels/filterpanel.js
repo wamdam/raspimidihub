@@ -14,6 +14,7 @@ import { html, animateClose, useSwipeDismiss } from '../ui/common.js';
 import { useTapMenu } from '../ui/contextmenu.js';
 import { MSG_TYPES, MSG_LABELS } from '../state/constants.js';
 import { MappingFormOverlay, mappingDesc } from './mappingform.js';
+import { useSharedUiState } from '../lib/spectator/shared-ui-state.js';
 
 function MappingRow({ mapping, onEdit, onCopy, onRemove, showContextMenu }) {
     const trigger = useTapMenu(showContextMenu, () => [
@@ -33,7 +34,12 @@ export function FilterPanel({ connId, filter, mappings, onClose, onApply, onMapp
     const close = () => animateClose(panelRef.current, onClose);
     const [channelMask, setChannelMask] = useState(filter ? filter.channel_mask : 0xFFFF);
     const [msgTypes, setMsgTypes] = useState(new Set(filter ? filter.msg_types : MSG_TYPES));
-    const [mappingForm, setMappingForm] = useState(null); // null | { editing: null|obj, index: null|int }
+    // mappingForm drives the add/edit overlay. Shared via
+    // useSharedUiState so a spectator mirrors the form when the
+    // source taps + Add Mapping / Edit on a row — otherwise the
+    // overlay opens only on the source and the spectator sees just
+    // the filter panel underneath.
+    const [mappingForm, setMappingForm] = useSharedUiState('mappingForm', null); // null | { editing: null|obj, index: null|int }
 
     // Track the most recent write we've sent to the server. Server SSE
     // echoes that match it = "server caught up" (clear pending and

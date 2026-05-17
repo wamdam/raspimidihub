@@ -2780,7 +2780,8 @@ body.spectator-mode * { scrollbar-width: none; }
    Override to a percentage of the parent (.filter-overlay, which
    fills the wrapper exactly because it's position:fixed inset:0
    inside a transform-scaled containing block). */
-.spectator-app-wrap .filter-panel { max-height: 90%; }
+.spectator-app-wrap .filter-panel,
+.spectator-app-wrap .mapping-panel { max-height: 90%; }
 .spectator-touch-overlay {
     position: absolute;
     top: 0; left: 0;

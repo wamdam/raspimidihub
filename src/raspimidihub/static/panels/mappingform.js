@@ -140,7 +140,8 @@ export function MappingFormOverlay({ onSubmit, onClose, editing, srcClientId }) 
 
     return html`
         <div class="mapping-overlay" onclick=${(e) => e.target.className === 'mapping-overlay' && close()}>
-            <div class="mapping-panel" ref=${el => panelRef.current = el} ...${swipe}>
+            <div class="mapping-panel" data-spectator-scroll="mapping-panel"
+                ref=${el => panelRef.current = el} ...${swipe}>
                 <div class="panel-header">
                     <div class="panel-handle"></div>
                 </div>
