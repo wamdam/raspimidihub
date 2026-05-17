@@ -117,7 +117,12 @@ echoes that fade out on a lead synth line."""
         if max_repeats is None:
             max_repeats = 3
         max_repeats = max(0, min(10, max_repeats))
-        vel_decay = (self.get_param("vel_decay") or 20) / 100.0
+        # Explicit None check — `... or 20` would treat a legitimate 0 ("no
+        # decay, every echo at full velocity") as falsy and snap to 20%.
+        vel_decay_pct = self.get_param("vel_decay")
+        if vel_decay_pct is None:
+            vel_decay_pct = 20
+        vel_decay = vel_decay_pct / 100.0
 
         if self.get_param("sync"):
             # Sync mode: each echo lands on the next musical-rate tick

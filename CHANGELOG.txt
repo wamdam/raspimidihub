@@ -4,6 +4,17 @@ User-visible changes. Short tagged one-liners, no code or commit
 hashes. Tags: Added, Improved, Fix, Changed, Removed.
 
 
+2026-05-17 — Version 4.4.2
+
+Two falsy-fallback bugs where the value `0` was getting swapped
+for the plugin author's default because of Python's `value or
+default` idiom (0 is falsy). Both surfaced as a control whose
+zero position visibly disagreed with what came out.
+
+- Fix: CC LFO **Depth = 0** now produces the flat line at center it advertises, instead of silently jumping back to the 127 default and emitting full-swing modulation. Same fix on CC LFO **Center** so a zero-center setting stays at zero instead of snapping to 64.
+- Fix: MIDI Delay **Vel Decay = 0** now means "every echo at full velocity" (no decay), instead of falling back to the 20% default.
+
+
 2026-05-17 — Version 4.4.1
 
 Hot-fix for a CC LFO config panel that wouldn't accept input on
