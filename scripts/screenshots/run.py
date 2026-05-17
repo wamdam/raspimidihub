@@ -384,7 +384,9 @@ def build_scenes(target: str, instances: dict[str, dict]) -> list[dict]:
 
 
 def screenshot_scenes(target: str, scenes: list[dict], out_dir: Path,
-                      headless: bool, preset: str = "desktop") -> None:
+                      headless: bool, preset: str = "desktop",
+                      theme: str = "light",
+                      filename_suffix: str = "") -> None:
     from playwright.sync_api import sync_playwright
 
     cfg = VIEWPORT_PRESETS[preset]
@@ -403,6 +405,15 @@ def screenshot_scenes(target: str, scenes: list[dict], out_dir: Path,
                 "try { localStorage.setItem('raspimidihub:layoutDensity', 'small'); }"
                 " catch (e) {}"
             )
+        # Inject the chosen theme via localStorage before app boot so
+        # the inline bootstrap in index.html reads it and applies the
+        # right palette on first paint. Same pattern as layoutDensity:
+        # add_init_script runs in every new document context, which
+        # covers SPA navigation across pages.
+        ctx.add_init_script(
+            "try { localStorage.setItem('raspimidihub.theme', " + repr(theme) + "); }"
+            " catch (e) {}"
+        )
         page = ctx.new_page()
         for scene in scenes:
             url = target + scene["path"]
@@ -424,7 +435,7 @@ def screenshot_scenes(target: str, scenes: list[dict], out_dir: Path,
                 except Exception as e:
                     print(f"  ! {scene['name']}: setup failed ({e}); skipping")
                     continue
-            out_path = out_dir / f"{scene['name']}.png"
+            out_path = out_dir / f"{scene['name']}{filename_suffix}.png"
             page.screenshot(path=str(out_path), full_page=False)
             print(f"  → {out_path.name}")
         browser.close()
@@ -446,6 +457,14 @@ def main() -> int:
                          choices=sorted(VIEWPORT_PRESETS),
                          help="Viewport preset (default desktop = 480x960 @ DPR2; "
                               "phone = 360x640 @ DPR3, matches a typical small Android)")
+    parser.add_argument("--theme", default="light",
+                         choices=("light", "dark"),
+                         help="Theme to capture in (default light — the canonical "
+                              "docs/screenshots/<name>.png files are light)")
+    parser.add_argument("--suffix", default="",
+                         help="Append a suffix to every output filename (e.g. '-dark' "
+                              "to write the dark variant alongside the canonical light "
+                              "version, leaving the originals in place)")
     args = parser.parse_args()
 
     target = args.target.rstrip("/")
@@ -471,9 +490,10 @@ def main() -> int:
         pre_setup = [s for s in pre_setup if args.filter in s["name"]]
     if pre_setup:
         print(f"taking {len(pre_setup)} pre-setup screenshot(s) "
-              "(against the loaded config)")
+              f"(theme={args.theme}, against the loaded config)")
         screenshot_scenes(target, pre_setup, out_dir,
-                          headless=not args.headed, preset=args.viewport)
+                          headless=not args.headed, preset=args.viewport,
+                          theme=args.theme, filename_suffix=args.suffix)
 
     if args.skip_setup:
         # Resolve scenes by querying live instances.
@@ -491,9 +511,10 @@ def main() -> int:
 
     print(f"taking {len(scenes)} demo-set screenshot(s) → {out_dir} "
           f"({args.viewport}: {cfg['viewport']['width']}x{cfg['viewport']['height']} "
-          f"@ DPR{cfg['dpr']})")
+          f"@ DPR{cfg['dpr']}, theme={args.theme})")
     screenshot_scenes(target, scenes, out_dir, headless=not args.headed,
-                      preset=args.viewport)
+                      preset=args.viewport, theme=args.theme,
+                      filename_suffix=args.suffix)
 
     # Restore the user's saved config so the Pi is in the same
     # state it started in. Best-effort — if there is no saved

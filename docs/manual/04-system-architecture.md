@@ -80,6 +80,16 @@ phone or tablet. The Pi does not need a display of its own.
 
 ### Themes
 
+RaspiMIDIHub ships with two themes -- **Light** and **Dark** --
+both selectable from Settings → Display. Light is the daytime
+default and is what every screenshot in this manual is captured
+in. Dark is the night-rig alternative; first-time visitors with
+no saved preference inherit their OS's `prefers-color-scheme`.
+
+![Routing matrix in the **Light** theme.](../screenshots/01-routing.png){width=42%}
+
+![Same matrix, **Dark** theme. Every surface, control and play-pad flips: white cards become deep navy, dark navy text becomes pale, accent pink and turquoise lift to a brighter tint to stay legible against the dark backdrop.](../screenshots/01-routing-dark.png){width=42%}
+
 Every colour the UI paints is declared as a CSS custom property
 in `static/themes/_tokens.css`. Each installed theme is one CSS
 file in `static/themes/` that overrides a subset of those tokens

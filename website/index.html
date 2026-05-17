@@ -7,8 +7,40 @@
   <meta name="description" content="Open-source plug-and-play USB MIDI hub for Raspberry Pi with virtual instruments, routing matrix, and mobile browser control. No app needed.">
   <link rel="stylesheet" href="style.css">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎹</text></svg>">
+  <script>
+    /* Theme bootstrap — runs synchronously before the page paints
+       so we never flash the wrong palette. Read order:
+         1. Explicit localStorage choice (set by the toggle).
+         2. OS / browser prefers-color-scheme.
+         3. Default to light.
+       The <picture> blocks in the body use [data-theme] CSS rules
+       to pick the right screenshot variant; the toggle script at
+       the bottom of the page flips the attribute live. */
+    (function () {
+      try {
+        var saved = localStorage.getItem('raspimidihub.theme');
+        var theme = saved
+          || (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-theme', theme);
+      } catch (e) {
+        document.documentElement.setAttribute('data-theme', 'light');
+      }
+    })();
+  </script>
 </head>
 <body>
+
+<!-- Theme toggle -->
+<button class="theme-toggle" id="themeToggle" aria-label="Switch theme">
+  <svg class="icon-dark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+  </svg>
+  <svg class="icon-light" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="4"/>
+    <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
+  </svg>
+  <span class="theme-toggle-label" data-light="Dark" data-dark="Light">Light</span>
+</button>
 
 <!-- Hero -->
 <section class="hero">
@@ -30,15 +62,15 @@
     <div class="hero-phones">
       <div class="phone">
         <div class="phone-notch"></div>
-        <img src="screenshots/01-routing.png" alt="Routing Matrix" loading="lazy">
+        <img src="screenshots/01-routing.png" data-light-src="screenshots/01-routing.png" data-dark-src="screenshots/01-routing-dark.png" alt="Routing Matrix" loading="lazy">
       </div>
       <div class="phone phone-front">
         <div class="phone-notch"></div>
-        <img src="screenshots/euclidean-play.png" alt="Euclidean Play Surface" loading="lazy">
+        <img src="screenshots/euclidean-play.png" data-light-src="screenshots/euclidean-play.png" data-dark-src="screenshots/euclidean-play-dark.png" alt="Euclidean Play Surface" loading="lazy">
       </div>
       <div class="phone">
         <div class="phone-notch"></div>
-        <img src="screenshots/10-plugin-cc-lfo.png" alt="CC LFO Plugin" loading="lazy">
+        <img src="screenshots/10-plugin-cc-lfo.png" data-light-src="screenshots/10-plugin-cc-lfo.png" data-dark-src="screenshots/10-plugin-cc-lfo-dark.png" alt="CC LFO Plugin" loading="lazy">
       </div>
     </div>
   </div>
@@ -100,7 +132,7 @@
       <div class="feature-phone">
         <div class="phone">
           <div class="phone-notch"></div>
-          <img src="screenshots/01-routing.png" alt="Routing Matrix" loading="lazy">
+          <img src="screenshots/01-routing.png" data-light-src="screenshots/01-routing.png" data-dark-src="screenshots/01-routing-dark.png" alt="Routing Matrix" loading="lazy">
         </div>
       </div>
     </div>
@@ -119,7 +151,7 @@
       <div class="feature-phone">
         <div class="phone">
           <div class="phone-notch"></div>
-          <img src="screenshots/05-filter-panel.png" alt="Filter Panel" loading="lazy">
+          <img src="screenshots/05-filter-panel.png" data-light-src="screenshots/05-filter-panel.png" data-dark-src="screenshots/05-filter-panel-dark.png" alt="Filter Panel" loading="lazy">
         </div>
       </div>
     </div>
@@ -138,7 +170,7 @@
       <div class="feature-phone">
         <div class="phone">
           <div class="phone-notch"></div>
-          <img src="screenshots/12-plugin-chord-generator.png" alt="Chord Generator Plugin" loading="lazy">
+          <img src="screenshots/12-plugin-chord-generator.png" data-light-src="screenshots/12-plugin-chord-generator.png" data-dark-src="screenshots/12-plugin-chord-generator-dark.png" alt="Chord Generator Plugin" loading="lazy">
         </div>
       </div>
     </div>
@@ -158,7 +190,7 @@
       <div class="feature-phone">
         <div class="phone">
           <div class="phone-notch"></div>
-          <img src="screenshots/tracker.png" alt="Tracker step sequencer" loading="lazy">
+          <img src="screenshots/tracker.png" data-light-src="screenshots/tracker.png" data-dark-src="screenshots/tracker-dark.png" alt="Tracker step sequencer" loading="lazy">
         </div>
       </div>
     </div>
@@ -177,11 +209,11 @@
       <div class="feature-phone" style="display:flex;gap:16px;align-items:center">
         <div class="phone" style="width:200px">
           <div class="phone-notch"></div>
-          <img src="screenshots/controller-mixer-8.png" alt="Mixer 8 Controller" loading="lazy">
+          <img src="screenshots/controller-mixer-8.png" data-light-src="screenshots/controller-mixer-8.png" data-dark-src="screenshots/controller-mixer-8-dark.png" alt="Mixer 8 Controller" loading="lazy">
         </div>
         <div class="phone" style="width:200px">
           <div class="phone-notch"></div>
-          <img src="screenshots/controller-xy-4.png" alt="XY 4 Controller" loading="lazy">
+          <img src="screenshots/controller-xy-4.png" data-light-src="screenshots/controller-xy-4.png" data-dark-src="screenshots/controller-xy-4-dark.png" alt="XY 4 Controller" loading="lazy">
         </div>
       </div>
     </div>
@@ -200,7 +232,7 @@
       <div class="feature-phone">
         <div class="phone">
           <div class="phone-notch"></div>
-          <img src="screenshots/06-device-detail.png" alt="Device Detail Panel" loading="lazy">
+          <img src="screenshots/06-device-detail.png" data-light-src="screenshots/06-device-detail.png" data-dark-src="screenshots/06-device-detail-dark.png" alt="Device Detail Panel" loading="lazy">
         </div>
       </div>
     </div>
@@ -219,7 +251,7 @@
       <div class="feature-phone">
         <div class="phone">
           <div class="phone-notch"></div>
-          <img src="screenshots/13-plugin-master-clock.png" alt="Master Clock Plugin" loading="lazy">
+          <img src="screenshots/13-plugin-master-clock.png" data-light-src="screenshots/13-plugin-master-clock.png" data-dark-src="screenshots/13-plugin-master-clock-dark.png" alt="Master Clock Plugin" loading="lazy">
         </div>
       </div>
     </div>
@@ -238,7 +270,7 @@
       <div class="feature-phone">
         <div class="phone">
           <div class="phone-notch"></div>
-          <img src="screenshots/19-plugin-velocity-curve.png" alt="Velocity Curve Plugin" loading="lazy">
+          <img src="screenshots/19-plugin-velocity-curve.png" data-light-src="screenshots/19-plugin-velocity-curve.png" data-dark-src="screenshots/19-plugin-velocity-curve-dark.png" alt="Velocity Curve Plugin" loading="lazy">
         </div>
       </div>
     </div>
@@ -425,5 +457,48 @@
   </div>
 </dialog>
 
+<script>
+  /* Theme toggle. Flips <html data-theme>, persists in localStorage,
+     and rewrites every screenshot src so the in-page captures match
+     the chosen palette. Filename convention: light is canonical
+     (<name>.png), dark uses a -dark suffix (<name>-dark.png). */
+  (function () {
+    var btn = document.getElementById('themeToggle');
+    var label = btn.querySelector('.theme-toggle-label');
+    function syncLabel() {
+      var theme = document.documentElement.getAttribute('data-theme');
+      // Label shows the theme you'd switch TO on click.
+      label.textContent = label.getAttribute(theme === 'dark' ? 'data-dark' : 'data-light');
+    }
+    function applyImages(theme) {
+      document.querySelectorAll('img[data-light-src]').forEach(function (img) {
+        img.src = theme === 'dark'
+          ? img.getAttribute('data-dark-src')
+          : img.getAttribute('data-light-src');
+      });
+    }
+    btn.addEventListener('click', function () {
+      var current = document.documentElement.getAttribute('data-theme');
+      var next = current === 'dark' ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', next);
+      try { localStorage.setItem('raspimidihub.theme', next); } catch (e) {}
+      syncLabel();
+      applyImages(next);
+    });
+    syncLabel();
+    applyImages(document.documentElement.getAttribute('data-theme'));
+    /* Follow OS changes live while no explicit choice is saved. */
+    try {
+      var mql = window.matchMedia('(prefers-color-scheme: dark)');
+      mql.addEventListener('change', function (e) {
+        if (localStorage.getItem('raspimidihub.theme')) return;
+        var next = e.matches ? 'dark' : 'light';
+        document.documentElement.setAttribute('data-theme', next);
+        syncLabel();
+        applyImages(next);
+      });
+    } catch (e) {}
+  })();
+</script>
 </body>
 </html>

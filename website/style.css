@@ -20,6 +20,10 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
+  /* Dark palette (default — see :root[data-theme="light"] below
+     for the light overrides). Token names parallel the app's
+     own theme tokens so a future overhaul of the website can
+     reuse the same vocabulary. */
   --bg: #0d0d1a;
   --bg-light: #1a1a2e;
   --bg-card: #16213e;
@@ -30,8 +34,28 @@
   --text: #e0e0e0;
   --text-muted: #8892a4;
   --text-bright: #ffffff;
+  --shadow-strong: rgba(0,0,0,0.5);
+  --border-soft: rgba(255,255,255,0.08);
   --radius: 12px;
   --radius-lg: 20px;
+}
+/* Light palette. <html data-theme="light"> is set by the inline
+   bootstrap in index.html (reads localStorage, falls back to
+   prefers-color-scheme). The toggle button at the top right
+   flips this attribute at runtime. */
+:root[data-theme="light"] {
+  --bg: #f7f7fb;
+  --bg-light: #ffffff;
+  --bg-card: #ffffff;
+  --accent: #e94560;
+  --accent-glow: rgba(233, 69, 96, 0.18);
+  --turquoise: #009e80;
+  --turquoise-glow: rgba(0, 158, 128, 0.18);
+  --text: #1c1f2b;
+  --text-muted: #5b6478;
+  --text-bright: #0a0e1a;
+  --shadow-strong: rgba(20, 22, 40, 0.12);
+  --border-soft: rgba(20, 22, 40, 0.08);
 }
 
 html { scroll-behavior: smooth; overflow-x: hidden; }
@@ -466,4 +490,43 @@ dialog::backdrop { background: rgba(0,0,0,0.7); }
   .phone img { border-radius: 18px; }
   .phone-notch { width: 60px; height: 18px; }
   .btn { padding: 12px 22px; font-size: 0.9rem; }
+}
+
+/* === Theme toggle === */
+/* Pill-shaped button anchored top-right. Toggles between Light and
+   Dark, persisting the choice in localStorage. First-time visitors
+   inherit their OS's prefers-color-scheme via the inline bootstrap
+   in index.html. */
+.theme-toggle {
+  position: fixed;
+  top: 18px;
+  right: 18px;
+  z-index: 100;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  background: var(--bg-card);
+  color: var(--text);
+  font-size: 0.82rem;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: 0 4px 14px var(--shadow-strong);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  transition: background 0.15s ease-out, transform 0.1s ease-out;
+}
+.theme-toggle:hover { background: var(--bg-light); }
+.theme-toggle:active { transform: scale(0.97); }
+.theme-toggle svg { width: 16px; height: 16px; }
+/* Show only the icon matching the OPPOSITE of the current theme —
+   clicking switches to that one. */
+.theme-toggle .icon-light { display: none; }
+.theme-toggle .icon-dark { display: inline; }
+:root[data-theme="light"] .theme-toggle .icon-light { display: inline; }
+:root[data-theme="light"] .theme-toggle .icon-dark { display: none; }
+@media (max-width: 480px) {
+  .theme-toggle { top: 12px; right: 12px; padding: 5px 10px; font-size: 0.78rem; }
 }

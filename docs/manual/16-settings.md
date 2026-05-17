@@ -264,22 +264,15 @@ Export Config**.
   render in Default on a tablet and Small on a phone without one
   overriding the other.
 - **Theme** -- a dropdown listing every theme present in
-  `themes/manifest.json`. **Dark** is the default night-rig look;
-  **Light** flips every surface, control and play-pad to a
-  bright daytime look. The choice is browser-local, persists
-  across reloads, and seeds the PWA status-bar colour so the
-  mobile chrome matches the theme on the next page load.
+  `themes/manifest.json`. **Light** is the daytime default
+  (every screenshot in this manual is captured in Light); **Dark**
+  is the night-rig alternative. The choice is browser-local,
+  persists across reloads, and seeds the PWA status-bar colour
+  so the mobile chrome matches the theme on the next page load.
   First-time visitors with no saved preference inherit their
   OS's `prefers-color-scheme` setting. The picker hides itself
-  if only one theme is installed.
-
-![Settings → Display in the **Light** theme, showing the Theme picker.](../screenshots/35-settings-display-light.png){width=42%}
-
-![Routing matrix in the Light theme. The same matrix as the dark mode shot in chapter 9, with white cards and dark navy text.](../screenshots/36-routing-light.png){width=42%}
-
-![Euclidean play surface in the Light theme. Wheels become pale brushed-aluminium with a soft top/bottom dome, knobs go white with dark indicators and a pink LED ring, and the step pattern uses a grey/pink hierarchy so the accented beats stand out.](../screenshots/37-euclidean-play-light.png){width=42%}
-
-![Controller (Mixer 8) in the Light theme. Faders ride pure-white tracks with pale chrome thumbs; the four drop-buttons stay warm-coloured so they remain a distinct affordance.](../screenshots/38-controller-mixer-8-light.png){width=42%}
+  if only one theme is installed. See chapter 4 §"Themes" for a
+  side-by-side comparison of how the matrix looks in each mode.
 
 ## Stats
 
