@@ -4,6 +4,20 @@ User-visible changes. Short tagged one-liners, no code or commit
 hashes. Tags: Added, Improved, Fix, Changed, Removed.
 
 
+2026-05-17 — Version 4.4.3
+
+A reflow-vs-click bug in the Add/Edit Mapping overlay: tapping the
+**Channel Remap** type radio dropped the panel from ~650 px to
+~350 px between the touch starting on the radio and the browser
+synthesising the click — and the panel's tap-outside-to-dismiss
+handler then matched the gray backdrop above the now-shorter panel
+and closed itself. The handler now latches the *press-down* target,
+so only a tap that actually started outside the panel dismisses it.
+
+- Fix: tapping the **Channel Remap** type radio in the Add/Edit Mapping panel no longer closes the panel.
+- Fix: type-radio pills (and any other future PluginRadio) now opt out of the panel's swipe-down gesture, matching the convention every other interactive control already followed.
+
+
 2026-05-17 — Version 4.4.2
 
 Two falsy-fallback bugs where the value `0` was getting swapped

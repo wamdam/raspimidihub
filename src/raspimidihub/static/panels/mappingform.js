@@ -2,7 +2,7 @@
  * Mapping form overlay + mappingDesc helper used by FilterPanel.
  */
 
-import { useState, useEffect } from '../lib/hooks.module.js';
+import { useState, useEffect, useRef } from '../lib/hooks.module.js';
 import { html, animateClose, useEscapeClose, useSwipeDismiss } from '../ui/common.js';
 import { MAPPING_TYPES, noteName } from '../state/constants.js';
 import { PluginRadio, PluginWheel, PluginNoteSelect, PluginButton } from '../plugin-controls.js';
@@ -109,6 +109,22 @@ export function MappingFormOverlay({ onSubmit, onClose, editing, srcClientId }) 
     useEscapeClose(close);
     const swipe = useSwipeDismiss(close, panelRef);
 
+    // Tap-outside-to-close. We can't just check the click target,
+    // because changing `type` to one with much less content (notably
+    // Channel Remap) shrinks the panel between touchstart and the
+    // synthesised click; the click then lands on the gray backdrop
+    // even though the user tapped a radio pill inside the panel.
+    // Latch the original press target on pointerdown — only close
+    // when the press *started* on the overlay itself.
+    const overlayPressedRef = useRef(false);
+    const onOverlayPointerDown = (e) => {
+        overlayPressedRef.current = e.target === e.currentTarget;
+    };
+    const onOverlayClick = (e) => {
+        if (overlayPressedRef.current && e.target === e.currentTarget) close();
+        overlayPressedRef.current = false;
+    };
+
     const onSrcChannelChange = (val) => {
         setSrcChannel(val);
         if (val !== '') setDstChannel(+val);
@@ -139,7 +155,7 @@ export function MappingFormOverlay({ onSubmit, onClose, editing, srcClientId }) 
     const w = (setter) => (_, v) => setter(v);
 
     return html`
-        <div class="mapping-overlay" onclick=${(e) => e.target.className === 'mapping-overlay' && close()}>
+        <div class="mapping-overlay" onpointerdown=${onOverlayPointerDown} onclick=${onOverlayClick}>
             <div class="mapping-panel" data-spectator-scroll="mapping-panel"
                 ref=${el => panelRef.current = el} ...${swipe}>
                 <div class="panel-header">

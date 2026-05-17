@@ -2367,6 +2367,7 @@ body {
     transition: background 0.15s, border-color 0.15s, color 0.15s; user-select: none;
     -webkit-user-select: none;
     -webkit-touch-callout: none;
+    touch-action: none;
 }
 .radio-opt.active { background: var(--accent); border-color: var(--accent); color: var(--text-on-accent); }
 
