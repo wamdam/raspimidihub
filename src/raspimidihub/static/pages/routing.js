@@ -31,6 +31,13 @@ export function RoutingPage({ devices, connections, refresh, showToast, clockSou
     const [showAddPlugin, setShowAddPlugin] = useSharedUiState('showAddPlugin', false);
     const [pluginTypes, setPluginTypes] = useState({});
     const loadPluginTypes = () => { api('/plugins').then(setPluginTypes).catch(() => {}); };
+    // Preload the Add overlay's data on mount. The click handler used
+    // to be the sole caller, which works on the source but leaves a
+    // spectator-mirrored overlay empty — `showAddPlugin` rides through
+    // useSharedUiState but `pluginTypes` / BT scan results don't, so
+    // the overlay would render with zero rows and read as "didn't
+    // open at all". Cheap fetches; idempotent.
+    useEffect(() => { loadPluginTypes(); }, []);
     const addPlugin = async (typeName) => {
         await api('/plugins/instances', { method: 'POST', body: JSON.stringify({ type: typeName }) });
         showToast('Virtual device created');
@@ -63,6 +70,11 @@ export function RoutingPage({ devices, connections, refresh, showToast, clockSou
         setBtReason(r.available ? null : (r.reason || null));
         setBtDevices(r.devices || []);
     }).catch(() => {}); };
+    // Same reasoning as loadPluginTypes: preload so a spectator
+    // sees the BT section state when its mirrored overlay opens.
+    // GET /bluetooth doesn't trigger a scan, just reports availability
+    // and the paired-devices list.
+    useEffect(() => { loadBt(); }, []);
     const btScan = async () => {
         setBtScanning(true);
         try {
