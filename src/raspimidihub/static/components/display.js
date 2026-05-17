@@ -114,7 +114,7 @@ export function DisplayScope({ label, value, min, max, duration }) {
         </div>
         <div style="flex:1;position:relative">
             <canvas ref=${canvasRef} width="200" height="50"
-                style="width:100%;height:50px;border-radius:4px;background:var(--bg);border:1px solid var(--border-subtle)">
+                style="width:100%;height:50px;border-radius:4px;background:var(--bg);border:1px solid var(--border-subtle)"></canvas>
             <span style="position:absolute;bottom:2px;right:4px;font-size:9px;color:var(--text-dim)">${dur}s</span>
         </div>
         </div>
