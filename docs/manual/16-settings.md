@@ -111,6 +111,8 @@ paste it into OBS.
 
 ### Use in OBS
 
+![Spectator mirror with `frame=1`, magenta chroma backdrop, and a moderate tilt. OBS's Chroma Key filter on the same colour leaves the framed device floating free of the background.](../screenshots/37-spectator-mirror.png){width=42%}
+
 1. Open the spectator URL in a regular browser tab. Adjust the
    frame, tilt, and chroma until it looks the way you want.
 2. Click **Copy URL** (or just copy from the address bar).
@@ -123,14 +125,6 @@ paste it into OBS.
 
 Scrollbars are explicitly hidden across the whole spectator
 document so OBS's CEF doesn't paint them onto the captured feed.
-
-### Screenshots needed
-
-- `37-spectator-mirror.png`: the mirror URL itself, taken from a
-  desktop browser, showing the phone frame, a magenta chroma
-  backdrop, and a moderate tilt (e.g. `tilt-x=8`, `tilt-y=-12`).
-  The mirrored source should be on `/play/<arpeggiator-id>` so
-  the screenshot demonstrates the play surface inside the frame.
 
 ## Plugin Control Mappings
 

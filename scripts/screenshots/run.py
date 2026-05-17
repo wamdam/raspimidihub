@@ -236,12 +236,22 @@ def _open_settings_cc_bindings(page) -> None:
 def _open_settings_spectator(page) -> None:
     """Already at /settings/spectator — give the device-name field a
     friendly label so the screenshot shows a realistic value rather
-    than a blank input, and wait briefly for the clients-list poll
-    to render the spectatable devices."""
+    than a blank input. The Spectator URL field stays empty until
+    the SSE handshake yields a conn_id and the periodic
+    /api/spectator/clients refresh fires (every 3 s), so wait until
+    the readonly URL input has been populated before snapping."""
     label_input = page.locator(".card input[placeholder*='Living-room']")
     if label_input.count() > 0:
         label_input.first.fill("Phone")
-    time.sleep(0.5)  # let setSpectatorLabel re-flush via /api/sse/subscribe
+    try:
+        page.wait_for_function(
+            "() => { const i = document.querySelector('.card input[readonly]');"
+            " return i && i.value && i.value.includes('spectate='); }",
+            timeout=6000,
+        )
+    except Exception:
+        pass
+    time.sleep(0.4)
 
 
 def build_scenes(target: str, instances: dict[str, dict]) -> list[dict]:
