@@ -303,7 +303,7 @@ function midiToNote(m) {
 // Main component
 // ------------------------------------------------------------------
 
-export function PluginTrackerGrid({ param, values, onChange }) {
+export function PluginTrackerGrid({ param, values, onChange, displayCtx }) {
     const trackCount = param.track_count || 8;
     const maxPages = param.max_pages || 16;
     const maxRows = param.max_rows || 16;
@@ -1271,6 +1271,7 @@ export function PluginTrackerGrid({ param, values, onChange }) {
         status=${patternStatus}
         playing=${isPlaying}
         shiftEngagedRef=${shiftEngagedRef}
+        stateKey=${`${displayCtx?.instanceId || 'na'}:${param.name}`}
         onTap=${onTap}
         onCmd=${onCmd} />`;
 

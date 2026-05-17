@@ -6,6 +6,7 @@
 import { useState, useEffect, useRef } from '../lib/hooks.module.js';
 import { html, api, animateClose, useEscapeClose, useSwipeDismiss } from '../ui/common.js';
 import { useSSESubscription } from '../ui/sse-subscriptions.js';
+import { useSharedUiState } from '../lib/spectator/shared-ui-state.js';
 import { noteName } from '../state/constants.js';
 import { PluginConfigPanel, PluginWheel, PluginFader } from '../plugin-controls.js';
 import { SysExSenderControls } from '../components/sysexsender.js';
@@ -220,8 +221,14 @@ export function DeviceDetailPanel({ device, onClose, showToast, refresh, pluginD
     const isPlugin = !!device.is_plugin;
     const [pluginData, setPluginData] = useState(null);
     const [showHelp, setShowHelp] = useState(false);
-    const [showSender, setShowSender] = useState(false);
-    const [showMonitor, setShowMonitor] = useState(false);
+    // showSender / showMonitor mirror to spectators so the embedded
+    // CC test sender and MIDI monitor inside the device-detail panel
+    // appear in OBS too. Keyed by stable_id (or client_id fallback)
+    // so opening the monitor on Device A doesn't open it on B.
+    const [showSender, setShowSender] = useSharedUiState(
+        `deviceDetail:${sid}:sender`, false);
+    const [showMonitor, setShowMonitor] = useSharedUiState(
+        `deviceDetail:${sid}:monitor`, false);
     const {
         params: pluginParams,
         setParams: setPluginParams,

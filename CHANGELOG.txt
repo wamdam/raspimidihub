@@ -4,6 +4,22 @@ User-visible changes. Short tagged one-liners, no code or commit
 hashes. Tags: Added, Improved, Fix, Changed, Removed.
 
 
+2026-05-17 — Version 4.4.4
+
+Three fixes around drop-buttons and the spectator view. The
+drop-button one is the most consequential: fade-mode mute changes
+were landing on top of the new bar's first downbeat instead of
+just before it, which audibly played one bar in the old mute
+state. The other two are spectator gaps — the pattern long-press
+menu and the device-detail panel's test sender / MIDI monitor
+now make it across the wire.
+
+- Fix: drop-button snapshots in **Fade mode** now actually arrive at the destination synth before the new bar starts. Fade slots previously left their discrete-cell CCs (mute buttons, XY pads) un-scheduled and emitted them on the bar boundary itself, so the first bar's downbeat played in the OLD mute state. Now both Hard and Fade slots pre-schedule the full snapshot via the ALSA queue, 8 ms ahead of the bar.
+- Fix: a rare edge case where the clock-period EMA wasn't ready at press time (only one MIDI clock tick observed) lost the snapshot CCs entirely — Hard slots fell through to a state-only flip that never sent the CC. Now the slot tracks whether pre-schedule succeeded and falls back to an immediate send at fire moment if not.
+- Fix: the long-press menu on a pattern slot (Euclidean / Arpeggiator / Tracker) now mirrors to spectators. The menu's open-slot state was the last piece of pattern-bank UI still held in component-local state instead of `useSharedUiState`, so a phone long-press never made it across the spectator broadcast.
+- Fix: the CC test sender and MIDI monitor inside an instrument / plugin's device-detail panel now show up on the spectator when the source opens them. Their open/closed toggles were the last component-local pieces of that panel; the spectator just didn't see them flip. The monitor's event list flows through the same per-component SSE on the spectator's side, so the displayed events match the source.
+
+
 2026-05-17 — Version 4.4.3
 
 A reflow-vs-click bug in the Add/Edit Mapping overlay: tapping the

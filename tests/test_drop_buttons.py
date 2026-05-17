@@ -453,3 +453,115 @@ class TestHardFireCancelsFade:
         assert sched["hard"]["button_id"] == 1
         assert p._param_values["f1"] == 80         # fade landed
         assert p._param_values["f2"] == 0          # hard not yet fired
+
+
+# --- Pre-tick CC scheduling --------------------------------------------------
+#
+# The CC bytes for a drop's snapshot must arrive at the destination synth
+# BEFORE tick 0 of the new bar (otherwise the bar's first downbeat plays
+# in the old mute state). Both hard and fade slots pre-schedule their
+# snapshot via the ALSA queue at fire_at_monotonic - DROP_FIRE_LEAD_S; if
+# the clock period EMA isn't ready yet the slot falls back to an
+# immediate _apply_snapshot at fire moment.
+
+class _ClockedFakeBus(_FakeBus):
+    """FakeBus that also exposes tick_to_monotonic so pre-schedule fires."""
+    def __init__(self, tick=0, tpb=96, period=0.020833):
+        super().__init__(tick=tick, tpb=tpb)
+        self._period = period
+
+    def tick_to_monotonic(self, tick):
+        # Linear forecast from now. Tests don't care about the actual
+        # monotonic origin, only that a non-None float comes back so the
+        # pre-schedule path is taken.
+        return 1000.0 + (tick - self._tick_count) * self._period
+
+
+def _new_with_queue(bus=None):
+    p = _new(bus=bus)
+    p._scheduled: list[tuple[float, int, int, int, int]] = []
+    p.send_cc_at = (lambda when, ch, cc, v, tag=0:
+                    p._scheduled.append((when, ch, cc, v, tag)))
+    p.cancel_scheduled = lambda tag: None
+    return p
+
+
+class TestPreScheduledSnapshot:
+    def test_hard_pre_schedules_button_cc_ahead_of_bar(self):
+        # Button mute snapshot must hit the ALSA queue 8 ms before the
+        # bar boundary, not on/after it.
+        bus = _ClockedFakeBus(tick=0)
+        p = _new_with_queue(bus)
+        p._param_values["drop_modes"] = {"0": "bar", "1": "bar", "2": "bar", "3": "bar"}
+        p._param_values["drop_fade"] = {"0": False}
+        p._param_values["drop_sync"] = {"0": False}
+        # Snapshot mutes b1 (button on CC 13).
+        p._param_values["drop_snapshots"]["0"] = {"b1": 1}
+        p._param_values["b1"] = 0
+        p._fire_drop("0")
+        # One scheduled CC for b1, fired at fire_at - lead.
+        assert len(p._scheduled) == 1
+        when, ch, cc, val, _tag = p._scheduled[0]
+        assert (ch, cc, val) == (0, 13, 127)  # button "on" → CC 127
+        # fire_at = now+96 ticks, lead = 8 ms; period = 20.833 ms/tick.
+        expected = 1000.0 + 96 * 0.020833 - 0.008
+        assert abs(when - expected) < 1e-6
+        # Slot remembers it was pre-scheduled.
+        slot = p._param_values["drop_schedule"]["hard"]
+        assert slot["pre_scheduled"] is True
+
+    def test_fade_pre_schedules_discrete_snapshot_too(self):
+        # Regression: fade mode used to leave button/xypad snapshots
+        # un-scheduled, so the mute didn't apply until tick 0 of the
+        # new bar fired — too late to be heard on the downbeat.
+        bus = _ClockedFakeBus(tick=0)
+        p = _new_with_queue(bus)
+        p._param_values["drop_modes"] = {"0": "bar", "1": "bar", "2": "bar", "3": "bar"}
+        p._param_values["drop_fade"] = {"0": True}
+        p._param_values["drop_sync"] = {"0": False}
+        p._param_values["drop_snapshots"]["0"] = {"b1": 1}
+        p._param_values["b1"] = 0
+        p._fire_drop("0")
+        # Pre-schedule must have fired for fade just like for hard.
+        assert len(p._scheduled) == 1
+        slot = p._param_values["drop_schedule"]["fade"]
+        assert slot["pre_scheduled"] is True
+
+    def test_fire_moment_skips_resend_when_pre_scheduled(self):
+        # When pre-scheduled, _tick_slot at fire_at_tick must only flip
+        # the on-screen state — sending the CC again would double up.
+        bus = _ClockedFakeBus(tick=0)
+        p = _new_with_queue(bus)
+        p._param_values["drop_modes"] = {"0": "bar", "1": "bar", "2": "bar", "3": "bar"}
+        p._param_values["drop_fade"] = {"0": False}
+        p._param_values["drop_sync"] = {"0": False}
+        p._param_values["drop_snapshots"]["0"] = {"b1": 1}
+        p._param_values["b1"] = 0
+        p._fire_drop("0")
+        p._sent.clear()  # ignore any incidental send_cc calls
+        bus._tick_count = 96
+        p.on_tick("1/16")
+        # State flipped, no fresh send_cc.
+        assert p._param_values["b1"] == 1
+        assert p._sent == []
+
+    def test_fallback_to_apply_snapshot_when_clock_not_ready(self):
+        # When tick_to_monotonic returns None (only one tick observed so
+        # far → no period EMA), pre-schedule is skipped. At fire moment
+        # the CC must still be emitted — falling back to state-only
+        # would leave the synth in the old mute state forever.
+        bus = _FakeBus(tick=0)  # no tick_to_monotonic at all
+        p = _new_with_queue(bus)
+        p._param_values["drop_modes"] = {"0": "bar", "1": "bar", "2": "bar", "3": "bar"}
+        p._param_values["drop_fade"] = {"0": False}
+        p._param_values["drop_sync"] = {"0": False}
+        p._param_values["drop_snapshots"]["0"] = {"b1": 1}
+        p._param_values["b1"] = 0
+        p._fire_drop("0")
+        assert p._scheduled == []  # nothing pre-scheduled
+        slot = p._param_values["drop_schedule"]["hard"]
+        assert slot["pre_scheduled"] is False
+        bus._tick_count = 96
+        p.on_tick("1/16")
+        # CC was emitted at fire moment via the immediate-send fallback.
+        assert (0, 13, 127) in p._sent

@@ -31,8 +31,9 @@
  *                           suppressed (no commands available).
  */
 
-import { useEffect, useRef, useState } from '../lib/hooks.module.js';
+import { useEffect, useRef } from '../lib/hooks.module.js';
 import { html, tickFeedback } from './common.js';
+import { useSharedUiState } from '../lib/spectator/shared-ui-state.js';
 
 const LONG_PRESS_MS = 500;
 
@@ -45,6 +46,7 @@ export function PluginPatternBank({
     shiftEngagedRef,
     onTap,
     onCmd,
+    stateKey,
 }) {
     const total = Math.max(1, count | 0);
     const safeSel = Math.max(0, Math.min(total - 1, parseInt(selected) || 0));
@@ -52,7 +54,11 @@ export function PluginPatternBank({
         ? queued : -1;
     const hasMenu = typeof onCmd === 'function';
     const pressRef = useRef({ idx: -1, startTs: 0, longFired: false });
-    const [menuFor, setMenuFor] = useState(-1);
+    // Mirror the open-menu slot across spectators (so the source's
+    // long-press menu shows up in OBS too). stateKey must uniquely
+    // identify this bank — typically `${instanceId}:${param.name}`.
+    const [menuFor, setMenuFor] = useSharedUiState(
+        `patternBankMenu:${stateKey || 'unscoped'}`, -1);
 
     // Close the menu on outside pointerdown.
     useEffect(() => {

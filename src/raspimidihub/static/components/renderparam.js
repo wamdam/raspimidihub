@@ -157,6 +157,7 @@ export function renderParam(param, values, onChange, allValues, displayCtx) {
             return html`<${PluginPatternBank}
                 count=${param.count || 8}
                 selected=${val}
+                stateKey=${`${displayCtx?.instanceId || 'na'}:${param.name}`}
                 onTap=${onTap}
                 onCmd=${onCmd} />`;
         }

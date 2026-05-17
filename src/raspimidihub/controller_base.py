@@ -539,18 +539,22 @@ class ControllerBase(PluginBase):
 
         # Pre-schedule the snapshot CCs via the ALSA queue ahead of the
         # bar boundary, so the new state is in effect before any
-        # downbeat event lands at the destination synth. Hard slot only
-        # — fade still steps per-tick (Phase 2/3 migration). Skip if
-        # the clock-bus mapping isn't ready yet (no ticks observed) —
-        # _tick_slot will still _apply_snapshot at fire moment as a
-        # safety net.
-        if not fade:
-            tick_to_monotonic = getattr(bus, "tick_to_monotonic", None)
-            if callable(tick_to_monotonic):
-                fire_at_monotonic = tick_to_monotonic(fire_at_tick)
-                if fire_at_monotonic is not None:
-                    self._schedule_snapshot(
-                        snap, fire_at_monotonic, self._drop_tag_for(sid))
+        # downbeat event lands at the destination synth. Done for BOTH
+        # hard and fade — fade still steps continuous cells per-tick on
+        # top, but the discrete cells (button mutes, xypad) need to
+        # land just before the bar, not on/after it, otherwise the
+        # first bar plays in the OLD mute state. If the clock-bus
+        # period EMA isn't ready yet (essentially: only one tick
+        # observed) we mark pre_scheduled=False and `_tick_slot` falls
+        # back to immediate _apply_snapshot at fire moment.
+        pre_scheduled = False
+        tick_to_monotonic = getattr(bus, "tick_to_monotonic", None)
+        if callable(tick_to_monotonic):
+            fire_at_monotonic = tick_to_monotonic(fire_at_tick)
+            if fire_at_monotonic is not None:
+                self._schedule_snapshot(
+                    snap, fire_at_monotonic, self._drop_tag_for(sid))
+                pre_scheduled = True
 
         # If fade is enabled, capture the CURRENT cell values so the
         # fade interpolates from where we are now (not from where the
@@ -577,6 +581,7 @@ class ControllerBase(PluginBase):
             "every_n_bars": every_n_bars,
             "progress": progress,
             "synced": sync,
+            "pre_scheduled": pre_scheduled,
         }
         self._write_schedule(slots)
 
@@ -744,21 +749,23 @@ class ControllerBase(PluginBase):
         sid = str(slot.get("button_id"))
 
         if now_tick >= fire_at:
-            # Land the snapshot. For hard slots the CCs were pre-scheduled
-            # via the ALSA queue (delivered ahead of the bar by
-            # DROP_FIRE_LEAD_S so the new state is in effect before any
-            # downbeat); only the on-screen state needs to flip here.
-            # Fade slots still emit per-tick, so the final landing here
-            # IS the only place the exact target value is sent.
+            # Land the snapshot. When pre_scheduled=True the CCs were
+            # already delivered via the ALSA queue DROP_FIRE_LEAD_S
+            # ahead of the bar — only the on-screen cells need flipping
+            # here. When pre_scheduled=False (clock period EMA wasn't
+            # ready at press time) we have to emit the CCs now as a
+            # safety net; the first bar's downbeat may have already
+            # passed, but at least the new state goes out.
             snap = (self._param_values.get("drop_snapshots") or {}).get(sid)
+            pre_scheduled = bool(slot.get("pre_scheduled"))
             self._drop_fade_start.pop(sid, None)
             self._drop_fade_last_emit.pop(sid, None)
             states = dict(self._param_values.get("drop_states") or {})
             if snap:
-                if fade:
-                    self._apply_snapshot(snap)
-                else:
+                if pre_scheduled:
                     self._apply_snapshot_state_only(snap)
+                else:
+                    self._apply_snapshot(snap)
             states[sid] = "firing"
             self.set_param("drop_states", states)
             states[sid] = "captured" if snap else "idle"
