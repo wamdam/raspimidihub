@@ -137,8 +137,15 @@ vibrato to a synth pad without touching a physical controller."""
 
     def _emit_lfo(self):
         wave = self.get_param("wave") or "sine"
-        depth = self.get_param("depth") or 127
-        center = self.get_param("center") or 64
+        # `... or default` would swallow a legitimate 0 (Python falsiness):
+        # depth=0 should be a flat line at center, not the 127 default; same
+        # for center=0 vs the 64 default.
+        depth = self.get_param("depth")
+        if depth is None:
+            depth = 127
+        center = self.get_param("center")
+        if center is None:
+            center = 64
         cc_num = self.get_param("cc_num")
         if cc_num is None:
             cc_num = 1
