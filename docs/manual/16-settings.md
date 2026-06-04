@@ -169,6 +169,14 @@ the oldest are pruned automatically. These are distinct from the
 background **autosave** (chapter 15.6) -- backups are deliberate,
 labelled checkpoints you can step back to.
 
+At the top, a **Last autosave** line shows how long ago the
+background resume-snapshot was last written (`30s ago`, `2 min
+ago`, …) -- the same uptime-relative "n ago" the checkpoints use,
+so it reads **before last reboot** for an autosave carried over
+from a previous boot and **no autosave yet** before the first one
+this session. It is a snapshot as of when the page loaded; the
+**↻** button next to the heading re-reads it (and the list).
+
 Each row shows:
 
 - **#number** -- a monotonic sequence number. It only ever
@@ -180,9 +188,17 @@ Each row shows:
   shows **before last reboot** -- its `#number` is the only
   ordering you get.
 - **Summary** -- a coarse one-line diff against the *previous*
-  checkpoint (counts only, e.g. "+1 instrument · −18 mappings",
-  or "(no changes)" / "(initial)"). It tells you roughly what a
-  checkpoint captured, not which exact knob moved.
+  checkpoint. It counts only the four big categories (instruments,
+  connections, mappings, device names), e.g. "+1 instrument · −18
+  mappings". When none of those moved it reads **"settings
+  changed"** if anything else differs (a renamed cell, a re-bound
+  CC, a drop-button or theme tweak, an edited plugin parameter --
+  things the counts don't track), or **"(no changes)"** if the
+  snapshot is identical to the previous one; **"(initial)"** for
+  the first checkpoint. The summary tells you roughly what a
+  checkpoint captured, not which exact knob moved -- but the stored
+  copy always holds the *full* state, so a Restore is faithful
+  regardless of what the summary says.
 - **Size** -- the compressed size of the stored copy.
 
 Two actions per row:

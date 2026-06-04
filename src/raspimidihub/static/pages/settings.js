@@ -1001,11 +1001,12 @@ function SettingsCcBindings({ openCcBinding, openCellBinding }) {
 // readable name instead of a UUID.
 function SettingsBackup({ showToast }) {
     const [backups, setBackups] = useState(null);
+    const [autosave, setAutosave] = useState(null);
     const [busy, setBusy] = useState(false);
 
     const load = () => api('/backups')
-        .then(r => setBackups(r.backups || []))
-        .catch(() => setBackups([]));
+        .then(r => { setBackups(r.backups || []); setAutosave(r.autosave || null); })
+        .catch(() => { setBackups([]); setAutosave(null); });
     useEffect(() => { load(); }, []);
 
     // No RTC on the appliance, so we show time relative to uptime, not a
@@ -1042,9 +1043,34 @@ function SettingsBackup({ showToast }) {
         return html`<div class="card"><h3>Backups</h3>
             <p style="color:var(--text-dim)">Loading…</p></div>`;
     }
+    // The background autosave (resume snapshot), distinct from the
+    // deliberate Save checkpoints below.
+    const fmtAutosave = () => {
+        if (!autosave) return 'no autosave yet';
+        if (!autosave.same_session || autosave.age_seconds == null)
+            return 'before last reboot';
+        const s = autosave.age_seconds;
+        if (s < 60) return s + 's ago';
+        if (s < 3600) return Math.floor(s / 60) + ' min ago';
+        if (s < 86400) return Math.floor(s / 3600) + ' h ago';
+        return Math.floor(s / 86400) + ' d ago';
+    };
+
     return html`
         <div class="card">
-            <h3>Backups</h3>
+            <div style="display:flex;align-items:center;gap:8px">
+                <h3 style="flex:1;margin:0">Backups</h3>
+                <button class="btn btn-secondary" disabled=${busy}
+                    onClick=${load} title="Refresh">↻</button>
+            </div>
+            <div style="display:flex;align-items:baseline;gap:8px;margin-top:8px;
+                        padding:8px 10px;background:var(--bg-elevated,rgba(255,255,255,0.04));
+                        border-radius:6px">
+                <span style="font-size:12px;color:var(--text-dim);flex:1">
+                    Last autosave (live resume snapshot)
+                </span>
+                <span style="font-size:13px">${fmtAutosave()}</span>
+            </div>
             <p style="font-size:11px;color:var(--text-dim)">
                 A checkpoint is written automatically on every <strong>Save</strong>
                 (newest first, last 50 kept). The summary shows roughly what changed

@@ -85,9 +85,15 @@ def _count_mappings(cfg: dict) -> int:
 
 def summarize_config_diff(old: dict, new: dict) -> str:
     """A short, human-readable indicator of what changed between two
-    configs — counts only, not which knob. e.g.
-    '+1 instrument · -1 connection · -18 mappings'. '(no changes)' when
-    nothing tracked moved; '(initial)' when there's no prior config."""
+    configs — structural counts only, not which knob. e.g.
+    '+1 instrument · -1 connection · -18 mappings'.
+
+    When none of the counted categories moved we still distinguish two
+    cases: 'settings changed' when the configs differ in some other way
+    (a renamed cell, a re-bound CC, a drop-button or theme tweak, an
+    edited plugin param — anything not reflected in the four counts),
+    and '(no changes)' when the two snapshots are byte-for-byte equal.
+    '(initial)' when there's no prior config."""
     if not isinstance(old, dict) or not old:
         return "(initial)"
     parts = []
@@ -102,7 +108,9 @@ def summarize_config_diff(old: dict, new: dict) -> str:
     delta("connection", len(old.get("connections") or []), len(new.get("connections") or []))
     delta("mapping", _count_mappings(old), _count_mappings(new))
     delta("device name", len(old.get("device_names") or {}), len(new.get("device_names") or {}))
-    return " · ".join(parts) if parts else "(no changes)"
+    if parts:
+        return " · ".join(parts)
+    return "settings changed" if old != new else "(no changes)"
 
 DEFAULT_CONFIG = {
     "version": 1,
@@ -146,6 +154,13 @@ class Config:
         # Monotonic autosave sequence; restored from the slots on boot
         # so a power cut never makes a stale slot look newer.
         self._autosave_seq = 0
+        # When the newest autosave was written, in the no-RTC scheme:
+        # uptime seconds + boot id (stamped into the slot and restored
+        # on boot). Lets the Backup panel show a "last autosave n ago"
+        # for the current boot, or "before last reboot" otherwise.
+        # None until the first autosave of this process / a loaded slot.
+        self._autosave_up: int | None = None
+        self._autosave_boot: str = ""
         # True once load() resolved to an autosave slot — surfaced so
         # the UI can hint "resumed unsaved work" if it wants.
         self._loaded_from_autosave = False
@@ -382,8 +397,12 @@ class Config:
         many instances actually get re-encoded per autosave."""
         return json.dumps(inst, ensure_ascii=False).encode("utf-8")
 
-    def _encode_autosave_payload(self, seq: int, plugin_seqs) -> bytes:
-        """Build the autosave payload bytes ({"seq", "data": {...}}).
+    def _encode_autosave_payload(self, seq: int, up: int, boot: str,
+                                 plugin_seqs) -> bytes:
+        """Build the autosave payload bytes
+        ({"seq", "up", "boot", "data": {...}}). `up`/`boot` stamp WHEN
+        the slot was written (uptime + boot id, the no-RTC scheme) so
+        the Backup panel can show a "last autosave n ago".
 
         With `plugin_seqs` ({instance_id: encode_seq}) we splice the
         `plugins` array from per-instance JSON fragments, reusing the
@@ -394,7 +413,8 @@ class Config:
         full-document encode."""
         if plugin_seqs is None:
             return json.dumps(
-                {"seq": seq, "data": self._data}, ensure_ascii=False).encode("utf-8")
+                {"seq": seq, "up": up, "boot": boot, "data": self._data},
+                ensure_ascii=False).encode("utf-8")
 
         cache = self._autosave_frag_cache
         plugins = self._data.get("plugins") or []
@@ -427,7 +447,10 @@ class Config:
             data_bytes = b'{"plugins":' + plugins_bytes + b"}"
         else:
             data_bytes = data_top[:-1] + b',"plugins":' + plugins_bytes + b"}"
-        return b'{"seq":' + str(seq).encode("ascii") + b',"data":' + data_bytes + b"}"
+        return (b'{"seq":' + str(seq).encode("ascii")
+                + b',"up":' + str(int(up)).encode("ascii")
+                + b',"boot":' + json.dumps(boot).encode("utf-8")
+                + b',"data":' + data_bytes + b"}")
 
     def write_autosave(self, plugin_seqs=None) -> bool:
         """Persist the current in-memory config to the next ping-pong
@@ -439,22 +462,28 @@ class Config:
         try:
             seq = self._autosave_seq + 1
             slot = AUTOSAVE_SLOTS[seq % 2]
+            up, boot = int(uptime_seconds()), boot_id()
             # json.dumps holds the GIL (stalls the loop); gzip + io
             # release it, so only the encode is on the critical path —
             # which is exactly what the fragment cache shrinks.
-            payload = self._encode_autosave_payload(seq, plugin_seqs)
+            payload = self._encode_autosave_payload(seq, up, boot, plugin_seqs)
             blob = gzip.compress(payload)
             with _boot_rw():
                 PERSISTENT_DIR.mkdir(parents=True, exist_ok=True)
                 slot.write_bytes(blob)
             self._autosave_seq = seq
+            self._autosave_up = up
+            self._autosave_boot = boot
             return True
         except Exception:
             log.exception("Autosave failed")
             return False
 
     def _read_autosave(self):
-        """Return (seq, data) of the newest valid autosave slot, or None."""
+        """Return (seq, data) of the newest valid autosave slot, or None.
+        Side effect: records the winning slot's write-time (uptime +
+        boot id) on self so autosave_status() can report it after a
+        boot-time load (older v1 slots without these keys → unknown)."""
         best = None
         for slot in AUTOSAVE_SLOTS:
             if not slot.is_file():
@@ -465,10 +494,32 @@ class Config:
                 if not isinstance(data, dict):
                     continue
                 if best is None or seq > best[0]:
-                    best = (seq, data)
+                    best = (seq, data, obj.get("up"), obj.get("boot", ""))
             except (OSError, json.JSONDecodeError, gzip.BadGzipFile, KeyError, ValueError):
                 continue
-        return best
+        if best is None:
+            return None
+        seq, data, up, boot = best
+        self._autosave_up = int(up) if isinstance(up, (int, float)) else None
+        self._autosave_boot = boot or ""
+        return (seq, data)
+
+    def autosave_status(self) -> dict | None:
+        """Relative-time status of the newest autosave, for the Backup
+        panel: {seq, age_seconds, same_session}. None if no autosave
+        has been written this boot or loaded from a slot. age_seconds
+        is None for an autosave from a previous boot (no honest
+        relative time without an RTC) — the UI shows 'before last
+        reboot' then."""
+        if self._autosave_up is None:
+            return None
+        cur_up = uptime_seconds()
+        same = bool(self._autosave_boot) and self._autosave_boot == boot_id()
+        age = int(cur_up - self._autosave_up) if same else None
+        if age is not None and age < 0:
+            age = None  # clock-skew / restart guard
+        return {"seq": self._autosave_seq, "age_seconds": age,
+                "same_session": same}
 
     async def aload(self) -> bool:
         """Async wrapper around load() — symmetric with asave()."""

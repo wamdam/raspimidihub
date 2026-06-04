@@ -1559,7 +1559,8 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
 
     @server.route("GET", "/api/backups")
     async def api_backups_list(req: Request) -> Response:
-        return Response.json({"backups": config.list_backups()})
+        return Response.json({"backups": config.list_backups(),
+                              "autosave": config.autosave_status()})
 
     @server.route("POST", "/api/backups/", exact=False)
     async def api_backups_action(req: Request) -> Response:

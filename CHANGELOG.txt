@@ -11,6 +11,8 @@ hashes. Tags: Added, Improved, Fix, Changed, Removed.
 - Improved: launching or switching Tracker patterns during a set no longer marks the config dirty (no Routing asterisk) and no longer triggers an autosave — pattern selection is treated as performance, not an edit. Recording / Overwrite / Reset still dirty as before, and the active pattern is still written by a deliberate **Save Config**.
 - Improved: an autosave is forced immediately after **Load**, a backup **Restore**, or **Import**, so the just-loaded state — not the previous one — is what resumes after a power cut.
 - Improved: the autosave reuses a per-instance encode cache, re-encoding only the play surfaces that actually changed, so the snapshot cost stays flat as you add more Trackers.
+- Added: Settings -> Backup shows a **Last autosave** line (uptime-relative "n ago", "before last reboot", or "no autosave yet") plus a refresh button, so you can see the resume snapshot is current.
+- Improved: a backup whose structural counts didn't move now reads **"settings changed"** (instead of "(no changes)") when something non-structural differs — a renamed cell, a re-bound CC, a drop-button or theme tweak, an edited plugin param. The stored backup always held the full state; the summary line now says so.
 
 
 2026-06-04 — Version 4.6.0

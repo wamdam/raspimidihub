@@ -47,6 +47,24 @@ def test_diff_no_changes():
     assert cfg.summarize_config_diff(a, dict(a)) == "(no changes)"
 
 
+def test_diff_settings_changed_when_only_nonstructural():
+    # Same instrument / connection / mapping / device-name counts, but a
+    # plugin param differs (a renamed cell, a rebind, a knob edit…). The
+    # four counts don't move, yet the config genuinely changed.
+    a = _cfg(plugins=2, connections=1)
+    b = _cfg(plugins=2, connections=1)
+    b["plugins"][0]["params"] = {"rate": "1/8"}
+    assert cfg.summarize_config_diff(a, b) == "settings changed"
+
+
+def test_diff_structural_wins_over_settings_changed():
+    # A structural delta is reported even if other things also changed.
+    a = _cfg(plugins=2, connections=1)
+    b = _cfg(plugins=3, connections=1)
+    b["plugins"][0]["params"] = {"rate": "1/8"}
+    assert cfg.summarize_config_diff(a, b) == "+1 instrument"
+
+
 def test_diff_counts_added_and_removed():
     old = _cfg(plugins=2, connections=2, mappings=20)
     new = _cfg(plugins=3, connections=1, mappings=2)
@@ -285,3 +303,57 @@ def test_autosave_without_seqs_still_roundtrips(store):
     assert c.write_autosave(None) is True
     seq, data = c._read_autosave()
     assert data == c._data
+
+
+# ---- autosave "last written n ago" status -------------------------------
+
+def test_autosave_status_none_before_first_write(store):
+    c = cfg.Config()
+    assert c.autosave_status() is None
+
+
+def test_autosave_status_same_session(store, monkeypatch):
+    monkeypatch.setattr(cfg, "boot_id", lambda: "boot-AAA")
+    monkeypatch.setattr(cfg, "uptime_seconds", lambda: 100.0)
+    c = cfg.Config()
+    c._data = _cfg(plugins=1)
+    assert c.write_autosave(None) is True
+    # 30s later, same boot → "30s ago".
+    monkeypatch.setattr(cfg, "uptime_seconds", lambda: 130.0)
+    st = c.autosave_status()
+    assert st == {"seq": 1, "age_seconds": 30, "same_session": True}
+
+
+def test_autosave_status_other_session_after_reboot(store, monkeypatch):
+    monkeypatch.setattr(cfg, "boot_id", lambda: "boot-AAA")
+    monkeypatch.setattr(cfg, "uptime_seconds", lambda: 500.0)
+    c = cfg.Config()
+    c._data = _cfg(plugins=2)
+    c.write_autosave(None)                 # stamped boot-AAA @ uptime 500
+    # Reboot: a fresh process loads the slot under a new boot id + low
+    # uptime. No honest relative time → age_seconds None, but the status
+    # still surfaces (so the UI shows "before last reboot", not "none").
+    monkeypatch.setattr(cfg, "boot_id", lambda: "boot-BBB")
+    monkeypatch.setattr(cfg, "uptime_seconds", lambda: 12.0)
+    fresh = cfg.Config()
+    assert fresh.load() is True
+    st = fresh.autosave_status()
+    assert st is not None
+    assert st["same_session"] is False
+    assert st["age_seconds"] is None
+
+
+def test_autosave_status_survives_fragment_cache_path(store, monkeypatch):
+    """The spliced (fragment-cache) payload must also carry up/boot so a
+    boot-time load can report the autosave age."""
+    monkeypatch.setattr(cfg, "boot_id", lambda: "boot-CCC")
+    monkeypatch.setattr(cfg, "uptime_seconds", lambda: 200.0)
+    c = cfg.Config()
+    c._data = _cfg(plugins=3)
+    c.write_autosave(_seqs(c._data["plugins"]))   # fragment-splice path
+    monkeypatch.setattr(cfg, "uptime_seconds", lambda: 245.0)
+    fresh = cfg.Config()
+    assert fresh.load() is True
+    st = fresh.autosave_status()
+    assert st["same_session"] is True
+    assert st["age_seconds"] == 45
