@@ -255,30 +255,31 @@ def _open_settings_spectator(page) -> None:
 
 
 def _open_settings_backup(page) -> None:
-    """Already at /settings/backup. The demo population leaves no
-    rolling checkpoints, so the page would show the empty state.
-    Drop a couple of real checkpoints first — Save once (→ #1
-    "(initial)"), add a plugin, Save again (→ #2 "+1 instrument") —
-    so the screenshot shows populated rows with a diff summary +
-    relative "n ago", then reload so the list (fetched on mount,
-    before the saves existed) picks them up.
+    """Already at /settings/backup. Make sure the list shows real rows
+    rather than the empty state.
 
-    NOTE: these Saves write the *demo* config + checkpoints to the
-    Pi. The screenshot run's cleanup (restore the user's config,
-    wipe backups/ + autosave-*.json.gz, restart) removes them — see
-    PLAN.md Phase 7 / the manual's screenshot rules."""
-    page.evaluate(
-        "async () => {"
-        " const save = () => fetch('/api/config/save', {method:'POST'});"
-        " await save();"
-        " await fetch('/api/plugins/instances', {method:'POST',"
-        "   headers:{'Content-Type':'application/json'},"
-        "   body: JSON.stringify({type:'cc_lfo', name:'Demo LFO'})});"
-        " await save();"
-        " await new Promise(r => setTimeout(r, 200));"
-        "}"
-    )
-    page.goto(page.url, wait_until="networkidle")
+    If the unit already has checkpoints (capturing against a real
+    config), we write NOTHING — just wait for the existing list to
+    render. Only on an empty unit (a fresh / demo target) do we drop a
+    couple of checkpoints first — Save once (→ #1 "(initial)"), add a
+    plugin, Save again (→ #2 "+1 instrument") — so the shot isn't the
+    empty state. This keeps the scene safe to run against a live rig."""
+    n = page.evaluate(
+        "async () => { const r = await fetch('/api/backups');"
+        " const d = await r.json(); return (d.backups || []).length; }")
+    if not n:
+        page.evaluate(
+            "async () => {"
+            " const save = () => fetch('/api/config/save', {method:'POST'});"
+            " await save();"
+            " await fetch('/api/plugins/instances', {method:'POST',"
+            "   headers:{'Content-Type':'application/json'},"
+            "   body: JSON.stringify({type:'cc_lfo', name:'Demo LFO'})});"
+            " await save();"
+            " await new Promise(r => setTimeout(r, 200));"
+            "}"
+        )
+        page.goto(page.url, wait_until="networkidle")
     page.wait_for_selector(".backup-list > div", timeout=5000)
     time.sleep(0.3)
 

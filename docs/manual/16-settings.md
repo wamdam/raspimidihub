@@ -162,6 +162,8 @@ existing instances, not a way to spawn new ones.
 
 ## Backup
 
+![Settings → Backup: the **Last autosave** line at the top (uptime-relative), then the rolling Save checkpoints newest-first — each with its `#number`, relative age, a one-line summary ("settings changed", "+1 connection", "(no changes)", "(initial)"), size, and Restore / Download.](../screenshots/32-settings-backup.png){width=48%}
+
 A list of **rolling save checkpoints**. Every time you tap **Save
 Config** (chapter 15.2) the unit writes a compressed copy of the
 whole project state here, newest first; the last 50 are kept and
@@ -216,17 +218,6 @@ Two actions per row:
 
 When no checkpoints exist yet (a fresh unit that has never been
 Saved), the page shows a short placeholder.
-
-::: info
-**Screenshots pending capture.** The `32-settings-backup` scene
-(populated checkpoint list) and the refreshed `04-settings` hub
-(now showing the **Backup** card) are wired into
-`scripts/screenshots/run.py`; run `make screenshots
-TARGET=http://<pi>` on a non-production unit to generate
-`32-settings-backup.png` and refresh `04-settings.png`, then embed
-the Backup shot here. Not captured against the live rig because the
-screenshot run swaps in the demo plugin set.
-:::
 
 ## WiFi
 
