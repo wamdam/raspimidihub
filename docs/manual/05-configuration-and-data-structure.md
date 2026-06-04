@@ -7,20 +7,29 @@ actually writes.
 
 ## The Two State Locations
 
-Two filesystem paths hold the project state:
+The project state lives at these paths:
 
 - **Working copy** -- `/run/raspimidihub/config.json` on tmpfs
   (RAM). This is what the running unit reads from and writes to.
 - **Persistent copy** -- `/boot/firmware/raspimidihub/config.json`
-  on the FAT32 boot partition. This is what loads on next boot. A
-  backup of the previous version is kept alongside it as
-  `config.json.bak`.
+  on the FAT32 boot partition, the deliberate **Save Config**
+  checkpoint. A backup of the previous version is kept alongside
+  it as `config.json.bak`.
+- **Autosave slots** -- `autosave-0.json.gz` / `autosave-1.json.gz`
+  in the same directory: a gzipped, double-buffered snapshot of
+  the live edited state, written debounced while editing so a hard
+  power cut resumes the last edit, not just the last Save.
+- **Rolling backups** -- `backups/backup-NNNNN.json.gz` (+ an
+  `index.json`): a compressed checkpoint dropped on every Save,
+  last 50 kept, restorable from Settings -> Backup.
 
 The runtime copy is the one the routing service reads and writes
-during operation. The persistent copy is what loads on next boot.
-**Save Config** writes the runtime copy *and* copies it to the
-persistent location (chapter 4.7 describes the crash-safe save
-flow).
+during operation. **On boot the unit prefers the newest valid
+autosave**, falling back to the persistent `config.json` (then
+`.bak`, then defaults). **Save Config** writes the runtime copy
+*and* copies it to the persistent location (chapter 4.7 describes
+the crash-safe save flow). The autosave + backup mechanism is
+covered in chapters 15.6 and 18.3.
 
 Storing the persistent copy on the boot partition rather than the
 main root is deliberate. Both filesystems are mounted **read-only**

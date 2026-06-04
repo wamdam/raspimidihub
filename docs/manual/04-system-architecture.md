@@ -144,18 +144,26 @@ clearly marked and pointer-comment back to
 
 ## Configuration Persistence
 
-Two filesystem locations hold the project state:
+State on the boot partition (FAT32) comes in three tiers:
 
 - A **working copy** in RAM (tmpfs). This is what the running
   unit reads from and writes to.
-- A **persistent copy** on the boot partition (FAT32). This is
-  what loads on next boot.
+- The **persistent copy** (`config.json` + `config.json.bak`) --
+  the deliberate **Save Config** checkpoint.
+- A rolling **autosave** (two ping-pong slots) of the live edited
+  state, plus rolling **backups** of each Save. Boot prefers the
+  newest valid autosave, then `config.json`, then `.bak`, then
+  defaults.
 
 Tapping **Save Config** copies the working state to the
 persistent location with an atomic write (write a temp file,
 flush to disk, rename). Pulling the power mid-edit cannot
 corrupt the persistent copy because the rename either completes
-or doesn't.
+or doesn't -- and because the autosave is double-buffered and
+gzip-CRC validated, a cut mid-autosave still leaves a good slot
+to resume from. So a hard power cut resumes the last *edited*
+state, not just the last Save (chapter 18.3; chapter 15.6 is the
+user-facing description).
 
 Both filesystems are mounted **read-only** during normal
 operation -- the root and the boot partition alike. The save

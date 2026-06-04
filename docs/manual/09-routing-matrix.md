@@ -158,9 +158,11 @@ appropriate section based on their declared surface kind.
 Four buttons run across the bottom of the matrix:
 
 - **Save Config** -- persists the current in-memory state to disk
-  as the boot default. Clears the dirty-state asterisk.
-- **Load Config** -- reloads the last saved state. Plugin instances
-  that exist only in memory (unsaved) are stopped and discarded.
+  as the boot default, and drops a rolling backup checkpoint
+  (Settings -> Backup, chapter 16). Clears the dirty-state asterisk.
+- **Load Config** -- reloads the last saved state (the deliberate
+  Save, not the autosave). Plugin instances that exist only in
+  memory (unsaved) are stopped and discarded.
 - **Export Config** -- downloads the current state as a JSON file.
   Useful for backing up before a risky experiment.
 - **Import Config** -- uploads a JSON file and replaces the current
@@ -168,8 +170,9 @@ Four buttons run across the bottom of the matrix:
   file is rejected with an error.
 
 **Save Config** is the most-used button in the UI. The dirty-state
-asterisk on the bottom-nav **Routing** icon is the persistent
-reminder to use it.
+asterisk on the bottom-nav **Routing** icon is the reminder to use
+it -- though edits are also autosaved in the background, so a hard
+power cut resumes your last edit even before you Save (chapter 15.6).
 
 ## The Dirty-State Asterisk
 
