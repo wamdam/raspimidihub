@@ -446,7 +446,7 @@ cursor stays where you left it; when started, the cursor
 advances at the clock rate and the page-end-of-page wraps to
 the next page.
 
-The configuration panel has two independent clock toggles:
+The configuration panel has three independent transport toggles:
 
 - **Send Clock** -- when on, the Tracker becomes a clock
   *master*. It runs an internal 24-PPQ generator at the
@@ -457,19 +457,31 @@ The configuration panel has two independent clock toggles:
   external MIDI Clock instead; with no external clock routed
   in, the playhead is silent. A **BPM** wheel (40--300, default
   120) appears in the panel only when Send Clock is on.
-- **Send Transport** -- when on, the Tracker forwards incoming
+- **Send Trnsp.** (Send Transport) -- when on, the Tracker forwards incoming
   START / STOP / CONTINUE to OUT, *and* emits its own START /
   STOP / CONTINUE when the on-screen Play / Stop buttons fire,
   so downstream slaves bar-align with the Tracker whether the
   transport originated upstream or inside the Tracker itself.
+- **Rcv Trnsp.** (Receive Transport) -- on by default. When on,
+  incoming transport from a clock master or another instrument
+  (a START / STOP / CONTINUE on the global clock) starts, stops
+  and continues the Tracker's playhead -- the usual behaviour
+  where the whole rig starts together. Turn it **off** to
+  decouple the Tracker from the rig's transport: it then ignores
+  foreign START / STOP / CONTINUE and is driven only by its own
+  Play / Stop buttons (and the launch trigger modes, see below).
+  It still follows the shared *clock* for tempo -- only the
+  start/stop is decoupled -- so you can let one Tracker free-run
+  while the rest of the rig stops and starts around it. The Play
+  and Stop buttons always work regardless of this toggle.
 
-The two toggles are independent: the Tracker can generate clock
-without forwarding transport (rare), forward transport without
-generating clock (when an upstream source already provides the
-clock), or both (the common live-rig case where the Tracker is
-the master). External clock is ignored while Send Clock is
-on -- the Tracker's own clock takes priority so downstream gear
-never sees two competing sources.
+Send Clock / Send Trnsp. are independent: the Tracker can
+generate clock without forwarding transport (rare), forward
+transport without generating clock (when an upstream source
+already provides the clock), or both (the common live-rig case
+where the Tracker is the master). External clock is ignored
+while Send Clock is on -- the Tracker's own clock takes priority
+so downstream gear never sees two competing sources.
 
 ### Editing
 
@@ -511,9 +523,11 @@ feedback that you changed channel by accident.
 When the Tracker is stopped, playing a note from a routed MIDI
 keyboard (or from the on-screen keyboard, or from QWERTY
 keyboard entry) writes the note into the **cursor row** of the
-routed track and advances the cursor by one row. Held notes
-record their length: pressing `C` and holding for three rows
-writes `C-3`, `---`, `---`, then `Off` on the next.
+routed track and advances the cursor by one row. This is pure
+step entry -- one cell per note -- so the *length* of a held
+key is irrelevant when stopped; durations are only captured
+during live recording (below), where the clock supplies the
+rows to span.
 
 The cursor auto-advances once per chord, no matter how many
 notes the chord contains or how many channels they span. A
@@ -533,13 +547,31 @@ receives them).
 
 #### Live recording (playing)
 
-When the Tracker is playing, MIDI events that arrive land on
-the row whose events are *currently sounding* -- not the row
-the cursor is on. The cursor stays where you left it. This
-means you can play in a part during a loop and have the part
-stick to the beat it was played on. Routing (cursor track via
+When the Tracker is playing, each MIDI event lands on the row
+whose events are *currently sounding* -- the row under the
+playhead at the instant it arrives -- not the row the cursor is
+on. The cursor stays where you left it. So you can play a part
+during a loop and have every note stick to the beat it was
+played on. Unlike step-record there is **no chord window**: a
+note held across several steps does not pull a later note onto
+its row -- each note-on records exactly where the playhead was
+when you pressed it. Notes that fall on the *same* step still
+spread across consecutive tracks (a live-strummed chord fills
+tracks the way step-record does). Routing (cursor track via
 Auto Ch., or a specific matched track via the incoming channel)
 works the same way as in step-record.
+
+**Note-offs are recorded too.** When you release a key, an
+explicit `Off` is written to the row under the playhead, on the
+same track the note was recorded to -- so the recorded note
+gets its real length instead of ringing until the next note.
+Releases land per-track, so each voice of a chord ends where
+you lifted that finger. (A release lands an `Off` only on an
+otherwise-empty cell, so playing a new note on the same track
+in the same step is never overwritten by the old note's
+release.) Notes shorter than one step can't be represented on
+the grid, so a very quick stab records its note-on and rings to
+the next event rather than getting a same-cell `Off`.
 
 CCs touched during play also land on the currently-sounding
 row of the routed track.
@@ -711,7 +743,7 @@ Right-click on a slot also opens the menu.
 #### What each pattern stores
 
 Only the **grid** (pages + cells). The per-track output
-channels, the BPM, and the **Send Clock** / **Send Transport**
+channels, the BPM, and the **Send Clock** / **Send Trnsp.**
 toggles stay on the Tracker instance and apply to whichever
 pattern is playing. So the eight patterns share routing and
 tempo; they differ only in what they sequence.
@@ -719,18 +751,11 @@ tempo; they differ only in what they sequence.
 #### Pattern switching from a MIDI controller
 
 Hands-free pattern switching from a keyboard or pad controller
-is opt-in via the **Pattern Ctrl Ch** wheel in the
+is opt-in via the **Pt. Ctrl Ch** (Pattern Ctrl Ch) wheel in the
 configuration panel. Set it to **Off** (the default) and
 nothing changes. Set it to a MIDI channel `1..16` and that
 channel becomes reserved for pattern control: a Group of eight
 **P1..P8** NoteSelect wheels appears, one per pattern slot.
-
-Pressing the configured note for slot *N* on the control
-channel behaves exactly like tapping slot *N* on screen --
-queued to the next page-0 boundary while playing, immediate
-while stopped. The on-screen blink during the queued window
-matches a controller tap, so a player can see at a glance
-whether a press already landed or is still pending.
 
 Each P*N* row has a **Learn** button: tap it, then play the
 note on the controller to capture it. The channel-reservation
@@ -743,6 +768,44 @@ If a control channel and **Auto Ch.** or a per-track channel
 overlap, control wins. This keeps the reserved channel
 reserved.
 
+##### Trigger Mode
+
+What a trigger note *does* is set by the **Trigger Mode** wheel,
+a single per-Tracker setting (not per-slot) that appears next to
+**Pt. Ctrl Ch** once a control channel is chosen. Four modes:
+
+- **Switch** (the default) -- the historic behaviour described
+  above: a press selects the pattern, queued to the next page-0
+  boundary while playing and immediate while stopped. The
+  on-screen blink shows a queued press still pending. Configs
+  made before Trigger Mode existed load as Switch, so nothing
+  changes for them.
+- **One-shot** -- a press *launches* the pattern: it starts
+  playing from row 0 on the next clock step, runs once through
+  to its end (the End marker, or the last row of the last page),
+  then stops. There is no need to press Play first -- the launch
+  rides whatever clock the Tracker is following (an external
+  clock, or its own when **Send Clock** is on).
+- **Hold** -- the pattern launches while you hold the key and
+  loops for as long as it is held; releasing the key stops it.
+- **Toggle** -- a press launches the pattern; pressing the same
+  key again stops it.
+
+In the three launch modes the pattern always starts from row 0
+on the **next step** at the grid's rate (1/16 by default), so a
+phrase fires wherever you are in the song while staying locked to
+the clock -- it does not wait for bar 1. Launching is monophonic:
+pressing a new trigger replaces the one in flight. These modes
+govern the MIDI control-channel triggers only; tapping a pattern
+slot on screen always behaves as Switch (you cannot hold an
+on-screen tap, and the slot row is the editing interface).
+
+A common live use: split a pad row or a low keyboard zone onto
+the control channel, learn one pad per phrase, set **Hold** or
+**One-shot**, and fire melodies or fills you could not play by
+hand -- in sync -- while the rest of the keyboard records into
+your sequencer as usual.
+
 ### The Configuration Panel
 
 Open the Tracker's row or column header in the matrix to
@@ -752,12 +815,18 @@ access its plugin-config panel:
   one per track.
 - **Auto Ch.** -- recording-routing wheel.
 - **Send Clock** + **BPM** -- clock-master mode.
-- **Send Transport** -- forward START / STOP / CONTINUE in
+- **Send Trnsp.** -- forward START / STOP / CONTINUE in
   either direction.
-- **Pattern Ctrl Ch** -- channel reserved for hands-free
+- **Rcv Trnsp.** -- on by default; when off the Tracker ignores
+  external transport and only its own Play / Stop buttons (and
+  launch triggers) start it.
+- **Pt. Ctrl Ch** -- channel reserved for hands-free
   pattern switching from a controller. Off by default; when
-  set, the **Pattern Notes** group with eight learnable P1..P8
-  NoteSelects appears below.
+  set, the **Trigger Mode** wheel and the **Pattern Notes**
+  group with eight learnable P1..P8 NoteSelects appear below.
+- **Trigger Mode** -- Switch / One-shot / Hold / Toggle; how a
+  control-channel trigger behaves (see "Trigger Mode" above).
+  Only shown once **Pt. Ctrl Ch** is set.
 - **Help button** -- the standard `?` HELP text.
 
 ### Saving Tracker State

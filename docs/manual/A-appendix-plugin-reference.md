@@ -465,14 +465,32 @@ Configuration parameters (from the device-detail panel):
 - **Internal BPM** -- used when no external clock is routed in.
 - **Send Clock + Transport** -- Button toggle; when on, forwards
   incoming CLOCK / START / STOP / CONTINUE to OUT.
+- **Rcv Trnsp.** -- Button toggle, default **on**. When on,
+  external transport (START / STOP / CONTINUE off the global
+  clock bus) drives the playhead. When off, the Tracker ignores
+  foreign transport and is started only by its own Play / Stop
+  buttons and the launch trigger modes; it still follows the
+  shared clock for tempo. The Play / Stop buttons bypass this
+  gate and always work.
 - **Ctrl Ch** -- Wheel, range `Off` / 1..16, default
   `Off`. When set, the channel is reserved end-to-end (no
   recording, no pass-through, CCs dropped too) and incoming notes
-  trigger the matching pattern slot via the same queue-on-wrap
-  path that an on-screen Tap uses.
+  trigger the matching pattern slot.
+- **Trigger Mode** -- Wheel, `Switch` / `One-shot` / `Hold` /
+  `Toggle`, default `Switch`. Only visible when **Ctrl Ch** is
+  not Off. Governs what a control-channel trigger does:
+  *Switch* selects the pattern via the queue-on-wrap path an
+  on-screen Tap uses (the historic behaviour; pre-existing
+  configs load as Switch). *One-shot* / *Hold* / *Toggle* launch
+  the pattern from row 0 on the next clock step without a
+  transport Start -- One-shot plays once through then stops, Hold
+  loops while the key is held, Toggle starts on press and stops
+  on re-press. Launching is monophonic (a new trigger replaces
+  the one in flight) and applies to MIDI triggers only; on-screen
+  slot taps always behave as Switch.
 - **Pattern Notes (P1..P8)** -- 8 × NoteSelect, learnable,
   defaults 36..43 (C1..G1). Only visible when **Ctrl Ch**
-  is not Off. Each entry is the note that switches to that
+  is not Off. Each entry is the note that triggers that
   pattern slot. A note that doesn't match any slot is dropped on
   the control channel anyway.
 

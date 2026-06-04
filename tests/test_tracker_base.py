@@ -1248,6 +1248,149 @@ def test_step_record_when_stopped_still_uses_cursor_and_advances():
     assert t._param_values["cursor_row"] == 6
 
 
+# ---------------------------------------------------------------------------
+# Live record (playing): notes land where the playhead is, simultaneous
+# notes spread across tracks, and releases are recorded as `Off` on the
+# corresponding track. Step record (stopped) is unchanged and covered above.
+# ---------------------------------------------------------------------------
+
+def _blank_pages(rows=16, tracks=4):
+    return [{"rows": [empty_row(tracks) for _ in range(rows)]}]
+
+
+def test_live_record_held_note_then_later_note_land_on_their_own_rows():
+    """The old chord-collapse model is gone for live record: a note held
+    across steps does not pull a later note onto its row -- each lands
+    where the playhead was when it was played."""
+    t = _started(auto_ch=0)
+    t._param_values["pages"] = _blank_pages()
+    t._param_values["track_ch_0"] = 1   # T1 ← ch 1 (0-based 0)
+    t._param_values["rate"] = "1/16"
+    t.on_transport_start()              # record_row = 0
+    t.on_note_on(0, 60, 100)            # C-4 at row 0 (held)
+    t.on_tick("1/16")                   # record_row = 1
+    t.on_tick("1/16")                   # record_row = 2
+    t.on_note_on(0, 62, 100)            # D-4 while C still held
+    rows = t._param_values["pages"][0]["rows"]
+    assert rows[0]["voices"][0]["note"] == "C-4"
+    assert rows[2]["voices"][0]["note"] == "D-4"
+    # Row 0's C is untouched; row 1 stays a hold (the note rings through).
+    assert rows[1]["voices"][0]["note"] == NOTE_HOLD
+
+
+def test_live_record_simultaneous_notes_spread_across_tracks():
+    """Notes arriving within the same step still spread across
+    consecutive tracks (a live-strummed chord on one row)."""
+    t = _started(auto_ch=2)             # MIDI ch 2 = 0-based ch 1 = Auto Ch.
+    t._param_values["pages"] = _blank_pages()
+    t._param_values["cursor_track"] = 0
+    t._param_values["rate"] = "1/16"
+    t.on_transport_start()
+    t.on_tick("1/16")                   # record_row = 1
+    t.on_note_on(channel=1, note=60, velocity=100)  # → T1
+    t.on_note_on(channel=1, note=64, velocity=100)  # same step → T2
+    t.on_note_on(channel=1, note=67, velocity=100)  # same step → T3
+    voices = t._param_values["pages"][0]["rows"][1]["voices"]
+    assert voices[0]["note"] == "C-4"
+    assert voices[1]["note"] == "E-4"
+    assert voices[2]["note"] == "G-4"
+
+
+def test_live_record_spread_resets_each_step():
+    """The per-step spread resets when the playhead advances, so a note
+    on the next step starts back at the first target track."""
+    t = _started(auto_ch=2)
+    t._param_values["pages"] = _blank_pages()
+    t._param_values["cursor_track"] = 0
+    t._param_values["rate"] = "1/16"
+    t.on_transport_start()
+    t.on_tick("1/16")                   # row 1
+    t.on_note_on(channel=1, note=60, velocity=100)  # row 1 → T1
+    t.on_tick("1/16")                   # row 2 (spread resets)
+    t.on_note_on(channel=1, note=64, velocity=100)  # row 2 → T1 again
+    rows = t._param_values["pages"][0]["rows"]
+    assert rows[1]["voices"][0]["note"] == "C-4"
+    assert rows[2]["voices"][0]["note"] == "E-4"
+
+
+def test_live_record_note_off_records_off_on_same_track():
+    t = _started(auto_ch=0)
+    t._param_values["pages"] = _blank_pages()
+    t._param_values["track_ch_0"] = 1
+    t._param_values["rate"] = "1/16"
+    t.on_transport_start()
+    t.on_note_on(0, 60, 100)            # C-4 at row 0, T1
+    t.on_tick("1/16")                   # row 1
+    t.on_tick("1/16")                   # row 2
+    t.on_note_off(0, 60)                # release → Off on T1 at row 2
+    rows = t._param_values["pages"][0]["rows"]
+    assert rows[0]["voices"][0]["note"] == "C-4"
+    assert rows[1]["voices"][0]["note"] == NOTE_HOLD   # rings through
+    assert rows[2]["voices"][0]["note"] == NOTE_OFF
+
+
+def test_live_record_off_lands_on_chord_member_track():
+    """With a spread chord, each release records its Off on the track its
+    own note-on used -- not all on the first track."""
+    t = _started(auto_ch=2)
+    t._param_values["pages"] = _blank_pages()
+    t._param_values["cursor_track"] = 0
+    t._param_values["rate"] = "1/16"
+    t.on_transport_start()
+    t.on_note_on(channel=1, note=60, velocity=100)  # row 0 → T1
+    t.on_note_on(channel=1, note=64, velocity=100)  # row 0 → T2
+    t.on_tick("1/16")                   # row 1
+    t.on_note_off(channel=1, note=64)   # release the 2nd note → Off on T2
+    rows = t._param_values["pages"][0]["rows"]
+    assert rows[1]["voices"][1]["note"] == NOTE_OFF     # T2 got the Off
+    assert rows[1]["voices"][0]["note"] == NOTE_HOLD    # T1 still ringing
+
+
+def test_live_record_velocity_zero_records_off_and_passes_note_off():
+    t = _started(auto_ch=0)
+    s = _Sender()
+    s.attach(t)
+    t._param_values["pages"] = _blank_pages()
+    t._param_values["track_ch_0"] = 1
+    t._param_values["rate"] = "1/16"
+    t.on_transport_start()
+    t.on_note_on(0, 60, 100)            # C-4 row 0
+    t.on_tick("1/16")                   # row 1
+    s.events.clear()
+    t.on_note_on(0, 60, 0)              # velocity-0 = note-off at row 1
+    assert t._param_values["pages"][0]["rows"][1]["voices"][0]["note"] == NOTE_OFF
+    # Passed through as a real note-off, NOT a velocity-1 note-on.
+    assert ("off", 0, 60) in s.events
+    assert not any(e[0] == "on" for e in s.events)
+
+
+def test_live_record_off_does_not_clobber_note_on_same_cell():
+    """Releasing an old note must not overwrite a new note recorded on
+    the same track/row in the same step."""
+    t = _started(auto_ch=0)
+    t._param_values["pages"] = _blank_pages()
+    t._param_values["track_ch_0"] = 1   # only T1 matches ch 1
+    t._param_values["rate"] = "1/16"
+    t.on_transport_start()
+    t.on_note_on(0, 60, 100)            # C-4 row 0, T1 (held)
+    t.on_tick("1/16")                   # row 1
+    t.on_note_on(0, 62, 100)            # D-4 row 1, T1
+    t.on_note_off(0, 60)                # release C → target T1 row 1, occupied
+    assert t._param_values["pages"][0]["rows"][1]["voices"][0]["note"] == "D-4"
+
+
+def test_note_off_when_stopped_records_no_off():
+    t = _started(auto_ch=0)
+    t._param_values["track_ch_0"] = 1
+    t._param_values["cursor_row"] = 0
+    t.on_note_on(0, 60, 100)            # step record: C-4 row 0
+    t.on_note_off(0, 60)
+    notes = [v["note"]
+             for row in t._param_values["pages"][0]["rows"]
+             for v in row["voices"]]
+    assert NOTE_OFF not in notes
+
+
 def test_note_preview_fires_note_on_and_resets_signal():
     # Frontend writes note_preview=<midi> when a wheel/keyboard tick
     # picks a real pitch. Plugin fires note-on on the focused track's
@@ -1340,6 +1483,75 @@ def test_send_transport_off_does_not_emit_for_play_button():
     t.on_transport_start()
     t.on_transport_stop()
     assert not any(e[0] in ("start", "stop") for e in s.events)
+
+
+def _row0_c4_page():
+    """A page whose row 0 fires C-4 on T1 (channel 1 → 0-based 0)."""
+    return {"rows": [
+        {"voices": [{"note": "C-4", "vel": 90, "cc_num": ".", "cc_val": "--"},
+                    empty_voice(), empty_voice(), empty_voice()]},
+    ] + [empty_row(4) for _ in range(15)]}
+
+
+def test_recv_transport_defaults_on():
+    t = _started()
+    assert t._param_values["recv_transport"] is True
+
+
+def test_recv_transport_on_external_start_drives_playhead():
+    t = _started()
+    s = _Sender()
+    s.attach(t)
+    t._param_values["pages"] = [_row0_c4_page()]
+    t._param_values["recv_transport"] = True
+    t.on_transport_start()  # foreign START off the ClockBus
+    assert t._playing is True
+    assert ("on", 0, 60, 90) in s.events
+
+
+def test_recv_transport_off_ignores_external_start():
+    t = _started()
+    s = _Sender()
+    s.attach(t)
+    t._param_values["pages"] = [_row0_c4_page()]
+    t._param_values["recv_transport"] = False
+    t.on_transport_start()
+    assert t._playing is False
+    assert s.events == []  # nothing fired — foreign transport ignored
+
+
+def test_recv_transport_off_ignores_external_stop_and_continue():
+    t = _started()
+    t._param_values["recv_transport"] = False
+    # The Tracker is running on its own (e.g. its Play button).
+    t._playing = True
+    t.on_transport_stop()       # foreign STOP must not halt it
+    assert t._playing is True
+    t.on_transport_continue()   # foreign CONTINUE is a no-op too
+    assert t._playing is True
+
+
+def test_play_button_works_with_recv_transport_off():
+    """Rcv Trnsp. only gates *external* transport — the on-screen Play
+    button must still start the playhead."""
+    t = _started()
+    s = _Sender()
+    s.attach(t)
+    t._param_values["pages"] = [_row0_c4_page()]
+    t._param_values["recv_transport"] = False
+    t.on_param_change("cmd_play", True)
+    assert t._preroll_timer is not None
+    t._preroll_timer.join()
+    assert t._playing is True
+    assert ("on", 0, 60, 90) in s.events
+
+
+def test_stop_button_works_with_recv_transport_off():
+    t = _started()
+    t._param_values["recv_transport"] = False
+    t._playing = True
+    t.on_param_change("cmd_stop", True)
+    assert t._playing is False
 
 
 def test_legacy_send_clock_migrates_to_both_flags():
@@ -1718,3 +1930,176 @@ def test_control_note_overlap_with_auto_ch_wins():
     t.on_note_on(channel=2, note=37, velocity=100)  # channel 2 = MIDI ch 3
     assert t._param_values["selected_pattern"] == 1
     assert s.events == []
+
+
+# ---------------------------------------------------------------------------
+# Trigger modes: One-shot / Hold / Toggle launch the pattern off incoming
+# clock without a transport Start. Mode 0 (Switch) is the historic
+# queue/immediate select and is covered by the tests above (which never set
+# trigger_mode, so it defaults to 0).
+# ---------------------------------------------------------------------------
+
+_END_VOICE = {"note": NOTE_END, "vel": CC_HOLD, "cc_num": CC_NONE, "cc_val": CC_HOLD}
+
+
+def _started_launch(mode, ctrl_ch=10, notes=None):
+    """Tracker on control channel 10 (0-based ch 9), trigger notes 36..43,
+    with `trigger_mode` set to one of the launch modes (1/2/3)."""
+    t = _started(track_count=4, auto_ch=0)
+    t._param_values["pattern_ctrl_ch"] = ctrl_ch
+    t._param_values["trigger_mode"] = mode
+    notes = notes if notes is not None else list(range(36, 44))
+    for i, n in enumerate(notes):
+        t._param_values[f"pattern_note_{i}"] = n
+    return t
+
+
+def _one_row_pattern(track_count, with_end=True):
+    """A page whose row 0 fires C-4 on T1; row 1 is an End marker so the
+    pattern is effectively one fireable step long."""
+    page = empty_page(track_count, 16)
+    page["rows"][0]["voices"][0] = _filled_voice("C-4")
+    if with_end:
+        page["rows"][1]["voices"][0] = dict(_END_VOICE)
+    return page
+
+
+def test_trigger_mode_defaults_to_switch():
+    t = _started()
+    assert t._param_values["trigger_mode"] == 0
+
+
+def test_switch_mode_does_not_launch():
+    """Mode 0 keeps the historic select path — no launch state is set."""
+    t = _started_with_ctrl()  # trigger_mode unset -> defaults to 0
+    t.on_note_on(channel=9, note=37, velocity=100)
+    assert t._launch_active is False
+    assert t._param_values["selected_pattern"] == 1
+
+
+def test_launch_starts_without_transport_and_waits_for_next_step():
+    """A One-shot trigger arms the launch but fires nothing until the next
+    clock tick — that one-step wait is the quantize-to-the-next-step start."""
+    t = _started_launch(mode=1)
+    t._param_values["patterns"][1] = [_one_row_pattern(t.TRACK_COUNT)]
+    t._refresh_pattern_status_slot(1)
+    s = _Sender()
+    s.attach(t)
+    assert t._playing is False
+    t.on_note_on(channel=9, note=37, velocity=100)  # slot 1
+    assert t._launch_active is True
+    assert t._param_values["selected_pattern"] == 1
+    assert s.events == []  # nothing fired yet — waiting for the clock
+    t.on_tick("1/16")      # next step fires row 0
+    assert ("on", 0, 60, 90) in s.events
+
+
+def test_launch_advances_on_clock_without_playing_flag():
+    """on_tick advances a launch even though transport (_playing) is off."""
+    t = _started_launch(mode=2)  # Hold loops, easy to observe
+    t._param_values["patterns"][1] = [_filled_page(track_count=t.TRACK_COUNT)]
+    t._refresh_pattern_status_slot(1)
+    s = _Sender()
+    s.attach(t)
+    t.on_note_on(channel=9, note=37, velocity=100)
+    assert t._playing is False
+    t.on_tick("1/16")
+    assert any(e[0] == "on" for e in s.events)
+
+
+def test_launch_oneshot_stops_at_end_marker():
+    t = _started_launch(mode=1)
+    t._param_values["patterns"][1] = [_one_row_pattern(t.TRACK_COUNT)]
+    t._refresh_pattern_status_slot(1)
+    s = _Sender()
+    s.attach(t)
+    t.on_note_on(channel=9, note=37, velocity=100)
+    t.on_tick("1/16")  # fires row 0 (C-4 on)
+    assert t._launch_active is True
+    t.on_tick("1/16")  # lands on End -> release + stop
+    assert t._launch_active is False
+    assert ("off", 0, 60) in s.events
+
+
+def test_launch_oneshot_plays_full_page_then_stops_at_wrap():
+    """No End marker: the pattern plays its 16 rows, the last row keeps a
+    full step of ring, then the launch stops on the following tick."""
+    t = _started_launch(mode=1)
+    page = empty_page(t.TRACK_COUNT, t.MAX_ROWS_PER_PAGE)
+    page["rows"][0]["voices"][0] = _filled_voice("C-4")
+    t._param_values["patterns"][1] = [page]
+    t._refresh_pattern_status_slot(1)
+    s = _Sender()
+    s.attach(t)
+    t.on_note_on(channel=9, note=37, velocity=100)
+    for _ in range(t.MAX_ROWS_PER_PAGE):  # fire rows 0..15
+        t.on_tick("1/16")
+    # Last row fired; the stop is deferred one tick so it rings a full step.
+    assert t._launch_active is True
+    assert t._launch_oneshot_ending is True
+    t.on_tick("1/16")
+    assert t._launch_active is False
+    assert ("off", 0, 60) in s.events
+
+
+def test_launch_hold_loops_while_held_and_stops_on_release():
+    t = _started_launch(mode=2)
+    t._param_values["patterns"][1] = [_filled_page(track_count=t.TRACK_COUNT)]
+    t._refresh_pattern_status_slot(1)
+    s = _Sender()
+    s.attach(t)
+    t.on_note_on(channel=9, note=37, velocity=100)
+    assert t._launch_active is True
+    for _ in range(40):  # well past one page — Hold keeps looping
+        t.on_tick("1/16")
+    assert t._launch_active is True
+    # A release of a different control note doesn't stop our launch.
+    t.on_note_off(channel=9, note=99)
+    assert t._launch_active is True
+    # Releasing the launch note stops it.
+    t.on_note_off(channel=9, note=37)
+    assert t._launch_active is False
+
+
+def test_launch_toggle_press_starts_then_second_press_stops():
+    t = _started_launch(mode=3)
+    t._param_values["patterns"][1] = [_filled_page(track_count=t.TRACK_COUNT)]
+    t._refresh_pattern_status_slot(1)
+    t.on_note_on(channel=9, note=37, velocity=100)
+    assert t._launch_active is True
+    assert t._param_values["selected_pattern"] == 1
+    t.on_note_on(channel=9, note=37, velocity=100)  # same slot again
+    assert t._launch_active is False
+
+
+def test_launch_toggle_other_slot_replaces():
+    t = _started_launch(mode=3)
+    t._param_values["patterns"][1] = [_filled_page(track_count=t.TRACK_COUNT)]
+    t._param_values["patterns"][2] = [_filled_page(track_count=t.TRACK_COUNT)]
+    t._refresh_pattern_status_slot(1)
+    t._refresh_pattern_status_slot(2)
+    t.on_note_on(channel=9, note=37, velocity=100)  # slot 1
+    assert t._param_values["selected_pattern"] == 1
+    t.on_note_on(channel=9, note=38, velocity=100)  # slot 2 replaces
+    assert t._launch_active is True
+    assert t._param_values["selected_pattern"] == 2
+
+
+def test_transport_stop_clears_active_launch():
+    t = _started_launch(mode=2)
+    t._param_values["patterns"][1] = [_filled_page(track_count=t.TRACK_COUNT)]
+    t._refresh_pattern_status_slot(1)
+    t.on_note_on(channel=9, note=37, velocity=100)
+    assert t._launch_active is True
+    t.on_transport_stop()
+    assert t._launch_active is False
+
+
+def test_panic_clears_active_launch():
+    t = _started_launch(mode=2)
+    t._param_values["patterns"][1] = [_filled_page(track_count=t.TRACK_COUNT)]
+    t._refresh_pattern_status_slot(1)
+    t.on_note_on(channel=9, note=37, velocity=100)
+    assert t._launch_active is True
+    t.panic()
+    assert t._launch_active is False

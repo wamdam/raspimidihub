@@ -21,10 +21,23 @@ Persistent state lives in `_param_values`:
                                               CONTINUE to OUT, and emit own
                                               START/STOP when the on-screen
                                               Play / Stop button fires
+  - recv_transport : bool                  — when on (default) incoming
+                                              transport from a clock master /
+                                              another instrument starts, stops
+                                              and continues the playhead; when
+                                              off, only the on-screen Play /
+                                              Stop buttons drive it
   - bpm            : int                   — internal BPM (40..300) used when
                                               send_clock is on
   - cmd_play / cmd_stop : bool             — manual transport signals from
                                               the play-page header buttons
+  - trigger_mode   : int 0..3              — how Pt. Ctrl Ch trigger notes
+                                              behave: 0 Switch (queue/immediate
+                                              pattern select, the default),
+                                              1 One-shot, 2 Hold, 3 Toggle.
+                                              Modes 1..3 launch the pattern
+                                              from row 0 on the next clock step
+                                              without a transport Start.
 
 Each voice fires on its own configured channel — defaults all 1, the
 config card on the device-detail panel lets the user remap any track
@@ -334,17 +347,44 @@ class TrackerBase(PluginBase):
             # panel doesn't show a dead wheel.
             Wheel("bpm", "BPM", min=40, max=300, default=120,
                   config_only=True, visible_when=("send_clock", True)),
-            Button("send_transport", "Send Transport",
+            Button("send_transport", "Send Trnsp.",
                    default=False, color="green", config_only=True),
+            # Receive transport: when on (default), incoming transport
+            # from the global clock bus (a clock master or another
+            # instrument's START / STOP / CONTINUE) drives this
+            # Tracker's playhead. When off, the Tracker ignores foreign
+            # transport and only its own Play / Stop buttons (and the
+            # launch trigger modes) start it -- useful for a Tracker
+            # that should free-run on a shared clock without being
+            # started/stopped by the rest of the rig.
+            Button("recv_transport", "Rcv Trnsp.",
+                   default=True, color="green", config_only=True),
             # Pattern control channel: when set to 1..16, incoming notes
             # on that channel never record or pass through — instead each
             # configured pattern_note_N triggers a pattern switch (queued
             # to the next page-0 boundary while playing, immediate while
             # stopped). 0 = Off, no interception.
-            Wheel("pattern_ctrl_ch", "Pattern Ctrl Ch",
+            Wheel("pattern_ctrl_ch", "Pt. Ctrl Ch",
                   min=0, max=16, default=0,
                   labels=["Off"] + [str(i) for i in range(1, 17)],
                   config_only=True),
+            # How a trigger note on the control channel behaves:
+            #   Switch   — historic pattern-select (queue while playing,
+            #              immediate while stopped). The default; old
+            #              configs upgrade to this so nothing changes.
+            #   One-shot — launch the pattern from row 0 on the next
+            #              clock step, play once through, then stop.
+            #   Hold     — launch while the key is held (looping), stop
+            #              on release.
+            #   Toggle   — launch on press, stop on a second press.
+            # One-shot / Hold / Toggle drive the playhead straight from
+            # incoming clock without a transport Start, so a key press
+            # fires the phrase wherever you are in the song.
+            Wheel("trigger_mode", "Trigger Mode",
+                  min=0, max=3, default=0,
+                  labels=["Switch", "One-shot", "Hold", "Toggle"],
+                  config_only=True,
+                  visible_when=("pattern_ctrl_ch", list(range(1, 17)))),
             Group("Pattern Notes", [
                 NoteSelect(f"pattern_note_{i}", f"P{i + 1}",
                            default=36 + i, config_only=True)
@@ -419,6 +459,10 @@ class TrackerBase(PluginBase):
                 self._param_values.get("send_clock"),
             )
         self._param_values.setdefault("send_clock", False)
+        # Receive transport: default on so existing configs (which
+        # predate the toggle) keep responding to external transport
+        # exactly as before.
+        self._param_values.setdefault("recv_transport", True)
         self._param_values.setdefault("bpm", 120)
         # Note-preview signal: frontend writes a MIDI note number when
         # the user picks a pitch on the Note wheel or types one on
@@ -432,6 +476,9 @@ class TrackerBase(PluginBase):
         self._param_values.setdefault("pattern_ctrl_ch", 0)
         for i in range(self.PATTERN_COUNT):
             self._param_values.setdefault(f"pattern_note_{i}", 36 + i)
+        # Trigger mode: 0 = Switch (historic). Old configs predate this
+        # key, so setdefault keeps their behaviour identical.
+        self._param_values.setdefault("trigger_mode", 0)
 
         # Cursor + octave + playhead + cmd signals are live-play
         # state — moving them shouldn't mark the routing config dirty.
@@ -470,6 +517,16 @@ class TrackerBase(PluginBase):
         # the user's edit cursor happens to sit.
         self._lock = threading.RLock()
         self._playing = False
+        # Pattern-launch state (One-shot / Hold / Toggle trigger modes).
+        # Independent of `_playing` (which is transport-driven): a launch
+        # advances the playhead straight off incoming clock. `_launch_note`
+        # remembers the control-channel note that started it so Hold mode
+        # can stop on the matching release. `_launch_oneshot_ending` defers
+        # the One-shot stop by one tick so the final row keeps a full step
+        # of ring before its note-off — see _advance_step.
+        self._launch_active = False
+        self._launch_note: int | None = None
+        self._launch_oneshot_ending = False
         self._play_page = 0
         self._play_row = 0
         self._record_page = 0
@@ -482,33 +539,38 @@ class TrackerBase(PluginBase):
         # Currently-sounding MIDI note per voice — used to fire the
         # implicit note-off when the next non-`---` cell rolls in.
         self._sounding: list[int | None] = [None] * self.TRACK_COUNT
-        # Chord-detection state for record-as-you-play. The chord
-        # window is gated by held notes, NOT by a time window: a chord
-        # stays open as long as ANY recorded note is still held, and a
-        # new chord only starts when all keys are released and the
-        # next note-on arrives. This matches the natural musical model
-        # (chord = simultaneous-ish notes) far better than a fixed
-        # millisecond window — a slow-played chord still records as a
-        # chord, and a fast arpeggio still records as a sequence.
+        # Recording state. Two distinct models depending on transport:
         #
-        # `_held_recording_keys` is the SET of (channel, note) pairs
-        # currently held that were accepted for recording. Empty set
-        # = next note-on opens a new chord. Same row/page snapshot is
-        # reused across the chord so the user can advance the cursor
-        # one step on chord-start and have all in-flight chord notes
-        # still land on the original row. The per-channel offset dict
-        # tracks polyphonic spread within one chord across multiple
-        # matching tracks or in Auto-Ch cursor-spread mode.
+        # STOPPED = step record. Notes held together form a chord: the
+        # window is gated by held notes, not a time window — a chord
+        # stays open as long as ANY note is held, and a new chord only
+        # starts once all keys release. The whole chord lands on the
+        # cursor row (one row/page snapshot reused across the chord)
+        # spread across consecutive tracks, and the cursor advances one
+        # step per chord. `_chord_offset_by_ch` tracks that per-channel
+        # track spread; `_chord_page/_chord_row` hold the snapshot.
         #
-        # `_chord_last_event_t` + `_CHORD_STALE_TIMEOUT_S` are a
-        # safety net: if a note-off goes missing (USB hiccup,
-        # keyboard quirk), the held set could stay non-empty
-        # forever. After `_CHORD_STALE_TIMEOUT_S` seconds of total
-        # silence on note-on/off the set is force-cleared on the
-        # next note-on so recording can recover without a transport
-        # cycle.
-        self._held_recording_keys: set[tuple[int, int]] = set()
+        # PLAYING = live record. The chord-to-one-row model does NOT
+        # apply: each note-on records where the playhead is at the
+        # moment it arrives (`_record_page/_record_row`), so a melody
+        # lands on the beats it was played on. Notes that arrive within
+        # the SAME step still spread across consecutive tracks via
+        # `_live_offset_by_ch`, which `_advance_step` resets every time
+        # the playhead moves to a new row. Note-offs are recorded too:
+        # `_held_recording_keys` maps each held (channel, note) to the
+        # track its note-on landed on (or None if it wasn't recorded)
+        # so the matching release can write an explicit `Off` to that
+        # same cell, capturing duration.
+        #
+        # `_held_recording_keys` doubles as the chord-gate when stopped
+        # (non-empty = a chord is open). `_chord_last_event_t` +
+        # `_CHORD_STALE_TIMEOUT_S` are a safety net: if a note-off goes
+        # missing (USB hiccup, keyboard quirk) the held map could stay
+        # non-empty forever, so it's force-cleared on the next note-on
+        # after that much silence.
+        self._held_recording_keys: dict[tuple[int, int], int | None] = {}
         self._chord_offset_by_ch: dict[int, int] = {}
+        self._live_offset_by_ch: dict[int, int] = {}
         self._chord_last_event_t = 0.0
         self._chord_page = 0
         self._chord_row = 0
@@ -525,7 +587,7 @@ class TrackerBase(PluginBase):
             self._clock_gen.start()
 
         # Manual-Play pre-roll timer (see _PLAY_PREROLL_S). Holds the
-        # threading.Timer that will fire on_transport_start ~50 ms
+        # threading.Timer that will fire _begin_playback ~50 ms
         # after the user taps Play; cleared when the start fires or
         # when Stop / panic / unload cancels it first.
         self._preroll_timer: threading.Timer | None = None
@@ -533,9 +595,13 @@ class TrackerBase(PluginBase):
     def on_stop(self) -> None:
         self._clock_gen.stop()
         self._cancel_play_preroll()
+        self._launch_active = False
+        self._launch_note = None
+        self._launch_oneshot_ending = False
         self._silence_all()
         self._held_recording_keys.clear()
         self._chord_offset_by_ch.clear()
+        self._live_offset_by_ch.clear()
 
     def panic(self) -> None:
         """All notes off across every per-track channel + stop the
@@ -544,6 +610,9 @@ class TrackerBase(PluginBase):
         note we never tracked."""
         with self._lock:
             self._playing = False
+            self._launch_active = False
+            self._launch_note = None
+            self._launch_oneshot_ending = False
             self._silence_all()
             channels = {self._track_channel(i) for i in range(self.TRACK_COUNT)}
             for ch in channels:
@@ -555,6 +624,7 @@ class TrackerBase(PluginBase):
         self._cancel_play_preroll()
         self._held_recording_keys.clear()
         self._chord_offset_by_ch.clear()
+        self._live_offset_by_ch.clear()
         self._publish_playhead()
 
     # ---- Per-track output channel ----
@@ -582,6 +652,13 @@ class TrackerBase(PluginBase):
                     pass
                 self._sounding[v_idx] = None
 
+    # ---- Internal: is the playhead advancing right now? ----
+    # True when transport is running OR a pattern launch (One-shot /
+    # Hold / Toggle) is in flight. on_tick advances on either; the UI
+    # ▶ indicator and Play-button green follow this.
+    def _is_running(self) -> bool:
+        return self._playing or self._launch_active
+
     # ---- Internal: push the current playhead state to the UI. ----
     def _publish_playhead(self) -> None:
         # Dict literal so SSE serialises cleanly. set_param both stores
@@ -589,7 +666,7 @@ class TrackerBase(PluginBase):
         self.set_param("playhead", {
             "page": self._play_page,
             "row": self._play_row,
-            "playing": self._playing,
+            "playing": self._is_running(),
         })
 
     # ================================================================
@@ -597,7 +674,7 @@ class TrackerBase(PluginBase):
     # ================================================================
 
     def _schedule_play_preroll(self) -> None:
-        """Manual-Play entry point. Defers on_transport_start by
+        """Manual-Play entry point. Defers _begin_playback by
         _PLAY_PREROLL_S so the first row's note-ons leave ALSA's
         output queue before the next clock tick. Without it, the
         very first MIDI byte after a cold queue takes longer to
@@ -606,11 +683,14 @@ class TrackerBase(PluginBase):
         on time while its note-on was delayed.
 
         External Start (e.g. an upstream sequencer) bypasses this and
-        goes straight into on_transport_start — that path is already
-        aligned to the upstream clock and adding a pre-roll would
-        introduce desync."""
+        goes straight into _begin_playback via on_transport_start —
+        that path is already aligned to the upstream clock and adding
+        a pre-roll would introduce desync. The pre-roll target is
+        _begin_playback (not on_transport_start) so the Play button
+        always starts the playhead regardless of the Rcv Trnsp.
+        toggle, which only gates *external* transport."""
         self._cancel_play_preroll()
-        timer = threading.Timer(_PLAY_PREROLL_S, self.on_transport_start)
+        timer = threading.Timer(_PLAY_PREROLL_S, self._begin_playback)
         timer.daemon = True
         self._preroll_timer = timer
         timer.start()
@@ -623,7 +703,30 @@ class TrackerBase(PluginBase):
                 pass
             self._preroll_timer = None
 
+    # External transport (ClockBus broadcast from a clock master or
+    # another instrument). Gated by Rcv Trnsp.: when off, the Tracker
+    # ignores foreign START / STOP / CONTINUE entirely and is driven
+    # only by its own Play / Stop buttons and the launch trigger modes.
+    # The buttons call the _*_playback cores directly, bypassing this
+    # gate.
     def on_transport_start(self) -> None:
+        if not self._param_values.get("recv_transport", True):
+            return
+        self._begin_playback()
+
+    def on_transport_stop(self) -> None:
+        if not self._param_values.get("recv_transport", True):
+            return
+        self._end_playback()
+
+    def on_transport_continue(self) -> None:
+        if not self._param_values.get("recv_transport", True):
+            return
+        self._resume_playback()
+
+    # ---- Playback cores (used by both external transport and the
+    # on-screen Play / Stop buttons). ----
+    def _begin_playback(self) -> None:
         # Any in-flight pre-roll has just fired (or this was reached
         # by an external Start) — either way drop the reference.
         self._preroll_timer = None
@@ -632,6 +735,10 @@ class TrackerBase(PluginBase):
             self._play_page = 0
             self._play_row = 0
             self._playing = True
+            # A fresh transport start supersedes any in-flight launch.
+            self._launch_active = False
+            self._launch_note = None
+            self._launch_oneshot_ending = False
         # Fire row 0 right at the Start moment. Without this the first
         # row would sound 1/16 (or whatever rate) late: the ClockBus
         # increments tick_count to 1 on the first MIDI Clock after
@@ -652,15 +759,19 @@ class TrackerBase(PluginBase):
             except Exception:
                 pass
 
-    def on_transport_stop(self) -> None:
+    def _end_playback(self) -> None:
         # Cancel any in-flight Play pre-roll so a fast Play→Stop tap
         # doesn't leak a delayed start through the timer.
         self._cancel_play_preroll()
         with self._lock:
             self._silence_all()
             self._playing = False
+            self._launch_active = False
+            self._launch_note = None
+            self._launch_oneshot_ending = False
         self._held_recording_keys.clear()
         self._chord_offset_by_ch.clear()
+        self._live_offset_by_ch.clear()
         self._publish_playhead()
         if self._param_values.get("send_transport"):
             try:
@@ -668,7 +779,7 @@ class TrackerBase(PluginBase):
             except Exception:
                 pass
 
-    def on_transport_continue(self) -> None:
+    def _resume_playback(self) -> None:
         with self._lock:
             self._playing = True
         self._publish_playhead()
@@ -683,11 +794,12 @@ class TrackerBase(PluginBase):
     # ================================================================
 
     def on_tick(self, division: str) -> None:
-        # Strictly transport-driven: clock alone doesn't start the
-        # tracker — the user has to send a MIDI Start (which lands
-        # in on_transport_start). This avoids the playhead silently
-        # marching whenever a clock source happens to be wired in.
-        if not self._playing:
+        # Transport-driven OR launch-driven. Transport (a MIDI Start)
+        # starts the whole sequence from the top; a pattern launch
+        # (One-shot / Hold / Toggle trigger) advances the playhead off
+        # the same clock without a Start. Plain clock with neither
+        # active leaves the playhead parked — no silent marching.
+        if not (self._playing or self._launch_active):
             return
         if division != self._param_values.get("rate", "1/16"):
             return
@@ -736,8 +848,32 @@ class TrackerBase(PluginBase):
              cc_num) pair holds the rightmost value set on that
              (channel, cc_num) for the row.
           3. Fire one `send_cc` per surviving entry."""
+        # One-shot launch that completed its last loop on the previous
+        # tick: the final row has now had its full step of ring time,
+        # so release it and stop instead of restarting the pattern.
+        ended = False
+        with self._lock:
+            if self._launch_oneshot_ending:
+                self._launch_oneshot_ending = False
+                self._launch_active = False
+                self._launch_note = None
+                self._silence_all()
+                self._just_wrapped = False
+                ended = True
+                end_page, end_row = self._play_page, self._play_row
+        if ended:
+            self.set_param("playhead", {
+                "page": end_page, "row": end_row,
+                "playing": self._is_running(),
+            })
+            return
+
         published = None
         with self._lock:
+            # One-shot launches stop at the pattern's natural end; other
+            # modes (and transport play) loop.
+            oneshot = self._launch_active and int(
+                self._param_values.get("trigger_mode") or 0) == 1
             pages = self._param_values.get("pages") or []
             if not pages:
                 return
@@ -769,6 +905,20 @@ class TrackerBase(PluginBase):
                         new_page = (self._play_page + 1) % len(pages)
                         if new_page == 0:
                             self._just_wrapped = True
+                            if oneshot:
+                                # One-shot reached the end via an End
+                                # marker. The last real row fired on the
+                                # previous tick, and the End row sits in
+                                # the slot where its note-off naturally
+                                # lands — so release + stop now rather
+                                # than wrapping to row 0.
+                                self._launch_active = False
+                                self._launch_note = None
+                                self._silence_all()
+                                self._play_page = 0
+                                self._play_row = 0
+                                published = (0, 0, False)
+                                break
                         self._play_page = new_page
                         self._play_row = 0
                         continue
@@ -777,9 +927,13 @@ class TrackerBase(PluginBase):
                 played_page = self._play_page
                 played_row = self._play_row
                 # Live recording target — incoming notes / CCs land
-                # on the row whose events are now sounding.
+                # on the row whose events are now sounding. Moving to a
+                # new row resets the live-record track spread so the
+                # next note-on starts at this row's first target rather
+                # than continuing the previous row's chord spread.
                 self._record_page = played_page
                 self._record_row = played_row
+                self._live_offset_by_ch.clear()
 
                 if isinstance(row, dict):
                     voices = row.get("voices") or []
@@ -818,6 +972,12 @@ class TrackerBase(PluginBase):
                     new_page = (self._play_page + 1) % len(pages)
                     if new_page == 0:
                         self._just_wrapped = True
+                        if oneshot:
+                            # Last row just fired; let it ring one more
+                            # step, then stop on the next tick instead
+                            # of looping (the ending-guard at the top
+                            # of _advance_step does the actual stop).
+                            self._launch_oneshot_ending = True
                     self._play_page = new_page
                     self._play_row = 0
                 else:
@@ -932,7 +1092,15 @@ class TrackerBase(PluginBase):
             if velocity > 0:
                 for i in range(self.PATTERN_COUNT):
                     if int(self._param_values.get(f"pattern_note_{i}") or -1) == note:
-                        self._handle_pattern_command({"pattern": i, "mode": "tap"})
+                        mode = int(self._param_values.get("trigger_mode") or 0)
+                        if mode == 0:
+                            # Switch — historic queue/immediate select.
+                            self._handle_pattern_command(
+                                {"pattern": i, "mode": "tap"})
+                        else:
+                            # One-shot / Hold / Toggle — launch the
+                            # pattern off incoming clock.
+                            self._launch_trigger(i, note, mode)
                         break
             return
 
@@ -951,21 +1119,26 @@ class TrackerBase(PluginBase):
         # channel equals the incoming channel, so pass-through is
         # transparent.
         out_ch = self._track_channel(targets[0])
+        now = time.monotonic()
+        # MIDI: a note-on with velocity 0 is a note-off. Pass it
+        # through as a real note-off (not a velocity-1 note-on, which
+        # would strand the note on the synth) and route it into the
+        # same release-recording path as an explicit note-off.
+        if velocity <= 0:
+            try:
+                self.send_note_off(out_ch, note)
+            except Exception:
+                pass
+            self._record_live_note_off(channel, note)
+            self._chord_last_event_t = now
+            return
         try:
             self.send_note_on(out_ch, note, max(1, min(127, int(velocity))))
         except Exception:
             pass
-        # MIDI: note-on with velocity 0 is a note-off. Discard the
-        # key from the held set so a keyboard that uses this idiom
-        # (no real note-off byte) doesn't leave the chord open.
-        now = time.monotonic()
-        if velocity <= 0:
-            self._held_recording_keys.discard((channel, note))
-            self._chord_last_event_t = now
-            return
 
         # Stale-set recovery: if too much time has passed since the
-        # last note-on/off, treat the held set as drift and clear it.
+        # last note-on/off, treat the held map as drift and clear it.
         # Without this guard a missing note-off (USB hiccup, keyboard
         # quirk) would keep the chord open forever and every later
         # recording would land on the same anchored row.
@@ -973,45 +1146,97 @@ class TrackerBase(PluginBase):
                 and now - self._chord_last_event_t > _CHORD_STALE_TIMEOUT_S):
             self._held_recording_keys.clear()
             self._chord_offset_by_ch.clear()
+            self._live_offset_by_ch.clear()
         self._chord_last_event_t = now
 
-        # New chord = nothing held. Capture the target row + page
-        # (one row per chord across ALL channels), reset per-channel
-        # offsets, and — when stopped — step the cursor one row so
-        # the next chord lands on the next row.
-        #
-        # Two recording modes for the row/page snapshot:
-        #   - PLAYING: row = currently-sounding row (_record_row).
-        #     Cursor doesn't move; live-record snaps to the beat.
-        #   - STOPPED: row = cursor row. Cursor auto-advances once
-        #     per chord (step record).
+        if self._playing:
+            # LIVE RECORD: the note lands where the playhead is right
+            # now. Notes arriving within the same step spread across
+            # consecutive tracks (the spread is reset per step in
+            # _advance_step); the cursor is not touched.
+            self._live_record_note_on(channel, note, velocity, targets)
+            return
+
+        # STOPPED = step record. A new chord (nothing held) snapshots
+        # the cursor row, resets the per-channel spread, and advances
+        # the cursor one row so the next chord lands below. Notes held
+        # together reuse that snapshot and spread across tracks.
         if not self._held_recording_keys:
             self._chord_offset_by_ch.clear()
-            with self._lock:
-                if self._playing:
-                    self._chord_page = self._record_page
-                    self._chord_row = self._record_row
-                else:
-                    self._chord_page = int(self._param_values.get("current_page") or 0)
-                    self._chord_row = int(self._param_values.get("cursor_row") or 0)
-            if not self._playing:
-                self._auto_advance_cursor()
-
-        self._held_recording_keys.add((channel, note))
+            self._chord_page = int(self._param_values.get("current_page") or 0)
+            self._chord_row = int(self._param_values.get("cursor_row") or 0)
+            self._auto_advance_cursor()
 
         offset = self._chord_offset_by_ch.get(channel, 0)
         self._chord_offset_by_ch[channel] = offset + 1
-        if offset >= len(targets):
-            return  # polyphony deeper than matching tracks: drop
-
-        target = targets[offset]
         note_str = midi_to_note_str(note)
-        if note_str is None:
+        rec_track = (targets[offset]
+                     if offset < len(targets) and note_str is not None
+                     else None)
+        # Held-map membership gates the chord; the track value is unused
+        # when stopped (offs are only recorded while playing).
+        self._held_recording_keys[(channel, note)] = rec_track
+        if rec_track is None:
             return
         self._record_voice_field_at(
-            self._chord_page, self._chord_row, target,
+            self._chord_page, self._chord_row, rec_track,
             {"note": note_str, "vel": max(1, min(127, int(velocity)))},
         )
+
+    def _live_record_note_on(
+        self, channel: int, note: int, velocity: int, targets: list[int],
+    ) -> None:
+        """Record one note-on at the current playhead row while playing.
+        Tracks arriving in the same step spread across `targets` via
+        `_live_offset_by_ch` (reset per step in _advance_step). The
+        chosen track is stashed in `_held_recording_keys` so the
+        matching note-off can write its `Off` to the same cell."""
+        with self._lock:
+            page_idx = self._record_page
+            row_idx = self._record_row
+            offset = self._live_offset_by_ch.get(channel, 0)
+            self._live_offset_by_ch[channel] = offset + 1
+        note_str = midi_to_note_str(note)
+        rec_track = (targets[offset]
+                     if offset < len(targets) and note_str is not None
+                     else None)
+        self._held_recording_keys[(channel, note)] = rec_track
+        if rec_track is None:
+            return
+        self._record_voice_field_at(
+            page_idx, row_idx, rec_track,
+            {"note": note_str, "vel": max(1, min(127, int(velocity)))},
+        )
+
+    def _record_live_note_off(self, channel: int, note: int) -> None:
+        """Close a held note. Always drops the key from the held map
+        (so the step-record chord closes when stopped); additionally,
+        while playing, writes an explicit `Off` to the track the
+        note-on landed on, at the current playhead row — capturing the
+        note's duration. The `Off` is only written into an empty (`---`)
+        cell so it never clobbers a note just played on that
+        track/row (a new note implies the previous one's end anyway)."""
+        rec_track = self._held_recording_keys.pop((channel, note), None)
+        if not self._playing or rec_track is None:
+            return
+        with self._lock:
+            page_idx = self._record_page
+            row_idx = self._record_row
+            cur = None
+            pages = self._param_values.get("pages") or []
+            if page_idx < len(pages):
+                page = pages[page_idx]
+                rows = page.get("rows") if isinstance(page, dict) else None
+                if rows and row_idx < len(rows):
+                    row = rows[row_idx]
+                    voices = row.get("voices") if isinstance(row, dict) else None
+                    if (voices and rec_track < len(voices)
+                            and isinstance(voices[rec_track], dict)):
+                        cur = voices[rec_track].get("note")
+        if cur != NOTE_HOLD:
+            return
+        self._record_voice_field_at(page_idx, row_idx, rec_track,
+                                    {"note": NOTE_OFF})
 
     def _auto_advance_cursor(self) -> None:
         """Step cursor_row down by 1, wrapping at the page boundary
@@ -1034,21 +1259,26 @@ class TrackerBase(PluginBase):
 
     def on_note_off(self, channel: int, note: int) -> None:
         # Pattern control channel: drop note-offs too (the channel is
-        # reserved — no pass-through, no held-key bookkeeping).
+        # reserved — no pass-through, no held-key bookkeeping). The one
+        # exception is Hold mode, where releasing the trigger key that
+        # started the active launch stops it.
         ctrl_ch = int(self._param_values.get("pattern_ctrl_ch") or 0)
         if ctrl_ch != 0 and (channel + 1) == ctrl_ch:
+            if (int(self._param_values.get("trigger_mode") or 0) == 2
+                    and self._launch_active and note == self._launch_note):
+                self._launch_stop()
             return
 
-        # Symmetric with on_note_on: pass-through on the first
-        # routing target's channel. Recording doesn't write
-        # release events (playback emits note-offs from the next
-        # non-`---` cell or an explicit `Off`).
+        # Symmetric with on_note_on: pass-through on the first routing
+        # target's channel. _record_live_note_off closes the held key
+        # (so the step-record chord closes when stopped) and, while
+        # playing, writes an `Off` to the track the note-on landed on
+        # so the recorded note gets its real duration. It pops the key
+        # even on unmatched channels: if the routing config changed
+        # between note-on and note-off (e.g. the user re-targeted a
+        # track mid-press), the chord must still close on release.
         targets, _ = self._resolve_targets(channel)
-        # Drop the key from the held set even on unmatched channels:
-        # if the routing config changed between note-on and note-off
-        # (e.g. user re-targeted a track mid-press), we still want
-        # the chord to close properly when all keys are released.
-        self._held_recording_keys.discard((channel, note))
+        self._record_live_note_off(channel, note)
         self._chord_last_event_t = time.monotonic()
         if not targets:
             return
@@ -1159,7 +1389,9 @@ class TrackerBase(PluginBase):
             self._schedule_play_preroll()
             self.set_param("cmd_play", False)
         elif name == "cmd_stop" and value:
-            self.on_transport_stop()
+            # Manual Stop bypasses the Rcv Trnsp. gate -- the button
+            # always stops the playhead.
+            self._end_playback()
             self.set_param("cmd_stop", False)
         elif name == "note_preview" and isinstance(value, int) and 0 <= value <= 127:
             self._preview_fire(value)
@@ -1431,6 +1663,53 @@ class TrackerBase(PluginBase):
                 self._play_row = new_row
             self._set_queued_pattern(-1)
             self._publish_playhead()
+
+    # ================================================================
+    # Pattern launch -- One-shot / Hold / Toggle trigger modes.
+    #
+    # Where Switch mode selects which pattern the transport playhead
+    # walks (queued to the next bar while playing), a launch drives the
+    # playhead directly off incoming clock without a transport Start and
+    # rewinds the pattern to row 0 so it fires from the top on the next
+    # step -- the "start wherever I am, in sync" behaviour. Monophonic:
+    # a new trigger replaces whatever was in flight.
+    # ================================================================
+
+    def _launch_trigger(self, idx: int, note: int, mode: int) -> None:
+        """Dispatch a control-channel trigger for launch modes
+        (mode 1 One-shot, 2 Hold, 3 Toggle). Toggle stops when the
+        already-launched slot is pressed again; every other press
+        (re)starts the launch on `idx`."""
+        if (mode == 3 and self._launch_active
+                and idx == int(self._param_values.get("selected_pattern", -1))):
+            self._launch_stop()
+            return
+        self._launch_start(idx, note)
+
+    def _launch_start(self, idx: int, note: int) -> None:
+        """Load pattern `idx` into the live view, rewind its playhead to
+        row 0, and mark a launch active. The cursor is left where the
+        user had it (reset_cursor=False) so launching doesn't disturb
+        editing. The next on_tick at the configured rate fires row 0 --
+        that one-step wait IS the quantize-to-the-next-step start."""
+        with self._lock:
+            self._silence_all()
+            self._launch_oneshot_ending = False
+        self._switch_pattern(idx, reset_cursor=False, reset_playhead=True)
+        with self._lock:
+            self._launch_active = True
+            self._launch_note = note
+        self._publish_playhead()
+
+    def _launch_stop(self) -> None:
+        """End the active launch: silence sounding voices and park the
+        playhead. Note-offs go out so nothing rings on the synth."""
+        with self._lock:
+            self._launch_active = False
+            self._launch_note = None
+            self._launch_oneshot_ending = False
+            self._silence_all()
+        self._publish_playhead()
 
     # ---- Note preview (wheel / keyboard typing → audible OUT) ----
     def _preview_fire(self, midi: int) -> None:
