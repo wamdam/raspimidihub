@@ -4,11 +4,20 @@ User-visible changes. Short tagged one-liners, no code or commit
 hashes. Tags: Added, Improved, Fix, Changed, Removed.
 
 
-Unreleased
+2026-06-04 — Version 4.6.0
 
-- Improved: Tracker **live recording** now captures what you actually play. Note-offs are recorded — releasing a key writes an explicit Off on the same track the note landed on, at the row under the playhead, so recorded notes get their real length instead of ringing until the next note (releases land per-track, so each voice of a chord ends where you lifted that finger). And held notes no longer collapse onto one row: while playing there is no chord window — each note-on records exactly where the playhead was when you pressed it, with simultaneous notes still spreading across consecutive tracks. Step-record (stopped) is unchanged. Also fixes a velocity-0 note-on (the running-status note-off some keyboards send) passing through to OUT as a velocity-1 note-on, which could strand a note on the synth.
-- Added: Tracker **Rcv Trnsp.** toggle (config panel, default on). When on, external transport (START / STOP / CONTINUE off the global clock) starts/stops/continues the playhead as before. Turn it off to decouple the Tracker from the rig's transport — it then ignores foreign start/stop and is driven only by its own Play / Stop buttons and the launch trigger modes, while still following the shared clock for tempo. The Play / Stop buttons always work regardless of the toggle. Old configs default to on, so nothing changes for them.
+This release turns the Tracker into a live-performance surface.
+Trigger Mode fires whole patterns from a pad or key — hold for a
+looping phrase, tap for a one-shot, or toggle — launching in sync
+from wherever you are in the song without waiting for the bar.
+Rcv Trnsp. decouples a Tracker from the rig's transport so it can
+free-run on the shared clock. And live recording now captures what
+you actually play: real note durations, and notes placed where the
+playhead was rather than collapsed into chords.
+
 - Added: Tracker **Trigger Mode** (per-Tracker config wheel: Switch / One-shot / Hold / Toggle) for the pattern control channel. Switch is the historic queue-on-wrap pattern select and the default (old configs load as Switch). One-shot / Hold / Toggle *launch* a pattern straight off the incoming clock without a transport Start: the pattern starts from row 0 on the next step wherever you are in the song (in sync, not bar-aligned). One-shot plays once through then stops; Hold loops while the key is held; Toggle starts on press and stops on re-press. Monophonic — a new trigger replaces the one in flight — and governs MIDI control-channel triggers only (on-screen slot taps stay Switch). Lets a pad row fire phrases you can't play by hand while the keyboard records into your sequencer as usual.
+- Added: Tracker **Rcv Trnsp.** toggle (config panel, default on). When on, external transport (START / STOP / CONTINUE off the global clock) starts/stops/continues the playhead as before. Turn it off to decouple the Tracker from the rig's transport — it then ignores foreign start/stop and is driven only by its own Play / Stop buttons and the launch trigger modes, while still following the shared clock for tempo. The Play / Stop buttons always work regardless of the toggle. Old configs default to on, so nothing changes for them.
+- Improved: Tracker **live recording** now captures what you actually play. Note-offs are recorded — releasing a key writes an explicit Off on the same track the note landed on, at the row under the playhead, so recorded notes get their real length instead of ringing until the next note (releases land per-track, so each voice of a chord ends where you lifted that finger). And held notes no longer collapse onto one row: while playing there is no chord window — each note-on records exactly where the playhead was when you pressed it, with simultaneous notes still spreading across consecutive tracks. Step-record (stopped) is unchanged. Also fixes a velocity-0 note-on (the running-status note-off some keyboards send) passing through to OUT as a velocity-1 note-on, which could strand a note on the synth.
 - Changed: Tracker config-panel labels **Send Transport** → **Send Trnsp.** and **Pattern Ctrl Ch** → **Pt. Ctrl Ch** so each fits on a single line in the panel.
 
 
