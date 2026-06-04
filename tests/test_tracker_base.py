@@ -1391,6 +1391,37 @@ def test_note_off_when_stopped_records_no_off():
     assert NOTE_OFF not in notes
 
 
+def test_live_record_sub_step_note_off_lands_on_next_step():
+    """A note played and released within the same step still gets a
+    clean ending: the Off lands on the next step."""
+    t = _started(auto_ch=0)
+    t._param_values["pages"] = _blank_pages()
+    t._param_values["track_ch_0"] = 1
+    t._param_values["rate"] = "1/16"
+    t.on_transport_start()              # record_row = 0
+    t.on_note_on(0, 60, 100)            # C-4 at row 0
+    t.on_note_off(0, 60)                # released same step → Off on row 1
+    rows = t._param_values["pages"][0]["rows"]
+    assert rows[0]["voices"][0]["note"] == "C-4"
+    assert rows[1]["voices"][0]["note"] == NOTE_OFF
+
+
+def test_live_record_sub_step_off_skipped_when_next_step_occupied():
+    """The pushed-to-next-step Off never clobbers a note already
+    recorded on that next step."""
+    t = _started(auto_ch=0)
+    t._param_values["pages"] = _blank_pages()
+    t._param_values["track_ch_0"] = 1
+    t._param_values["rate"] = "1/16"
+    # Next step already holds a note on the same track.
+    t._param_values["pages"][0]["rows"][1]["voices"][0] = {
+        "note": "E-4", "vel": 90, "cc_num": ".", "cc_val": "--"}
+    t.on_transport_start()
+    t.on_note_on(0, 60, 100)            # C-4 row 0
+    t.on_note_off(0, 60)                # same step → would push to row 1, occupied
+    assert t._param_values["pages"][0]["rows"][1]["voices"][0]["note"] == "E-4"
+
+
 def test_note_preview_fires_note_on_and_resets_signal():
     # Frontend writes note_preview=<midi> when a wheel/keyboard tick
     # picks a real pitch. Plugin fires note-on on the focused track's

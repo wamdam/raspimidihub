@@ -1200,7 +1200,12 @@ class TrackerBase(PluginBase):
         rec_track = (targets[offset]
                      if offset < len(targets) and note_str is not None
                      else None)
-        self._held_recording_keys[(channel, note)] = rec_track
+        # Remember WHERE the note-on landed (page, row, track) so the
+        # matching release can write its Off to the same cell and tell a
+        # same-step release apart from one that spanned several steps.
+        self._held_recording_keys[(channel, note)] = (
+            (page_idx, row_idx, rec_track) if rec_track is not None else None
+        )
         if rec_track is None:
             return
         self._record_voice_field_at(
@@ -1209,34 +1214,63 @@ class TrackerBase(PluginBase):
         )
 
     def _record_live_note_off(self, channel: int, note: int) -> None:
-        """Close a held note. Always drops the key from the held map
-        (so the step-record chord closes when stopped); additionally,
-        while playing, writes an explicit `Off` to the track the
-        note-on landed on, at the current playhead row — capturing the
-        note's duration. The `Off` is only written into an empty (`---`)
-        cell so it never clobbers a note just played on that
-        track/row (a new note implies the previous one's end anyway)."""
-        rec_track = self._held_recording_keys.pop((channel, note), None)
-        if not self._playing or rec_track is None:
+        """Close a held note. Always drops the key from the held map (so
+        the step-record chord closes when stopped); additionally, while
+        playing, writes an explicit `Off` capturing the note's duration:
+
+          - Released a step or more after it was played → `Off` on the
+            row under the playhead now.
+          - Released within the SAME step it was played (the note-on
+            still occupies that cell) → `Off` on the NEXT step instead,
+            so a sub-step note still gets a clean one-step length.
+
+        Either way the `Off` only goes into an empty (`---`) cell, so it
+        never clobbers a note already there (a new note implies the
+        previous one's end anyway)."""
+        rec = self._held_recording_keys.pop((channel, note), None)
+        # Tuple values come from the live-record path; ints / None from
+        # step-record, which doesn't record releases.
+        if not self._playing or not isinstance(rec, tuple):
             return
+        on_page, on_row, track = rec
         with self._lock:
-            page_idx = self._record_page
-            row_idx = self._record_row
-            cur = None
-            pages = self._param_values.get("pages") or []
-            if page_idx < len(pages):
-                page = pages[page_idx]
-                rows = page.get("rows") if isinstance(page, dict) else None
-                if rows and row_idx < len(rows):
-                    row = rows[row_idx]
-                    voices = row.get("voices") if isinstance(row, dict) else None
-                    if (voices and rec_track < len(voices)
-                            and isinstance(voices[rec_track], dict)):
-                        cur = voices[rec_track].get("note")
-        if cur != NOTE_HOLD:
-            return
-        self._record_voice_field_at(page_idx, row_idx, rec_track,
+            if (self._record_page, self._record_row) == (on_page, on_row):
+                tgt_page, tgt_row = self._next_step(on_page, on_row)
+            else:
+                tgt_page, tgt_row = self._record_page, self._record_row
+            if self._cell_note(tgt_page, tgt_row, track) != NOTE_HOLD:
+                return
+        self._record_voice_field_at(tgt_page, tgt_row, track,
                                     {"note": NOTE_OFF})
+
+    def _cell_note(self, page_idx: int, row_idx: int, track: int) -> str | None:
+        """The `note` string at (page, row, track), or None if any index
+        is out of range / the cell is malformed."""
+        pages = self._param_values.get("pages") or []
+        if not (0 <= page_idx < len(pages)):
+            return None
+        page = pages[page_idx]
+        rows = page.get("rows") if isinstance(page, dict) else None
+        if not rows or not (0 <= row_idx < len(rows)):
+            return None
+        row = rows[row_idx]
+        voices = row.get("voices") if isinstance(row, dict) else None
+        if not voices or not (0 <= track < len(voices)):
+            return None
+        v = voices[track]
+        return v.get("note") if isinstance(v, dict) else None
+
+    def _next_step(self, page_idx: int, row_idx: int) -> tuple[int, int]:
+        """The (page, row) the playhead advances to after (page, row),
+        wrapping at the last row to the next page's row 0. Mirrors the
+        normal-advance step in _advance_step; End markers aren't special-
+        cased (a sub-step Off simply won't land on an End row, since that
+        cell won't read as a `---` hold)."""
+        pages = self._param_values.get("pages") or []
+        page_count = max(1, len(pages))
+        if row_idx + 1 >= self.MAX_ROWS_PER_PAGE:
+            return (page_idx + 1) % page_count, 0
+        return page_idx, row_idx + 1
 
     def _auto_advance_cursor(self) -> None:
         """Step cursor_row down by 1, wrapping at the page boundary

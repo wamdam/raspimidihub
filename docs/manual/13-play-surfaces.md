@@ -566,12 +566,12 @@ explicit `Off` is written to the row under the playhead, on the
 same track the note was recorded to -- so the recorded note
 gets its real length instead of ringing until the next note.
 Releases land per-track, so each voice of a chord ends where
-you lifted that finger. (A release lands an `Off` only on an
-otherwise-empty cell, so playing a new note on the same track
-in the same step is never overwritten by the old note's
-release.) Notes shorter than one step can't be represented on
-the grid, so a very quick stab records its note-on and rings to
-the next event rather than getting a same-cell `Off`.
+you lifted that finger. A note played and released within a
+single step still gets a clean ending: its `Off` lands on the
+**next** step, giving the stab a one-step length. In every case
+an `Off` is only written into an otherwise-empty cell, so a new
+note recorded on the same track is never overwritten by an
+older note's release.
 
 CCs touched during play also land on the currently-sounding
 row of the routed track.
