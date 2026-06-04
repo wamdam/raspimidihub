@@ -182,14 +182,22 @@ config:
 
 - A connection added or removed
 - A filter or mapping edited
-- A plugin instance added, removed, or its parameters changed
-- A controller instance added, removed, or its cells edited
+- A plugin instance added, removed, or a saveable parameter changed
+- A controller instance added, removed, or its cells renamed /
+  rebound (labels, bindings, theme, drop-button settings)
 - A device renamed
 - A port renamed
 
+**Performing does not light it.** Live play — moving a fader / knob /
+XY pad, launching or switching Tracker patterns, firing or cancelling
+a drop button — changes no saveable content, so it leaves the
+asterisk clear and triggers no autosave. Only edits to the saved
+state do. (Capturing a drop snapshot *is* an edit and does count.)
+
 The asterisk is *only* about persistence. The unit runs perfectly
 fine with unsaved state; the next reboot is the only thing that
-loses it.
+loses it -- and even then the background autosave (chapter 15.6)
+resumes your last edit.
 
 ## The Direct-Path vs Filter-Path Distinction
 

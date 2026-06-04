@@ -60,14 +60,19 @@ class ControllerBase(PluginBase):
     DROP_MODE_GRID_BARS = {"bar": 1, "2bar": 2, "4bar": 4, "8bar": 8, "16bar": 16}
 
     # Drop-button auxiliary params that represent live-play state, NOT
-    # config: drop_states cycles through fire/capture/idle on every
-    # press; drop_schedule holds whatever fire is currently scheduled;
-    # drop_note_pressing is an SSE flag for the on-screen press-fill
-    # animation while a trigger note is held. Captured snapshots,
-    # modes, labels, sync/fade flags, trigger-note bindings, theme,
-    # cell rename/rebind ARE config and stay outside this set.
+    # config: `drops` is the momentary action signal (fire / capture /
+    # cancel, reset to idle after handling) — a *performance* edge, like
+    # the Tracker's pattern launches, so firing or cancelling a drop must
+    # not paint the Routing asterisk or churn the autosave; drop_states
+    # cycles through fire/capture/idle on every press; drop_schedule
+    # holds whatever fire is currently scheduled; drop_note_pressing is
+    # an SSE flag for the on-screen press-fill animation while a trigger
+    # note is held. Captured snapshots, modes, labels, sync/fade flags,
+    # trigger-note bindings, theme, cell rename/rebind ARE config and
+    # stay outside this set — so *capturing* a drop still dirties (it
+    # writes drop_snapshots), only firing/cancelling stays quiet.
     _DROP_TRANSIENT_PARAMS = frozenset({
-        "drop_states", "drop_schedule", "drop_note_pressing",
+        "drops", "drop_states", "drop_schedule", "drop_note_pressing",
     })
 
     def on_start(self):

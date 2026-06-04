@@ -565,3 +565,57 @@ class TestPreScheduledSnapshot:
         p.on_tick("1/16")
         # CC was emitted at fire moment via the immediate-send fallback.
         assert (0, 13, 127) in p._sent
+
+
+# --- Dirty gating: firing a drop is performance, not an edit -----------------
+#
+# A drop-button *press* (fire / cancel) is a momentary action edge, like a
+# Tracker pattern launch — it must NOT paint the Routing asterisk or churn
+# the autosave. *Capturing* a drop writes drop_snapshots (real saved config)
+# and still dirties. The fake notify below mirrors the host's
+# PluginHost._on_param_change gating so we test the end-to-end consequence.
+
+def _wire_dirty(p):
+    state = {"dirty": False, "encode_seq": 0, "calls": []}
+
+    def notify(name, value, persist=True):
+        state["calls"].append((name, persist))
+        if persist and name not in p.transient_params:
+            state["encode_seq"] += 1
+            state["dirty"] = True
+
+    p._notify_param_change = notify
+    return state
+
+
+def test_drops_param_is_transient():
+    p = _new()
+    assert "drops" in p.transient_params
+    # …but the captured snapshot is NOT (capturing is a real edit).
+    assert "drop_snapshots" not in p.transient_params
+
+
+def test_firing_a_drop_does_not_dirty():
+    p = _new()
+    # Pre-seed a snapshot directly (not via set_param) so the fire itself
+    # is the only thing under test; immediately-mode fires on press.
+    p._param_values["drop_snapshots"]["1"] = {"f1": 64}
+    p._param_values["drop_modes"]["1"] = "immediately"
+    state = _wire_dirty(p)
+    # Replicate the host: deliver the press, then run the handler.
+    p.set_param("drops", {"action": "fire", "button_id": 1})
+    p.on_param_change("drops", {"action": "fire", "button_id": 1})
+    assert state["dirty"] is False
+    assert state["encode_seq"] == 0
+
+
+def test_capturing_a_drop_dirties():
+    p = _new()
+    p._param_values["f1"] = 100  # something to snapshot
+    state = _wire_dirty(p)
+    p.set_param("drops", {"action": "capture", "button_id": 1})
+    p.on_param_change("drops", {"action": "capture", "button_id": 1})
+    # Capture wrote drop_snapshots (non-transient) → real edit → dirty.
+    assert state["dirty"] is True
+    assert state["encode_seq"] >= 1
+    assert p._param_values["drop_snapshots"].get("1") == {"f1": 100}

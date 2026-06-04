@@ -236,3 +236,12 @@ them; **Export Config** captures them in a JSON snapshot (chapter
 it (Copy → Paste-as-new from the header menu) duplicates the
 state.
 
+What is **not** saved -- and so does not light the dirty-state
+asterisk (chapter 9.9) -- is *performing*: moving a fader / knob /
+XY pad, and **firing or cancelling a drop button**. Those are live
+play, not edits, so a gig of pad-firing leaves the config clean and
+triggers no autosave. **Capturing** a drop (long-press) *does*
+count -- it writes a new snapshot into the saved state -- as do cell
+renames, rebinds, theme changes, and drop-button settings (mode,
+label, fade/sync).
+
