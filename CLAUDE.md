@@ -135,9 +135,8 @@ local `.venv`, never globally -- applies here unchanged.
 
 ## Config persistence, autosave & backups (design decisions)
 
-In-progress feature (see `PLAN.md` for the TODO state). These
-decisions were worked out carefully; honour them unless the user
-revisits.
+Shipped in 4.7.0. These decisions were worked out carefully;
+honour them unless the user revisits.
 
 **Hard constraints of this appliance**
 - **Hard power cuts are normal.** The Pi is switched off at the
