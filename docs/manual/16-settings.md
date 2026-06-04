@@ -162,8 +162,6 @@ existing instances, not a way to spawn new ones.
 
 ## Backup
 
-![Settings → Backup: the **Last autosave** line at the top (uptime-relative), then the rolling Save checkpoints newest-first — each with its `#number`, relative age, a one-line summary ("settings changed", "+1 connection", "(no changes)", "(initial)"), size, and Restore / Download.](../screenshots/32-settings-backup.png){width=48%}
-
 A list of **rolling save checkpoints**. Every time you tap **Save
 Config** (chapter 15.2) the unit writes a compressed copy of the
 whole project state here, newest first; the last 50 are kept and
@@ -178,6 +176,8 @@ so it reads **before last reboot** for an autosave carried over
 from a previous boot and **no autosave yet** before the first one
 this session. It is a snapshot as of when the page loaded; the
 **↻** button next to the heading re-reads it (and the list).
+
+![Settings → Backup: the **Last autosave** line at the top (uptime-relative), then the rolling Save checkpoints newest-first — each with its `#number`, relative age, a one-line summary ("settings changed", "+1 connection", "(no changes)", "(initial)"), size, and Restore / Download.](../screenshots/32-settings-backup.png){width=42%}
 
 Each row shows:
 
