@@ -61,8 +61,10 @@ chapter 13.
 The action row buttons on the Tracker surface (**Shift / Cut /
 Copy / Paste**) are the primary entry point for editing
 operations and do not have direct keyboard shortcuts beyond
-`Delete`. `Shift+Cut` and `Shift+Copy` target the whole current
-page; both are surface-button operations.
+`Delete`. While a selection is active, Cut and Copy act on the
+selection, release Shift, and move the cursor to the selection's
+top-left. `Shift+Cut` / `Shift+Copy` target the whole current
+page only when nothing is selected.
 
 ## Routing matrix
 

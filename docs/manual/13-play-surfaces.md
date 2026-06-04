@@ -627,10 +627,17 @@ The action row left-to-right reads
   half-compatibility check ensures a Note-only paste does not
   overwrite CCs on the destination, and vice versa.
 
-`Shift+Cut` / `Shift+Copy` target the whole current page
-instead of the current selection. **Del** is **Cut** (copy +
-clear) rather than destructive delete -- the paste buffer is
-updated so an accidental Del can be undone with Paste.
+A selection always takes priority: while one is active, Cut and
+Copy act on the **selection**, never the page. Both also end
+selection mode (the on-screen **Shift** toggle releases) and
+drop the cursor on the selection's **top-left** cell, so the
+next edit starts from a predictable spot. With no selection,
+`Shift+Cut` / `Shift+Copy` (hold the physical Shift, or tap the
+on-screen Shift without moving the cursor) target the whole
+current page, and a plain Cut / Copy acts on the focused cell.
+**Del** is **Cut** (copy + clear) rather than destructive delete
+-- the paste buffer is updated so an accidental Del can be
+undone with Paste.
 
 ### Keyboard Note Entry
 

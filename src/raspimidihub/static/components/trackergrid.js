@@ -384,6 +384,8 @@ export function PluginTrackerGrid({ param, values, onChange, displayCtx }) {
         `${stateKeyBase}:keyboardShift`, false);
     const [buttonShift, setButtonShift] = useSharedUiState(
         `${stateKeyBase}:buttonShift`, false);
+    const buttonShiftRef = useRef(false);
+    buttonShiftRef.current = buttonShift;
     const shiftEngaged = keyboardShift || buttonShift;
     const shiftEngagedRef = useRef(false);
     shiftEngagedRef.current = shiftEngaged;
@@ -767,6 +769,30 @@ export function PluginTrackerGrid({ param, values, onChange, displayCtx }) {
     //   Paste → page-clipboard replaces the current page; area-
     //           clipboard pastes at the cursor (with half-match check).
 
+    // After a Cut / Copy, drop the selection and release the on-screen
+    // Shift toggle (which is also the selection toggle), landing the
+    // cursor on the selection's top-left cell. Matches the "Shift
+    // releases on cut/copy" expectation and gives a predictable
+    // post-edit cursor. Passing `null` (no selection) just releases
+    // the toggle and clears any stale anchor.
+    const exitSelectionToTopLeft = useCallback((rect) => {
+        if (rect) {
+            if (cursorRowRef.current !== rect.minRow) {
+                onChange(param.cursor_row_param, rect.minRow);
+            }
+            const t = trackOfSub(rect.minSub);
+            const h = halfOfSub(rect.minSub);
+            if (cursorTrackRef.current !== t) {
+                onChange(param.cursor_track_param, t);
+            }
+            if (cursorHalfRef.current !== h) {
+                onChange(param.cursor_half_param, h);
+            }
+        }
+        clearAnchor();
+        if (buttonShiftRef.current) setButtonShift(false);
+    }, [onChange, param, clearAnchor, setButtonShift]);
+
     const onDel = useCallback(() => {
         const rect = makeSelectionRect(anchorRef.current, currentPageRef.current,
                                        cursorRowRef.current,
@@ -799,17 +825,24 @@ export function PluginTrackerGrid({ param, values, onChange, displayCtx }) {
     // half-compatibility check + cursor placement work uniformly.
     const onCopy = useCallback((wholePage = false) => {
         const page = pages[currentPage] || emptyPage(trackCount, maxRows);
-        if (wholePage) {
-            window.__trackerClipboard = { type: 'page', page: clonePage(page) };
-            showHelp('Copied page', true);
-            return;
-        }
+        // An active multi-cell selection always wins over the
+        // whole-page modifier: with a selection on screen, Copy copies
+        // the SELECTION, never the page. This is the fix for Cut/Copy
+        // grabbing the whole page just because the Shift toggle (which
+        // is also the selection toggle) was engaged.
         const rect = makeSelectionRect(anchorRef.current, currentPageRef.current,
                                        cursorRowRef.current,
                                        subOf(cursorTrackRef.current, cursorHalfRef.current));
         if (rect && !rectIsSingleCell(rect)) {
             window.__trackerClipboard = captureArea(page, rect, trackCount);
             showHelp(`Copied selection (${rect.maxRow - rect.minRow + 1} × ${rect.maxSub - rect.minSub + 1})`, true);
+            exitSelectionToTopLeft(rect);
+            return;
+        }
+        if (wholePage) {
+            window.__trackerClipboard = { type: 'page', page: clonePage(page) };
+            showHelp('Copied page', true);
+            exitSelectionToTopLeft(null);
             return;
         }
         // No selection — capture just the focused sub-cell as a 1×1 area.
@@ -820,7 +853,8 @@ export function PluginTrackerGrid({ param, values, onChange, displayCtx }) {
         };
         window.__trackerClipboard = captureArea(page, single, trackCount);
         showHelp('Copied cell', true);
-    }, [pages, currentPage, trackCount, maxRows, showHelp]);
+        exitSelectionToTopLeft(null);
+    }, [pages, currentPage, trackCount, maxRows, showHelp, exitSelectionToTopLeft]);
 
     const onPaste = useCallback(() => {
         const clip = window.__trackerClipboard;
@@ -852,35 +886,50 @@ export function PluginTrackerGrid({ param, values, onChange, displayCtx }) {
         showHelp(`Pasted selection (${clip.height} × ${clip.width})`, true);
     }, [pages, currentPage, trackCount, maxRows, onChange, param, showHelp]);
 
-    // Cut = Copy + Del in one shot. Mirrors text-editor convention:
-    // the cut content lands in the paste buffer and is cleared from
-    // the source. Shift+Cut cuts the whole page (matches Shift+Copy).
-    // The trailing showHelp overrides the "Copied …" / "Cleared …"
-    // messages onCopy / onDel set internally so the user sees a
-    // single coherent "Cut …" line.
+    // Cut = Copy + clear in one shot, mirroring the text-editor
+    // convention: the cut content lands in the paste buffer and is
+    // removed from the source. Self-contained (rather than onCopy +
+    // onDel) because copying now moves the cursor to the selection's
+    // top-left and exits selection mode — calling onDel afterwards
+    // would clear the wrong (post-move) cell. Same scope rules as
+    // Copy: a multi-cell selection wins over the whole-page modifier.
     const onCut = useCallback((wholePage = false) => {
+        const page = pages[currentPage] || emptyPage(trackCount, maxRows);
         const rect = makeSelectionRect(anchorRef.current, currentPageRef.current,
                                        cursorRowRef.current,
                                        subOf(cursorTrackRef.current, cursorHalfRef.current));
-        onCopy(wholePage);
+        if (rect && !rectIsSingleCell(rect)) {
+            window.__trackerClipboard = captureArea(page, rect, trackCount);
+            const newPages = pages.slice();
+            newPages[currentPage] = clearAreaInPage(page, rect, trackCount);
+            onChange(param.pages_param, newPages);
+            showHelp(`Cut selection (${rect.maxRow - rect.minRow + 1} × ${rect.maxSub - rect.minSub + 1})`, true);
+            exitSelectionToTopLeft(rect);
+            return;
+        }
         if (wholePage) {
-            // Page-cut needs to clear the whole page too — onDel only
-            // clears the selection or focused cell, not the page. Do
-            // it inline.
-            const blankPage = emptyPage(trackCount, maxRows);
+            window.__trackerClipboard = { type: 'page', page: clonePage(page) };
             const next = pages.slice();
-            next[currentPage] = blankPage;
+            next[currentPage] = emptyPage(trackCount, maxRows);
             onChange(param.pages_param, next);
             showHelp('Cut page', true);
-        } else {
-            onDel();
-            if (rect && !rectIsSingleCell(rect)) {
-                showHelp(`Cut selection (${rect.maxRow - rect.minRow + 1} × ${rect.maxSub - rect.minSub + 1})`, true);
-            } else {
-                showHelp('Cut cell', true);
-            }
+            exitSelectionToTopLeft(null);
+            return;
         }
-    }, [onCopy, onDel, pages, currentPage, trackCount, maxRows, onChange, param, showHelp]);
+        // Single focused cell.
+        const sub = subOf(cursorTrackRef.current, cursorHalfRef.current);
+        const single = { minRow: cursorRowRef.current, maxRow: cursorRowRef.current,
+                         minSub: sub, maxSub: sub };
+        window.__trackerClipboard = captureArea(page, single, trackCount);
+        if (cursorHalfRef.current === 'note') {
+            setVoiceFields({ note: HOLD, vel: CC_HOLD });
+        } else {
+            setVoiceFields({ cc_num: CC_NONE, cc_val: CC_HOLD });
+        }
+        showHelp('Cut cell', true);
+        exitSelectionToTopLeft(null);
+    }, [pages, currentPage, trackCount, maxRows, onChange, param,
+        setVoiceFields, showHelp, exitSelectionToTopLeft]);
 
     // Typed note from the keyboard — same write semantics as turning
     // the Note wheel + the chord auto-advance from MIDI input. One
@@ -1183,10 +1232,10 @@ export function PluginTrackerGrid({ param, values, onChange, displayCtx }) {
         ${shiftBtn}
         ${actionBtn('Cut',
             (e) => onCut(e.shiftKey || shiftEngagedRef.current),
-            'Cut focused cell or selection — Shift+Cut = whole page')}
+            'Cut selection or focused cell — Shift = whole page when nothing is selected')}
         ${actionBtn('Copy',
             (e) => onCopy(e.shiftKey || shiftEngagedRef.current),
-            'Copy focused cell or selection — Shift+Copy = whole page')}
+            'Copy selection or focused cell — Shift = whole page when nothing is selected')}
         ${actionBtn('Paste', onPaste, 'Paste at cursor')}
     </div>`;
 
