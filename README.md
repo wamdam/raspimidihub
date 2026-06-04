@@ -115,10 +115,10 @@ Plugins on the **Play** bottom-nav tab (alongside Controllers). They route in th
 - **8-voice step sequencer**, **16 hex-numbered rows × up to 16 pages** chained linearly, loops back to page 0
 - **Per voice cell** -- Note (3-char pitch / Off / End / hold), Velocity (hex), CC# (hex or `.`), CC Val (hex). Note and CC events fire independently
 - **Per-track output channel** -- T1..T8 each route to their own MIDI channel (defaults all 1, remappable in the device-detail panel)
-- **8 pattern slots** -- tap to switch (queued to the next page-0 boundary while playing); Shift+Tap switches immediately
-- **Live recording** -- play notes / move CCs in time with playback and they land on the currently-sounding row. Cursor stays put while playing; step-record at cursor when stopped
+- **8 pattern slots** -- tap to switch (queued to the next page-0 boundary while playing); Shift+Tap switches immediately. A per-Tracker **Trigger Mode** (Switch / One-shot / Hold / Toggle) fires patterns from a pad or key via **Pt. Ctrl Ch**, launching in sync from anywhere in the song without waiting for the bar
+- **Live recording** -- play notes / move CCs in time with playback and they land on the row under the playhead, with note-offs captured so recorded notes keep their real length. Cursor stays put while playing; step-record at cursor when stopped
 - **Keyboard entry** -- q..u for white keys + 2/3/5/6/7 for black keys (QWERTY and QWERTZ both work via physical-key code); Space toggles play; Shift held + cursor extends a sub-cell selection; Cut / Copy / Paste with half-compatibility check
-- **Clock master** -- Send Clock generates an internal 24-PPQ at the configured BPM; Send Transport forwards START / STOP / CONTINUE; Pattern Ctrl Ch reserves a MIDI channel for hands-free pattern switching
+- **Clock master** -- Send Clock generates an internal 24-PPQ at the configured BPM; Send Trnsp. forwards START / STOP / CONTINUE (and emits its own from the Play / Stop buttons); Rcv Trnsp. (default on) gates whether external transport drives the playhead, so a Tracker can free-run on the shared clock
 
 **Euclidean**
 - **Bjorklund distribution** -- Pulses / Steps / Rotate generate evenly-spaced hits (E(4,16) is four-on-the-floor; E(3,8) is the tresillo; E(5,8) is the cinquillo)

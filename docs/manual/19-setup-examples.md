@@ -74,7 +74,8 @@ timbral synth across eight MIDI channels.
 5. Switch to the **Play** tab. Enter notes on the grid; the cell
    format is described in chapter 13.2.
 6. To make the Tracker the clock master for downstream gear, open
-   its config and enable **Send Clock + Transport**.
+   its config and enable **Send Clock** (and **Send Trnsp.** if you
+   also want it to forward START / STOP / CONTINUE).
 7. Tap **Save Config**.
 
 **Why this rig.** The Tracker's per-track channel mapping is what

@@ -95,7 +95,7 @@ Plugins fall into three groups with respect to clock:
   their own timing (**Arpeggiator**, **Euclidean**, **CC LFO**,
   **MIDI Delay**, **Clock Divider** -- both consumes and produces).
 - **Clock-generating** -- emit MIDI Clock (**Master Clock**,
-  **Tracker** with **Send Clock + Transport** enabled,
+  **Tracker** with **Send Clock** enabled,
   **Clock Divider**).
 
 Clock-consuming plugins typically have a **Sync** toggle. When sync

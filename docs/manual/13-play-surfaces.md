@@ -839,7 +839,8 @@ access its plugin-config panel:
 ### Saving Tracker State
 
 The grid contents, the page count, the per-track channels, the
-**Send Clock + Transport** state, and the cursor position are
+**Send Clock** / **Send Trnsp.** / **Rcv Trnsp.** toggles, and
+the cursor position are
 all part of the plugin instance state. **Save Config** persists
 them with the rest of the project; **Export Config** captures
 them in a JSON snapshot (chapter 15).

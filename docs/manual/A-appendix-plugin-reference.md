@@ -462,9 +462,15 @@ Configuration parameters (from the device-detail panel):
   cursor-relative recording (chord-spread from `cursor_track`
   across consecutive tracks). All other channels route by matching
   the per-track channel; unmatched channels are silently dropped.
-- **Internal BPM** -- used when no external clock is routed in.
-- **Send Clock + Transport** -- Button toggle; when on, forwards
-  incoming CLOCK / START / STOP / CONTINUE to OUT.
+- **Internal BPM** -- used when **Send Clock** is on and no
+  external clock is routed in.
+- **Send Clock** -- Button toggle; when on the Tracker is the
+  clock master, generating its own 24-PPQ at the Internal BPM and
+  emitting it to OUT (incoming clock is then ignored). Off =
+  follow external clock.
+- **Send Trnsp.** -- Button toggle; forwards incoming START /
+  STOP / CONTINUE to OUT and emits its own when the on-screen
+  Play / Stop buttons fire.
 - **Rcv Trnsp.** -- Button toggle, default **on**. When on,
   external transport (START / STOP / CONTINUE off the global
   clock bus) drives the playhead. When off, the Tracker ignores
@@ -500,8 +506,9 @@ parameters above.
 
 **Input.** Notes, CC (live recording, channel-routed -- see
 chapter 13 §Routing), Clock, Start, Stop, Continue.
-**Output.** Notes, CC (from the grid), optionally Clock /
-Start / Stop / Continue (when **Send Clock + Transport** is on).
+**Output.** Notes, CC (from the grid), optionally Clock (when
+**Send Clock** is on) and Start / Stop / Continue (when **Send
+Trnsp.** is on).
 **Clock.** Consumes and optionally re-emits.
 
 ![Tracker play surface.](../screenshots/tracker.png){width=35%}
