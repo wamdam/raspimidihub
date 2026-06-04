@@ -4,6 +4,15 @@ User-visible changes. Short tagged one-liners, no code or commit
 hashes. Tags: Added, Improved, Fix, Changed, Removed.
 
 
+2026-06-04 — Version 4.7.0
+
+- Added: automatic **autosave** — the live edited state is written to disk in the background (debounced, double-buffered ping-pong, gzip-CRC validated) so a hard power cut resumes the last thing you were doing, not just your last manual Save. Boot prefers the newest valid autosave, then config.json, then its .bak, then defaults.
+- Added: **Settings → Backup** sub-page — every **Save Config** also drops a rolling, compressed checkpoint tagged with a coarse diff summary ("+1 instrument · −18 mappings"); the last 50 are kept. **Restore** any checkpoint into the live config, or **Download** it as a JSON file. Times are relative to uptime (the appliance has no clock); checkpoints from before the last reboot show only their #number.
+- Improved: launching or switching Tracker patterns during a set no longer marks the config dirty (no Routing asterisk) and no longer triggers an autosave — pattern selection is treated as performance, not an edit. Recording / Overwrite / Reset still dirty as before, and the active pattern is still written by a deliberate **Save Config**.
+- Improved: an autosave is forced immediately after **Load**, a backup **Restore**, or **Import**, so the just-loaded state — not the previous one — is what resumes after a power cut.
+- Improved: the autosave reuses a per-instance encode cache, re-encoding only the play surfaces that actually changed, so the snapshot cost stays flat as you add more Trackers.
+
+
 2026-06-04 — Version 4.6.0
 
 This release turns the Tracker into a live-performance surface.

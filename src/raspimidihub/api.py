@@ -41,6 +41,101 @@ log = logging.getLogger(__name__)
 
 # --- Helpers ---
 
+class _Autosaver:
+    """Polls the engine's change counter and writes a debounced, rate-
+    capped ping-pong autosave snapshot so a reboot — including a hard
+    power cut — resumes the last edited state. The cadence: never more
+    often than MIN_INTERVAL; after edits go quiet for DEBOUNCE it writes
+    promptly; during a long continuous edit it still writes every
+    MAX_WAIT so you can't lose an unbounded amount on a cut."""
+
+    POLL = 3.0
+    DEBOUNCE = 6.0
+    MIN_INTERVAL = 15.0
+    MAX_WAIT = 30.0
+
+    def __init__(self, engine, config, snapshot):
+        self._engine = engine
+        self._config = config
+        self._snapshot = snapshot
+        self._last_seq = engine._change_seq
+        self._last_write = 0.0
+        self._running = True
+
+    def _plugin_seqs(self):
+        """Per-instance encode-seq map, read on the loop right after the
+        snapshot so it's race-free vs hotplug. Feeds the autosave
+        fragment cache. None when there's no plugin host."""
+        host = getattr(self._engine, "_plugin_host", None)
+        return host.instance_encode_seqs() if host is not None else None
+
+    async def run(self) -> None:
+        import time as _t
+        # Anchor MIN_INTERVAL to start-up so we don't write in the first
+        # few seconds of boot while things settle.
+        self._last_write = _t.monotonic()
+        while self._running:
+            await asyncio.sleep(self.POLL)
+            try:
+                seq = self._engine._change_seq
+                if seq == self._last_seq:
+                    continue  # nothing changed since the last autosave
+                now = _t.monotonic()
+                since_write = now - self._last_write
+                if since_write < self.MIN_INTERVAL:
+                    continue  # rate cap
+                idle = now - self._engine._last_change_t
+                if idle < self.DEBOUNCE and since_write < self.MAX_WAIT:
+                    continue  # still actively editing and not yet overdue
+                self._snapshot()
+                seqs = self._plugin_seqs()
+                ok = await asyncio.to_thread(self._config.write_autosave, seqs)
+                self._last_write = now
+                if ok:
+                    self._last_seq = seq
+            except Exception:
+                log.exception("autosave loop error")
+
+    def flush(self, force: bool = False) -> None:
+        """Synchronous final autosave for the shutdown path — captures a
+        clean stop even if the debounce hadn't fired. No-op if nothing
+        changed since the last autosave, UNLESS `force` is set.
+
+        `force=True` is used right after Load / Restore / Import: the
+        live state *is* the new state and the user expects it to be the
+        resume point, but those paths clear_dirty() (so _change_seq ==
+        _last_seq and the debounced loop would never fire) — without a
+        forced write a power cut just after a Load would resume the
+        PRE-Load state."""
+        try:
+            if not force and self._engine._change_seq == self._last_seq:
+                return
+            self._snapshot()
+            self._config.write_autosave(self._plugin_seqs())
+            self._last_seq = self._engine._change_seq
+            import time as _t
+            self._last_write = _t.monotonic()
+        except Exception:
+            log.exception("autosave flush error")
+
+    async def autosave_now(self) -> None:
+        """Async force-autosave for the request handlers (Load / Restore
+        / Import). Builds the snapshot on the loop (race-free vs
+        hotplug) and runs the encode+gzip+write on a worker thread."""
+        try:
+            self._snapshot()
+            seqs = self._plugin_seqs()
+            await asyncio.to_thread(self._config.write_autosave, seqs)
+            self._last_seq = self._engine._change_seq
+            import time as _t
+            self._last_write = _t.monotonic()
+        except Exception:
+            log.exception("autosave_now error")
+
+    def stop(self) -> None:
+        self._running = False
+
+
 def _parse_conn_id(conn_id: str) -> tuple[int, int, int, int]:
     """Parse 'src_client:src_port-dst_client:dst_port' → (sc, sp, dc, dp). Raises ValueError."""
     src, dst = conn_id.split("-")
@@ -186,6 +281,48 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
     # runs before that, so doing it here would no-op.
     engine._dirty_loop = asyncio.get_event_loop()
     engine._dirty_sse_cb = server.send_sse
+
+    # Serialize the live engine state into config.data. Shared by manual
+    # Save, the autosaver, and the shutdown flush so all three persist an
+    # identical snapshot.
+    def _snapshot_into_config() -> None:
+        fe = engine.filter_engine
+        registry = engine.device_registry
+        config.set_connections(
+            [_serialize_connection(c, registry, fe) for c in engine.connections])
+        disconn = []
+        for conn_id, saved_data in engine._disconnected.items():
+            try:
+                sc, sp, dc, dp = _parse_conn_id(conn_id)
+            except (ValueError, IndexError):
+                continue
+            entry = {"src_port": sp, "dst_port": dp}
+            src_info = registry.get_by_client(sc)
+            dst_info = registry.get_by_client(dc)
+            if src_info:
+                entry["src_stable_id"] = src_info.stable_id
+            if dst_info:
+                entry["dst_stable_id"] = dst_info.stable_id
+            if saved_data:
+                entry.update(saved_data)
+            disconn.append(entry)
+        config.data["disconnected"] = disconn
+        names = dict(registry.get_custom_names())
+        for dev in engine.devices:
+            info = registry.get_by_client(dev.client_id)
+            if info and info.stable_id not in names:
+                names[info.stable_id] = info.name
+        config.data["device_names"] = names
+        if engine._plugin_host:
+            config.data["plugins"] = engine._plugin_host.serialize_instances()
+
+    # Debounced rolling autosave: resume the last edited state on boot,
+    # incl. after a hard power cut. Polls engine._change_seq; writes a
+    # ping-pong snapshot once edits settle, rate-capped. flush() is used
+    # by the shutdown path so a clean stop loses nothing.
+    autosaver = _Autosaver(engine, config, _snapshot_into_config)
+    engine._autosaver = autosaver
+    asyncio.get_event_loop().create_task(autosaver.run())
 
     # MIDI Learn — armed state for the CC binding popup. Keyed by
     # learn_id (UUID). Values: {instance_id, param, timeout_task}.
@@ -1053,43 +1190,10 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
 
     @server.route("POST", "/api/config/save")
     async def api_save_config(req: Request) -> Response:
-        # Serialize current connections + filters into config
-        fe = engine.filter_engine
-        registry = engine.device_registry
-        config.set_connections([_serialize_connection(c, registry, fe) for c in engine.connections])
-
-        # Save deliberately disconnected pairs with their filter/mapping config
-        disconn = []
-        for conn_id, saved_data in engine._disconnected.items():
-            try:
-                sc, sp, dc, dp = _parse_conn_id(conn_id)
-            except (ValueError, IndexError):
-                continue
-            entry = {"src_port": sp, "dst_port": dp}
-            src_info = registry.get_by_client(sc)
-            dst_info = registry.get_by_client(dc)
-            if src_info:
-                entry["src_stable_id"] = src_info.stable_id
-            if dst_info:
-                entry["dst_stable_id"] = dst_info.stable_id
-            if saved_data:
-                entry.update(saved_data)
-            disconn.append(entry)
-        config.data["disconnected"] = disconn
-
-        # Persist all device names (custom + ALSA defaults) by stable ID
-        names = dict(registry.get_custom_names())
-        for dev in engine.devices:
-            info = registry.get_by_client(dev.client_id)
-            if info and info.stable_id not in names:
-                names[info.stable_id] = info.name
-        config.data["device_names"] = names
-
-        # Save plugin instances
-        if engine._plugin_host:
-            config.data["plugins"] = engine._plugin_host.serialize_instances()
-
-        if await config.asave():
+        # Gather live engine state, then persist + drop a rolling backup
+        # checkpoint (with an auto diff summary) in the same rw window.
+        _snapshot_into_config()
+        if await config.asave(make_backup=True):
             engine.clear_dirty()
             return Response.json({"status": "saved"})
         return Response.error("Failed to save config", 500)
@@ -1377,15 +1481,15 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
     # POST /api/config/load — reload saved config from disk
     # ================================================================
 
-    @server.route("POST", "/api/config/load")
-    async def api_load_config(req: Request) -> Response:
-        await config.aload()
-        # Plugin instances are part of the saved config (just like
-        # connections / device names / disconnected entries). Reload
-        # them from disk before touching connections so any saved
-        # routing that references plugin stable IDs can resolve. This
-        # also drops any unsaved instances the user added since the
-        # last save — which is the whole point of "Load Config".
+    async def _apply_current_config() -> None:
+        """Apply whatever is in config.data to the live engine — restore
+        plugin instances, then diff routing onto the matrix. Shared by
+        Load (manual save) and backup Restore."""
+        # The live instance set is being wholesale replaced — the
+        # recreated instances start their encode_seq counters fresh, so
+        # drop the autosave fragment cache to avoid a stale (id, seq)
+        # falsely matching and splicing an outdated fragment.
+        config.clear_autosave_cache()
         if engine._plugin_host:
             engine._plugin_host.stop_all()
             saved_plugins = config.data.get("plugins", [])
@@ -1435,9 +1539,79 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
                 engine._disconnected[conn_id] = saved_data
             engine._update_monitor_subscriptions()
 
+    @server.route("POST", "/api/config/load")
+    async def api_load_config(req: Request) -> Response:
+        # Load the last DELIBERATE save (not the autosave) — reverting to
+        # the user's committed checkpoint is the whole point of "Load".
+        await config.aload_manual()
+        await _apply_current_config()
         engine.clear_dirty()
+        # The loaded config IS the resume point now — force an autosave
+        # so a power cut right after Load doesn't resume the pre-Load
+        # state (Load clears dirty, so the debounced loop won't fire).
+        await autosaver.autosave_now()
         await server.send_sse("connection-changed", {"action": "config-loaded"})
         return Response.json({"status": "loaded"})
+
+    # ================================================================
+    # Backups — list / restore / download rolling save checkpoints
+    # ================================================================
+
+    @server.route("GET", "/api/backups")
+    async def api_backups_list(req: Request) -> Response:
+        return Response.json({"backups": config.list_backups()})
+
+    @server.route("POST", "/api/backups/", exact=False)
+    async def api_backups_action(req: Request) -> Response:
+        # Path: /api/backups/<seq>/restore
+        tail = req.path.split("/api/backups/")[1].strip("/")
+        parts = tail.split("/")
+        if len(parts) != 2 or parts[1] != "restore":
+            return Response.error("Not found", 404)
+        try:
+            seq = int(parts[0])
+        except ValueError:
+            return Response.error("Bad backup id", 400)
+        data = config.backup_data(seq)
+        if not data:
+            return Response.error("Backup not found", 404)
+        if engine._plugin_host:
+            engine._plugin_host.stop_all()
+        config._data = data
+        await _apply_current_config()
+        # A restored backup diverges from the on-disk deliberate save, so
+        # leave the config dirty — the user can Save to commit it.
+        engine.mark_dirty()
+        # The restored state is the resume point now — force an autosave
+        # so a power cut right after Restore resumes it, not the prior
+        # live state.
+        await autosaver.autosave_now()
+        await server.send_sse("connection-changed", {"action": "config-loaded"})
+        return Response.json({"status": "restored", "seq": seq})
+
+    @server.route("GET", "/api/backups/", exact=False)
+    async def api_backup_download(req: Request) -> Response:
+        # Path: /api/backups/<seq>/download
+        tail = req.path.split("/api/backups/")[1].strip("/")
+        parts = tail.split("/")
+        if len(parts) != 2 or parts[1] != "download":
+            return Response.error("Not found", 404)
+        try:
+            seq = int(parts[0])
+        except ValueError:
+            return Response.error("Bad backup id", 400)
+        data = config.backup_data(seq)
+        if not data:
+            return Response.error("Backup not found", 404)
+        return Response(
+            status=200,
+            body=json.dumps(data, indent=2).encode(),
+            content_type="application/json",
+            headers={
+                "Content-Disposition":
+                    f'attachment; filename="raspimidihub-backup-{seq:05d}.json"',
+            },
+        )
 
     # ================================================================
     # GET /api/config/export — download full config as JSON
@@ -1466,6 +1640,9 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
             return Response.error("Invalid config format")
 
         config._data = data
+        # Fresh instance set incoming — drop the autosave fragment cache
+        # (see _apply_current_config) so no stale fragment survives.
+        config.clear_autosave_cache()
         await config.asave()
         # Apply the imported config
         if config.mode == "custom":
@@ -1492,6 +1669,9 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
                 engine._schedule_rescan()
 
         engine.clear_dirty()
+        # Imported config is the resume point now — force an autosave so
+        # a power cut right after Import resumes it, not the prior state.
+        await autosaver.autosave_now()
         await server.send_sse("connection-changed", {"action": "config-loaded"})
         return Response.json({"status": "imported"})
 

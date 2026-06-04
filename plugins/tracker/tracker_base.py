@@ -1604,15 +1604,23 @@ class TrackerBase(PluginBase):
         # always replaces the rows / voices on the way down, never
         # mutates in place.
         new_pages = list(patterns[idx])
-        self.set_param("selected_pattern", idx)
-        # set_param("pages", ...) will trigger our own on_param_change
-        # mirror-back, but `patterns[idx]` is already what we're
-        # writing, so the mirror is a no-op other than a status
-        # refresh -- which is also a no-op. Safe.
-        self.set_param("pages", new_pages)
+        # Quiet writes (persist=False): a pattern *selection* moves the
+        # pointer (selected_pattern) + the live mirror (pages) but does
+        # NOT change saveable content (the patterns bank). So launching
+        # stems / tapping pattern slots during a set must not paint the
+        # Routing asterisk nor churn the autosave. Both keys stay
+        # serialized, so a deliberate Save still records the active
+        # pattern. Recording / clone / clear go through normal
+        # set_param and DO dirty + invalidate as usual.
+        self.set_param("selected_pattern", idx, persist=False)
+        self.set_param("pages", new_pages, persist=False)
         if reset_cursor:
-            self.set_param("current_page", 0)
-            self.set_param("cursor_row", 0)
+            # The cursor/page jump is part of the same pure selection —
+            # keep it quiet too (current_page is serialized but not
+            # transient, so a persisting reset here would dirty a plain
+            # Switch-mode tap).
+            self.set_param("current_page", 0, persist=False)
+            self.set_param("cursor_row", 0, persist=False)
         if reset_playhead:
             with self._lock:
                 self._play_page = 0

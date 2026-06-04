@@ -20,3 +20,11 @@ class PluginInstance:
     crash_error: str = ""
     _tick_queue: object = None  # queue.Queue for clock ticks from bus
     _tick_pipe: tuple = None   # (read_fd, write_fd) for waking select on tick
+    # Bumped on every persisted, non-transient param change (see
+    # PluginHost._on_param_change). The autosave fragment cache keys
+    # on (id, _encode_seq) to reuse the JSON of instances that haven't
+    # changed since the last autosave. Transient params (cursor /
+    # playhead) and quiet writes (persist=False — pattern launches /
+    # selection) deliberately do NOT bump it, so they invalidate
+    # nothing and cost no re-encode.
+    _encode_seq: int = 0

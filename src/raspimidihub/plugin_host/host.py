@@ -356,19 +356,27 @@ class PluginHost:
         # AFTER create_instance, and the closure must follow.
         host_self_p = self
         instance_p = instance
-        def _on_param_change(name, value):
-            # Skip dirty-fire for params the plugin marked transient
-            # (live-play state on Controllers — fader / knob / XY
-            # positions, drop fire signals, learn-mode toggle). The
-            # bottom-nav Routing asterisk should reflect saveable
-            # config drift only, not knob movement.
-            if (host_self_p._on_dirty_cb
-                    and not host_self_p._loading
-                    and name not in instance_p.plugin.transient_params):
-                try:
-                    host_self_p._on_dirty_cb()
-                except Exception:
-                    pass
+        def _on_param_change(name, value, persist=True):
+            # A non-transient, persisted param change is the only thing
+            # that (a) marks the routing config dirty and (b) invalidates
+            # this instance's autosave fragment cache. Skip both for:
+            #  - transient params (live-play state on Controllers/Tracker
+            #    — fader / knob / XY positions, cursor, playhead, drop
+            #    fire signals): never serialized, so they can't drift.
+            #  - quiet writes (persist=False — pure pattern selection /
+            #    stem launches): serialized but pointer-only, so a live
+            #    set paints no asterisk and forces no re-encode.
+            # The value still broadcasts over SSE below regardless, so
+            # the display always follows.
+            saveable = (persist
+                        and name not in instance_p.plugin.transient_params)
+            if saveable:
+                instance_p._encode_seq += 1
+                if host_self_p._on_dirty_cb and not host_self_p._loading:
+                    try:
+                        host_self_p._on_dirty_cb()
+                    except Exception:
+                        pass
             key = (instance_p.id, name)
             if isinstance(value, str):
                 host_self_p._param_coalescer.emit_now(
@@ -773,6 +781,12 @@ class PluginHost:
         return True
 
     # --- Serialization for config persistence ---
+
+    def instance_encode_seqs(self) -> dict[str, int]:
+        """{instance_id: encode_seq} for the autosave fragment cache.
+        Read on the asyncio loop right after the snapshot so it's
+        race-free against hotplug (which also runs on the loop)."""
+        return {inst.id: inst._encode_seq for inst in self._instances.values()}
 
     def serialize_instances(self) -> list[dict]:
         """Serialize all instances for config save. Transient params

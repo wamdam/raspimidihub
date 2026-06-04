@@ -4,8 +4,6 @@ Playwright checks; this file pins the Python-side behaviours so the
 ALSA-scheduling refactor can land later without breaking semantics."""
 
 import pytest
-
-from raspimidihub.plugin_api import schema_param_keys
 from tracker.tracker_base import (
     CC_HOLD,
     CC_NONE,
@@ -20,6 +18,8 @@ from tracker.tracker_base import (
     midi_to_note_str,
     note_str_to_midi,
 )
+
+from raspimidihub.plugin_api import schema_param_keys
 
 
 def test_empty_voice_uses_hold_sentinels():
@@ -2228,3 +2228,89 @@ def test_panic_clears_active_launch():
     assert t._launch_active is True
     t.panic()
     assert t._launch_active is False
+
+
+# ---------------------------------------------------------------------------
+# Pattern selection is "quiet" (persist=False): launching stems / tapping
+# pattern slots moves the live pointer (selected_pattern) + mirror (pages)
+# but changes no saveable content, so it must NOT mark the config dirty nor
+# invalidate the autosave encode cache. Recording goes through the normal
+# (persisting) path and DOES both. The fake _notify_param_change below
+# mirrors the host's PluginHost._on_param_change gating so we test the
+# end-to-end consequence (dirty + encode_seq), not just the persist flag.
+# ---------------------------------------------------------------------------
+
+def _wire_dirty_tracker(t):
+    """Attach a _notify_param_change mirroring the host gating: a
+    persisted, non-transient change bumps encode_seq + marks dirty;
+    transient or quiet (persist=False) writes do neither. Returns a
+    state dict {dirty, encode_seq, calls}."""
+    state = {"dirty": False, "encode_seq": 0, "calls": []}
+
+    def notify(name, value, persist=True):
+        state["calls"].append((name, value, persist))
+        if persist and name not in t.transient_params:
+            state["encode_seq"] += 1
+            state["dirty"] = True
+
+    t._notify_param_change = notify
+    return state
+
+
+def _persist_calls(state, name):
+    return [c[2] for c in state["calls"] if c[0] == name]
+
+
+@pytest.mark.parametrize("mode", [1, 2, 3])  # One-shot / Hold / Toggle
+def test_launch_is_quiet_no_dirty_no_encode_bump(mode):
+    t = _started_launch(mode=mode)
+    t._param_values["patterns"][1] = [_filled_page(track_count=t.TRACK_COUNT)]
+    t._refresh_pattern_status_slot(1)
+    state = _wire_dirty_tracker(t)  # wire AFTER on_start so seeding doesn't count
+    t.on_note_on(channel=9, note=37, velocity=100)  # launch slot 1
+    assert t._launch_active is True
+    assert t._param_values["selected_pattern"] == 1
+    # The launch selected a pattern but dirtied nothing and forced no
+    # re-encode — a live set stays asterisk-free and autosave-quiet.
+    assert state["dirty"] is False
+    assert state["encode_seq"] == 0
+    # Both pointer + mirror were written quietly.
+    assert _persist_calls(state, "selected_pattern") == [False]
+    assert _persist_calls(state, "pages") == [False]
+
+
+def test_switch_mode_tap_is_quiet():
+    t = _started_with_ctrl()  # trigger_mode 0 = Switch
+    t._param_values["patterns"][1] = [_filled_page(track_count=t.TRACK_COUNT)]
+    t._refresh_pattern_status_slot(1)
+    state = _wire_dirty_tracker(t)
+    # Stopped + tap = immediate switch (the Switch-mode selection path).
+    t.on_param_change("cmd_pattern_select", {"pattern": 1, "mode": "tap"})
+    assert t._param_values["selected_pattern"] == 1
+    assert state["dirty"] is False
+    assert state["encode_seq"] == 0
+    assert _persist_calls(state, "selected_pattern") == [False]
+    assert _persist_calls(state, "pages") == [False]
+
+
+def test_recording_dirties_and_bumps_encode_seq():
+    t = _started()
+    state = _wire_dirty_tracker(t)
+    t._record_voice_field_at(0, 0, 0, {"note": "G-4", "vel": 100})
+    # Recording wrote real, saveable content → dirty + cache invalidated.
+    assert state["dirty"] is True
+    assert state["encode_seq"] >= 1
+    assert _persist_calls(state, "pages") == [True]
+
+
+def test_selected_pattern_stays_serialized_after_launch():
+    """Even though launches are quiet, selected_pattern must remain a
+    NON-transient (serialized) param so a deliberate Save still records
+    the active pattern."""
+    t = _started_launch(mode=1)
+    t._param_values["patterns"][1] = [_filled_page(track_count=t.TRACK_COUNT)]
+    t._refresh_pattern_status_slot(1)
+    t.on_note_on(channel=9, note=37, velocity=100)
+    assert "selected_pattern" not in t.transient_params
+    assert "pages" not in t.transient_params
+    assert t._param_values["selected_pattern"] == 1

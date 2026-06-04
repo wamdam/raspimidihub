@@ -48,19 +48,56 @@ package.
 The persistence model assumes the user *will* yank the power. The
 service explicitly:
 
-- Writes the project state only when **Save Config** is tapped --
-  no autosave that could be interrupted mid-write.
-- Uses atomic-replace on every config write (write to temp file,
-  fsync, rename).
+- Keeps the deliberate **Save Config** checkpoint
+  (`config.json`) as the committed state, written with
+  atomic-replace (write to temp file, fsync, rename) inside a
+  brief remount-rw / remount-ro window on the boot partition.
+- **Autosaves the live edited state in the background** so a hard
+  power cut resumes the last thing you were doing, not just the
+  last manual Save (see *Autosave and Resume* below).
 - Snapshots BlueZ bonds to the boot partition on every change,
   not periodically (using the same rw / write / ro cycle as
   Save Config).
 - Restores BlueZ bonds from the snapshot on every boot before the
   routing service comes up.
 
-Pulling the power between **Save Config** taps loses the unsaved
-state and *only* the unsaved state. The boot config and the
-BlueZ bonds are intact.
+## Autosave and Resume
+
+Because the appliance is switched off at the wall with no clean
+shutdown, it keeps a rolling **autosave** of the live edited state
+in addition to the manual **Save Config** checkpoint. On the next
+boot the unit resumes the newest valid autosave, falling back to
+`config.json` (then its `.bak`, then defaults) if no autosave is
+usable.
+
+Three properties make this power-cut-safe and unobtrusive:
+
+- **Ping-pong, never overwrite-in-place.** The autosave alternates
+  between two slots (`autosave-0` / `autosave-1`). A cut can only
+  corrupt the slot being written; the other still holds the
+  previous good snapshot. Each slot is gzip-compressed, and gzip's
+  built-in CRC *is* the validity check — a torn write fails to
+  decompress, so boot simply uses the other slot.
+- **No clock, so no dates.** The appliance has no real-time clock,
+  so the autosave (and the Backup list, chapter 16) never stores a
+  wall-clock time. It records uptime + a per-boot id and shows a
+  relative "n ago" that is only honest within the current boot;
+  anything from before the last reboot shows only its sequence
+  number.
+- **Debounced and launch-free.** The autosave fires a few seconds
+  after edits settle (and on a clean shutdown / reboot), not on
+  every keystroke. Purely *performing* — launching Tracker
+  patterns, tapping pattern slots — moves the live playhead but
+  changes no saveable content, so it triggers **no** autosave and
+  leaves the Routing dirty-asterisk clear. Only real edits
+  (recording, routing changes, parameter edits) do. After a
+  **Load**, a **Restore** (chapter 16), or an **Import**, an
+  autosave is forced immediately so the just-loaded state is the
+  resume point.
+
+Pulling the power loses at most the few seconds of editing since
+the last autosave settled. The boot config, the rolling backups,
+and the BlueZ bonds are all intact.
 
 ## CPU 3 Reservation
 

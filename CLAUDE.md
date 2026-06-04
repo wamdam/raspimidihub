@@ -132,3 +132,95 @@ The user-level rule from `~/.claude/CLAUDE.md` -- add new Python
 packages to `requirements.txt` (this project uses
 `pyproject.toml` `optional-dependencies`) and install into the
 local `.venv`, never globally -- applies here unchanged.
+
+## Config persistence, autosave & backups (design decisions)
+
+In-progress feature (see `PLAN.md` for the TODO state). These
+decisions were worked out carefully; honour them unless the user
+revisits.
+
+**Hard constraints of this appliance**
+- **Hard power cuts are normal.** The Pi is switched off at the
+  wall with no clean shutdown. We must resume the last edited
+  state on boot, and any persistent write must survive a cut
+  mid-write. (This is why the root + boot FS are read-only and we
+  remount-rw only for the brief write window.)
+- **No RTC.** Wall-clock time is never trustworthy. Never store an
+  absolute date for user-facing "when" info -- store **uptime**
+  (`/proc/uptime`) + **`boot_id`** (`/proc/sys/kernel/random/boot_id`)
+  and show a relative "n ago" that is only valid within the current
+  boot; older items show "before last reboot" and rely on a
+  monotonic `#seq` for ordering.
+- **The asyncio loop carries filtered/mapped MIDI + SSE + REST.**
+  `json.dumps` (and pickle/orjson) **hold the GIL**, so a big encode
+  blocks the loop *even on a worker thread*. Disk I/O (`mount`,
+  `sync`) and `gzip` **release** the GIL, so they don't. Measured:
+  ~60 ms to JSON-encode the ~235 KB config on the Pi (≈ ×8 with 8
+  trackers). So the cost to minimise is **the encode**, not the I/O.
+
+**The three persistence tiers**
+1. **`config.json`** -- the deliberate manual Save (single full
+   JSON) + `config.json.bak`. The "committed checkpoint." The
+   **"Load" button loads this**, not the autosave.
+2. **`backups/backup-NNNNN.json.gz`** (+ `index.json`) -- rolling
+   gzipped checkpoints written on each manual Save, last 50,
+   each with a coarse **diff summary** vs the previous (counts of
+   instruments / connections / mappings / device-names changed --
+   *not* which knob). Restore + Download from Settings → Backup.
+3. **`autosave-0/1.json.gz`** -- a **single-file ping-pong** resume
+   snapshot, written debounced while editing, on clean shutdown,
+   and **immediately after Load/Restore/Import**. Boot prefers the
+   newest valid autosave → `config.json` → `.bak` → defaults.
+
+**Why these specific choices**
+- **Ping-pong (two slots), not one file.** A power cut can corrupt
+  only the slot being written; the other holds the previous good
+  state. gzip's CRC is the validity check (a torn write fails to
+  decompress → use the other slot). This is the power-cut
+  guarantee; keep it.
+- **Single autosave file + in-memory per-instrument encode cache**,
+  **not** per-instrument files + a tar.gz/zip container. Per-file
+  would need an on-FAT transactional store (manifest commit, orphan
+  GC when instruments are deleted/restored-away, per-file A/B) -- a
+  real bug surface. The cache (skip re-encoding **unchanged**
+  instruments, splice cached JSON fragments) gets the same
+  scaling win (cost ≈ one changed instrument, regardless of count)
+  with a single file and **zero cleanup story**.
+- **JSON, not pickle/orjson.** JSON fragments concatenate into the
+  `plugins` array (pickle blobs don't); the cache -- not the format
+  -- is the real win, so no dependency is needed. orjson/pickle were
+  considered and rejected (orjson = a compiled arch+pyver-locked dep
+  on an `_all` deb; pickle breaks fragment concatenation).
+- **No sidecar/IPC process.** It would push the encode fully off the
+  main process, but at the cost of a delta protocol + state mirror +
+  fork-safety + funnelling all writes through it. Reserve only if the
+  cache proves insufficient.
+- **Pattern selection must not dirty (Lever 1).** A Trigger-Mode stem
+  launch (and a Switch-mode tap) moves the pattern *pointer*
+  (`selected_pattern`) + live *mirror* (`pages`) but does **not**
+  change saveable content (the `patterns` bank). Decision (per the
+  user, simplest): pattern **selection simply does not mark the tracker
+  dirty** -- a **per-call quiet write** (`set_param(..., persist=False)`)
+  that still SSE-broadcasts the value (display follows the launch) but
+  skips the dirty hook *and* the encode-cache invalidation.
+  `selected_pattern`/`pages` stay **non-transient (serialised)**, so the
+  active pattern is still saved on a deliberate Save (no `default_pattern`
+  field). It must be per-call, **not** a per-param `transient` flag,
+  because `pages` is changed by both launches (quiet) and recording
+  (must dirty). Recording/clone/clear use normal `set_param` → they
+  dirty + invalidate the cache as usual; no `persist_changed` mechanism.
+  Net: pure stem-launching during a set triggers **no** autosave and
+  **no** asterisk; only real edits do. (This is *not* the rejected idea
+  of launches not switching the display -- the display still follows.)
+- **Autosave after Load/Restore/Import is mandatory.** After those,
+  the live state *is* the new state and the user expects it to be the
+  resume point; a force-autosave closes the window where a cut would
+  otherwise resume the pre-Load state.
+
+**Threading**: MIDI routing is kernel ALSA port subscriptions;
+plugins run on their own threads; clock/scheduled sends are
+pre-queued to the ALSA queue (kernel-timed). So an autosave encode
+only ever blips **filtered/mapped connections + the UI**, never
+clock/plugin/kernel-routed timing. The snapshot is built on the
+loop (race-free vs hotplug, which is also on the loop); the
+encode+gzip+write run via `asyncio.to_thread`.

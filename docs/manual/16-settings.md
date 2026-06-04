@@ -1,12 +1,12 @@
 # Settings
 
-The **Settings** tab is a hub of six sub-pages. The hub shows a card
+The **Settings** tab is a hub of sub-pages. The hub shows a card
 per sub-page; tapping a card opens it under a `< Settings / <title>`
 back-bar. The active sub-page is part of the URL
 (`/settings/<section>`) and the bottom-nav remembers your last
 sub-page across tab switches, same as Routing / Controller / Play.
 
-The six sub-pages:
+The sub-pages:
 
 | Sub-page | What lives there |
 |---|---|
@@ -16,6 +16,9 @@ The six sub-pages:
 | **Display** | Per-device browser preferences — activity bar, knob/wheel tick sounds, scroll-assist FABs, layout density |
 | **Update** | Check GitHub, manage stored versions, install |
 | **Plugin Control Mappings** | Flat editable table of every CC binding across every plugin instance and every controller cell |
+| **Backup** | Restore or download a rolling save checkpoint (see **Backup** below) |
+
+(plus **Spectator mirroring**, documented in its own section below.)
 
 The dirty-state asterisk (chapter 6.4) does **not** track most
 Settings changes. WiFi credentials, ethernet config, and the AP
@@ -157,6 +160,58 @@ placeholder pointing at the Routing tab's **Add** button. There's
 no "create" affordance here -- this is a viewer / editor over
 existing instances, not a way to spawn new ones.
 
+## Backup
+
+A list of **rolling save checkpoints**. Every time you tap **Save
+Config** (chapter 15.2) the unit writes a compressed copy of the
+whole project state here, newest first; the last 50 are kept and
+the oldest are pruned automatically. These are distinct from the
+background **autosave** (chapter 15.6) -- backups are deliberate,
+labelled checkpoints you can step back to.
+
+Each row shows:
+
+- **#number** -- a monotonic sequence number. It only ever
+  increases, so it orders checkpoints even across reboots.
+- **When** -- a relative "n ago" (`125s ago`, `3 min ago`, `2 h
+  ago`). The appliance has no real-time clock, so this is measured
+  against uptime, not a wall-clock date, and is only honest within
+  the current boot. A checkpoint written before the last reboot
+  shows **before last reboot** -- its `#number` is the only
+  ordering you get.
+- **Summary** -- a coarse one-line diff against the *previous*
+  checkpoint (counts only, e.g. "+1 instrument · −18 mappings",
+  or "(no changes)" / "(initial)"). It tells you roughly what a
+  checkpoint captured, not which exact knob moved.
+- **Size** -- the compressed size of the stored copy.
+
+Two actions per row:
+
+- **Restore** replaces the live config with that checkpoint
+  (plugins are stopped and recreated, routing is re-diffed onto
+  the matrix). After confirming, the restored state is running but
+  the dirty-state asterisk lights: tap **Save Config** to commit it
+  as the new boot default, or **Load Config** to go back to your
+  last Save. A Restore is autosaved immediately, so it survives a
+  power cut even before you Save.
+- **Download** saves that checkpoint to the browser as a plain
+  JSON file (`raspimidihub-backup-NNNNN.json`) -- the same format
+  **Export Config** produces, so it can be re-imported anywhere.
+
+When no checkpoints exist yet (a fresh unit that has never been
+Saved), the page shows a short placeholder.
+
+::: info
+**Screenshots pending capture.** The `32-settings-backup` scene
+(populated checkpoint list) and the refreshed `04-settings` hub
+(now showing the **Backup** card) are wired into
+`scripts/screenshots/run.py`; run `make screenshots
+TARGET=http://<pi>` on a non-production unit to generate
+`32-settings-backup.png` and refresh `04-settings.png`, then embed
+the Backup shot here. Not captured against the live rig because the
+screenshot run swaps in the demo plugin set.
+:::
+
 ## WiFi
 
 A single card with the WiFi status badge plus rows for credentials
@@ -175,7 +230,7 @@ the home network for the **WiFi for updates** and **WiFi always**
 modes. The credentials are stored on the Pi as part of the saved
 project state and *are* therefore included in **Export Config**
 JSON files -- edit the WiFi section out before sharing an export
-externally (chapter 15.7).
+externally (chapter 15.8).
 
 ### AP Password
 

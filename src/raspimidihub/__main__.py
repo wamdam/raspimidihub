@@ -412,6 +412,17 @@ async def async_main() -> None:
             await asyncio.wait_for(server.stop(), timeout=2.0)
         except (asyncio.TimeoutError, asyncio.CancelledError):
             log.warning("Web server stop timed out")
+        # Flush a final autosave BEFORE tearing down plugins, so a clean
+        # stop (deploy / reboot) resumes the exact in-memory state and the
+        # snapshot still sees live plugin instances. Power cuts skip this
+        # (no SIGTERM) — the periodic autosave covers those.
+        try:
+            autosaver = getattr(engine, "_autosaver", None)
+            if autosaver is not None:
+                autosaver.stop()
+                autosaver.flush()
+        except Exception:
+            log.warning("Final autosave flush failed", exc_info=True)
         plugin_host.stop_all()
         engine.stop()
         led.set_off()

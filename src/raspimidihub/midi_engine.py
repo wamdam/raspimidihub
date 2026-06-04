@@ -108,6 +108,11 @@ class MidiEngine:
         self.config_dirty = False
         self._dirty_loop = None
         self._dirty_sse_cb = None
+        # Monotonically-bumped on every mark_dirty (even while already
+        # dirty) + the time of the last bump. The autosaver polls these
+        # to debounce: write a snapshot a few seconds after edits settle.
+        self._change_seq = 0
+        self._last_change_t = 0.0
         # Per-port message counters for rate metering
         self._port_msg_counts: dict[str, int] = {}  # "client:port" -> count
         self._port_rates: dict[str, int] = {}  # "client:port" -> msgs/sec (last snapshot)
@@ -143,9 +148,12 @@ class MidiEngine:
     def mark_dirty(self) -> None:
         """Mark the in-memory config as diverged from disk.
 
-        Idempotent — only the False→True transition broadcasts SSE; further
-        calls are cheap. Safe to call from any thread (the SSE schedule
-        crosses to the asyncio loop via run_coroutine_threadsafe)."""
+        The SSE flip is idempotent — only the False→True transition
+        broadcasts. The change counter bumps on EVERY call though (even
+        while already dirty), so the polling autosaver sees each edit.
+        Safe to call from any thread."""
+        self._change_seq += 1
+        self._last_change_t = time.monotonic()
         if self.config_dirty:
             return
         self.config_dirty = True

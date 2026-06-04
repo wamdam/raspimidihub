@@ -999,6 +999,82 @@ function SettingsCcBindings({ openCcBinding, openCellBinding }) {
 // yourself); the rest become tappable links. The device-name field
 // at the top sets this connection's label so other devices see a
 // readable name instead of a UUID.
+function SettingsBackup({ showToast }) {
+    const [backups, setBackups] = useState(null);
+    const [busy, setBusy] = useState(false);
+
+    const load = () => api('/backups')
+        .then(r => setBackups(r.backups || []))
+        .catch(() => setBackups([]));
+    useEffect(() => { load(); }, []);
+
+    // No RTC on the appliance, so we show time relative to uptime, not a
+    // (meaningless) date. Backups from before the last reboot can't have
+    // an honest relative time — #seq still orders them.
+    const fmtAgo = (b) => {
+        if (!b.same_session || b.age_seconds == null) return 'before last reboot';
+        const s = b.age_seconds;
+        if (s < 60) return s + 's ago';
+        if (s < 3600) return Math.floor(s / 60) + ' min ago';
+        if (s < 86400) return Math.floor(s / 3600) + ' h ago';
+        return Math.floor(s / 86400) + ' d ago';
+    };
+    const fmtSize = (b) => (b >= 1024 ? (b / 1024).toFixed(1) + ' KB' : (b || 0) + ' B');
+
+    const restore = async (seq) => {
+        if (!window.confirm(
+            'Restore backup #' + seq + '?\n\nThis replaces the live config. ' +
+            'Use "Load" to return to your last Save, or Save to keep the restored one.')) {
+            return;
+        }
+        setBusy(true);
+        try {
+            await api('/backups/' + seq + '/restore', { method: 'POST' });
+            showToast('Backup #' + seq + ' restored — Save to keep it');
+        } catch (e) {
+            showToast('Restore failed');
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    if (backups === null) {
+        return html`<div class="card"><h3>Backups</h3>
+            <p style="color:var(--text-dim)">Loading…</p></div>`;
+    }
+    return html`
+        <div class="card">
+            <h3>Backups</h3>
+            <p style="font-size:11px;color:var(--text-dim)">
+                A checkpoint is written automatically on every <strong>Save</strong>
+                (newest first, last 50 kept). The summary shows roughly what changed
+                since the previous checkpoint. <strong>Restore</strong> replaces the
+                live config — Save afterwards to keep it, or use Load to revert.
+                Times are relative to uptime (this device has no clock); checkpoints
+                from before the last reboot show only their <code>#number</code>.
+            </p>
+            ${backups.length === 0 ? html`
+                <p style="color:var(--text-dim)">No backups yet — they appear after your first Save.</p>
+            ` : html`
+                <div class="backup-list">
+                    ${backups.map(b => html`
+                        <div key=${b.seq} style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border)">
+                            <div style="flex:1;min-width:0">
+                                <div style="font-size:13px">#${b.seq} · ${fmtAgo(b)}</div>
+                                <div style="font-size:11px;color:var(--text-dim)">${b.summary || ''} · ${fmtSize(b.bytes)}</div>
+                            </div>
+                            <button class="btn btn-secondary" disabled=${busy}
+                                onClick=${() => restore(b.seq)}>Restore</button>
+                            <a class="btn btn-secondary" href=${'/api/backups/' + b.seq + '/download'}
+                                download>Download</a>
+                        </div>
+                    `)}
+                </div>
+            `}
+        </div>
+    `;
+}
+
 function SettingsSpectator() {
     const [label, setLabelState] = useState(() => getSpectatorLabel());
     const [clients, setClients] = useState([]);
@@ -1101,6 +1177,7 @@ const SECTIONS = [
     { key: 'display',     title: 'Display',                 hint: 'MIDI activity bar, sounds, scroll-assist, density' },
     { key: 'update',      title: 'Update',                  hint: 'Check GitHub, manage stored versions' },
     { key: 'cc-bindings', title: 'Plugin Control Mappings', hint: 'CC bindings across every plugin instance' },
+    { key: 'backup',      title: 'Backup',                  hint: 'Restore or download a saved config checkpoint' },
     { key: 'spectator',   title: 'Spectator mirroring',     hint: 'Stream this device into OBS, or mirror another device' },
 ];
 
@@ -1119,6 +1196,7 @@ export function SettingsPage({ showToast, showMidiBar, toggleMidiBar,
             case 'display':     body = html`<${SettingsDisplay} showMidiBar=${showMidiBar} toggleMidiBar=${toggleMidiBar} />`; break;
             case 'update':      body = html`<${SettingsUpdate} showToast=${showToast} onUpgradingChange=${setIsUpgrading} />`; break;
             case 'cc-bindings': body = html`<${SettingsCcBindings} openCcBinding=${openCcBinding} openCellBinding=${openCellBinding} />`; break;
+            case 'backup':      body = html`<${SettingsBackup} showToast=${showToast} />`; break;
             case 'spectator':   body = html`<${SettingsSpectator} />`; break;
             default:            body = html`<div class="card"><p>Unknown section</p></div>`;
         }

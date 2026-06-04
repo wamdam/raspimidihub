@@ -32,18 +32,30 @@ dirty-state asterisk clears. The next reboot will start in this
 state.
 
 Save Config writes the *entire* project state. Anything in chapter
-15.5 is captured.
+15.7 is captured.
+
+Each Save also drops a **rolling backup checkpoint** -- a
+compressed copy tagged with a short summary of what changed since
+the previous one (e.g. "+1 instrument · −18 mappings"). The last
+50 are kept and can be restored or downloaded from **Settings →
+Backup** (chapter 16). This is separate from the automatic
+**autosave** below.
 
 ## Load Config
 
 Tap **Load Config** at the bottom of the routing matrix. The
-in-memory state is replaced with the boot config from disk. Any
-unsaved edits since the last save are discarded; plugin instances
-that exist only in memory are stopped.
+in-memory state is replaced with the **boot config**
+(`config.json`, the last deliberate Save) from disk -- *not* the
+autosave. Any unsaved edits since the last save are discarded;
+plugin instances that exist only in memory are stopped.
 
 Load Config is the "undo my unsaved edits" button. It is the
 single-button equivalent of rebooting -- except faster and without
-losing the AP connection.
+losing the AP connection. (Reverting to the *committed* Save, not
+the autosave, is the whole point: it is how you throw away the
+work-in-progress the autosave has been keeping.) Immediately after
+a Load the loaded state is autosaved, so it becomes the resume
+point on the next boot.
 
 ## Export Config
 
@@ -89,7 +101,39 @@ default, tap **Save Config**.
 
 The import validates the JSON before commit. A malformed file or
 a file from an incompatible major version is rejected with an
-explanatory error; the running state is left untouched.
+explanatory error; the running state is left untouched. The
+imported state is autosaved immediately, so it survives a power
+cut even before you tap **Save Config**.
+
+## Autosave and Resume
+
+Separately from the manual **Save Config** checkpoint, the unit
+continuously **autosaves the live edited state** in the background
+so a hard power cut resumes the last thing you were doing -- not
+just the last manual Save. On boot the unit prefers the newest
+valid autosave, falling back to `config.json` (then its `.bak`,
+then defaults).
+
+What this means in practice:
+
+- You do **not** have to tap Save before pulling the power to keep
+  your edits across the reboot -- the autosave already has them.
+  Save is still what you tap to set the *committed* checkpoint that
+  **Load Config** reverts to, and to drop a backup checkpoint.
+- The autosave is **debounced**: it writes a few seconds after
+  edits settle, and on a clean shutdown / reboot.
+- Purely *performing* does not autosave. Launching Tracker
+  patterns or tapping pattern slots during a set moves the
+  playhead but changes no saveable content, so it triggers no
+  autosave and does not light the dirty-state asterisk. The active
+  pattern is still written by a deliberate **Save**.
+- After **Load**, a backup **Restore** (chapter 16), or **Import**,
+  the new state is autosaved at once so it -- not the previous live
+  state -- is the resume point.
+
+The autosave is double-buffered (two ping-pong slots, gzip-CRC
+validated) so a cut mid-write can never leave the unit without a
+good snapshot to resume from. Chapter 18.3 covers the mechanism.
 
 ## What the State Contains
 

@@ -254,6 +254,35 @@ def _open_settings_spectator(page) -> None:
     time.sleep(0.4)
 
 
+def _open_settings_backup(page) -> None:
+    """Already at /settings/backup. The demo population leaves no
+    rolling checkpoints, so the page would show the empty state.
+    Drop a couple of real checkpoints first — Save once (→ #1
+    "(initial)"), add a plugin, Save again (→ #2 "+1 instrument") —
+    so the screenshot shows populated rows with a diff summary +
+    relative "n ago", then reload so the list (fetched on mount,
+    before the saves existed) picks them up.
+
+    NOTE: these Saves write the *demo* config + checkpoints to the
+    Pi. The screenshot run's cleanup (restore the user's config,
+    wipe backups/ + autosave-*.json.gz, restart) removes them — see
+    PLAN.md Phase 7 / the manual's screenshot rules."""
+    page.evaluate(
+        "async () => {"
+        " const save = () => fetch('/api/config/save', {method:'POST'});"
+        " await save();"
+        " await fetch('/api/plugins/instances', {method:'POST',"
+        "   headers:{'Content-Type':'application/json'},"
+        "   body: JSON.stringify({type:'cc_lfo', name:'Demo LFO'})});"
+        " await save();"
+        " await new Promise(r => setTimeout(r, 200));"
+        "}"
+    )
+    page.goto(page.url, wait_until="networkidle")
+    page.wait_for_selector(".backup-list > div", timeout=5000)
+    time.sleep(0.3)
+
+
 def build_scenes(target: str, instances: dict[str, dict]) -> list[dict]:
     """Materialise the scene list. URL paths reference the running
     Pi; client_ids are resolved per-scene from the demo instances we
@@ -270,6 +299,12 @@ def build_scenes(target: str, instances: dict[str, dict]) -> list[dict]:
         {"name": "31-settings-cc-bindings",
          "path": "/settings/cc-bindings",
          "setup": _open_settings_cc_bindings},
+        # 4.7.0: the Backup sub-page. The setup hook drops a couple of
+        # checkpoints first so the list shows real rows (diff summary +
+        # relative "n ago") rather than the empty state.
+        {"name": "32-settings-backup",
+         "path": "/settings/backup",
+         "setup": _open_settings_backup},
         # Spectator mirroring sub-page (the picker + this device's
         # spectator URL). The setup hook fills the device-name field
         # so the screenshot shows a realistic label rather than the

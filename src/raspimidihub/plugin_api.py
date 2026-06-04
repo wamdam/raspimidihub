@@ -757,14 +757,23 @@ class PluginBase:
         """Get current value of a parameter."""
         return self._param_values.get(name)
 
-    def set_param(self, name: str, value: Any) -> None:
+    def set_param(self, name: str, value: Any, persist: bool = True) -> None:
         """Update a parameter value from inside the plugin and push the
         change to the UI via SSE. Use this for trigger-style buttons that
-        reset their value after firing (e.g. Panic, Drop pad)."""
+        reset their value after firing (e.g. Panic, Drop pad).
+
+        `persist=False` is a *quiet* write: the value still updates and
+        still broadcasts over SSE (so the display follows), but it does
+        NOT mark the routing config dirty and does NOT invalidate the
+        autosave encode cache. Used for pure pattern *selection* (stem
+        launches, Switch-mode taps) — moving the live pointer/mirror
+        without changing saveable content, so a live set triggers no
+        asterisk and no autosave churn. The value stays serialized, so
+        a deliberate Save still records the active pattern."""
         self._param_values[name] = value
         if self._notify_param_change:
             try:
-                self._notify_param_change(name, value)
+                self._notify_param_change(name, value, persist)
             except Exception:
                 pass
 

@@ -34,6 +34,15 @@ the Tracker the switch queues to the next page-0 boundary while
 playing (Shift+Tap forces an immediate switch). Long-press any
 slot for an **Overwrite from current / Reset to default** menu.
 
+Switching the active pattern -- by tapping a slot, or by a
+control-channel launch (chapter 13.3) -- is treated as pure
+*performance*, not an edit: it moves the active-pattern pointer
+but changes none of the stored slots, so it does **not** mark the
+config dirty (no Routing asterisk) and does **not** trigger an
+autosave (chapter 15.6). The active pattern is still written by a
+deliberate **Save Config**. Editing a slot's content (recording,
+Overwrite, Reset) is a real edit and dirties as usual.
+
 Routing-matrix appearance, instance lifecycle, and config-panel
 chrome all follow chapter 11; this chapter is the surface-and-
 workflow reference for each plugin.
