@@ -17,6 +17,7 @@ identically.
 | Shortcut | Action |
 |----------|--------|
 | `Space` | Toggle Play / Stop |
+| `Shift`+`Space` | Play looping just the current page (follows the page you view); Stop or plain Play returns to full-sequence playback |
 
 ## Tracker -- note entry
 

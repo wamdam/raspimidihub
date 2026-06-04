@@ -351,9 +351,14 @@ export function PluginTrackerGrid({ param, values, onChange, displayCtx }) {
     const isPlaying = !!(playhead && playhead.playing);
     const isPlayingRef = useRef(false);
     isPlayingRef.current = isPlaying;
-    const togglePlay = useCallback(() => {
+    // `loopPage` (Shift+Play) starts a single-page loop that follows
+    // the displayed page — a composing aid. When already playing,
+    // toggle always stops regardless of the modifier.
+    const togglePlay = useCallback((loopPage = false) => {
         if (isPlayingRef.current) {
             onChange(param.cmd_stop_param, true);
+        } else if (loopPage && param.cmd_play_page_param) {
+            onChange(param.cmd_play_page_param, true);
         } else {
             onChange(param.cmd_play_param, true);
         }
@@ -1007,7 +1012,7 @@ export function PluginTrackerGrid({ param, values, onChange, displayCtx }) {
                 case 'PageDown':   cursorMove(() => movePage(+1), e.shiftKey); e.preventDefault(); return;
                 case 'Delete':
                 case 'Backspace':  onCut(); e.preventDefault(); return;
-                case ' ':          togglePlay(); e.preventDefault(); return;
+                case ' ':          togglePlay(e.shiftKey); e.preventDefault(); return;
                 // Octave nudges — `+` and `-` step the sticky octave
                 // up / down one. `=` and `_` also match so the user
                 // doesn't have to hold Shift on US keyboards just to
@@ -1098,7 +1103,8 @@ export function PluginTrackerGrid({ param, values, onChange, displayCtx }) {
             </select>
 
             <button class="tracker-page-btn tracker-transport-btn ${isPlaying ? 'active' : ''}"
-                title="Play / Stop (Space)" onclick=${togglePlay}>▶ Play</button>
+                title="Play / Stop (Space). Shift+Play loops the current page (follows the page you view)."
+                onpointerdown=${(e) => { e.preventDefault(); togglePlay(e.shiftKey || shiftEngagedRef.current); }}>▶ Play</button>
 
             <button class="tracker-page-btn"
                 disabled=${pages.length >= maxPages}

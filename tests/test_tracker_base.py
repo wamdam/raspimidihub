@@ -127,9 +127,10 @@ def test_on_start_seeds_one_blank_page():
         assert t._param_values[f"track_ch_{i}"] == 1
     assert t.transient_params == {
         "cursor_row", "cursor_track", "cursor_half", "octave",
-        "playhead", "cmd_play", "cmd_stop", "note_preview",
+        "playhead", "cmd_play", "cmd_play_page", "cmd_stop", "note_preview",
         "queued_pattern", "pattern_status", "cmd_pattern_select",
     }
+    assert t._param_values["cmd_play_page"] is False
 
 
 def test_on_start_preserves_existing_state():
@@ -1585,6 +1586,82 @@ def test_stop_button_works_with_recv_transport_off():
     assert t._playing is False
 
 
+def _page_with_note(track_count, note="C-4"):
+    page = empty_page(track_count, 16)
+    page["rows"][0]["voices"][0] = _filled_voice(note)
+    return page
+
+
+def test_loop_page_repeats_current_page_without_advancing():
+    """Shift+Play (loop_page) loops the displayed page instead of
+    walking through the pages."""
+    t = _started(auto_ch=0)
+    t._param_values["pages"] = [
+        _page_with_note(t.TRACK_COUNT, "E-4"),
+        _page_with_note(t.TRACK_COUNT, "C-4"),
+    ]
+    t._param_values["current_page"] = 1
+    t._param_values["rate"] = "1/16"
+    s = _Sender()
+    s.attach(t)
+    t._begin_playback(loop_page=True)   # starts on the displayed page (1)
+    assert t._loop_page is True
+    assert t._play_page == 1
+    for _ in range(17):                 # > one page; would cross pages if advancing
+        t.on_tick("1/16")
+    assert t._play_page == 1            # never left page 1
+    assert any(e == ("on", 0, 60, 90) for e in s.events)          # C-4 fired
+    assert not any(e[0] == "on" and e[2] == 64 for e in s.events)  # page 0's E-4 never
+
+
+def test_loop_page_follows_navigation_at_wrap():
+    """Navigating to another page while looping moves the loop there at
+    the next wrap (follow-current-page)."""
+    t = _started(auto_ch=0)
+    t._param_values["pages"] = [
+        _page_with_note(t.TRACK_COUNT, "E-4"),   # page 0 → E-4 (64)
+        _page_with_note(t.TRACK_COUNT, "C-4"),   # page 1 → C-4 (60)
+    ]
+    t._param_values["current_page"] = 0
+    t._param_values["rate"] = "1/16"
+    s = _Sender()
+    s.attach(t)
+    t._begin_playback(loop_page=True)            # looping page 0
+    assert t._play_page == 0
+    t._param_values["current_page"] = 1          # navigate mid-loop
+    for _ in range(20):                          # let page 0's loop finish and wrap
+        if t._play_page == 1:
+            break
+        t.on_tick("1/16")
+    assert t._play_page == 1                     # loop followed to page 1 at the wrap
+    assert t._play_row == 0
+    s.events.clear()
+    t.on_tick("1/16")                            # fires page 1 row 0 → C-4
+    assert any(e == ("on", 0, 60, 90) for e in s.events)
+
+
+def test_loop_page_cleared_on_stop_and_normal_play():
+    t = _started(auto_ch=0)
+    t._param_values["pages"] = [_page_with_note(t.TRACK_COUNT)]
+    t._begin_playback(loop_page=True)
+    assert t._loop_page is True
+    t._end_playback()
+    assert t._loop_page is False
+    t._begin_playback()                          # normal play does not loop a page
+    assert t._loop_page is False
+
+
+def test_cmd_play_page_triggers_loop_via_preroll():
+    t = _started(auto_ch=0)
+    t._param_values["pages"] = [_page_with_note(t.TRACK_COUNT)]
+    t.on_param_change("cmd_play_page", True)
+    assert t._preroll_timer is not None
+    t._preroll_timer.join()
+    assert t._playing is True
+    assert t._loop_page is True
+    assert t._param_values["cmd_play_page"] is False
+
+
 def test_legacy_send_clock_migrates_to_both_flags():
     """A config saved with the old combined `send_clock=True` toggle
     used to mean 'forward clock + start/stop/continue.' After the
@@ -2090,6 +2167,23 @@ def test_launch_hold_loops_while_held_and_stops_on_release():
     # Releasing the launch note stops it.
     t.on_note_off(channel=9, note=37)
     assert t._launch_active is False
+
+
+def test_hold_launch_supersedes_transport_play_and_stops_on_release():
+    """A Hold launch while the tracker is already running from transport
+    takes over and fully stops on release. Regression: the release only
+    cleared _launch_active, so transport-driven _playing kept the
+    playhead advancing and Hold never actually stopped."""
+    t = _started_launch(mode=2)
+    t._param_values["patterns"][1] = [_filled_page(track_count=t.TRACK_COUNT)]
+    t._refresh_pattern_status_slot(1)
+    t._playing = True                  # already running from external transport
+    t.on_note_on(channel=9, note=37, velocity=100)   # Hold press
+    assert t._launch_active is True
+    assert t._playing is False         # launch superseded the normal play
+    t.on_note_off(channel=9, note=37)  # Hold release
+    assert t._launch_active is False
+    assert t._playing is False         # fully stopped — on_tick won't advance
 
 
 def test_launch_toggle_press_starts_then_second_press_stops():

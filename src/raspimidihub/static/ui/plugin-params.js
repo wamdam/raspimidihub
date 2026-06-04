@@ -48,6 +48,7 @@ export function collectTriggerParams(schema) {
                 walk((p.cells || []).map((c) => c.param));
             } else if (p.type === 'trackergrid') {
                 if (p.cmd_play_param) s.add(p.cmd_play_param);
+                if (p.cmd_play_page_param) s.add(p.cmd_play_page_param);
                 if (p.cmd_stop_param) s.add(p.cmd_stop_param);
                 if (p.note_preview_param) s.add(p.note_preview_param);
             } else if (p.type === 'dropbuttonrow') s.add(p.name);

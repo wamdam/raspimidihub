@@ -110,6 +110,7 @@ class TrackerGrid(StructuralParam):
     playhead_param: str | None = None  # {page, row, playing} broadcast per step
     track_channels_param: str | None = None  # base name; per-track lookup as <name>_<idx>
     cmd_play_param: str | None = None  # bool, frontend → backend trigger
+    cmd_play_page_param: str | None = None  # bool — Shift+Play: loop page
     cmd_stop_param: str | None = None  # bool, frontend → backend trigger
     send_clock_param: str | None = None  # bool, latching toggle
     note_preview_param: str | None = None  # int (MIDI note), frontend → backend trigger
@@ -142,7 +143,7 @@ class TrackerGrid(StructuralParam):
                      "cursor_track_param", "cursor_half_param",
                      "octave_param", "rate_param", "playhead_param",
                      "track_channels_param", "cmd_play_param",
-                     "cmd_stop_param", "send_clock_param",
+                     "cmd_play_page_param", "cmd_stop_param", "send_clock_param",
                      "note_preview_param", "patterns_param",
                      "selected_pattern_param", "queued_pattern_param",
                      "pattern_status_param", "cmd_pattern_select_param"):
@@ -317,6 +318,7 @@ class TrackerBase(PluginBase):
                 playhead_param="playhead",
                 track_channels_param="track_channels",
                 cmd_play_param="cmd_play",
+                cmd_play_page_param="cmd_play_page",
                 cmd_stop_param="cmd_stop",
                 send_clock_param="send_clock",
                 note_preview_param="note_preview",
@@ -446,6 +448,7 @@ class TrackerBase(PluginBase):
         # Manual transport signals from the play-page header buttons.
         # Frontend sets to True; on_param_change resets to False.
         self._param_values.setdefault("cmd_play", False)
+        self._param_values.setdefault("cmd_play_page", False)
         self._param_values.setdefault("cmd_stop", False)
         # Clock master + transport-forwarding toggles. Old configs
         # carry a single `send_clock` that meant "forward CLOCK +
@@ -488,7 +491,7 @@ class TrackerBase(PluginBase):
         # cmd_* is a one-shot trigger.
         self.transient_params = {
             "cursor_row", "cursor_track", "cursor_half", "octave",
-            "playhead", "cmd_play", "cmd_stop", "note_preview",
+            "playhead", "cmd_play", "cmd_play_page", "cmd_stop", "note_preview",
             "queued_pattern", "pattern_status", "cmd_pattern_select",
         }
 
@@ -517,6 +520,10 @@ class TrackerBase(PluginBase):
         # the user's edit cursor happens to sit.
         self._lock = threading.RLock()
         self._playing = False
+        # Page-loop mode (Shift+Play): while True, playback loops the
+        # displayed page instead of running the whole sequence. Only
+        # meaningful while `_playing`; cleared on stop / launch.
+        self._loop_page = False
         # Pattern-launch state (One-shot / Hold / Toggle trigger modes).
         # Independent of `_playing` (which is transport-driven): a launch
         # advances the playhead straight off incoming clock. `_launch_note`
@@ -673,7 +680,7 @@ class TrackerBase(PluginBase):
     # Transport — global ClockBus events
     # ================================================================
 
-    def _schedule_play_preroll(self) -> None:
+    def _schedule_play_preroll(self, loop_page: bool = False) -> None:
         """Manual-Play entry point. Defers _begin_playback by
         _PLAY_PREROLL_S so the first row's note-ons leave ALSA's
         output queue before the next clock tick. Without it, the
@@ -690,7 +697,8 @@ class TrackerBase(PluginBase):
         always starts the playhead regardless of the Rcv Trnsp.
         toggle, which only gates *external* transport."""
         self._cancel_play_preroll()
-        timer = threading.Timer(_PLAY_PREROLL_S, self._begin_playback)
+        timer = threading.Timer(_PLAY_PREROLL_S, self._begin_playback,
+                                kwargs={"loop_page": loop_page})
         timer.daemon = True
         self._preroll_timer = timer
         timer.start()
@@ -726,13 +734,18 @@ class TrackerBase(PluginBase):
 
     # ---- Playback cores (used by both external transport and the
     # on-screen Play / Stop buttons). ----
-    def _begin_playback(self) -> None:
+    def _begin_playback(self, loop_page: bool = False) -> None:
         # Any in-flight pre-roll has just fired (or this was reached
         # by an external Start) — either way drop the reference.
         self._preroll_timer = None
         with self._lock:
             self._silence_all()
-            self._play_page = 0
+            # loop_page (Shift+Play): loop a single page, following the
+            # displayed page live, instead of running the whole sequence
+            # from the top. Start on whatever page is currently shown.
+            self._loop_page = loop_page
+            self._play_page = (int(self._param_values.get("current_page") or 0)
+                               if loop_page else 0)
             self._play_row = 0
             self._playing = True
             # A fresh transport start supersedes any in-flight launch.
@@ -766,6 +779,7 @@ class TrackerBase(PluginBase):
         with self._lock:
             self._silence_all()
             self._playing = False
+            self._loop_page = False
             self._launch_active = False
             self._launch_note = None
             self._launch_oneshot_ending = False
@@ -874,6 +888,10 @@ class TrackerBase(PluginBase):
             # modes (and transport play) loop.
             oneshot = self._launch_active and int(
                 self._param_values.get("trigger_mode") or 0) == 1
+            # Shift+Play page-loop: instead of advancing through the
+            # pages, loop the displayed page, re-reading current_page at
+            # each wrap so the loop follows page navigation live.
+            loop_page = self._loop_page
             pages = self._param_values.get("pages") or []
             if not pages:
                 return
@@ -900,8 +918,15 @@ class TrackerBase(PluginBase):
                         for v in voices
                     )
                     if is_end_row:
-                        # End row — skip without firing. Jump to next
-                        # page row 0 and re-evaluate.
+                        # End row — skip without firing. In page-loop
+                        # mode an End ends THIS page: restart the
+                        # currently-displayed page from row 0 (follows
+                        # navigation). Otherwise jump to the next page.
+                        if loop_page:
+                            lp = int(self._param_values.get("current_page") or 0)
+                            self._play_page = lp if lp < len(pages) else 0
+                            self._play_row = 0
+                            continue
                         new_page = (self._play_page + 1) % len(pages)
                         if new_page == 0:
                             self._just_wrapped = True
@@ -969,17 +994,24 @@ class TrackerBase(PluginBase):
 
                 # Advance for next call.
                 if self._play_row + 1 >= self.MAX_ROWS_PER_PAGE:
-                    new_page = (self._play_page + 1) % len(pages)
-                    if new_page == 0:
-                        self._just_wrapped = True
-                        if oneshot:
-                            # Last row just fired; let it ring one more
-                            # step, then stop on the next tick instead
-                            # of looping (the ending-guard at the top
-                            # of _advance_step does the actual stop).
-                            self._launch_oneshot_ending = True
-                    self._play_page = new_page
-                    self._play_row = 0
+                    if loop_page:
+                        # Page-loop: restart the currently-displayed page
+                        # (re-read so the loop follows navigation).
+                        lp = int(self._param_values.get("current_page") or 0)
+                        self._play_page = lp if lp < len(pages) else 0
+                        self._play_row = 0
+                    else:
+                        new_page = (self._play_page + 1) % len(pages)
+                        if new_page == 0:
+                            self._just_wrapped = True
+                            if oneshot:
+                                # Last row just fired; let it ring one
+                                # more step, then stop on the next tick
+                                # instead of looping (the ending-guard at
+                                # the top of _advance_step does the stop).
+                                self._launch_oneshot_ending = True
+                        self._play_page = new_page
+                        self._play_row = 0
                 else:
                     self._play_row += 1
 
@@ -1422,6 +1454,10 @@ class TrackerBase(PluginBase):
         if name == "cmd_play" and value:
             self._schedule_play_preroll()
             self.set_param("cmd_play", False)
+        elif name == "cmd_play_page" and value:
+            # Shift+Play — loop the displayed page (composing aid).
+            self._schedule_play_preroll(loop_page=True)
+            self.set_param("cmd_play_page", False)
         elif name == "cmd_stop" and value:
             # Manual Stop bypasses the Rcv Trnsp. gate -- the button
             # always stops the playhead.
@@ -1725,9 +1761,18 @@ class TrackerBase(PluginBase):
         row 0, and mark a launch active. The cursor is left where the
         user had it (reset_cursor=False) so launching doesn't disturb
         editing. The next on_tick at the configured rate fires row 0 --
-        that one-step wait IS the quantize-to-the-next-step start."""
+        that one-step wait IS the quantize-to-the-next-step start.
+
+        A launch supersedes normal (transport / Play-button) playback:
+        `_playing` is cleared so the launch is the *sole* driver of the
+        playhead. Without this, a tracker already running from external
+        transport would keep advancing after a Hold key is released
+        (the release only clears `_launch_active`), so Hold never
+        stopped. Now press = the launch takes over, release = silence."""
         with self._lock:
             self._silence_all()
+            self._playing = False
+            self._loop_page = False
             self._launch_oneshot_ending = False
         self._switch_pattern(idx, reset_cursor=False, reset_playhead=True)
         with self._lock:

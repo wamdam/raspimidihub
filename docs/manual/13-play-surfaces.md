@@ -446,6 +446,14 @@ cursor stays where you left it; when started, the cursor
 advances at the clock rate and the page-end-of-page wraps to
 the next page.
 
+**Shift+Play** (hold Shift while tapping Play, or `Shift`+`Space`)
+starts a **single-page loop** instead of running the whole
+sequence: only the page you are viewing plays, repeating at its
+end. The loop *follows the page you view* -- navigate to another
+page and the loop moves there at the next wrap. This is a
+composing aid for working on one page at a time. **Stop**, or a
+plain **Play**, returns to normal full-sequence playback.
+
 The configuration panel has three independent transport toggles:
 
 - **Send Clock** -- when on, the Tracker becomes a clock
@@ -806,6 +814,13 @@ pressing a new trigger replaces the one in flight. These modes
 govern the MIDI control-channel triggers only; tapping a pattern
 slot on screen always behaves as Switch (you cannot hold an
 on-screen tap, and the slot row is the editing interface).
+
+A launch **takes over** from normal playback: if the Tracker is
+already running (from its Play button or external transport),
+firing a trigger stops that and the launch becomes the sole
+driver of the playhead. So in **Hold** mode the key is the gate
+-- press to sound, release to silence -- regardless of whether
+transport was running underneath.
 
 A common live use: split a pad row or a low keyboard zone onto
 the control channel, learn one pad per phrase, set **Hold** or
