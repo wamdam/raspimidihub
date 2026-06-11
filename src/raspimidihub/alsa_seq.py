@@ -290,6 +290,10 @@ snd_seq_create_simple_port = _func(
     "snd_seq_create_simple_port", c_int,
     SndSeqPtr, c_char_p, c_uint, c_uint,
 )
+snd_seq_delete_simple_port = _func(
+    "snd_seq_delete_simple_port", c_int,
+    SndSeqPtr, c_int,
+)
 
 # Subscriptions
 snd_seq_port_subscribe_malloc = _func("snd_seq_port_subscribe_malloc", c_int, POINTER(SndSeqPortSubscribePtr))
@@ -601,6 +605,15 @@ class AlsaSeq:
         )
         check(port_id, f"Failed to create port {name}")
         return port_id
+
+    def delete_port(self, port_id: int) -> None:
+        """Delete a port created with create_port. The kernel drops all
+        of the port's subscriptions along with it. A client holds at
+        most ~254 ports, so every transient port MUST be deleted when
+        its owner lets go of it — leaking them eventually makes all
+        port creation fail with EINVAL."""
+        check(snd_seq_delete_simple_port(self._handle, port_id),
+              f"Failed to delete port {port_id}")
 
     def send_event(self, ev: SndSeqEvent, dest_client: int, dest_port: int) -> None:
         """Send a MIDI event directly to a specific destination port."""

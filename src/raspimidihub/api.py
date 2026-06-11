@@ -1052,7 +1052,15 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
                     engine._seq.unsubscribe(src_client, src_port, dst_client, dst_port)
                 except OSError:
                     pass
-                fe.add_filter(src_client, src_port, dst_client, dst_port, midi_filter)
+                try:
+                    fe.add_filter(src_client, src_port, dst_client, dst_port, midi_filter)
+                except OSError:
+                    # Port creation failed — restore the direct
+                    # subscription so the connection keeps flowing, and
+                    # tell the UI instead of silently dropping the edit.
+                    log.exception("add_filter failed for %s", conn_id)
+                    engine._seq.subscribe(src_client, src_port, dst_client, dst_port)
+                    return Response.error("Failed to apply filter", 500)
             else:
                 fe.update_filter(conn_id, midi_filter)
 

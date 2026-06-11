@@ -401,6 +401,16 @@ class FilterEngine:
                                       fc.dst_client, fc.dst_port)
             except OSError:
                 pass
+        # Delete both ports — a client holds at most ~254 ports, so
+        # leaking them here breaks ALL filter creation once the
+        # add/remove churn (filter edits, hotplug edge rebuilds)
+        # exhausts the budget.
+        for port in (fc._read_port, fc._write_port):
+            if port >= 0:
+                try:
+                    self._seq.delete_port(port)
+                except OSError:
+                    log.warning("Failed to delete port %d for %s", port, conn_id)
 
         log.info("Removed filter on %s", conn_id)
         return True

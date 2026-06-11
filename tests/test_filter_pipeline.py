@@ -690,3 +690,52 @@ class TestNoteToCcVelocityValue:
         )
         engine.process_event(ev)
         assert fwd_cc == [(0, 11, 88)]
+
+
+class TestPortLifecycle:
+    """add_filter creates two ALSA ports per connection; remove_filter
+    must delete them again. An ALSA client holds at most ~254 ports, so
+    leaking two per add/remove cycle (filter edits, hotplug edge
+    rebuilds) eventually makes every add_filter fail with EINVAL — the
+    'filter edits stop sticking' bug."""
+
+    def _engine_with_counted_ports(self):
+        mock_seq = MagicMock()
+        mock_seq.client_id = 128
+        ports = iter(range(100, 1000))
+        mock_seq.create_port.side_effect = lambda *a, **k: next(ports)
+        return FilterEngine(mock_seq), mock_seq
+
+    def test_add_remove_cycle_is_port_neutral(self):
+        engine, mock_seq = self._engine_with_counted_ports()
+
+        for _ in range(5):
+            fc = engine.add_filter(1, 0, 2, 0, MidiFilter(channel_mask=0x0001))
+            assert engine.remove_filter(fc.conn_id)
+
+        created = list(range(100, 100 + mock_seq.create_port.call_count))
+        deleted = sorted(c.args[0] for c in mock_seq.delete_port.call_args_list)
+        assert mock_seq.create_port.call_count == 10  # 2 per add
+        assert deleted == created
+
+    def test_readd_replaces_ports(self):
+        """add_filter on an existing conn_id recreates the ports — the
+        old pair must be deleted, not orphaned."""
+        engine, mock_seq = self._engine_with_counted_ports()
+
+        engine.add_filter(1, 0, 2, 0, MidiFilter(channel_mask=0x0001))
+        fc = engine.add_filter(1, 0, 2, 0, MidiFilter(channel_mask=0x0003))
+
+        deleted = sorted(c.args[0] for c in mock_seq.delete_port.call_args_list)
+        assert deleted == [100, 101]            # first pair freed
+        assert (fc._read_port, fc._write_port) == (102, 103)
+
+    def test_delete_failure_is_swallowed(self):
+        """A failing port delete must not abort remove_filter — the
+        connection is already gone from the table."""
+        engine, mock_seq = self._engine_with_counted_ports()
+        mock_seq.delete_port.side_effect = OSError("boom")
+
+        fc = engine.add_filter(1, 0, 2, 0, MidiFilter(channel_mask=0x0001))
+        assert engine.remove_filter(fc.conn_id)
+        assert not engine.has_filter(fc.conn_id)

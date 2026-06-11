@@ -4,6 +4,11 @@ User-visible changes. Short tagged one-liners, no code or commit
 hashes. Tags: Added, Improved, Fix, Changed, Removed.
 
 
+Unreleased
+
+- Fix: editing a connection's **channel / message-type filter** could silently stop working (the panel reverted to "everything on" on reopen) once the hub had been running long enough — every filter remove/rebuild leaked two ALSA ports until the client's ~254-port budget was gone and new filters could no longer be created. Ports are now freed properly; should applying a filter still fail, the connection keeps passing MIDI and the UI gets a real error instead of a silent revert.
+
+
 2026-06-04 — Version 4.7.0
 
 - Added: automatic **autosave** — the live edited state is written to disk in the background (debounced, double-buffered ping-pong, gzip-CRC validated) so a hard power cut resumes the last thing you were doing, not just your last manual Save. Boot prefers the newest valid autosave, then config.json, then its .bak, then defaults.
