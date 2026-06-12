@@ -7,8 +7,8 @@
  *   - `deviceId`        — open device-detail panel on the Routing page
  *   - `settingsSection` — active Settings sub-page ('sys-info', 'network',
  *                         'midi', 'display', 'update', 'cc-bindings',
- *                         'backup', 'spectator'), or null = the Settings
- *                         hub itself.
+ *                         'backup', 'network-midi', 'spectator'), or
+ *                         null = the Settings hub itself.
  *
  * URL forms:
  *
@@ -34,7 +34,7 @@ import { useEffect, useState, useCallback } from '../lib/hooks.module.js';
 const TABS = new Set(['routing', 'controller', 'play', 'settings']);
 const SETTINGS_SECTIONS = new Set([
     'sys-info', 'network', 'midi', 'display', 'update', 'cc-bindings',
-    'backup', 'spectator',
+    'backup', 'network-midi', 'spectator',
 ]);
 
 // Optional external route source — set at boot by spectator mode to

@@ -271,7 +271,8 @@ _CAPTIVE_PASSTHROUGH = {
 
 def register_api(server: WebServer, engine: MidiEngine, config: Config,
                   wifi: WifiManager | None = None,
-                  bluetooth: BluetoothMidi | None = None):
+                  bluetooth: BluetoothMidi | None = None,
+                  network_midi=None):
     """Register all API routes on the web server."""
 
     # Wire the dirty-tracker SSE side so mark_dirty / clear_dirty can fan
@@ -598,6 +599,8 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
                 # already governs them).
                 if not info.is_plugin:
                     entry["clock_blocked"] = registry.is_clock_blocked(info.stable_id)
+                entry["exported"] = (
+                    info.stable_id in config.network_midi.get("exported", []))
             entry["online"] = True
             # Add plugin instance info if this is a virtual device
             if info and info.is_plugin and engine._plugin_host:
@@ -638,6 +641,9 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
                 # matrix's "Reconnect" context-menu item shows up for
                 # paired-but-disconnected BLE-MIDI devices.
                 "is_bluetooth": sid.startswith("bt-"),
+                # Same idea for mirrored network devices (peer hub
+                # offline): the matrix tints + groups them by prefix.
+                "is_network": sid.startswith("net-"),
             })
 
         return Response.json(result)
@@ -1850,6 +1856,58 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
                 "available": False,
                 "reason": bt_avail.get("reason"),
                 "devices": [],
+            })
+
+    # ================================================================
+    # Network MIDI API (RTP-MIDI hub-to-hub link + standard clients)
+    # ================================================================
+    # Gated like Bluetooth: routes exist only when python3-zeroconf is
+    # importable; the bare GET always answers so the Settings page can
+    # render an "unsupported" hint without polling 404s. All settings
+    # here are appliance settings (wifi pattern): mutate config +
+    # asave() immediately, no dirty/asterisk.
+
+    nm_avail = network_midi.availability() if network_midi else \
+        {"available": False, "reason": "no-network-midi-manager"}
+    if network_midi and nm_avail["available"]:
+        @server.route("GET", "/api/network-midi")
+        async def api_network_midi(req: Request) -> Response:
+            return Response.json(network_midi.status())
+
+        @server.route("POST", "/api/network-midi/enable")
+        async def api_network_midi_enable(req: Request) -> Response:
+            enabled = bool(req.json.get("enabled"))
+            config.data.setdefault("network_midi", {})["enabled"] = enabled
+            await config.asave()
+            await network_midi.set_enabled(enabled)
+            return Response.json({"status": "saved", "enabled": enabled})
+
+        @server.route("POST", "/api/network-midi/export")
+        async def api_network_midi_export(req: Request) -> Response:
+            stable_id = req.json.get("stable_id", "")
+            exported = bool(req.json.get("exported"))
+            if not stable_id:
+                return Response.error("stable_id required")
+            if exported:
+                ok, reason = network_midi.is_exportable(stable_id)
+                if not ok:
+                    return Response.error(reason)
+            cfg = config.data.setdefault("network_midi", {})
+            current = cfg.setdefault("exported", [])
+            if exported and stable_id not in current:
+                current.append(stable_id)
+            elif not exported and stable_id in current:
+                current.remove(stable_id)
+            await config.asave()
+            await network_midi.set_export(stable_id, exported)
+            return Response.json({"status": "saved"})
+    else:
+        @server.route("GET", "/api/network-midi")
+        async def api_network_midi_unavailable(req: Request) -> Response:
+            return Response.json({
+                "available": False,
+                "reason": nm_avail.get("reason"),
+                "exports": [],
             })
 
     # ================================================================

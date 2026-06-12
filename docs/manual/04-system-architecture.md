@@ -61,6 +61,27 @@ indistinguishable from a USB device.
 Chapter 14 covers the user-facing side of BLE-MIDI (pairing,
 reconnection, persistence across power-off).
 
+## The Network MIDI Bridge
+
+The network MIDI bridge does for RTP-MIDI (AppleMIDI) what the
+BLE bridge does for Bluetooth. On the *export* side, each local
+device the user shares is advertised over mDNS as its own
+RTP-MIDI session and bridged through a hidden ALSA client -- any
+standard RTP-MIDI participant (a second hub, macOS, iOS,
+`rtpmidid`) can connect to it. On the *mirror* side, sessions
+exported by a peer hub appear as virtual MIDI devices in the
+routing matrix, indistinguishable from local hardware to the
+routing engine.
+
+The protocol implementation is in-process and journal-free (the
+recovery journal of RFC 6295 targets lossy open-internet paths;
+on a wired LAN the engine's panic / note-release machinery covers
+the residual risk). Discovery and advertising use the
+`python3-zeroconf` library alongside the avahi daemon the hub
+already runs for `raspimidihub.local`.
+
+Chapter 17's *Network MIDI* section covers the user-facing side.
+
 ## The Web UI Connection
 
 The configuration UI is a single-page web application served by

@@ -131,6 +131,22 @@ DEFAULT_CONFIG = {
         # in client mode (only useful when no AP clients are present).
         "wifi_mode_pref": "ap_only",
     },
+    "network_midi": {
+        # Master switch: advertise exports + browse for peers only
+        # when on. Like the wifi block this is an appliance setting:
+        # applied immediately, saved via asave(), no dirty/asterisk.
+        "enabled": False,
+        # stable_ids of local devices advertised as RTP-MIDI sessions.
+        # Offline devices stay listed; the advert exists only while
+        # the device is present.
+        "exported": [],
+        # Opt-out list: peer-hub sessions NOT to auto-mirror (phase 3).
+        "mirror_disabled": [],
+        # Manually mirrored non-hub sessions, by mDNS service name.
+        "mirrored_foreign": [],
+        # IPs/hostnames to invite directly when mDNS can't reach them.
+        "manual_peers": [],
+    },
 }
 
 
@@ -201,6 +217,10 @@ class Config:
     @property
     def wifi(self) -> dict:
         return self._data.get("wifi", DEFAULT_CONFIG["wifi"])
+
+    @property
+    def network_midi(self) -> dict:
+        return self._data.get("network_midi", DEFAULT_CONFIG["network_midi"])
 
     def _apply_loaded(self, data: dict, source: str) -> None:
         self._data = _deep_merge(DEFAULT_CONFIG, data)

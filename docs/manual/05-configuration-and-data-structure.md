@@ -53,6 +53,7 @@ The exported / saved JSON has the following top-level keys:
 | `connections` | list | Every saved connection in the matrix. |
 | `disconnected` | list | Connections explicitly toggled off but kept for re-enable. |
 | `wifi` | object | WiFi configuration; see 5.4. |
+| `network_midi` | object | Network MIDI (RTP-MIDI) sharing; see the *Network MIDI Configuration* section below. |
 
 Plugin instances, controller instances, device renames, port
 renames, and per-cell filter/mapping state all live inside the
@@ -95,6 +96,24 @@ The `mode` field reflects the *current* mode (live state); the
 `wifi_mode_pref` field is the user's *preference* set in
 **Settings**. The service reconciles preference to mode as
 conditions change.
+
+## Network MIDI Configuration
+
+The `network_midi` object (Settings → Network MIDI; chapter 17's
+*Network MIDI* section for the concept):
+
+| Key | Type | Meaning |
+|-----|------|---------|
+| `enabled` | bool | Master switch for advertising / discovery. |
+| `exported` | list | Stable IDs of local devices shared as RTP-MIDI sessions. |
+| `mirror_disabled` | list | Peer-hub sessions excluded from auto-mirroring. |
+| `mirrored_foreign` | list | Manually mirrored non-hub sessions (by mDNS service name). |
+| `manual_peers` | list | IPs/hostnames invited directly when mDNS discovery cannot reach them. |
+
+Like `wifi`, this is an appliance setting: changes apply
+immediately and are saved on the spot, outside the dirty-state
+model. Devices mirrored *from* a peer hub get stable IDs with the
+`net-` prefix (see chapter 21, "Device identity").
 
 ## Plugin Instances
 

@@ -17,6 +17,7 @@ The sub-pages:
 | **Update** | Check GitHub, manage stored versions, install |
 | **Plugin Control Mappings** | Flat editable table of every CC binding across every plugin instance and every controller cell |
 | **Backup** | Restore or download a rolling save checkpoint (see **Backup** below) |
+| **Network MIDI** | Export local devices as RTP-MIDI sessions for a second hub, Macs, iPads (see **Network MIDI** below) |
 
 (plus **Spectator mirroring**, documented in its own section below.)
 
@@ -286,6 +287,37 @@ Configures the wired interface. Two modes:
 When `eth0` is connected and has an address, the card shows the
 resulting URL (typically `http://raspimidihub.local/` or the IP)
 as a clickable link.
+
+## Network MIDI
+
+Shares local MIDI devices over the network as standard RTP-MIDI
+(AppleMIDI) sessions -- the concept, the clients that can connect
+and the wire details live in chapter 17's *Network MIDI* section.
+This page is the control surface:
+
+- **Share devices over the network** -- the master toggle.
+  Advertising (and, with a peer hub, discovery) runs only while
+  this is on.
+- **Exported devices** -- one checkbox per local device that is
+  currently online. Ticking it advertises the device as
+  `"<name> @<hostname>"`; the sub-line below an exported device
+  shows the advertised session name and how many network clients
+  are connected to it right now.
+
+Like the WiFi settings, everything here applies immediately and
+does **not** feed the dirty-state asterisk -- the export list is
+an appliance setting, saved the moment you change it, and it
+survives reboots on its own.
+
+On systems without the `python3-zeroconf` package the page shows
+an "unavailable" hint instead of the toggles.
+
+Screenshots needed:
+
+- `16-settings-network-midi.png` -- the Network MIDI sub-page with
+  the master toggle on, two devices exported and one showing a
+  connected participant. Needs real hardware (a connected RTP-MIDI
+  client); not yet covered by the scripted screenshot scenes.
 
 ## MIDI Routing
 

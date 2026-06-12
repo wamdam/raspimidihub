@@ -1198,6 +1198,128 @@ function SettingsSpectator() {
     `;
 }
 
+// --- Network MIDI ----------------------------------------------------
+//
+// Export local devices as RTP-MIDI (AppleMIDI) sessions and (phase 3)
+// mirror a peer hub's exports into the matrix. Exports are visible to
+// anything that speaks RTP-MIDI: a second RaspiMIDIHub, macOS Audio
+// MIDI Setup, iPads, rtpmidid.
+
+function SettingsNetworkMidi({ showToast }) {
+    const [nm, setNm] = useState(null);
+    const [devices, setDevices] = useState([]);
+    const [busy, setBusy] = useState(false);
+
+    const reload = async () => {
+        try { setNm(await api('/network-midi')); }
+        catch { setNm({ available: false, reason: 'unreachable' }); }
+        try {
+            const d = await api('/devices');
+            setDevices(Array.isArray(d) ? d : []);
+        } catch { setDevices([]); }
+    };
+
+    useEffect(() => {
+        reload();
+        const es = new EventSource('/api/events');
+        const onConn = (e) => {
+            try {
+                const { conn_id } = JSON.parse(e.data);
+                if (!conn_id) return;
+                fetch('/api/sse/subscribe', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ conn_id, events: [
+                        'network-midi-changed', 'device-connected',
+                        'device-disconnected'], instances: [] }),
+                }).catch(() => {});
+            } catch {}
+        };
+        const onChange = () => reload();
+        es.addEventListener('connection', onConn);
+        es.addEventListener('network-midi-changed', onChange);
+        es.addEventListener('device-connected', onChange);
+        es.addEventListener('device-disconnected', onChange);
+        return () => es.close();
+    }, []);
+
+    if (nm === null) {
+        return html`<div class="card"><p style="color:var(--text-dim)">Loading...</p></div>`;
+    }
+    if (!nm.available) {
+        return html`<div class="card">
+            <h3>Network MIDI</h3>
+            <p style="color:var(--text-dim);font-size:13px">
+                Not available on this system${nm.reason === 'no-zeroconf'
+                    ? ' — the python3-zeroconf package is missing.'
+                    : '.'}
+            </p>
+        </div>`;
+    }
+
+    const setEnabled = async (enabled) => {
+        setBusy(true);
+        const res = await api('/network-midi/enable', {
+            method: 'POST', body: JSON.stringify({ enabled }) });
+        setBusy(false);
+        if (res.error) showToast(res.error);
+        else reload();
+    };
+
+    const setExport = async (stableId, exported) => {
+        const res = await api('/network-midi/export', {
+            method: 'POST',
+            body: JSON.stringify({ stable_id: stableId, exported }) });
+        if (res.error) showToast(res.error);
+        else reload();
+    };
+
+    // Sessions by stable_id for the "advertised as" sub-line.
+    const sessions = {};
+    (nm.exports || []).forEach(s => { sessions[s.stable_id] = s; });
+    const exportable = devices.filter(d =>
+        d.online && d.stable_id && !d.is_network);
+
+    return html`
+        <div class="card">
+            <h3>Network MIDI</h3>
+            <label class="msg-toggle">
+                <input type="checkbox" data-testid="network-midi-enable"
+                    checked=${nm.enabled} disabled=${busy}
+                    onchange=${e => setEnabled(e.target.checked)} />
+                <span>Share devices over the network</span>
+            </label>
+            <p style="font-size:11px;color:var(--text-dim);margin-top:6px">
+                Exported devices appear to other hubs (and Macs, iPads,
+                anything speaking RTP-MIDI) as "Name @${nm.hostname}".
+                Direct cable between two hubs? No router needed.
+            </p>
+        </div>
+        ${nm.enabled && html`<div class="card">
+            <h3>Exported devices</h3>
+            ${exportable.length === 0 && html`
+                <p style="color:var(--text-dim);font-size:13px">No local devices online.</p>`}
+            ${exportable.map(d => {
+                const sess = sessions[d.stable_id];
+                return html`
+                    <div key=${d.stable_id}>
+                        <label class="msg-toggle">
+                            <input type="checkbox"
+                                checked=${!!d.exported}
+                                onchange=${e => setExport(d.stable_id, e.target.checked)} />
+                            <span>${d.name}</span>
+                        </label>
+                        ${sess && html`
+                            <p style="font-size:11px;color:var(--text-dim);margin:-4px 0 8px 26px">
+                                advertised as "${sess.name}"${sess.participants.length
+                                    ? ` · ${sess.participants.length} connected` : ''}
+                            </p>`}
+                    </div>`;
+            })}
+        </div>`}
+    `;
+}
+
 // --- Hub + dispatcher -----------------------------------------------
 
 const SECTIONS = [
@@ -1208,6 +1330,7 @@ const SECTIONS = [
     { key: 'update',      title: 'Update',                  hint: 'Check GitHub, manage stored versions' },
     { key: 'cc-bindings', title: 'Plugin Control Mappings', hint: 'CC bindings across every plugin instance' },
     { key: 'backup',      title: 'Backup',                  hint: 'Restore or download a saved config checkpoint' },
+    { key: 'network-midi', title: 'Network MIDI',           hint: 'Share devices with a second hub or DAW via RTP-MIDI' },
     { key: 'spectator',   title: 'Spectator mirroring',     hint: 'Stream this device into OBS, or mirror another device' },
 ];
 
@@ -1227,6 +1350,7 @@ export function SettingsPage({ showToast, showMidiBar, toggleMidiBar,
             case 'update':      body = html`<${SettingsUpdate} showToast=${showToast} onUpgradingChange=${setIsUpgrading} />`; break;
             case 'cc-bindings': body = html`<${SettingsCcBindings} openCcBinding=${openCcBinding} openCellBinding=${openCellBinding} />`; break;
             case 'backup':      body = html`<${SettingsBackup} showToast=${showToast} />`; break;
+            case 'network-midi': body = html`<${SettingsNetworkMidi} showToast=${showToast} />`; break;
             case 'spectator':   body = html`<${SettingsSpectator} />`; break;
             default:            body = html`<div class="card"><p>Unknown section</p></div>`;
         }

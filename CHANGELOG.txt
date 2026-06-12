@@ -4,6 +4,11 @@ User-visible changes. Short tagged one-liners, no code or commit
 hashes. Tags: Added, Improved, Fix, Changed, Removed.
 
 
+Unreleased
+
+- Added: **Network MIDI** (Settings → Network MIDI) — export any local device as a standard **RTP-MIDI (AppleMIDI)** session, advertised over mDNS as "Name @hostname". Macs (Audio MIDI Setup), iPads, rtpmidid, and a second RaspiMIDIHub can connect; several clients per device at once. Notes, CCs, clock and SysEx cross the wire with sub-millisecond LAN latency. Exports survive reboots; the advert exists only while the device is present.
+
+
 2026-06-12 — Version 4.8.0
 
 - Added: Settings → Sys Info shows **ALSA ports** (used / 254 for the hub's own client) — every filtered or mapped connection holds two, and at the kernel's per-client cap new filters can no longer be created, so an approaching ceiling is now visible (red at 80%) instead of failing silently.

@@ -49,6 +49,10 @@ ARMv8 system.
   Renames".
 - Bluetooth devices are identified by MAC address (`bt-<mac>`),
   plugin instruments by instance ID (`plugin-<id>`).
+- Devices mirrored from a peer hub over Network MIDI are
+  identified by the peer's hub ID plus the device's stable ID on
+  that hub (`net-<hub>-<remote-id>`) -- stable across reboots and
+  IP changes on both ends.
 
 ### Bluetooth
 
@@ -126,6 +130,8 @@ PSU, or a plugin doing more work than expected in a callback.
 | SSE endpoint | `/api/events` (long-lived `text/event-stream`) |
 | BLE-MIDI service UUID | `03B80E5A-EDE8-4B33-A751-6CE34EC4C700` |
 | BLE-MIDI characteristic UUID | `7772E5DB-3868-4112-A1A9-F2669D106BF3` |
+| RTP-MIDI (Network MIDI) ports | UDP, one even/odd pair per exported device, allocated upward from 5004 |
+| RTP-MIDI discovery | mDNS `_apple-midi._udp` via `python3-zeroconf` (coexists with avahi on port 5353) |
 
 ## Filesystem Layout
 

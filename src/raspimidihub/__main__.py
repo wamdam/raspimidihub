@@ -117,8 +117,15 @@ async def async_main() -> None:
     bt.ble_bridge = ble_bridge
     engine._ble_bridge = ble_bridge  # so device scans see BLE clients
 
+    # Network MIDI: exported devices become RTP-MIDI sessions, peer
+    # hubs' exports get mirrored into the matrix. No-op (available:
+    # false) when python3-zeroconf isn't installed.
+    from .network_midi import NetworkMidiManager
+    network_midi = NetworkMidiManager(engine, config, server)
+    engine._network_midi = network_midi  # device scans see mirror clients
+
     # Register API routes
-    register_api(server, engine, config, wifi, bt)
+    register_api(server, engine, config, wifi, bt, network_midi)
 
     # Spectator-mode mirroring service. Owns its own routes, per-conn
     # state map, and watcher tracking; plugs into the WebServer via
@@ -361,6 +368,11 @@ async def async_main() -> None:
         # background polling.
         asyncio.ensure_future(bt.restore_connected_bridges())
 
+        # Bring up network MIDI (if enabled in config): exports restore
+        # for online devices, discovery browser starts. After the
+        # initial scan so exported devices resolve to ALSA clients.
+        asyncio.ensure_future(network_midi.start())
+
         notify_systemd("READY=1")
         log.info("Service ready (web on port %d)", port)
 
@@ -412,6 +424,12 @@ async def async_main() -> None:
             await asyncio.wait_for(server.stop(), timeout=2.0)
         except (asyncio.TimeoutError, asyncio.CancelledError):
             log.warning("Web server stop timed out")
+        # BY to all RTP-MIDI participants + mDNS goodbye, so peers
+        # drop the sessions instead of timing them out.
+        try:
+            await asyncio.wait_for(network_midi.stop(), timeout=2.0)
+        except (Exception, asyncio.CancelledError):
+            log.warning("Network MIDI stop failed", exc_info=True)
         # Flush a final autosave BEFORE tearing down plugins, so a clean
         # stop (deploy / reboot) resumes the exact in-memory state and the
         # snapshot still sees live plugin instances. Power cuts skip this

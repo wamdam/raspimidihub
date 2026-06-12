@@ -109,6 +109,41 @@ If mDNS is unavailable on the network or the client, fall back to
 the gateway IP (AP-mode) or the static / DHCP IP from the
 router's DHCP table (WiFi-always mode).
 
+## Network MIDI -- Sharing Devices over the Network
+
+**Settings → Network MIDI** can *export* any local MIDI device as
+a standard **RTP-MIDI (AppleMIDI)** session. Each exported device
+is advertised over mDNS under its own name -- `"TX-7 @<hostname>"`
+-- and anything that speaks RTP-MIDI can connect to it:
+
+- **a second RaspiMIDIHub** -- the long-cable scenario: two hubs
+  joined by an Ethernet cable (up to 100 m) or any shared network,
+  routing MIDI between stages or rooms;
+- **macOS / iOS** -- exported devices appear in Audio MIDI Setup's
+  *MIDI Network Setup* directory (macOS) and in RTP-MIDI-capable
+  iOS apps, with no extra software;
+- **Linux** -- `rtpmidid` (and compatible tools) discover and
+  connect to exported sessions.
+
+Turn the feature on with the master toggle, then tick the devices
+to share. The export list is the curation step: export a single
+plugin pair and you have a point-to-point tunnel; export
+everything and the far end sees each device individually. Several
+clients can be connected to the same exported device at once --
+a Mac and a peer hub, for example.
+
+Exports survive reboots (the list is part of the config); the
+network advert for a device exists only while the device is
+actually present. Notes, CCs, clock and SysEx all cross the wire;
+on a wired LAN the added latency is well under a millisecond.
+
+The transport is plain UDP on ports 5004 and up (one even/odd
+port pair per exported device), discovery is the same mDNS the
+hub already uses for `raspimidihub.local`. It needs the
+`python3-zeroconf` package (a standard dependency of the deb);
+when missing, the Settings page says so instead of offering the
+toggle.
+
 ## Software Updates: The Three Paths
 
 The **Check GitHub for newer versions** button in **Settings →
