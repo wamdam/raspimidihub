@@ -7,6 +7,10 @@ bridges the GATT notifications into ALSA in software. This chapter
 documents the pairing flow, the reconnect behaviour, the persistence
 model that survives power-pulls, and the known limits.
 
+(For sharing devices with a *second hub* or a computer over the
+network -- wired or WiFi -- see chapter 17's *Network MIDI*
+section; this chapter is about Bluetooth peripherals only.)
+
 ## The Bridge
 
 RaspiMIDIHub includes its own BLE-MIDI bridge. It handles

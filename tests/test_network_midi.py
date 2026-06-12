@@ -1,12 +1,18 @@
-"""Tests for the network MIDI manager / exported sessions.
+"""Tests for the network MIDI manager / exported + mirrored sessions.
 
 Protocol state machines are driven through fake transports — no
 sockets, no zeroconf (mocked at the manager boundary, same style as
 test_wifi / test_usb_tether)."""
 
-from raspimidihub import apple_midi
+import asyncio
+
+from raspimidihub import apple_midi, network_midi
 from raspimidihub.alsa_seq import MidiEventType
-from raspimidihub.network_midi import ExportedSession
+from raspimidihub.network_midi import (
+    DiscoveredService,
+    ExportedSession,
+    MirroredSession,
+)
 
 
 class FakeTransport:
@@ -195,6 +201,211 @@ class TestSysExChunkFraming:
     def test_midstream_chunk_without_start_dropped(self):
         _, sess = make_session()
         assert sess._frame_sysex_chunk(bytes([3, 4])) == []
+
+
+def make_discovered(rmh="1", hub="feedface0001", sid="usb-1-2-a:b",
+                    name="TX-7 @hub2", host="hub2"):
+    txt = {}
+    if rmh:
+        txt = {"rmh": rmh, "hub": hub, "sid": sid, "host": host,
+               "dev": name.rsplit(" @", 1)[0]}
+    return DiscoveredService(
+        service=f"{name}._apple-midi._udp.local.",
+        instance=name,
+        host=f"{host}.local",
+        addresses=["192.0.2.20"],
+        port=5004,
+        txt=txt,
+    )
+
+
+class TestDiscoveredService:
+    def test_hub_session_identity(self):
+        svc = make_discovered()
+        assert svc.is_hub
+        assert svc.stable_id == "net-feedface0001-usb-1-2-a:b"
+        assert svc.device_name == "TX-7"
+        assert svc.remote_hub == "hub2"
+
+    def test_foreign_session_identity(self):
+        svc = make_discovered(rmh="")
+        assert not svc.is_hub
+        assert svc.stable_id.startswith("net-")
+        assert "feedface" not in svc.stable_id
+        # Falls back to parsing the instance name
+        assert svc.device_name == "TX-7"
+
+    def test_foreign_without_at_suffix(self):
+        svc = DiscoveredService(
+            service="MacBook._apple-midi._udp.local.",
+            instance="MacBook", host="mac.local",
+            addresses=["192.0.2.30"], port=5004, txt={})
+        assert svc.device_name == "MacBook"
+        assert svc.remote_hub == "mac.local"
+
+
+class FakeAlsa:
+    client_id = 142
+    handle = None
+
+    def fileno(self):
+        return -1
+
+    def close(self):
+        pass
+
+
+def make_mirror():
+    mgr = StubManager()
+    mgr.lost = []
+
+    async def on_mirror_lost(m):
+        mgr.lost.append(m)
+    mgr.on_mirror_lost = on_mirror_lost
+    mgr.unregister_mirror_device = lambda sid: None
+    mirror = MirroredSession(mgr, make_discovered())
+    mirror._ctrl_transport = FakeTransport()
+    mirror._data_transport = FakeTransport()
+    return mgr, mirror
+
+
+class TestMirroredSession:
+    def test_ok_resolves_handshake_future(self):
+        async def run():
+            _, mirror = make_mirror()
+            mirror._ok_future = asyncio.get_event_loop().create_future()
+            mirror.on_control(
+                apple_midi.build_exchange(
+                    apple_midi.CMD_ACCEPT, mirror._token, 0xAAAA, "TX-7 @hub2"),
+                ("192.0.2.20", 5004))
+            ok = await asyncio.wait_for(mirror._ok_future, 1)
+            assert ok.ssrc == 0xAAAA
+            assert mirror._remote_ssrc == 0xAAAA
+        asyncio.run(run())
+
+    def test_reject_fails_handshake(self):
+        async def run():
+            _, mirror = make_mirror()
+            mirror._ok_future = asyncio.get_event_loop().create_future()
+            mirror.on_control(
+                apple_midi.build_exchange(
+                    apple_midi.CMD_REJECT, mirror._token, 0xAAAA),
+                ("192.0.2.20", 5004))
+            try:
+                await asyncio.wait_for(mirror._ok_future, 1)
+                raise AssertionError("expected rejection")
+            except ConnectionRefusedError:
+                pass
+        asyncio.run(run())
+
+    def test_ck1_reply_closes_round_and_takes_latency(self):
+        _, mirror = make_mirror()
+        ts1 = network_midi.now_ts()  # "we sent CK0 just now"
+        mirror._ck_ts1 = ts1
+        mirror.on_data(
+            apple_midi.build_clock_sync(0xAAAA, 1, ts1, ts1 + 10),
+            ("192.0.2.20", 5005))
+        ck2 = apple_midi.parse_command(mirror._data_transport.sent[-1][0])
+        assert ck2.count == 2
+        assert ck2.ts1 == ts1
+        assert mirror.latency_ms is not None and mirror.latency_ms >= 0
+
+    def test_peer_initiated_ck0_answered(self):
+        _, mirror = make_mirror()
+        mirror.on_data(
+            apple_midi.build_clock_sync(0xAAAA, 0, 555),
+            ("192.0.2.20", 5005))
+        ck1 = apple_midi.parse_command(mirror._data_transport.sent[-1][0])
+        assert ck1.count == 1
+        assert ck1.ts1 == 555
+
+    def test_rtp_injected_through_own_client(self, monkeypatch):
+        _, mirror = make_mirror()
+        mirror._alsa = FakeAlsa()
+        mirror._out_port = 0
+        mirror._remote_ssrc = 0xAAAA
+        injected = []
+        monkeypatch.setattr(network_midi, "_output_event",
+                            lambda alsa, ev, port: injected.append((ev, port)))
+        mirror.on_data(
+            apple_midi.build_rtp_midi(1, 0, 0xAAAA, bytes([0x90, 60, 100])),
+            ("192.0.2.20", 5005))
+        assert len(injected) == 1
+        assert injected[0][0].type == MidiEventType.NOTEON
+
+    def test_bye_reports_lost(self):
+        async def run():
+            mgr, mirror = make_mirror()
+            mirror.on_control(
+                apple_midi.build_exchange(apple_midi.CMD_BYE, 0, 0xAAAA),
+                ("192.0.2.20", 5004))
+            await asyncio.sleep(0)  # let ensure_future run
+            assert mgr.lost == [mirror]
+        asyncio.run(run())
+
+
+class TestMirrorPolicy:
+    def make_manager(self, settings, monkeypatch):
+        from raspimidihub.network_midi import NetworkMidiManager
+
+        started = []
+
+        class FakeMirror:
+            def __init__(self, manager, svc):
+                self.svc = svc
+                self.alsa_client_id = 99
+                self.stable_id = svc.stable_id
+                self.state = "connected"
+                self.latency_ms = None
+
+            async def start(self):
+                started.append(self.svc.service)
+
+            async def stop(self, send_bye=True):
+                pass
+
+        monkeypatch.setattr(network_midi, "MirroredSession", FakeMirror)
+
+        class FakeConfig:
+            data = {"network_midi": {"enabled": True, "exported": [],
+                                     **settings}}
+
+        mgr = NetworkMidiManager(engine=None, config=FakeConfig(),
+                                 server=None)
+        return mgr, started
+
+    def test_hub_session_auto_mirrors(self, monkeypatch):
+        mgr, started = self.make_manager({}, monkeypatch)
+        svc = make_discovered()
+        asyncio.run(mgr._apply_mirror_policy(svc))
+        assert started == [svc.service]
+        assert svc.service in mgr._mirrors
+
+    def test_opt_out_respected(self, monkeypatch):
+        svc = make_discovered()
+        mgr, started = self.make_manager(
+            {"mirror_disabled": [svc.service]}, monkeypatch)
+        asyncio.run(mgr._apply_mirror_policy(svc))
+        assert started == []
+
+    def test_foreign_not_auto_mirrored(self, monkeypatch):
+        mgr, started = self.make_manager({}, monkeypatch)
+        svc = make_discovered(rmh="")
+        asyncio.run(mgr._apply_mirror_policy(svc))
+        assert started == []
+
+    def test_foreign_mirrors_when_added(self, monkeypatch):
+        svc = make_discovered(rmh="")
+        mgr, started = self.make_manager(
+            {"mirrored_foreign": [svc.service]}, monkeypatch)
+        asyncio.run(mgr._apply_mirror_policy(svc))
+        assert started == [svc.service]
+
+    def test_hub_session_without_sid_skipped(self, monkeypatch):
+        mgr, started = self.make_manager({}, monkeypatch)
+        svc = make_discovered(sid="")
+        asyncio.run(mgr._apply_mirror_policy(svc))
+        assert started == []
 
 
 class TestManagerPolicy:

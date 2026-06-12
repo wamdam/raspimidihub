@@ -40,6 +40,33 @@ device names are middle-truncated to fit (`Velocity Equalizer
 1 → Velo…ar 1`); tapping a row header opens its context menu
 with the full name at the top of the menu.
 
+Row and column headers are colour-tinted by device category:
+teal for plugins, blue for Bluetooth, violet for devices mirrored
+from a peer hub over Network MIDI (which also carry a two-node
+link icon).
+
+## Remote Hub Groups
+
+Devices mirrored from a peer hub (chapter 17's *Network MIDI*
+section) sit at the bottom of the matrix, grouped under a violet
+header row per hub -- `@hub2 · 3 devices`. Tapping the group row
+collapses or expands the hub: collapsing hides the hub's **rows
+and columns** entirely (the group row stays as the re-expand
+handle), keeping the grid compact when the far end shares more
+than you currently need. The collapse state is a per-browser
+display preference, like layout density -- it is not part of the
+saved config.
+
+The matrix row shows the device's bare name ("TX-7"); the group
+header carries the hub, and the context menu's title line shows
+the full `TX-7 @hub2` so twin device names across hubs stay
+unambiguous.
+
+When the peer hub goes offline, its mirrored devices behave
+exactly like unplugged hardware: rows and columns stay, dimmed,
+with all connections, filters and mappings intact, and everything
+reconnects by itself when the peer comes back.
+
 ## The Cell Context Menu
 
 Tapping a cell opens its context menu. The entries depend on the
@@ -74,6 +101,10 @@ Tapping a row or column header opens a menu of device-level actions:
   cloned.
 - **Reconnect / Disconnect / Forget** (Bluetooth devices) --
   chapter 14.
+- **Unmirror** (network devices) -- drops the mirrored device from
+  this hub's matrix. The peer's export is untouched; the session
+  stays discoverable and can be re-added from the Add menu or
+  Settings → Network MIDI.
 - **Rename** -- inline edit of the displayed name. The original
   ALSA name remains shown in grey alongside.
 
@@ -151,6 +182,11 @@ do:
    (chapter 13; per-plugin parameter tables in Appendix A).
 4. **Bluetooth MIDI** -- a Scan button and a list of paired
    peripherals. See chapter 14 for the pairing flow.
+5. **Network MIDI** (when enabled in Settings) -- discovered but
+   unmirrored RTP-MIDI sessions: peer-hub exports you previously
+   unmirrored, and foreign sessions from Macs / iPads / DAWs,
+   which never mirror automatically. **Add** mirrors one into the
+   matrix. See chapter 17's *Network MIDI* section.
 
 User-supplied plugins discovered at startup appear in the
 appropriate section based on their declared surface kind.
@@ -214,3 +250,10 @@ hints at the latency profile.
 
 See chapter 4 for the architectural details.
 
+
+Screenshots needed:
+
+- `09-matrix-remote-hub-group.png` -- the matrix with a second
+  hub's devices mirrored: the violet `@hub2` group row expanded
+  with two device rows, and a second capture collapsed. Needs two
+  real hubs on one network; not coverable by the scripted scenes.

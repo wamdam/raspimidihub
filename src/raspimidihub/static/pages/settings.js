@@ -1274,6 +1274,34 @@ function SettingsNetworkMidi({ showToast }) {
         else reload();
     };
 
+    const setMirrored = async (service, mirrored) => {
+        const res = await api(`/network-midi/${mirrored ? 'mirror' : 'unmirror'}`, {
+            method: 'POST', body: JSON.stringify({ service }) });
+        if (res.error) showToast(res.error);
+        else reload();
+    };
+
+    const stateDot = (s) => s.state === 'connected'
+        ? html`<span style="color:var(--success);font-size:11px">●</span>`
+        : s.state === 'connecting'
+            ? html`<span style="color:var(--warn-soft);font-size:11px">●</span>`
+            : html`<span style="color:var(--text-dim);font-size:11px">○</span>`;
+
+    const sessionRow = (s, from) => html`
+        <div key=${s.service} style="display:flex;align-items:center;gap:8px;padding:6px 0">
+            ${stateDot(s)}
+            <div style="flex:1;min-width:0">
+                <div style="font-size:13px">${s.name}</div>
+                <div style="font-size:11px;color:var(--text-dim)">
+                    ${s.mirrored ? s.state : 'not mirrored'}${s.latency_ms != null ? ` · ${s.latency_ms.toFixed(1)} ms` : ''}${from ? ` · ${from}` : ''}
+                </div>
+            </div>
+            <button class="btn btn-secondary" style="font-size:12px;padding:4px 10px"
+                onclick=${() => setMirrored(s.service, !s.mirrored)}>
+                ${s.mirrored ? 'Unmirror' : 'Mirror'}
+            </button>
+        </div>`;
+
     // Sessions by stable_id for the "advertised as" sub-line.
     const sessions = {};
     (nm.exports || []).forEach(s => { sessions[s.stable_id] = s; });
@@ -1316,6 +1344,32 @@ function SettingsNetworkMidi({ showToast }) {
                             </p>`}
                     </div>`;
             })}
+        </div>`}
+        ${nm.enabled && html`<div class="card">
+            <h3>Remote hubs</h3>
+            ${(nm.hubs || []).length === 0 && html`
+                <p style="color:var(--text-dim);font-size:13px">
+                    No hubs discovered. Connect a second RaspiMIDIHub to the
+                    same network (a direct Ethernet cable works) and export
+                    devices on it — they appear here and in the matrix
+                    automatically.
+                </p>`}
+            ${(nm.hubs || []).map(hub => html`
+                <div key=${hub.hub} style="margin-bottom:10px">
+                    <div style="font-size:12px;font-weight:600;margin-bottom:2px">
+                        @${hub.host}
+                    </div>
+                    ${hub.sessions.map(s => sessionRow(s, null))}
+                </div>
+            `)}
+            ${(nm.foreign || []).length > 0 && html`
+                <div style="font-size:11px;text-transform:uppercase;color:var(--text-dim);letter-spacing:1px;margin:12px 0 4px;font-weight:600">Other sessions</div>
+                <p style="font-size:11px;color:var(--text-dim);margin-bottom:4px">
+                    RTP-MIDI sessions from Macs, iPads or DAWs. These never
+                    mirror automatically — add the ones you want.
+                </p>
+                ${(nm.foreign || []).map(s => sessionRow(s, s.addr))}
+            `}
         </div>`}
     `;
 }

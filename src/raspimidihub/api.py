@@ -599,8 +599,12 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
                 # already governs them).
                 if not info.is_plugin:
                     entry["clock_blocked"] = registry.is_clock_blocked(info.stable_id)
-                entry["exported"] = (
-                    info.stable_id in config.network_midi.get("exported", []))
+                if info.is_network:
+                    entry["is_network"] = True
+                    entry["remote_hub"] = info.remote_hub
+                else:
+                    entry["exported"] = (
+                        info.stable_id in config.network_midi.get("exported", []))
             entry["online"] = True
             # Add plugin instance info if this is a virtual device
             if info and info.is_plugin and engine._plugin_host:
@@ -630,7 +634,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
                 pname = port_names.get(port_key, f"MIDI {pid + 1}")
                 ports.append({"port_id": pid, "name": pname, "default_name": f"MIDI {pid + 1}",
                               "is_input": True, "is_output": True})
-            result.append({
+            offline_entry = {
                 "client_id": None,
                 "stable_id": sid,
                 "name": name,
@@ -644,7 +648,11 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
                 # Same idea for mirrored network devices (peer hub
                 # offline): the matrix tints + groups them by prefix.
                 "is_network": sid.startswith("net-"),
-            })
+            }
+            if offline_entry["is_network"] and network_midi:
+                offline_entry["remote_hub"] = \
+                    network_midi.hub_name_for_stable_id(sid)
+            result.append(offline_entry)
 
         return Response.json(result)
 
@@ -1901,6 +1909,47 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
             await config.asave()
             await network_midi.set_export(stable_id, exported)
             return Response.json({"status": "saved"})
+
+        @server.route("POST", "/api/network-midi/mirror")
+        async def api_network_midi_mirror(req: Request) -> Response:
+            key = req.json.get("service") or req.json.get("stable_id", "")
+            svc = network_midi.service_for(key)
+            if svc is None:
+                return Response.error("session not found")
+            cfg = config.data.setdefault("network_midi", {})
+            if svc.is_hub:
+                # Hub sessions auto-mirror; "mirror" = clear the opt-out.
+                disabled = cfg.setdefault("mirror_disabled", [])
+                if svc.service in disabled:
+                    disabled.remove(svc.service)
+            else:
+                added = cfg.setdefault("mirrored_foreign", [])
+                if svc.service not in added:
+                    added.append(svc.service)
+            await config.asave()
+            await network_midi.set_mirrored(svc.service, True)
+            await server.send_sse("device-connected", {})
+            return Response.json({"status": "mirrored"})
+
+        @server.route("POST", "/api/network-midi/unmirror")
+        async def api_network_midi_unmirror(req: Request) -> Response:
+            key = req.json.get("service") or req.json.get("stable_id", "")
+            svc = network_midi.service_for(key)
+            if svc is None:
+                return Response.error("session not found")
+            cfg = config.data.setdefault("network_midi", {})
+            if svc.is_hub:
+                disabled = cfg.setdefault("mirror_disabled", [])
+                if svc.service not in disabled:
+                    disabled.append(svc.service)
+            else:
+                added = cfg.setdefault("mirrored_foreign", [])
+                if svc.service in added:
+                    added.remove(svc.service)
+            await config.asave()
+            await network_midi.set_mirrored(svc.service, False)
+            await server.send_sse("device-disconnected", {})
+            return Response.json({"status": "unmirrored"})
     else:
         @server.route("GET", "/api/network-midi")
         async def api_network_midi_unavailable(req: Request) -> Response:

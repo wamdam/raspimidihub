@@ -124,6 +124,7 @@
      * ones — same purpose as a category colour. */
     --info-bt:         #4488ff;
     --info-plugin:     #4dd9c0;
+    --info-net:        #a583ff;
     --info-blue:       #2196f3;
 
     /* Overlays. Modal / filter / mapping panel scrim depth. Tuned

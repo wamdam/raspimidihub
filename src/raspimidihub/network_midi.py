@@ -91,6 +91,78 @@ class _UdpShim(asyncio.DatagramProtocol):
             log.exception("network-midi: datagram handler failed")
 
 
+async def _bind_port_pair(loop, on_control, on_data):
+    """Bind an even/odd UDP port pair (AppleMIDI convention: data =
+    control + 1), probing upward from BASE_PORT. Returns
+    (control_port, control_transport, data_transport)."""
+    last_err = None
+    for port in range(BASE_PORT, BASE_PORT + PORT_RANGE, 2):
+        try:
+            ctrl, _ = await loop.create_datagram_endpoint(
+                lambda: _UdpShim(on_control), local_addr=("0.0.0.0", port))
+        except OSError as e:
+            last_err = e
+            continue
+        try:
+            data, _ = await loop.create_datagram_endpoint(
+                lambda: _UdpShim(on_data), local_addr=("0.0.0.0", port + 1))
+        except OSError as e:
+            ctrl.close()
+            last_err = e
+            continue
+        return port, ctrl, data
+    raise OSError(f"no free UDP port pair: {last_err}")
+
+
+def _output_event(alsa, ev, source_port: int) -> None:
+    """Emit `ev` from `source_port` of `alsa` to all subscribers —
+    the network→ALSA injection used by exports and mirrors alike."""
+    from ctypes import pointer
+
+    from .alsa_seq import (
+        SND_SEQ_ADDRESS_SUBSCRIBERS,
+        SND_SEQ_QUEUE_DIRECT,
+        snd_seq_event_output_direct,
+    )
+    ev.source.client = alsa.client_id
+    ev.source.port = source_port
+    ev.dest.client = SND_SEQ_ADDRESS_SUBSCRIBERS
+    ev.dest.port = 0
+    ev.queue = SND_SEQ_QUEUE_DIRECT
+    try:
+        snd_seq_event_output_direct(alsa.handle, pointer(ev))
+    except Exception as e:
+        log.debug("network-midi: ALSA inject failed: %s", e)
+
+
+class _SysExChunkFramer:
+    """Frames raw ALSA SysEx chunks as RFC 6295 segments. ALSA
+    delivers large dumps as a series of SYSEX events whose payloads
+    concatenate to F0 … F7; segment framing maps onto that stream
+    directly (F0/F7 opener, F0 = to-be-continued, F7 = final), so
+    chunks go on the wire as they arrive — no buffering the dump.
+    Chunks are device/driver-sized (typically ≤ 256 B), well under
+    MTU; a complete-in-one chunk still gets split when oversized."""
+
+    def __init__(self):
+        self._open = False
+
+    def frame(self, chunk: bytes) -> list[bytes]:
+        if not chunk:
+            return []
+        if not self._open:
+            if chunk[0] != 0xF0:
+                return []  # mid-stream chunk with no start seen — drop
+            if chunk[-1] == 0xF7:
+                return apple_midi.sysex_segments(chunk)
+            self._open = True
+            return [chunk + b"\xf0"]
+        if chunk[-1] == 0xF7:
+            self._open = False
+            return [b"\xf7" + chunk]
+        return [b"\xf7" + chunk + b"\xf0"]
+
+
 class _Participant:
     """One remote endpoint connected to an ExportedSession."""
 
@@ -125,7 +197,7 @@ class ExportedSession:
         self.rx_port = -1              # readable: source for injected input
         self.participants: dict[int, _Participant] = {}
         self._seqnum = int.from_bytes(os.urandom(2), "big")
-        self._tx_sysex_open = False
+        self._sysex_tx = _SysExChunkFramer()
         self._service_info = None      # zeroconf ServiceInfo while registered
 
     @property
@@ -149,31 +221,8 @@ class ExportedSession:
                 alsa.subscribe(alsa.client_id, self.rx_port,
                                device.client_id, p.port_id)
 
-            # Even/odd UDP port pair; probe upward from the base.
-            base = BASE_PORT
-            last_err = None
-            for port in range(base, base + PORT_RANGE, 2):
-                try:
-                    ctrl, _ = await loop.create_datagram_endpoint(
-                        lambda: _UdpShim(self.on_control),
-                        local_addr=("0.0.0.0", port))
-                except OSError as e:
-                    last_err = e
-                    continue
-                try:
-                    data, _ = await loop.create_datagram_endpoint(
-                        lambda: _UdpShim(self.on_data),
-                        local_addr=("0.0.0.0", port + 1))
-                except OSError as e:
-                    ctrl.close()
-                    last_err = e
-                    continue
-                self.control_port = port
-                self._control_transport = ctrl
-                self._data_transport = data
-                break
-            if self.control_port < 0:
-                raise OSError(f"no free UDP port pair: {last_err}")
+            self.control_port, self._control_transport, self._data_transport = \
+                await _bind_port_pair(loop, self.on_control, self.on_data)
 
             await self._manager.register_service(self)
         except Exception:
@@ -302,7 +351,7 @@ class ExportedSession:
         chunk) out to all connected participants."""
         if not self._data_transport:
             return
-        segments = (self._frame_sysex_chunk(midi) if is_sysex_chunk
+        segments = (self._sysex_tx.frame(midi) if is_sysex_chunk
                     else [midi])
         for seg in segments:
             self._seqnum = (self._seqnum + 1) & 0xFFFF
@@ -313,26 +362,7 @@ class ExportedSession:
                     self._data_transport.sendto(pkt, part.data_addr)
 
     def _frame_sysex_chunk(self, chunk: bytes) -> list[bytes]:
-        """Frame a raw ALSA SysEx chunk as RFC 6295 segment(s). ALSA
-        delivers large dumps as a series of SYSEX events whose payloads
-        concatenate to F0 … F7; segment framing maps onto that stream
-        directly (F0/F7 opener, F0 = to-be-continued, F7 = final), so
-        chunks go on the wire as they arrive — no buffering the dump.
-        Chunks are device/driver-sized (typically ≤ 256 B), well under
-        MTU; a complete-in-one chunk still gets split when oversized."""
-        if not chunk:
-            return []
-        if not self._tx_sysex_open:
-            if chunk[0] != 0xF0:
-                return []  # mid-stream chunk with no start seen — drop
-            if chunk[-1] == 0xF7:
-                return apple_midi.sysex_segments(chunk)
-            self._tx_sysex_open = True
-            return [chunk + b"\xf0"]
-        if chunk[-1] == 0xF7:
-            self._tx_sysex_open = False
-            return [b"\xf7" + chunk]
-        return [b"\xf7" + chunk + b"\xf0"]
+        return self._sysex_tx.frame(chunk)
 
     def status(self) -> dict:
         return {
@@ -348,6 +378,282 @@ class ExportedSession:
         }
 
 
+class DiscoveredService:
+    """One RTP-MIDI session seen via mDNS (hub export or foreign)."""
+
+    def __init__(self, service: str, instance: str, host: str,
+                 addresses: list[str], port: int, txt: dict[str, str]):
+        self.service = service        # full mDNS instance name
+        self.instance = instance      # without the service-type suffix
+        self.host = host              # advertising host (server record)
+        self.addresses = addresses
+        self.port = port              # control port; data = +1
+        self.txt = txt
+
+    @property
+    def is_hub(self) -> bool:
+        return self.txt.get("rmh") == "1"
+
+    @property
+    def hub(self) -> str:
+        return self.txt.get("hub", "")
+
+    @property
+    def sid(self) -> str:
+        return self.txt.get("sid", "")
+
+    @property
+    def device_name(self) -> str:
+        """Bare device name — the matrix group header carries the hub,
+        so the 9-char row budget isn't wasted on '@hostname'."""
+        if self.txt.get("dev"):
+            return self.txt["dev"]
+        if " @" in self.instance:
+            return self.instance.rsplit(" @", 1)[0]
+        return self.instance
+
+    @property
+    def remote_hub(self) -> str:
+        if self.txt.get("host"):
+            return self.txt["host"]
+        if " @" in self.instance:
+            return self.instance.rsplit(" @", 1)[1]
+        return self.host or "network"
+
+    @property
+    def stable_id(self) -> str:
+        """Survives reboots and IP/port changes on both ends: keyed on
+        the peer's machine-id + the device's stable id over there. A
+        foreign session has neither — its mDNS instance name is the
+        most stable thing it offers."""
+        if self.is_hub and self.sid:
+            return f"net-{self.hub}-{self.sid}"
+        slug = "".join(c if c.isalnum() else "-" for c in self.instance)
+        return f"net-{slug}"
+
+
+class MirroredSession:
+    """Initiator side of one mirrored remote session: its own visible
+    ALSA client (the _BleDevice pattern — the device in the matrix IS
+    this client), an AppleMIDI handshake to the remote port pair, and
+    a CK clock-sync task that doubles as the liveness probe."""
+
+    HANDSHAKE_TIMEOUT = 3.0
+    HANDSHAKE_RETRIES = 3
+    CK_INTERVAL = 10.0
+
+    def __init__(self, manager, svc: DiscoveredService):
+        self._manager = manager
+        self.svc = svc
+        self.stable_id = svc.stable_id
+        self.device_name = svc.device_name
+        self.remote_hub = svc.remote_hub
+        self.state = "idle"            # idle/connecting/connected/closed
+        self.latency_ms: float | None = None
+        self.ssrc = int.from_bytes(os.urandom(4), "big")
+        self._token = int.from_bytes(os.urandom(4), "big")
+        self._alsa = None              # own visible client while connected
+        self._out_port = -1            # readable: remote's output enters here
+        self._in_port = -1             # writable: matrix routes into here
+        self._ctrl_transport = None
+        self._data_transport = None
+        self._remote_ctrl = (svc.addresses[0], svc.port)
+        self._remote_data = (svc.addresses[0], svc.port + 1)
+        self._ok_future: asyncio.Future | None = None
+        self._remote_ssrc: int | None = None
+        self._ck_task = None
+        self._ck_ts1 = 0
+        self._seqnum = int.from_bytes(os.urandom(2), "big")
+        self._sysex_rx = apple_midi.SysExAssembler()
+        self._sysex_tx = _SysExChunkFramer()
+        self.last_rx = time.monotonic()
+
+    @property
+    def alsa_client_id(self) -> int | None:
+        return self._alsa.client_id if self._alsa else None
+
+    # --- lifecycle ---
+
+    async def start(self) -> None:
+        """Bind a local port pair, run the two-phase invitation, then
+        surface the remote device as a local ALSA client."""
+        loop = asyncio.get_event_loop()
+        self.state = "connecting"
+        _, self._ctrl_transport, self._data_transport = \
+            await _bind_port_pair(loop, self.on_control, self.on_data)
+        try:
+            await self._invite(self._ctrl_transport, self._remote_ctrl)
+            await self._invite(self._data_transport, self._remote_data)
+        except Exception:
+            await self.stop(send_bye=False)
+            raise
+
+        from .alsa_seq import AlsaSeq
+        self._alsa = AlsaSeq(self.device_name, default_ports=False)
+        self._out_port = self._alsa.create_port("OUT", readable=True)
+        self._in_port = self._alsa.create_port("IN", writable=True)
+        loop.add_reader(self._alsa.fileno(), self._on_alsa_readable)
+        # Creating the client fires CLIENT_START — the engine's
+        # debounced hotplug rescan picks the device up from there.
+
+        self.state = "connected"
+        self._ck_task = loop.create_task(self._ck_loop())
+        log.info("network-midi: mirroring '%s' from %s (%s:%d)",
+                 self.device_name, self.remote_hub, *self._remote_ctrl)
+
+    async def _invite(self, transport, remote) -> None:
+        """Send IN and await the OK on one port (control, then data)."""
+        loop = asyncio.get_event_loop()
+        for _attempt in range(self.HANDSHAKE_RETRIES):
+            self._ok_future = loop.create_future()
+            transport.sendto(
+                apple_midi.build_exchange(
+                    apple_midi.CMD_INVITATION, self._token, self.ssrc,
+                    f"{self._manager.hostname}"),
+                remote)
+            try:
+                await asyncio.wait_for(self._ok_future,
+                                       self.HANDSHAKE_TIMEOUT)
+                return
+            except asyncio.TimeoutError:
+                continue
+        raise TimeoutError(f"no OK from {remote[0]}:{remote[1]}")
+
+    async def stop(self, send_bye: bool = True) -> None:
+        self.state = "closed"
+        if self._ck_task:
+            self._ck_task.cancel()
+            self._ck_task = None
+        if send_bye and self._ctrl_transport:
+            try:
+                self._ctrl_transport.sendto(
+                    apple_midi.build_exchange(
+                        apple_midi.CMD_BYE, self._token, self.ssrc),
+                    self._remote_ctrl)
+            except Exception:
+                pass
+        for transport in (self._ctrl_transport, self._data_transport):
+            if transport:
+                transport.close()
+        self._ctrl_transport = self._data_transport = None
+        if self._alsa:
+            try:
+                asyncio.get_event_loop().remove_reader(self._alsa.fileno())
+            except (OSError, ValueError, RuntimeError):
+                pass
+            self._manager.unregister_mirror_device(self.stable_id)
+            # Closing the client fires CLIENT_EXIT → matrix rescan;
+            # saved connections to the stable id stay pending.
+            self._alsa.close()
+            self._alsa = None
+
+    # --- session protocol (initiator role) ---
+
+    def on_control(self, data: bytes, addr) -> None:
+        self._on_session_packet(data, addr, self._ctrl_transport)
+
+    def on_data(self, data: bytes, addr) -> None:
+        pkt = apple_midi.parse_command(data)
+        if pkt is not None:
+            self._on_session_packet(data, addr, self._data_transport)
+            return
+        rtp = apple_midi.parse_rtp_midi(data)
+        if rtp is None or rtp.ssrc != self._remote_ssrc_guard(rtp.ssrc):
+            return
+        self.last_rx = time.monotonic()
+        for cmd in rtp.commands:
+            if cmd and cmd[0] in (0xF0, 0xF7):
+                complete = self._sysex_rx.feed(cmd)
+                if complete:
+                    self._inject(complete)
+            else:
+                self._inject(cmd)
+
+    def _remote_ssrc_guard(self, ssrc: int) -> int:
+        """The mirror talks to exactly one responder; accept its ssrc
+        once seen, ignore strays. (The OK packet told us the ssrc, but
+        some stacks renumber between handshake and data.)"""
+        if getattr(self, "_remote_ssrc", None) is None:
+            self._remote_ssrc = ssrc
+        return self._remote_ssrc
+
+    def _on_session_packet(self, data: bytes, addr, transport) -> None:
+        pkt = apple_midi.parse_command(data)
+        if isinstance(pkt, apple_midi.ExchangePacket):
+            if pkt.command == apple_midi.CMD_ACCEPT:
+                self._remote_ssrc = pkt.ssrc
+                if self._ok_future and not self._ok_future.done():
+                    self._ok_future.set_result(pkt)
+            elif pkt.command == apple_midi.CMD_REJECT:
+                if self._ok_future and not self._ok_future.done():
+                    self._ok_future.set_exception(
+                        ConnectionRefusedError(pkt.name or "rejected"))
+            elif pkt.command == apple_midi.CMD_BYE:
+                log.info("network-midi: peer closed '%s'", self.device_name)
+                asyncio.ensure_future(self._manager.on_mirror_lost(self))
+        elif isinstance(pkt, apple_midi.ClockSync):
+            self.last_rx = time.monotonic()
+            if pkt.count == 0 and transport:
+                # Peer-initiated round: answer like a responder.
+                transport.sendto(apple_midi.build_clock_sync(
+                    self.ssrc, 1, pkt.ts1, now_ts()), addr)
+            elif pkt.count == 1 and transport:
+                # Our round coming back: close it + take the latency.
+                ts3 = now_ts()
+                transport.sendto(apple_midi.build_clock_sync(
+                    self.ssrc, 2, pkt.ts1, pkt.ts2, ts3), addr)
+                if pkt.ts1 == self._ck_ts1:
+                    self.latency_ms = (ts3 - pkt.ts1) / 2 / 10
+
+    async def _ck_loop(self) -> None:
+        """Initiator clock sync every CK_INTERVAL — keeps macOS happy
+        and doubles as the liveness signal (timeout logic: phase 4)."""
+        while self.state == "connected":
+            self._ck_ts1 = now_ts()
+            if self._data_transport:
+                self._data_transport.sendto(
+                    apple_midi.build_clock_sync(self.ssrc, 0, self._ck_ts1),
+                    self._remote_data)
+            await asyncio.sleep(self.CK_INTERVAL)
+
+    # --- MIDI bridging ---
+
+    def _inject(self, msg: bytes) -> None:
+        ev = midi_to_event(msg)
+        if ev is not None and self._alsa:
+            _output_event(self._alsa, ev, self._out_port)
+
+    def _on_alsa_readable(self) -> None:
+        from .alsa_seq import MidiEventType
+        while True:
+            ev = self._alsa.read_event() if self._alsa else None
+            if ev is None:
+                return
+            if ev.dest.port != self._in_port:
+                continue
+            midi = event_to_midi(ev)
+            if midi is None or not self._data_transport:
+                continue
+            segments = (self._sysex_tx.frame(midi)
+                        if ev.type == MidiEventType.SYSEX else [midi])
+            for seg in segments:
+                self._seqnum = (self._seqnum + 1) & 0xFFFF
+                self._data_transport.sendto(
+                    apple_midi.build_rtp_midi(self._seqnum, now_ts(),
+                                              self.ssrc, seg),
+                    self._remote_data)
+
+    def status(self) -> dict:
+        return {
+            "service": self.svc.service,
+            "stable_id": self.stable_id,
+            "name": self.device_name,
+            "remote_hub": self.remote_hub,
+            "state": self.state,
+            "latency_ms": self.latency_ms,
+        }
+
+
 class NetworkMidiManager:
     """Owns the export list, the shared ALSA client, zeroconf
     registration and (phase 3) discovery/mirroring."""
@@ -357,8 +663,12 @@ class NetworkMidiManager:
         self._config = config
         self._server = server
         self._exports: dict[str, ExportedSession] = {}
+        self._mirrors: dict[str, MirroredSession] = {}      # by service name
+        self._discovered: dict[str, DiscoveredService] = {}  # by service name
         self._alsa = None              # shared hidden client, created on start
         self._aiozc = None             # AsyncZeroconf while running
+        self._browser = None           # AsyncServiceBrowser while running
+        self._loop = None
         self._started = False
         self._notify_task = None
         self.hub_id = hub_id()
@@ -400,22 +710,39 @@ class NetworkMidiManager:
             log.info("network-midi: zeroconf not installed, feature off")
             return
         from zeroconf import IPVersion
-        from zeroconf.asyncio import AsyncZeroconf
+        from zeroconf.asyncio import AsyncServiceBrowser, AsyncZeroconf
 
         from .alsa_seq import AlsaSeq
 
+        self._loop = asyncio.get_event_loop()
         self._aiozc = AsyncZeroconf(ip_version=IPVersion.V4Only)
         self._alsa = AlsaSeq("NetworkMIDI", default_ports=False)
-        asyncio.get_event_loop().add_reader(
-            self._alsa.fileno(), self._on_alsa_readable)
+        self._loop.add_reader(self._alsa.fileno(), self._on_alsa_readable)
         self._started = True
         await self.resync_exports()
+        # Browse for other hubs' (and foreign) RTP-MIDI sessions. The
+        # handler may fire on zeroconf's own thread — marshal onto the
+        # loop unconditionally; call_soon_threadsafe is loop-thread-safe
+        # in both directions.
+        self._browser = AsyncServiceBrowser(
+            self._aiozc.zeroconf, SERVICE_TYPE,
+            handlers=[self._on_service_state])
         log.info("network-midi: up (hub id %s)", self.hub_id)
 
     async def stop(self) -> None:
         if not self._started:
             return
         self._started = False
+        if self._browser:
+            try:
+                await self._browser.async_cancel()
+            except Exception:
+                pass
+            self._browser = None
+        for mirror in list(self._mirrors.values()):
+            await mirror.stop()
+        self._mirrors.clear()
+        self._discovered.clear()
         for sess in list(self._exports.values()):
             await sess.stop()
         self._exports.clear()
@@ -503,7 +830,8 @@ class NetworkMidiManager:
             port=sess.control_port,
             addresses=addresses,
             properties={"rmh": "1", "hub": self.hub_id,
-                        "sid": sess.stable_id},
+                        "sid": sess.stable_id, "host": self.hostname,
+                        "dev": sess.device_name},
         )
         await self._aiozc.async_register_service(sess._service_info)
 
@@ -544,24 +872,138 @@ class NetworkMidiManager:
     def output_event(self, ev, source_port: int) -> None:
         """Network → ALSA: emit `ev` from `source_port` to subscribers
         (the kernel subscription delivers it to the exported device)."""
-        if not self._alsa:
-            return
-        from ctypes import pointer
+        if self._alsa:
+            _output_event(self._alsa, ev, source_port)
 
-        from .alsa_seq import (
-            SND_SEQ_ADDRESS_SUBSCRIBERS,
-            SND_SEQ_QUEUE_DIRECT,
-            snd_seq_event_output_direct,
+    # --- discovery / mirroring ---
+
+    def _on_service_state(self, zeroconf, service_type, name, state_change):
+        """zeroconf browser callback — may fire on zeroconf's thread;
+        marshal onto the loop (call_soon_threadsafe is safe from the
+        loop thread too)."""
+        if self._loop is None:
+            return
+        change = getattr(state_change, "name", str(state_change))
+        if change in ("Added", "Updated"):
+            self._loop.call_soon_threadsafe(
+                lambda: self._loop.create_task(self._service_added(name)))
+        elif change == "Removed":
+            self._loop.call_soon_threadsafe(
+                lambda: self._loop.create_task(self._service_removed(name)))
+
+    async def _service_added(self, name: str) -> None:
+        if not self._started or not self._aiozc:
+            return
+        info = await self._aiozc.async_get_service_info(SERVICE_TYPE, name,
+                                                        3000)
+        if info is None or info.port is None:
+            return
+        txt = {}
+        for k, v in (info.properties or {}).items():
+            if v is None:
+                continue
+            key = k.decode() if isinstance(k, bytes) else k
+            txt[key] = v.decode() if isinstance(v, bytes) else v
+        svc = DiscoveredService(
+            service=name,
+            instance=name.removesuffix("." + SERVICE_TYPE),
+            host=(info.server or "").rstrip("."),
+            addresses=list(info.parsed_addresses()),
+            port=info.port,
+            txt=txt,
         )
-        ev.source.client = self._alsa.client_id
-        ev.source.port = source_port
-        ev.dest.client = SND_SEQ_ADDRESS_SUBSCRIBERS
-        ev.dest.port = 0
-        ev.queue = SND_SEQ_QUEUE_DIRECT
+        if svc.hub == self.hub_id:
+            return  # our own advert echoing back
+        if svc.sid.startswith("net-"):
+            return  # a hub erroneously exporting a mirror — never chain
+        self._discovered[name] = svc
+        await self._apply_mirror_policy(svc)
+        self.notify_changed()
+
+    async def _service_removed(self, name: str) -> None:
+        self._discovered.pop(name, None)
+        mirror = self._mirrors.pop(name, None)
+        if mirror:
+            await mirror.stop(send_bye=False)
+        self.notify_changed()
+
+    async def _apply_mirror_policy(self, svc: DiscoveredService) -> None:
+        """Hub sessions auto-mirror (the export list over there is the
+        deliberate share); foreign sessions (Macs, DAWs) only when the
+        user added them — a Mac's advert is not an invitation, and a
+        studio WLAN full of DAWs must not flood the matrix."""
+        if svc.service in self._mirrors:
+            return
+        if svc.is_hub:
+            want = (bool(svc.sid)
+                    and svc.service not in
+                    self.settings.get("mirror_disabled", []))
+        else:
+            want = svc.service in self.settings.get("mirrored_foreign", [])
+        if not want or not svc.addresses:
+            return
+        mirror = MirroredSession(self, svc)
         try:
-            snd_seq_event_output_direct(self._alsa.handle, pointer(ev))
+            await mirror.start()
         except Exception as e:
-            log.debug("network-midi: ALSA inject failed: %s", e)
+            log.warning("network-midi: mirroring '%s' failed: %s",
+                        svc.instance, e)
+            return
+        self._mirrors[svc.service] = mirror
+
+    async def set_mirrored(self, service: str, mirrored: bool) -> None:
+        """Apply a mirror/unmirror decision (config lists are mutated
+        by the API handler, same split as exports)."""
+        if mirrored:
+            svc = self._discovered.get(service)
+            if svc:
+                await self._apply_mirror_policy(svc)
+        else:
+            mirror = self._mirrors.pop(service, None)
+            if mirror:
+                await mirror.stop()
+        self.notify_changed()
+
+    async def on_mirror_lost(self, mirror) -> None:
+        """Peer sent BY: drop the live session, keep the discovery
+        entry (the service may come back; re-mirror is automatic)."""
+        if self._mirrors.get(mirror.svc.service) is mirror:
+            self._mirrors.pop(mirror.svc.service)
+        await mirror.stop(send_bye=False)
+        self.notify_changed()
+
+    def unregister_mirror_device(self, stable_id: str) -> None:
+        self._engine.device_registry.unregister_network_device(stable_id)
+
+    def service_for(self, key: str):
+        """Resolve a service by mDNS name or mirrored stable_id —
+        the API accepts either (Settings rows carry the service name,
+        matrix header menus carry the stable id)."""
+        if key in self._discovered:
+            return self._discovered[key]
+        for svc in self._discovered.values():
+            if svc.stable_id == key:
+                return svc
+        return None
+
+    def get_mirror_client_ids(self) -> set[int]:
+        return {m.alsa_client_id for m in self._mirrors.values()
+                if m.alsa_client_id is not None}
+
+    def get_mirrors(self) -> list:
+        return [m for m in self._mirrors.values()
+                if m.alsa_client_id is not None]
+
+    def hub_name_for_stable_id(self, stable_id: str) -> str:
+        """Best-effort group label for an offline mirrored device:
+        the peer's hostname while it is discovered, else the hub-id
+        segment of the stable id (`net-<hub>-…`)."""
+        parts = stable_id.split("-", 2)
+        hub = parts[1] if len(parts) > 2 else ""
+        for svc in self._discovered.values():
+            if svc.hub == hub:
+                return svc.remote_hub
+        return hub or "offline hub"
 
     # --- status / SSE ---
 
@@ -579,6 +1021,28 @@ class NetworkMidiManager:
             pass  # no loop (tests constructing the manager standalone)
 
     def status(self) -> dict:
+        hubs: dict[str, dict] = {}
+        foreign: list[dict] = []
+        for svc in self._discovered.values():
+            mirror = self._mirrors.get(svc.service)
+            entry = {
+                "service": svc.service,
+                "stable_id": svc.stable_id,
+                "name": svc.device_name,
+                "addr": svc.addresses[0] if svc.addresses else None,
+                "port": svc.port,
+                "mirrored": mirror is not None,
+                "state": mirror.state if mirror else "discovered",
+                "latency_ms": mirror.latency_ms if mirror else None,
+            }
+            if svc.is_hub:
+                hub = hubs.setdefault(svc.hub, {
+                    "hub": svc.hub, "host": svc.remote_hub, "sessions": []})
+                hub["sessions"].append(entry)
+            else:
+                foreign.append(entry)
+        for hub in hubs.values():
+            hub["sessions"].sort(key=lambda s: s["name"].lower())
         return {
             "available": True,
             "enabled": bool(self.settings.get("enabled")),
@@ -587,4 +1051,7 @@ class NetworkMidiManager:
             "hub_id": self.hub_id,
             "exported": list(self.settings.get("exported", [])),
             "exports": [s.status() for s in self._exports.values()],
+            "hubs": sorted(hubs.values(), key=lambda h: h["host"].lower()),
+            "foreign": sorted(foreign, key=lambda s: s["name"].lower()),
+            "manual_peers": list(self.settings.get("manual_peers", [])),
         }

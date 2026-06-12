@@ -2560,6 +2560,32 @@ body {
 .matrix .plugin-col { color: var(--info-plugin); }
 .matrix .bt-row { color: var(--info-bt); }
 .matrix .bt-col { color: var(--info-bt); }
+.matrix .net-row { color: var(--info-net); }
+.matrix .net-col { color: var(--info-net); }
+.dev-icon.net { color: var(--info-net); }
+
+/* Per-hub group row for network-mirrored devices. The whole header
+ * is the collapse/expand affordance; collapsing hides the hub's rows
+ * AND columns, the group row itself stays as the re-expand handle. */
+.matrix .net-group-header {
+    text-align: left;
+    color: var(--info-net);
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px 8px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.matrix .net-group-header .net-chevron {
+    display: inline-block;
+    width: 12px;
+    margin-right: 2px;
+    font-size: 9px;
+}
+.matrix .net-group-header .net-count {
+    font-weight: 400;
+    color: var(--text-dim);
+}
 
 /* Device list offline dot */
 .dot.offline { background: #555 !important; }

@@ -7,6 +7,7 @@ hashes. Tags: Added, Improved, Fix, Changed, Removed.
 Unreleased
 
 - Added: **Network MIDI** (Settings → Network MIDI) — export any local device as a standard **RTP-MIDI (AppleMIDI)** session, advertised over mDNS as "Name @hostname". Macs (Audio MIDI Setup), iPads, rtpmidid, and a second RaspiMIDIHub can connect; several clients per device at once. Notes, CCs, clock and SysEx cross the wire with sub-millisecond LAN latency. Exports survive reboots; the advert exists only while the device is present.
+- Added: **two-hub mirroring** — devices exported by a second RaspiMIDIHub appear in the routing matrix automatically as violet network devices, grouped under a collapsible @hubname row (collapse hides the hub's rows *and* columns). Filters, mappings, renames and saved connections work like for any device; peer offline behaves like unplugged hardware and recovers on its own. Unmirror per device from the header menu; Macs/DAW sessions never auto-mirror but can be added from the Add menu or Settings.
 
 
 2026-06-12 — Version 4.8.0

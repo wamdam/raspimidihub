@@ -62,6 +62,8 @@ class StableDeviceInfo:
     custom_name: str = ""  # User-assigned name (empty = use default)
     is_plugin: bool = False  # True for virtual instrument plugins
     is_bluetooth: bool = False  # True for BLE-MIDI devices via BlueALSA
+    is_network: bool = False  # True for devices mirrored from a peer hub
+    remote_hub: str = ""  # Peer hostname for is_network devices
     serial: str = ""  # Usable USB serial ("" if absent or a placeholder)
     canonical_id: str = ""  # The device's own identity (serial or port form)
     legacy_id: str = ""  # Port-bound form, always set for USB devices
@@ -641,6 +643,35 @@ class DeviceRegistry:
         stable_id = f"plugin-{instance_id}"
         self._by_stable_id.pop(stable_id, None)
         to_remove = [cid for cid, info in self._by_client.items() if info.stable_id == stable_id]
+        for cid in to_remove:
+            del self._by_client[cid]
+
+    def register_network_device(self, client_id: int, stable_id: str,
+                                display_name: str,
+                                remote_hub: str) -> StableDeviceInfo:
+        """Register a device mirrored from a peer hub (stable ID =
+        net-<hub>-<remote stable id>, assigned by the network MIDI
+        manager). Mirrors the plugin pattern: no sysfs card behind it,
+        identity comes from the bridge that owns the ALSA client."""
+        info = StableDeviceInfo(
+            stable_id=stable_id,
+            vid="", pid="", usb_path="",
+            card_num=-1,
+            display_name=display_name,
+            is_network=True,
+            remote_hub=remote_hub,
+        )
+        if stable_id in self._custom_names:
+            info.custom_name = self._custom_names[stable_id]
+        self._by_client[client_id] = info
+        self._by_stable_id[stable_id] = info
+        return info
+
+    def unregister_network_device(self, stable_id: str) -> None:
+        """Remove a mirrored network device from the registry."""
+        self._by_stable_id.pop(stable_id, None)
+        to_remove = [cid for cid, info in self._by_client.items()
+                     if info.stable_id == stable_id]
         for cid in to_remove:
             del self._by_client[cid]
 

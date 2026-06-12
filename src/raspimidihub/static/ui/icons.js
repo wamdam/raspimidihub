@@ -38,6 +38,12 @@ export function IconBluetooth() {
     return html`<svg viewBox="0 0 20 20" class="dev-icon bt"><path d="M7 5 L13 15 L10 17 L10 3 L13 5 L7 15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 }
 
+// Network icon for devices mirrored from a peer hub over RTP-MIDI:
+// two nodes joined by a link. Component form — see IconDIN for why.
+export function IconNetwork() {
+    return html`<svg viewBox="0 0 20 20" class="dev-icon net"><circle cx="5" cy="14" r="2.6" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="15" cy="6" r="2.6" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M7 12 L13 8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>`;
+}
+
 // Plugin icon: fetched from /api/plugins/icon/{type} and injected inline so currentColor works.
 const _iconCache = {};
 export function PluginIcon({ type }) {
@@ -55,5 +61,6 @@ export function PluginIcon({ type }) {
 export function DeviceIcon({ device }) {
     if (device.is_plugin && device.plugin_type) return html`<${PluginIcon} type=${device.plugin_type} />`;
     if (device.is_bluetooth) return html`<${IconBluetooth} />`;
+    if (device.is_network) return html`<${IconNetwork} />`;
     return html`<${IconDIN} />`;
 }

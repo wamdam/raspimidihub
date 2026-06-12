@@ -132,6 +132,34 @@ everything and the far end sees each device individually. Several
 clients can be connected to the same exported device at once --
 a Mac and a peer hub, for example.
 
+### Mirroring -- the two-hub scenario
+
+When two RaspiMIDIHubs see each other, the peer's exported
+devices **mirror automatically**: each appears in the local
+routing matrix as a violet network device, grouped under a
+collapsible `@hubname` header (chapter 9, *Remote Hub Groups*).
+No pairing flow, no taps -- plug the cable in, export on one
+side, route on the other. Each side decides what it *shares*
+(its export list) and the receiving side can opt out per session
+(**Unmirror** in the device's header menu) and re-add later from
+the Add menu.
+
+Mirrored devices are full citizens of the matrix: filters,
+mappings, renames and clock routing all work, and connections to
+them are saved by a stable identity that survives reboots and IP
+changes on both ends. While the peer is offline its devices show
+as offline rows like unplugged hardware, and recover by
+themselves when the peer returns.
+
+Sessions from Macs, iPads or DAWs are **not** mirrored
+automatically -- a DAW advertising a session is not an invitation,
+and a studio WLAN full of them would flood the matrix. They are
+listed under Settings → Network MIDI (and in the Add menu) and
+can be mirrored with one tap.
+
+Loops are prevented structurally: a mirrored device cannot be
+re-exported, and a hub never mirrors its own sessions.
+
 Exports survive reboots (the list is part of the config); the
 network advert for a device exists only while the device is
 actually present. Notes, CCs, clock and SysEx all cross the wire;

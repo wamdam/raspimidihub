@@ -69,6 +69,10 @@
      * in light mode, keeping the brand teal consistent. */
     --info-plugin:             #1a8c75;
 
+    /* Same story for network-mirrored devices: the soft violet
+     * washes out on white, deepen it for light cards. */
+    --info-net:                #7a4fe0;
+
     /* Overlays (modal scrim, filter-panel backdrop) stay dark on
      * BOTH themes — a scrim is always "make the page recede". A
      * light-coloured scrim wouldn't read as a scrim. */

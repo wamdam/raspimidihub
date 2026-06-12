@@ -303,6 +303,12 @@ This page is the control surface:
   `"<name> @<hostname>"`; the sub-line below an exported device
   shows the advertised session name and how many network clients
   are connected to it right now.
+- **Remote hubs** -- everything discovered on the network, grouped
+  per hub. Peer-hub sessions mirror into the matrix automatically;
+  each row shows a state dot (green connected / amber connecting /
+  grey discovered), the measured link latency, and a
+  Mirror / Unmirror button. Sessions from Macs, iPads or DAWs are
+  listed under *Other sessions* and only mirror when you add them.
 
 Like the WiFi settings, everything here applies immediately and
 does **not** feed the dirty-state asterisk -- the export list is

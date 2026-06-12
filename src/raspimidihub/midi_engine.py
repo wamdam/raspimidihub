@@ -243,6 +243,14 @@ class MidiEngine:
         if ble_bridge is not None:
             ble_client_ids = set(ble_bridge.get_alsa_client_ids())
             user_clients |= ble_client_ids
+        # Mirrored network MIDI devices (one visible ALSA client per
+        # mirrored session). The manager's hidden export client is NOT
+        # whitelisted — its plumbing ports stay out of the matrix.
+        network_midi = getattr(self, "_network_midi", None)
+        net_client_ids: set[int] = set()
+        if network_midi is not None:
+            net_client_ids = set(network_midi.get_mirror_client_ids())
+            user_clients |= net_client_ids
         # BlueZ (modern kernels) also creates an ALSA seq user client
         # per connected BLE-MIDI peripheral, named after the device.
         # Whitelist any user client whose name matches a known BT
@@ -261,7 +269,7 @@ class MidiEngine:
         # BLE clients are treated as hardware-ish so DeviceRegistry.scan
         # routes them through the `name in bt_macs` branch and gives
         # them `bt-<MAC>` stable ids.
-        plugin_only_clients = user_clients - ble_client_ids
+        plugin_only_clients = (user_clients - ble_client_ids) | net_client_ids
         hw_client_ids = [d.client_id for d in self._devices
                          if d.client_id not in plugin_only_clients]
         # Pass {client_id: name} so DeviceRegistry can identify
@@ -281,6 +289,14 @@ class MidiEngine:
                 if inst.alsa_client:
                     self._device_registry.register_plugin(
                         inst.alsa_client.client_id, inst.id, inst.name)
+        # Register mirrored network devices (net-<hub>-<sid> identity
+        # comes from the peer's mDNS TXT records, not from sysfs).
+        if network_midi is not None:
+            for m in network_midi.get_mirrors():
+                if m.alsa_client_id is not None:
+                    self._device_registry.register_network_device(
+                        m.alsa_client_id, m.stable_id,
+                        m.device_name, m.remote_hub)
         # BLE-MIDI bridge devices are registered by the regular
         # device_registry.scan() above — the bridge names its ALSA
         # client after the BT alias, so the `name in bt_macs` branch

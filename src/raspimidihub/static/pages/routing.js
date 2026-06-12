@@ -113,6 +113,23 @@ export function RoutingPage({ devices, connections, refresh, showToast, clockSou
         loadBt();
         refresh();
     };
+    // Network MIDI: the Add overlay lists discovered-but-unmirrored
+    // RTP-MIDI sessions (a hub session the user opted out of, or a
+    // foreign Mac/DAW session) with an Add button. Export management
+    // lives in Settings → Network MIDI; this is just the "bring it
+    // into my matrix" affordance, mirroring the Bluetooth section.
+    const [nmInfo, setNmInfo] = useState(null);
+    const loadNm = () => { api('/network-midi').then(setNmInfo).catch(() => {}); };
+    useEffect(() => { loadNm(); }, []);
+    const nmMirror = async (service) => {
+        try {
+            const r = await api('/network-midi/mirror', { method: 'POST', body: JSON.stringify({ service }) });
+            if (r && r.error) { showToast(r.error); return; }
+            showToast('Network device added');
+            setShowAddPlugin(false);
+            refresh();
+        } catch (e) { showToast('Mirroring failed'); }
+    };
     const btForget = async (address, name) => {
         if (!confirm('Forget ' + (name || address) + '?')) return;
         await api('/bluetooth/' + encodeURIComponent(address), { method: 'DELETE' });
@@ -449,8 +466,13 @@ export function RoutingPage({ devices, connections, refresh, showToast, clockSou
         // at the top of this menu so the user can verify which row /
         // column they tapped before committing to a destructive
         // action (Remove / Delete).
-        const headerItem = fullLabel
-            ? [{ header: true, label: fullLabel }, { divider: true }]
+        // Network devices carry their hub in the menu header — twin
+        // device names across hubs ("TX-7 @hub2") stay unambiguous
+        // even though the matrix row shows only the bare name.
+        const headerLabel = (item.is_network && item.remote_hub)
+            ? `${fullLabel} @${item.remote_hub}` : fullLabel;
+        const headerItem = headerLabel
+            ? [{ header: true, label: headerLabel }, { divider: true }]
             : [];
         // Offline hardware: keep the existing "remove?" confirmation
         // available without forcing the user to tap-then-confirm. Offline
@@ -489,6 +511,26 @@ export function RoutingPage({ devices, connections, refresh, showToast, clockSou
                   disabled: !isCompat },
                 { divider: true },
                 { label: 'Delete', danger: true, action: () => deletePlugin(item) },
+            ];
+        }
+        // Online network device (mirrored from a peer hub): Rename
+        // persists by stable_id like hardware; Unmirror drops it from
+        // this hub's matrix (the peer's export is untouched, and the
+        // session reappears in Add Device → Network MIDI).
+        if (item.is_network) {
+            return [
+                ...headerItem,
+                { label: 'Edit', action: () => onDeviceOpenForMenu(item.client_id) },
+                { label: 'Rename', action: () => renameHardware(item) },
+                { divider: true },
+                { label: 'Unmirror', danger: true, action: async () => {
+                    try {
+                        const r = await api('/network-midi/unmirror', { method: 'POST', body: JSON.stringify({ stable_id: item.stable_id }) });
+                        if (r && r.error) { showToast(r.error); return; }
+                        showToast('Device unmirrored');
+                        refresh();
+                    } catch (e) { showToast('Unmirror failed'); }
+                } },
             ];
         }
         // Online hardware: Edit (opens device-detail panel for MIDI
@@ -659,6 +701,41 @@ export function RoutingPage({ devices, connections, refresh, showToast, clockSou
                             `;
                         })()}
                     `}
+                    ${nmInfo && nmInfo.available && nmInfo.enabled && (() => {
+                        // Discovered-but-unmirrored RTP-MIDI sessions:
+                        // hub sessions the user opted out of, plus
+                        // foreign sessions (Macs, DAWs) which never
+                        // auto-mirror. Already-mirrored ones are in
+                        // the matrix and don't need an Add row.
+                        const addable = [];
+                        for (const hub of nmInfo.hubs || []) {
+                            for (const s of hub.sessions || []) {
+                                if (!s.mirrored) addable.push({ ...s, from: hub.host });
+                            }
+                        }
+                        for (const s of nmInfo.foreign || []) {
+                            if (!s.mirrored) addable.push({ ...s, from: s.addr || 'network' });
+                        }
+                        return html`
+                            <div style="font-size:11px;text-transform:uppercase;color:var(--text-dim);letter-spacing:1px;margin:20px 0 8px;font-weight:600;border-top:1px solid var(--surface2);padding-top:16px">Network MIDI</div>
+                            ${addable.length === 0 && html`
+                                <div style="font-size:13px;color:var(--text-dim);text-align:center;padding:8px 0">
+                                    No unmirrored network sessions. Devices a peer hub exports appear in the matrix automatically — manage them in Settings → Network MIDI.
+                                </div>
+                            `}
+                            ${addable.map(s => html`
+                                <div class="device" style="padding:10px 0;display:flex;align-items:center;gap:10px">
+                                    <span style="font-size:18px;color:var(--info-net)">⦿</span>
+                                    <div style="flex:1">
+                                        <div style="font-weight:600;margin-bottom:2px;color:var(--info-net)">${s.name}</div>
+                                        <div style="font-size:11px;color:var(--text-dim)">@${s.from}</div>
+                                    </div>
+                                    <button style="background:var(--accent);color:#fff;border:none;border-radius:4px;padding:5px 12px;font-size:12px;font-weight:600;cursor:pointer"
+                                        onclick=${() => nmMirror(s.service)}>Add</button>
+                                </div>
+                            `)}
+                        `;
+                    })()}
                 </div>
             </div>
         `}
