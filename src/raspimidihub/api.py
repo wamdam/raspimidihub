@@ -1950,6 +1950,30 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
             await network_midi.set_mirrored(svc.service, False)
             await server.send_sse("device-disconnected", {})
             return Response.json({"status": "unmirrored"})
+
+        @server.route("POST", "/api/network-midi/peers")
+        async def api_network_midi_peer_add(req: Request) -> Response:
+            host = (req.json.get("host") or "").strip()
+            if not host:
+                return Response.error("host required")
+            cfg = config.data.setdefault("network_midi", {})
+            peers = cfg.setdefault("manual_peers", [])
+            if host not in peers:
+                peers.append(host)
+                await config.asave()
+            return Response.json({"status": "added"})
+
+        @server.route("DELETE", "/api/network-midi/peers/", exact=False)
+        async def api_network_midi_peer_remove(req: Request) -> Response:
+            host = req.path_param("/api/network-midi/peers/")
+            if not host:
+                return Response.error("host required")
+            cfg = config.data.setdefault("network_midi", {})
+            peers = cfg.setdefault("manual_peers", [])
+            if host in peers:
+                peers.remove(host)
+                await config.asave()
+            return Response.json({"status": "removed"})
     else:
         @server.route("GET", "/api/network-midi")
         async def api_network_midi_unavailable(req: Request) -> Response:

@@ -309,6 +309,10 @@ This page is the control surface:
   grey discovered), the measured link latency, and a
   Mirror / Unmirror button. Sessions from Macs, iPads or DAWs are
   listed under *Other sessions* and only mirror when you add them.
+- **Manual peers** -- an IP/hostname list for networks where mDNS
+  multicast doesn't get through (routed LANs, some managed
+  switches). The hub polls each entry directly for its exported
+  devices; everything else behaves exactly as with discovery.
 
 Like the WiFi settings, everything here applies immediately and
 does **not** feed the dirty-state asterisk -- the export list is

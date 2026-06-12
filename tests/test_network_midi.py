@@ -408,6 +408,154 @@ class TestMirrorPolicy:
         assert started == []
 
 
+class TestLifecycle:
+    def test_ck_timeout_drops_mirror(self):
+        async def run():
+            mgr, mirror = make_mirror()
+            mirror.state = "connected"
+            mirror.CK_INTERVAL = 0.01
+            task = asyncio.get_event_loop().create_task(mirror._ck_loop())
+            await asyncio.wait_for(task, 2)
+            await asyncio.sleep(0)  # let the ensure_future(on_mirror_lost) run
+            assert mgr.lost == [mirror]
+            # CK0 went out on every round
+            cks = [apple_midi.parse_command(d)
+                   for d, _ in mirror._data_transport.sent]
+            assert all(isinstance(c, apple_midi.ClockSync) and c.count == 0
+                       for c in cks)
+            assert len(cks) >= mirror.CK_MAX_UNANSWERED
+        asyncio.run(run())
+
+    def test_ck_answer_resets_timeout(self):
+        async def run():
+            _, mirror = make_mirror()
+            mirror.state = "connected"
+            mirror.CK_INTERVAL = 0.01
+
+            # Auto-answer every CK0 with a matching CK1.
+            real_sendto = mirror._data_transport.sendto
+            def answering_sendto(data, addr):
+                real_sendto(data, addr)
+                pkt = apple_midi.parse_command(data)
+                if isinstance(pkt, apple_midi.ClockSync) and pkt.count == 0:
+                    mirror.on_data(apple_midi.build_clock_sync(
+                        0xAAAA, 1, pkt.ts1, pkt.ts1), ("192.0.2.20", 5005))
+            mirror._data_transport.sendto = answering_sendto
+
+            task = asyncio.get_event_loop().create_task(mirror._ck_loop())
+            await asyncio.sleep(0.08)  # several rounds
+            assert not task.done()     # never timed out
+            mirror.state = "closed"
+            await asyncio.wait_for(task, 1)
+        asyncio.run(run())
+
+    def test_reaper_drops_silent_participant(self):
+        import time as _time
+
+        from raspimidihub.network_midi import (
+            PARTICIPANT_TIMEOUT,
+            NetworkMidiManager,
+        )
+
+        class FakeConfig:
+            data = {"network_midi": {"enabled": True, "exported": []}}
+
+        mgr = NetworkMidiManager(engine=None, config=FakeConfig(), server=None)
+        sess = ExportedSession(mgr, "usb-1-2-aaaa:bbbb", "TX-7")
+        sess._control_transport = FakeTransport()
+        sess._data_transport = FakeTransport()
+        mgr._exports["usb-1-2-aaaa:bbbb"] = sess
+        part = join(sess, ssrc=0x1111)
+        part.last_seq = 42
+        now = _time.monotonic()
+
+        # Fresh participant: kept, and RS feedback goes out.
+        n_before = len(sess._data_transport.sent)
+        mgr._housekeep_once(now)
+        assert 0x1111 in sess.participants
+        rs = apple_midi.parse_command(sess._data_transport.sent[n_before][0])
+        assert isinstance(rs, apple_midi.Feedback)
+        assert rs.seqnum >> 16 == 42
+
+        # Silent past the timeout: reaped.
+        part.last_rx = now - PARTICIPANT_TIMEOUT - 1
+        mgr._housekeep_once(now)
+        assert 0x1111 not in sess.participants
+
+
+class TestManualPeers:
+    def make_manager(self, monkeypatch, peers=("10.0.0.2",)):
+        from raspimidihub.network_midi import NetworkMidiManager
+
+        started = []
+
+        class FakeMirror:
+            def __init__(self, manager, svc):
+                self.svc = svc
+                self.alsa_client_id = 99
+                self.stable_id = svc.stable_id
+                self.state = "connected"
+                self.latency_ms = None
+
+            async def start(self):
+                started.append(self.svc.service)
+
+            async def stop(self, send_bye=True):
+                pass
+
+        monkeypatch.setattr(network_midi, "MirroredSession", FakeMirror)
+
+        class FakeConfig:
+            data = {"network_midi": {"enabled": True, "exported": [],
+                                     "manual_peers": list(peers)}}
+
+        mgr = NetworkMidiManager(engine=None, config=FakeConfig(), server=None)
+        return mgr, started
+
+    @staticmethod
+    def peer_status(hub_id="feedface0002"):
+        return {
+            "available": True, "hub_id": hub_id, "hostname": "hub2",
+            "_addr": "10.0.0.2",
+            "exports": [{"stable_id": "usb-9-9-c:d", "name": "JX-3P @hub2",
+                         "port": 5006, "participants": []}],
+        }
+
+    def test_peer_exports_mirror(self, monkeypatch):
+        mgr, started = self.make_manager(monkeypatch)
+        asyncio.run(mgr._integrate_peer_status("10.0.0.2", self.peer_status()))
+        assert len(started) == 1
+        svc = next(iter(mgr._discovered.values()))
+        assert svc.via_manual == "10.0.0.2"
+        assert svc.stable_id == "net-feedface0002-usb-9-9-c:d"
+
+    def test_own_hub_skipped(self, monkeypatch):
+        mgr, started = self.make_manager(monkeypatch)
+        asyncio.run(mgr._integrate_peer_status(
+            "10.0.0.2", self.peer_status(hub_id=mgr.hub_id)))
+        assert started == []
+        assert mgr._discovered == {}
+
+    def test_peer_down_retracts_entries(self, monkeypatch):
+        mgr, started = self.make_manager(monkeypatch)
+        asyncio.run(mgr._integrate_peer_status("10.0.0.2", self.peer_status()))
+        assert len(mgr._discovered) == 1
+        asyncio.run(mgr._integrate_peer_status("10.0.0.2", None))
+        assert mgr._discovered == {}
+        assert mgr._mirrors == {}
+
+    def test_mdns_entry_not_overwritten(self, monkeypatch):
+        mgr, started = self.make_manager(monkeypatch)
+        svc = make_discovered(hub="feedface0002", sid="usb-9-9-c:d",
+                              name="JX-3P @hub2", host="hub2")
+        mgr._discovered[svc.service] = svc  # mDNS-owned (via_manual=None)
+        asyncio.run(mgr._integrate_peer_status("10.0.0.2", self.peer_status()))
+        assert mgr._discovered[svc.service] is svc
+        # And the poller's retraction pass must not touch it either
+        asyncio.run(mgr._integrate_peer_status("10.0.0.2", None))
+        assert svc.service in mgr._discovered
+
+
 class TestManagerPolicy:
     def test_mirrored_devices_not_exportable(self):
         from raspimidihub.network_midi import NetworkMidiManager
@@ -419,6 +567,9 @@ class TestManagerPolicy:
         class FakeEngine:
             device_registry = FakeRegistry()
             devices = []
+
+            def on_change(self, cb):
+                pass
 
         class FakeConfig:
             data = {"network_midi": {"enabled": True, "exported": []}}

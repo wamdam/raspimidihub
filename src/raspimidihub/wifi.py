@@ -728,6 +728,74 @@ def get_all_interfaces() -> list[dict]:
     return interfaces
 
 
+def ensure_eth_link_local(iface: str = "eth0") -> bool:
+    """Make a direct hub-to-hub Ethernet cable work without a router:
+    add `link-local=enabled` to the [ipv4] section of the interface's
+    NM profile (NetworkManager ≥ 1.40; Pi-OS Bookworm ships 1.42).
+    With DHCP present nothing changes; without it, NM self-assigns a
+    169.254.x.x address instead of failing the connection — which is
+    what mDNS discovery between two hubs rides on. Profiles with
+    method=manual are left alone (the user chose static addressing).
+    Called when Network MIDI is switched on. Returns True if the
+    profile already had the key or was upgraded."""
+    conn_file = None
+    conn_name = None
+    for nm_file in NM_CONN_DIR.glob("*.nmconnection"):
+        try:
+            content = nm_file.read_text()
+            if f"interface-name={iface}" in content:
+                conn_file = nm_file
+                for line in content.splitlines():
+                    if line.startswith("id="):
+                        conn_name = line[3:]
+                break
+        except OSError:
+            pass
+    try:
+        if conn_file is None:
+            # No profile yet: create one via the normal path (DHCP),
+            # then re-enter to add the link-local key to it.
+            if not configure_interface(iface, "auto"):
+                return False
+            return ensure_eth_link_local(iface)
+
+        content = conn_file.read_text()
+        if "link-local=enabled" in content:
+            return True
+        if "method=manual" in content:
+            return True  # static config: the user chose addressing
+
+        new_lines = []
+        in_ipv4 = False
+        for line in content.splitlines():
+            if line.strip() == "[ipv4]":
+                in_ipv4 = True
+                new_lines.append(line)
+                new_lines.append("link-local=enabled")
+                continue
+            if in_ipv4 and line.startswith("link-local"):
+                continue
+            if line.startswith("["):
+                in_ipv4 = False
+            new_lines.append(line)
+        with _rw_rootfs():
+            conn_file.write_text("\n".join(new_lines) + "\n")
+        try:
+            _run(["nmcli", "connection", "reload"], check=False, timeout=10)
+            if conn_name:
+                _run(["nmcli", "connection", "up", conn_name],
+                     check=False, timeout=15)
+        except subprocess.TimeoutExpired:
+            log.warning("nmcli apply timed out after link-local upgrade")
+        log.info("Enabled IPv4 link-local fallback on %s", iface)
+        return True
+    except Exception:
+        # Old NM without ipv4.link-local support, or read-only hiccup —
+        # the user can still set static IPs via the Network settings.
+        log.exception("link-local upgrade for %s failed", iface)
+        return False
+
+
 def configure_interface(iface: str, method: str, address: str = "",
                         netmask: str = "255.255.255.0", gateway: str = "") -> bool:
     """Configure a network interface. Remounts rw/ro for persistence.

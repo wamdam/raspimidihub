@@ -112,6 +112,39 @@ warnings instead.
 - **Fix.** Long-press the row header → **Forget**, then re-run
   the **Add → Bluetooth MIDI → Scan → Connect** flow.
 
+## Network MIDI Issues
+
+(Full coverage in chapter 17's *Network MIDI* section.)
+
+### Peer hub not discovered
+
+- **First check.** Is **Network MIDI enabled on both hubs**, and
+  does the *other* hub actually export anything? Only exported
+  devices are advertised.
+- **Second check.** Direct cable: give both ends ~30 seconds
+  after plugging in to self-assign their `169.254.x.x` link-local
+  addresses (Settings → Network shows what `eth0` got).
+- **Third check.** On a routed LAN or behind a managed switch,
+  multicast (mDNS) may not get through -- add the peer's IP under
+  **Settings → Network MIDI → Manual peers**.
+- **Diagnose.** Over SSH: `journalctl -u raspimidihub -e`, look
+  for `network-midi:` lines.
+
+### Mirrored device greyed out
+
+- **Cause.** The peer hub is unreachable (cable pulled, peer
+  powered off) or stopped exporting the device. Detection takes
+  up to ~30 seconds.
+- **Fix.** Nothing to do -- restore the link / the export and the
+  device reconnects by itself, with all connections intact.
+
+### Network MIDI page says "unavailable"
+
+- **Cause.** The `python3-zeroconf` package is missing (image
+  upgraded via a path that skipped new dependencies).
+- **Fix.** Over SSH: `sudo apt install python3-zeroconf`, then
+  restart the service or reboot.
+
 ## Software Updates
 
 ### Stuck on download

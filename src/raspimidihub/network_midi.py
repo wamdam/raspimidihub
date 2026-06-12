@@ -51,6 +51,15 @@ SERVICE_TYPE = "_apple-midi._udp.local."
 BASE_PORT = 5004          # first control port tried; data port = +1
 PORT_RANGE = 200          # how far above BASE_PORT we probe for free pairs
 
+# Apple initiators clock-sync every ~10 s; 60 s of silence = 6 missed
+# rounds, safely past WiFi hiccups but quick enough that a vanished
+# Mac doesn't haunt the participant list.
+PARTICIPANT_TIMEOUT = 60.0
+HOUSEKEEPING_INTERVAL = 2.0
+MANUAL_PEER_INTERVAL = 30.0
+RECONNECT_DELAY = 2.0     # first retry; doubles up to the cap
+RECONNECT_DELAY_MAX = 30.0
+
 _T0 = time.monotonic()
 
 
@@ -382,13 +391,18 @@ class DiscoveredService:
     """One RTP-MIDI session seen via mDNS (hub export or foreign)."""
 
     def __init__(self, service: str, instance: str, host: str,
-                 addresses: list[str], port: int, txt: dict[str, str]):
+                 addresses: list[str], port: int, txt: dict[str, str],
+                 via_manual: str | None = None):
         self.service = service        # full mDNS instance name
         self.instance = instance      # without the service-type suffix
         self.host = host              # advertising host (server record)
         self.addresses = addresses
         self.port = port              # control port; data = +1
         self.txt = txt
+        # Set when the entry came from polling a manually-added peer
+        # (no mDNS path); holds that peer's configured host string so
+        # the poller can retract its own entries when the peer drops.
+        self.via_manual = via_manual
 
     @property
     def is_hub(self) -> bool:
@@ -441,6 +455,7 @@ class MirroredSession:
     HANDSHAKE_TIMEOUT = 3.0
     HANDSHAKE_RETRIES = 3
     CK_INTERVAL = 10.0
+    CK_MAX_UNANSWERED = 3   # ~30 s of dead air → declare the peer gone
 
     def __init__(self, manager, svc: DiscoveredService):
         self._manager = manager
@@ -463,6 +478,7 @@ class MirroredSession:
         self._remote_ssrc: int | None = None
         self._ck_task = None
         self._ck_ts1 = 0
+        self._ck_answered = False
         self._seqnum = int.from_bytes(os.urandom(2), "big")
         self._sysex_rx = apple_midi.SysExAssembler()
         self._sysex_tx = _SysExChunkFramer()
@@ -604,17 +620,32 @@ class MirroredSession:
                     self.ssrc, 2, pkt.ts1, pkt.ts2, ts3), addr)
                 if pkt.ts1 == self._ck_ts1:
                     self.latency_ms = (ts3 - pkt.ts1) / 2 / 10
+                    self._ck_answered = True
 
     async def _ck_loop(self) -> None:
         """Initiator clock sync every CK_INTERVAL — keeps macOS happy
-        and doubles as the liveness signal (timeout logic: phase 4)."""
+        and doubles as the liveness probe: a cable pull or peer
+        power-cut gives no BY, only silence. After CK_MAX_UNANSWERED
+        rounds the manager tears the mirror down (matrix shows the
+        device offline) and starts the backoff reconnect."""
+        unanswered = 0
         while self.state == "connected":
             self._ck_ts1 = now_ts()
+            self._ck_answered = False
             if self._data_transport:
                 self._data_transport.sendto(
                     apple_midi.build_clock_sync(self.ssrc, 0, self._ck_ts1),
                     self._remote_data)
             await asyncio.sleep(self.CK_INTERVAL)
+            if self._ck_answered:
+                unanswered = 0
+                continue
+            unanswered += 1
+            if unanswered >= self.CK_MAX_UNANSWERED:
+                log.info("network-midi: '%s' unreachable (%d CK rounds), "
+                         "dropping mirror", self.device_name, unanswered)
+                asyncio.ensure_future(self._manager.on_mirror_lost(self))
+                return
 
     # --- MIDI bridging ---
 
@@ -671,7 +702,20 @@ class NetworkMidiManager:
         self._loop = None
         self._started = False
         self._notify_task = None
+        self._housekeeping_task = None
+        self._manual_peers_task = None
+        self._reconnect_tasks: dict[str, asyncio.Task] = {}
         self.hub_id = hub_id()
+        # Hotplug reconcile: exported device unplugged → its session
+        # leaves the network; replugged → it comes back. The callback
+        # registers once for the manager's lifetime and no-ops while
+        # the feature is off.
+        if engine is not None:
+            engine.on_change(self._on_engine_change)
+
+    def _on_engine_change(self) -> None:
+        if self._started and self._loop is not None:
+            self._loop.create_task(self.resync_exports())
 
     # --- properties / availability ---
 
@@ -727,12 +771,21 @@ class NetworkMidiManager:
         self._browser = AsyncServiceBrowser(
             self._aiozc.zeroconf, SERVICE_TYPE,
             handlers=[self._on_service_state])
+        self._housekeeping_task = self._loop.create_task(self._housekeeping())
+        self._manual_peers_task = self._loop.create_task(
+            self._poll_manual_peers())
         log.info("network-midi: up (hub id %s)", self.hub_id)
 
     async def stop(self) -> None:
         if not self._started:
             return
         self._started = False
+        for task in (self._housekeeping_task, self._manual_peers_task,
+                     *self._reconnect_tasks.values()):
+            if task:
+                task.cancel()
+        self._housekeeping_task = self._manual_peers_task = None
+        self._reconnect_tasks.clear()
         if self._browser:
             try:
                 await self._browser.async_cancel()
@@ -762,6 +815,11 @@ class NetworkMidiManager:
         """Flip the master switch (config mutation + asave is the API
         handler's job, same split as the WiFi endpoints)."""
         if enabled:
+            # Direct-cable story: make sure eth0 self-assigns a
+            # 169.254.x.x when no DHCP answers (blocking nmcli work,
+            # off-loop).
+            from .wifi import ensure_eth_link_local
+            await asyncio.to_thread(ensure_eth_link_local)
             await self.start()
         else:
             await self.stop()
@@ -965,12 +1023,136 @@ class NetworkMidiManager:
         self.notify_changed()
 
     async def on_mirror_lost(self, mirror) -> None:
-        """Peer sent BY: drop the live session, keep the discovery
-        entry (the service may come back; re-mirror is automatic)."""
+        """Peer sent BY, or went silent past the CK timeout: drop the
+        live session (matrix shows the device offline, saved
+        connections stay pending) and retry with backoff while the
+        service is still listed — mDNS `remove_service` is what
+        finally stops the retries."""
         if self._mirrors.get(mirror.svc.service) is mirror:
             self._mirrors.pop(mirror.svc.service)
         await mirror.stop(send_bye=False)
+        self._schedule_reconnect(mirror.svc.service)
         self.notify_changed()
+
+    def _schedule_reconnect(self, service: str) -> None:
+        if not self._started or service in self._reconnect_tasks:
+            return
+
+        async def reconnect():
+            delay = RECONNECT_DELAY
+            try:
+                while self._started:
+                    await asyncio.sleep(delay)
+                    if (service not in self._discovered
+                            or service in self._mirrors):
+                        return
+                    await self._apply_mirror_policy(self._discovered[service])
+                    if service in self._mirrors:
+                        self.notify_changed()
+                        return
+                    delay = min(delay * 2, RECONNECT_DELAY_MAX)
+            finally:
+                self._reconnect_tasks.pop(service, None)
+
+        self._reconnect_tasks[service] = self._loop.create_task(reconnect())
+
+    # --- housekeeping (reaper + receiver feedback) ---
+
+    async def _housekeeping(self) -> None:
+        while self._started:
+            await asyncio.sleep(HOUSEKEEPING_INTERVAL)
+            self._housekeep_once(time.monotonic())
+
+    def _housekeep_once(self, now: float) -> None:
+        """Per-export upkeep: reap participants that went silent (a
+        vanished Mac sends no BY) and send RS receiver feedback so
+        journal-keeping senders can trim their journals (we send no
+        journal ourselves; RS is cheap good citizenship)."""
+        for sess in self._exports.values():
+            for ssrc, part in list(sess.participants.items()):
+                if now - part.last_rx > PARTICIPANT_TIMEOUT:
+                    log.info("network-midi: reaping silent "
+                             "participant '%s' from %s",
+                             part.name, sess.service_name)
+                    del sess.participants[ssrc]
+                    self.notify_changed()
+                elif (part.data_addr and part.last_seq
+                      and sess._data_transport):
+                    sess._data_transport.sendto(
+                        apple_midi.build_feedback(sess.ssrc,
+                                                  part.last_seq),
+                        part.data_addr)
+
+    # --- manual peers (no-mDNS fallback) ---
+
+    async def _poll_manual_peers(self) -> None:
+        """Reach configured peers over plain HTTP: a routed LAN can
+        swallow multicast, but the peer's own status endpoint lists
+        its exports with everything mDNS would have told us. Entries
+        synthesized here flow through the same mirror policy; an
+        mDNS-discovered duplicate simply overwrites (same service
+        key), so dual-path discovery stays consistent."""
+        while self._started:
+            for host in list(self.settings.get("manual_peers", [])):
+                try:
+                    status = await asyncio.to_thread(
+                        self._fetch_peer_status, host)
+                except Exception as e:
+                    log.debug("network-midi: peer %s unreachable: %s",
+                              host, e)
+                    status = None
+                await self._integrate_peer_status(host, status)
+            await asyncio.sleep(MANUAL_PEER_INTERVAL)
+
+    @staticmethod
+    def _fetch_peer_status(host: str) -> dict:
+        import json
+        import urllib.request
+        addr = socket.gethostbyname(host)
+        with urllib.request.urlopen(
+                f"http://{host}/api/network-midi", timeout=5) as resp:
+            status = json.loads(resp.read())
+        status["_addr"] = addr
+        return status
+
+    async def _integrate_peer_status(self, host: str,
+                                     status: dict | None) -> None:
+        fresh: set[str] = set()
+        if status and status.get("available") and \
+                status.get("hub_id") != self.hub_id:
+            for export in status.get("exports", []):
+                name = export.get("name") or ""
+                if not name or not export.get("port"):
+                    continue
+                service = f"{name}.{SERVICE_TYPE}"
+                fresh.add(service)
+                if service in self._discovered and \
+                        self._discovered[service].via_manual is None:
+                    continue  # mDNS path owns this entry
+                svc = DiscoveredService(
+                    service=service,
+                    instance=name,
+                    host=status.get("hostname", host),
+                    addresses=[status["_addr"]],
+                    port=export["port"],
+                    txt={"rmh": "1", "hub": status.get("hub_id", ""),
+                         "sid": export.get("stable_id", ""),
+                         "host": status.get("hostname", host),
+                         "dev": name.rsplit(" @", 1)[0]},
+                    via_manual=host,
+                )
+                if svc.sid.startswith("net-"):
+                    continue  # never chain mirrors
+                known = service in self._discovered
+                self._discovered[service] = svc
+                await self._apply_mirror_policy(svc)
+                if not known:
+                    self.notify_changed()
+        # Retract this peer's stale entries (export gone or peer down);
+        # entries the mDNS browser owns are left to its TTL handling.
+        for service, svc in list(self._discovered.items()):
+            if svc.via_manual == host and service not in fresh:
+                await self._service_removed(service)
 
     def unregister_mirror_device(self, stable_id: str) -> None:
         self._engine.device_registry.unregister_network_device(stable_id)

@@ -162,8 +162,34 @@ re-exported, and a hub never mirrors its own sessions.
 
 Exports survive reboots (the list is part of the config); the
 network advert for a device exists only while the device is
-actually present. Notes, CCs, clock and SysEx all cross the wire;
-on a wired LAN the added latency is well under a millisecond.
+actually present (unplug the synth and its session leaves the
+network; replug and it returns). Notes, CCs, clock and SysEx all
+cross the wire; on a wired LAN the added latency is well under a
+millisecond.
+
+### The direct cable, and life without mDNS
+
+A direct Ethernet cable between two hubs needs no router: when
+Network MIDI is switched on, the hub enables IPv4 link-local
+fallback on `eth0`, so both ends self-assign a `169.254.x.x`
+address when no DHCP server answers, and discovery rides on
+that. (Networks with DHCP are unaffected -- the fallback only
+kicks in when DHCP doesn't answer.)
+
+On networks that swallow multicast (routed LANs, some managed
+switches), add the other hub's IP or hostname under **Manual
+peers** -- the hub then asks the peer directly for its exported
+devices and everything else behaves exactly as with discovery.
+
+### Failure behaviour
+
+Link loss is survived in both directions. A cable pull or peer
+power-cut is detected within ~30 seconds (the clock-sync exchange
+doubles as the liveness probe); the mirrored devices drop to the
+offline state and the hub keeps retrying in the background, so
+plugging the cable back in restores everything without a tap.
+Network clients that vanish silently are dropped from an exported
+session's participant list after 60 seconds.
 
 The transport is plain UDP on ports 5004 and up (one even/odd
 port pair per exported device), discovery is the same mDNS the

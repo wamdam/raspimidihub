@@ -1209,6 +1209,7 @@ function SettingsNetworkMidi({ showToast }) {
     const [nm, setNm] = useState(null);
     const [devices, setDevices] = useState([]);
     const [busy, setBusy] = useState(false);
+    const [peerInput, setPeerInput] = useState('');
 
     const reload = async () => {
         try { setNm(await api('/network-midi')); }
@@ -1370,6 +1371,39 @@ function SettingsNetworkMidi({ showToast }) {
                 </p>
                 ${(nm.foreign || []).map(s => sessionRow(s, s.addr))}
             `}
+        </div>`}
+        ${nm.enabled && html`<div class="card">
+            <h3>Manual peers</h3>
+            <p style="font-size:11px;color:var(--text-dim);margin-bottom:8px">
+                Only needed when mDNS discovery doesn't reach the other
+                hub (routed networks that swallow multicast). The hub
+                polls each entry directly for its exported devices.
+            </p>
+            ${(nm.manual_peers || []).map(host => html`
+                <div key=${host} style="display:flex;align-items:center;gap:8px;padding:4px 0">
+                    <span style="flex:1;font-size:13px">${host}</span>
+                    <button class="btn btn-secondary" style="font-size:12px;padding:4px 10px"
+                        onclick=${async () => {
+                            const r = await api(`/network-midi/peers/${encodeURIComponent(host)}`, { method: 'DELETE' });
+                            if (r.error) showToast(r.error); else reload();
+                        }}>Remove</button>
+                </div>
+            `)}
+            <div style="display:flex;gap:8px;margin-top:8px">
+                <input type="text" placeholder="IP or hostname"
+                    style="flex:1;min-width:0"
+                    value=${peerInput}
+                    oninput=${e => setPeerInput(e.target.value)} />
+                <button class="btn btn-secondary" style="font-size:12px"
+                    disabled=${!peerInput.trim()}
+                    onclick=${async () => {
+                        const r = await api('/network-midi/peers', {
+                            method: 'POST',
+                            body: JSON.stringify({ host: peerInput.trim() }) });
+                        if (r.error) showToast(r.error);
+                        else { setPeerInput(''); reload(); }
+                    }}>Add</button>
+            </div>
         </div>`}
     `;
 }
