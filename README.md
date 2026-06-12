@@ -142,6 +142,12 @@ Plugins on the **Play** bottom-nav tab (alongside Controllers). They route in th
 - **Full message coverage** -- notes, CC, PC, pitch bend, aftertouch, MIDI Clock, Start/Stop/Continue, Song Position. (SysEx pending.)
 - **Persistent bonds across power-off** -- BlueZ state lives on tmpfs and is snapshotted to `/boot/firmware` on every change via inotify, so re-pairing isn't needed even on read-only-root appliances that get yanked from power
 
+### Network MIDI (RTP-MIDI / AppleMIDI)
+- **Export any device as a standard RTP-MIDI session** -- advertised over mDNS as "Name @hostname"; Macs (Audio MIDI Setup), iPads and rtpmidid connect with no extra software
+- **Link two hubs over Ethernet** -- a direct cable (no router needed, link-local fallback) or any shared network; the peer's exported devices mirror into the matrix automatically, grouped per hub (collapsible), with filters / mappings / renames / saved connections like any device
+- **Self-healing** -- cable pull or peer power-cut detected in ~30 s, devices drop to offline like unplugged hardware, reconnection is automatic; loop-safe by construction (mirrors can't be re-exported)
+- **Manual peers** for networks that swallow multicast; sub-millisecond added latency on wired LAN
+
 ### MIDI Filtering and Mapping
 - **Per-connection channel filtering** -- enable/disable any of 16 MIDI channels
 - **Message type filtering** -- block notes, CCs, program changes, pitch bend, aftertouch, SysEx, or clock

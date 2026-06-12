@@ -807,6 +807,12 @@ function SettingsSysInfo({ showToast, isUpgrading }) {
                             <div class="label">MIDI in → MIDI out</div>
                             <div class="value">${sys.latency_max.midi_in_midi_out != null ? sys.latency_max.midi_in_midi_out + ' ms' : '—'}</div>
                         </div>
+                        ${sys.latency_max.net_midi_rx != null && html`
+                            <div class="stat" title="RTP-MIDI packet in to ALSA inject — the hub's share of network MIDI latency (wire time not included).">
+                                <div class="label">Net MIDI in → MIDI out</div>
+                                <div class="value">${sys.latency_max.net_midi_rx + ' ms'}</div>
+                            </div>
+                        `}
                         <div class="stat" title="Plugin PATCH to send_cc latency.">
                             <div class="label">Control in → MIDI out</div>
                             <div class="value">${sys.latency_max.control_in_midi_out != null ? sys.latency_max.control_in_midi_out + ' ms' : '—'}</div>

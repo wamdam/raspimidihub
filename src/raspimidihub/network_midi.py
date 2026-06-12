@@ -325,7 +325,8 @@ class ExportedSession:
         part = self.participants.get(rtp.ssrc)
         if part is None:
             return  # not invited — ignore
-        part.last_rx = time.monotonic()
+        t0 = time.monotonic()
+        part.last_rx = t0
         part.last_seq = rtp.seq
         for cmd in rtp.commands:
             if cmd and cmd[0] in (0xF0, 0xF7):
@@ -334,6 +335,8 @@ class ExportedSession:
                     self._inject(complete)
             else:
                 self._inject(cmd)
+        self._manager.record_latency("net_midi_rx",
+                                     (time.monotonic() - t0) * 1000.0)
 
     def _on_clock(self, ck: apple_midi.ClockSync, addr, transport) -> None:
         """Always answer CK0 with CK1 — macOS drops peers that don't.
@@ -576,7 +579,8 @@ class MirroredSession:
         rtp = apple_midi.parse_rtp_midi(data)
         if rtp is None or rtp.ssrc != self._remote_ssrc_guard(rtp.ssrc):
             return
-        self.last_rx = time.monotonic()
+        t0 = time.monotonic()
+        self.last_rx = t0
         for cmd in rtp.commands:
             if cmd and cmd[0] in (0xF0, 0xF7):
                 complete = self._sysex_rx.feed(cmd)
@@ -584,6 +588,8 @@ class MirroredSession:
                     self._inject(complete)
             else:
                 self._inject(cmd)
+        self._manager.record_latency("net_midi_rx",
+                                     (time.monotonic() - t0) * 1000.0)
 
     def _remote_ssrc_guard(self, ssrc: int) -> int:
         """The mirror talks to exactly one responder; accept its ssrc
@@ -1188,6 +1194,14 @@ class NetworkMidiManager:
         return hub or "offline hub"
 
     # --- status / SSE ---
+
+    def record_latency(self, name: str, ms: float) -> None:
+        """Feed the Sys Info latency stats (worst-case per second).
+        Keeps the thread-a-session escalation decision data-driven:
+        if this number ever grows under load, move the bridging off
+        the main loop — measure first (module docstring)."""
+        if self._server is not None:
+            self._server.record_latency(name, ms)
 
     def notify_changed(self) -> None:
         """Debounced `network-midi-changed` SSE — the Settings page

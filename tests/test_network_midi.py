@@ -41,6 +41,9 @@ class StubManager:
     def notify_changed(self):
         self.notified += 1
 
+    def record_latency(self, name, ms):
+        pass
+
 
 CTRL_ADDR = ("192.0.2.10", 50000)
 DATA_ADDR = ("192.0.2.10", 50001)
