@@ -446,6 +446,29 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         except Exception:
             pass
 
+        # ALSA port budget of the hub's own seq client. The kernel caps
+        # a client at 254 ports and every filtered/mapped connection
+        # holds two, so an approaching ceiling must be VISIBLE — at the
+        # limit, creating filters fails (the 4.7.1 port leak presented
+        # as "filter edits silently stop saving").
+        alsa_ports = None
+        try:
+            own = engine._seq.client_id if engine._seq else None
+            if own is not None:
+                used = 0
+                current = None
+                for line in Path("/proc/asound/seq/clients").read_text().splitlines():
+                    if line.startswith("Client "):
+                        try:
+                            current = int(line.split()[1])
+                        except (IndexError, ValueError):
+                            current = None
+                    elif current == own and line.lstrip().startswith("Port "):
+                        used += 1
+                alsa_ports = {"used": used, "max": 254}
+        except Exception:
+            pass
+
         # Per-client SSE queue depth (0 = idle, 100 = saturated and
         # dropping oldest). A spike here means a slow tab is buffering
         # and the server is fanning out to it the wrong way — useful
@@ -464,6 +487,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
             "uptime_seconds": uptime, "load1": load1,
             "cpu_percent": server._cpu_percent,
             "sse_per_sec": server._sse_per_sec,
+            "alsa_ports": alsa_ports,
             "sse_clients": len(server._sse_queues),
             "sse_queue_max": sse_queue_depths[0] if sse_queue_depths else 0,
             "sse_queue_depths": sse_queue_depths,
@@ -1198,6 +1222,13 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
 
     @server.route("POST", "/api/config/save")
     async def api_save_config(req: Request) -> Response:
+        # A deliberate Save commits session aliases: re-recognized
+        # devices migrate from their saved (old) IDs to their canonical
+        # ones. Connections/device names rebuild from the registry in
+        # the snapshot below; the clock-block list is re-read here.
+        if engine.device_registry.commit_aliases():
+            config.data["device_clock_blocked"] = \
+                engine.device_registry.get_clock_blocked()
         # Gather live engine state, then persist + drop a rolling backup
         # checkpoint (with an auto diff summary) in the same rw window.
         _snapshot_into_config()
@@ -1498,6 +1529,11 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         # drop the autosave fragment cache to avoid a stale (id, seq)
         # falsely matching and splicing an outdated fragment.
         config.clear_autosave_cache()
+        # Boot-like identity semantics for a deliberately loaded config:
+        # every online device becomes eligible for re-recognition again,
+        # so e.g. an old backup whose port-bound IDs no longer match
+        # still binds to the devices that are sitting right there.
+        engine.device_registry.reset_presence()
         if engine._plugin_host:
             engine._plugin_host.stop_all()
             saved_plugins = config.data.get("plugins", [])
@@ -1506,9 +1542,11 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
                 await loop.run_in_executor(
                     None, engine._plugin_host.restore_instances, saved_plugins)
             _invalidate_instances_cache()
-            # Pick up the restored plugins' new ALSA client IDs so
-            # apply_edge_diff below can resolve their stable IDs.
-            engine.scan_devices()
+        # Pick up restored plugins' new ALSA client IDs AND run identity
+        # resolution against the just-loaded config's references, so
+        # apply_edge_diff below can resolve stable IDs (incl. re-bound
+        # ones) to live clients.
+        engine.scan_devices()
         if config.mode != "custom" or not config.connections:
             # No custom config — fall back to all-to-all
             engine.disconnect_all()
@@ -1652,6 +1690,9 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         # Fresh instance set incoming — drop the autosave fragment cache
         # (see _apply_current_config) so no stale fragment survives.
         config.clear_autosave_cache()
+        # Boot-like identity semantics for the imported config (see
+        # _apply_current_config): all devices re-recognizable.
+        engine.device_registry.reset_presence()
         await config.asave()
         # Apply the imported config
         if config.mode == "custom":

@@ -352,6 +352,12 @@ A pocket-sized health dashboard. Live readouts:
   control change to the resulting MIDI event leaving on a routed
   port. Useful for understanding controller responsiveness.
 - **Process CPU %** -- the routing service's own CPU usage.
+- **ALSA ports** -- sequencer ports held by the hub's own ALSA
+  client, against the kernel's per-client cap of 254. Every
+  filtered or mapped connection holds two. The value turns red at
+  80% of the cap; at the cap, new filters can no longer be
+  created. A steadily climbing count with a stable setup would
+  indicate a port leak -- worth a reboot and a bug report.
 - **SSE rate / backlog** -- events per second going out over the
   SSE channel, and the backlog if the browser has fallen behind.
 

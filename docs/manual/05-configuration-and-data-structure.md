@@ -126,16 +126,26 @@ and serialise the same way. The controller-specific payload adds:
 
 ## Device Topology and Renames
 
-USB devices are identified by *USB topology* (the path through
-the hub tree to a given port) rather than by vendor/product ID
-alone. The practical consequences:
+USB devices are identified by their **USB serial number** when the
+hardware provides a usable one (`usb-<vid>:<pid>-<serial>`), and by
+*USB topology* (the path through the hub tree to a given port,
+`usb-<path>-<vid>:<pid>`) otherwise. Factory placeholder "serials"
+(all zeros and the like) are treated as absent. The practical
+consequences:
 
-- Plugging the same device into the same port restores its custom
-  name and any saved connections.
-- Plugging the same device into a *different* port shows it with
-  its original ALSA name and no saved connections.
-- Two identical devices plugged into different ports are kept
-  distinct -- they will not share state by accident.
+- A device with a real serial number keeps its custom name and
+  saved connections on *any* port -- replug it wherever you like.
+- A device without one is re-recognised when replugged into a
+  different port as long as it is the only one of its model: the
+  hub matches it by vendor/product ID, unambiguously, and carries
+  its state over. The migrated identity is written on the next
+  **Save Config**.
+- Two identical serial-less devices plugged in at the same time
+  are kept distinct by port -- they will not share state by
+  accident, and the hub deliberately never *guesses* between them.
+- Re-recognition never rewrites configs, backups, or exports by
+  itself; old saved IDs keep loading and resolve live against the
+  connected hardware.
 
 Multi-port devices (an interface with multiple MIDI ports) have
 each port identified by topology + port number; per-port renames

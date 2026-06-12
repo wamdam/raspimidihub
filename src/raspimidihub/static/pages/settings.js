@@ -782,6 +782,10 @@ function SettingsSysInfo({ showToast, isUpgrading }) {
                         <div class="value">${sys.cpu_percent}%</div>
                     </div>`}
                     <div class="stat"><div class="label">RAM</div><div class="value">${sys.ram.available_mb || '?'} / ${sys.ram.total_mb || '?'} MB</div></div>
+                    ${sys.alsa_ports && html`<div class="stat" title="ALSA sequencer ports held by the hub's client. Every filtered or mapped connection uses two; the kernel caps a client at ${sys.alsa_ports.max}. At the ceiling, new filters can no longer be created.">
+                        <div class="label">ALSA ports</div>
+                        <div class="value" style=${sys.alsa_ports.used >= sys.alsa_ports.max * 0.8 ? 'color:var(--danger,#e94560)' : ''}>${sys.alsa_ports.used} / ${sys.alsa_ports.max}</div>
+                    </div>`}
                     ${sys.sse_per_sec != null && html`<div class="stat" title="Broadcast events/sec the server pushes to every connected browser.">
                         <div class="label">SSE / sec</div>
                         <div class="value">${sys.sse_per_sec}${sys.sse_clients ? html` <span style="color:var(--text-dim);font-size:11px">× ${sys.sse_clients} ${sys.sse_clients === 1 ? 'client' : 'clients'}</span>` : ''}</div>

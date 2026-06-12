@@ -38,6 +38,18 @@ ARMv8 system.
 - USB hubs supported on any USB-A port; powered hubs recommended
   if the attached devices are bus-powered.
 
+### Device identity
+
+- Devices with a usable USB serial number are identified by it
+  (`usb-<vid>:<pid>-<serial>`) -- port-independent.
+- Devices without one (or with a factory placeholder) are
+  identified by hub-tree path (`usb-<path>-<vid>:<pid>`); a single
+  such device replugged elsewhere is re-matched by vendor/product
+  ID when unambiguous. Details in chapter 5, "Device Topology and
+  Renames".
+- Bluetooth devices are identified by MAC address (`bt-<mac>`),
+  plugin instruments by instance ID (`plugin-<id>`).
+
 ### Bluetooth
 
 - On-board BLE used for BLE-MIDI peripherals.

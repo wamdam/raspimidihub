@@ -269,6 +269,11 @@ class MidiEngine:
         # `bt-<MAC>` instead of trying to read sysfs (they don't have
         # a card). Names come from the scan we just did.
         client_names = {d.client_id: d.name for d in self._devices}
+        # Feed the registry the stable_ids the current config refers to —
+        # this drives device re-recognition (exact / legacy / soft-match)
+        # inside the scan. Recomputed every time so Load / Restore /
+        # Import are automatically covered.
+        self._device_registry.set_referenced_ids(self._referenced_stable_ids())
         self._device_registry.scan(hw_client_ids, client_names=client_names)
         # Register plugin devices in the registry
         if self._plugin_host:
@@ -283,6 +288,23 @@ class MidiEngine:
         # `bt-<MAC>` stable_id. Earlier code overwrote that with
         # `plugin-ble-...`, which broke offline-stable routing.
         return self._devices
+
+    def _referenced_stable_ids(self) -> set[str]:
+        """All stable_ids the current config refers to — connections,
+        disabled cells, device names, and the clock-block list. Input
+        for the registry's identity resolution."""
+        config = self._config
+        if config is None:
+            return set()
+        refs: set[str] = set()
+        for c in list(config.connections) + list(config.disconnected):
+            for key in ("src_stable_id", "dst_stable_id"):
+                sid = c.get(key)
+                if sid:
+                    refs.add(sid)
+        refs.update((config.data.get("device_names") or {}).keys())
+        refs.update(config.data.get("device_clock_blocked") or [])
+        return refs
 
     def connect_all(self) -> set[Connection]:
         """Connect every input port to every output port on other devices."""

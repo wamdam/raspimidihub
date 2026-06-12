@@ -79,12 +79,14 @@ Tapping a row or column header opens a menu of device-level actions:
 
 ## Adding and Renaming Devices
 
-USB devices appear as soon as they are plugged in. Custom names are
-remembered by USB topology (the path through the hub tree), so
-unplugging and re-plugging the same device into the same port
-restores its name. Plugging it into a *different* port shows it
-with its original ALSA name -- the rename does not follow the
-device, it follows the port.
+USB devices appear as soon as they are plugged in. Custom names
+follow the device: hardware with a real USB serial number is
+recognised on any port, and a serial-less device is matched by
+vendor/product ID when it is the only one of its model -- so
+re-plugging into a different port restores the name and routing in
+both cases. Only *identical serial-less* devices used side by side
+stay bound to their ports (chapter 5, "Device Topology and
+Renames").
 
 Multi-port devices (some interfaces expose multiple MIDI ports per
 USB connection) appear as one row and one column *per port*.
