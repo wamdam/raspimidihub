@@ -313,14 +313,36 @@ export function createRackEngine() {
         if (el) peekJack(el, true); else stickyKey = null;
     }
 
+    // ---- long-press affordance (growing ring at the touch point) ----
+    // Tells the user a hold is registering and something will follow.
+    // Appears only after a short delay so a quick tap (patch) doesn't
+    // flash it; the ring finishes growing right as the hold fires.
+    let holdRing = null, holdRingTimer = null;
+    function showHoldRing(x, y, dur) {
+        hideHoldRing();
+        holdRingTimer = setTimeout(() => {
+            if (!holdRing) { holdRing = document.createElement('div'); holdRing.className = 'rack-hold-ring'; document.body.appendChild(holdRing); }
+            holdRing.style.left = x + 'px'; holdRing.style.top = y + 'px';
+            holdRing.style.animation = 'none'; void holdRing.offsetWidth;   // restart
+            holdRing.style.animation = `rackHoldGrow ${Math.max(140, dur - 130)}ms ease-out forwards`;
+            holdRing.style.display = 'block';
+        }, 130);
+    }
+    function hideHoldRing() {
+        if (holdRingTimer) { clearTimeout(holdRingTimer); holdRingTimer = null; }
+        if (holdRing) holdRing.style.display = 'none';
+    }
+
     // ---- hold timers -------------------------------------------------
     let hold = null;       // press-hold on a jack → peek
-    function startHold(el) {
+    function startHold(el, x, y) {
         cancelHold();
-        hold = { el, active: false, timer: setTimeout(() => { hold.active = true; peekJack(el, true); }, HOLD_MS) };
+        showHoldRing(x, y, HOLD_MS);
+        hold = { el, active: false, timer: setTimeout(() => { hold.active = true; hideHoldRing(); peekJack(el, true); }, HOLD_MS) };
     }
-    function cancelHold() { if (hold) { clearTimeout(hold.timer); if (hold.active) { peekJack(hold.el, false); applySticky(); } hold = null; } }
+    function cancelHold() { hideHoldRing(); if (hold) { clearTimeout(hold.timer); if (hold.active) { peekJack(hold.el, false); applySticky(); } hold = null; } }
     function endHold() {
+        hideHoldRing();
         if (!hold) return false;
         const wasActive = hold.active; clearTimeout(hold.timer);
         if (wasActive) {
@@ -439,7 +461,7 @@ export function createRackEngine() {
         if (drag) return;
         const j = e.target.closest('.jack');
         if (j) {
-            startHold(j);
+            startHold(j, e.clientX, e.clientY);
             if (!j.dataset.jack) return;                 // group anchor: peek only
             e.preventDefault();
             // Capture the pointer on the jack so the whole drag honours
@@ -454,13 +476,14 @@ export function createRackEngine() {
         const u = e.target.closest('.unit');
         if (u && !inEarZone(u, e.clientX)) {
             cancelUnitHold();
+            showHoldRing(e.clientX, e.clientY, DEVICE_HOLD_MS);
             unitHold = { x: e.clientX, y: e.clientY, fired: false, timer: setTimeout(() => {
-                unitHold.fired = true; const dev = deviceForUnit(u); if (dev) openDeviceMenu(dev, unitHold.x, unitHold.y);
+                unitHold.fired = true; hideHoldRing(); const dev = deviceForUnit(u); if (dev) openDeviceMenu(dev, unitHold.x, unitHold.y);
             }, DEVICE_HOLD_MS) };
         }
     };
     function inEarZone(u, x) { const r = u.getBoundingClientRect(); return x < r.left + 46 || x > r.right - 46; }
-    function cancelUnitHold() { if (unitHold) { clearTimeout(unitHold.timer); unitHold = null; } }
+    function cancelUnitHold() { hideHoldRing(); if (unitHold) { clearTimeout(unitHold.timer); unitHold = null; } }
 
     const onPointerMove = (e) => {
         if (unitHold && !unitHold.fired && Math.hypot(e.clientX - unitHold.x, e.clientY - unitHold.y) > DRAG_THRESH) cancelUnitHold();
@@ -588,6 +611,7 @@ export function createRackEngine() {
         document.removeEventListener('mouseover', onMouseOver);
         document.removeEventListener('mouseout', onMouseOut);
         document.body.classList.remove('rack-dragging');
+        hideHoldRing(); if (holdRing) { holdRing.remove(); holdRing = null; }
     };
     return engine;
 }
