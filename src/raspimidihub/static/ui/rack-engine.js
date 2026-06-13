@@ -379,6 +379,20 @@ export function createRackEngine() {
     const onClickCapture = (e) => {
         if (swallowClick) { swallowClick = false; clearTimeout(swallowTimer); e.stopPropagation(); e.preventDefault(); }
     };
+    // When OUR timer opens the menu, the browser's own long-press fires
+    // a `contextmenu` ~100ms later. The menu's full-screen scrim closes
+    // on contextmenu, so that native event would snap the menu shut
+    // right after the haptic. Swallow contextmenu in the capture phase
+    // for a short window after we open, so it never reaches the scrim.
+    let ctxGuard = false, ctxGuardTimer = null;
+    function armCtxGuard() {
+        ctxGuard = true;
+        clearTimeout(ctxGuardTimer);
+        ctxGuardTimer = setTimeout(() => { ctxGuard = false; }, 500);
+    }
+    const onContextMenuCapture = (e) => {
+        if (ctxGuard) { e.preventDefault(); e.stopPropagation(); }
+    };
 
     function setArmed(a) {
         armed = a;
@@ -499,7 +513,7 @@ export function createRackEngine() {
             const dev = deviceForUnit(u);
             showHoldRing(e.clientX, e.clientY, DEVICE_HOLD_MS);
             unitHold = { x: e.clientX, y: e.clientY, fired: false, dev, timer: setTimeout(() => {
-                unitHold.fired = true; hideHoldRing(); if (dev) openDeviceMenu(dev, unitHold.x, unitHold.y);
+                unitHold.fired = true; hideHoldRing(); armCtxGuard(); if (dev) openDeviceMenu(dev, unitHold.x, unitHold.y);
             }, DEVICE_HOLD_MS) };
         }
     };
@@ -572,7 +586,7 @@ export function createRackEngine() {
         // dropping it. (A scroll would have moved >tol and already
         // cancelled unitHold, so this only fires on a genuine hold.)
         if (unitHold && !unitHold.fired && unitHold.dev) {
-            unitHold.fired = true; hideHoldRing(); suppressClick = true; armClickSwallow();
+            unitHold.fired = true; hideHoldRing(); suppressClick = true; armClickSwallow(); armCtxGuard();
             openDeviceMenu(unitHold.dev, unitHold.x, unitHold.y);
         }
         cancelUnitHold(); cancelHold();
@@ -624,6 +638,7 @@ export function createRackEngine() {
         document.addEventListener('pointerup', onPointerUp);
         document.addEventListener('pointercancel', onPointerCancel);
         document.addEventListener('click', onClickCapture, true);   // capture: swallow the long-press lift-click
+        document.addEventListener('contextmenu', onContextMenuCapture, true);   // capture: keep native long-press from closing our menu
         document.addEventListener('click', onClick);
         document.addEventListener('contextmenu', onContextMenu);
         document.addEventListener('mouseover', onMouseOver);
@@ -638,6 +653,7 @@ export function createRackEngine() {
         document.removeEventListener('pointerup', onPointerUp);
         document.removeEventListener('pointercancel', onPointerCancel);
         document.removeEventListener('click', onClickCapture, true);
+        document.removeEventListener('contextmenu', onContextMenuCapture, true);
         document.removeEventListener('click', onClick);
         document.removeEventListener('contextmenu', onContextMenu);
         document.removeEventListener('mouseover', onMouseOver);
