@@ -616,6 +616,10 @@ body {
 .matrix {
     overflow-x: auto;
     margin: var(--gap) 0;
+    /* The grid is all controls, no prose — a long-press on a header
+       (device name) would otherwise let the OS select the text and pop
+       a copy/paste bubble. */
+    user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
 }
 .matrix table {
     border-collapse: collapse;
