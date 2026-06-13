@@ -222,6 +222,38 @@ def make_discovered(rmh="1", hub="feedface0001", sid="usb-1-2-a:b",
     )
 
 
+class TestPickReachableAddress:
+    def test_single_address_returned_as_is(self):
+        from raspimidihub.network_midi import _pick_reachable_address
+        assert _pick_reachable_address(["10.1.1.2"]) == "10.1.1.2"
+
+    def test_prefers_same_subnet(self, monkeypatch):
+        from raspimidihub import network_midi
+        # We live on 10.1.1.0/24; the peer advertises its AP address
+        # (192.168.4.1, unreachable from here) first and its ethernet
+        # address second — we must pick the reachable one.
+        monkeypatch.setattr(network_midi, "get_all_interfaces", lambda: [
+            {"address": "10.1.1.50", "netmask": "255.255.255.0"},
+        ], raising=False)
+        # get_all_interfaces is imported inside the function from .wifi;
+        # patch there too.
+        import raspimidihub.wifi as wifi
+        monkeypatch.setattr(wifi, "get_all_interfaces", lambda: [
+            {"address": "10.1.1.50", "netmask": "255.255.255.0"},
+        ])
+        addr = network_midi._pick_reachable_address(["192.168.4.1", "10.1.1.2"])
+        assert addr == "10.1.1.2"
+
+    def test_falls_back_to_first_when_no_match(self, monkeypatch):
+        import raspimidihub.wifi as wifi
+        from raspimidihub import network_midi
+        monkeypatch.setattr(wifi, "get_all_interfaces", lambda: [
+            {"address": "172.16.0.5", "netmask": "255.255.255.0"},
+        ])
+        addr = network_midi._pick_reachable_address(["192.168.4.1", "10.1.1.2"])
+        assert addr == "192.168.4.1"
+
+
 class TestDiscoveredService:
     def test_hub_session_identity(self):
         svc = make_discovered()

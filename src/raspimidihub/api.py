@@ -1887,6 +1887,12 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
             enabled = bool(req.json.get("enabled"))
             config.data.setdefault("network_midi", {})["enabled"] = enabled
             await config.asave()
+            # config.json holds the setting, but the autosave slot is
+            # what boot resumes from — and a settings-only change never
+            # bumps the engine change-seq, so the debounced autosaver
+            # would never refresh it. Force a resume-snapshot now so the
+            # toggle survives a reboot (same rule as Load/Restore/Import).
+            await autosaver.autosave_now()
             await network_midi.set_enabled(enabled)
             return Response.json({"status": "saved", "enabled": enabled})
 
@@ -1907,6 +1913,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
             elif not exported and stable_id in current:
                 current.remove(stable_id)
             await config.asave()
+            await autosaver.autosave_now()  # keep the resume snapshot in sync
             await network_midi.set_export(stable_id, exported)
             return Response.json({"status": "saved"})
 
@@ -1927,6 +1934,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
                 if svc.service not in added:
                     added.append(svc.service)
             await config.asave()
+            await autosaver.autosave_now()  # keep the resume snapshot in sync
             await network_midi.set_mirrored(svc.service, True)
             await server.send_sse("device-connected", {})
             return Response.json({"status": "mirrored"})
@@ -1947,6 +1955,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
                 if svc.service in added:
                     added.remove(svc.service)
             await config.asave()
+            await autosaver.autosave_now()  # keep the resume snapshot in sync
             await network_midi.set_mirrored(svc.service, False)
             await server.send_sse("device-disconnected", {})
             return Response.json({"status": "unmirrored"})
@@ -1961,6 +1970,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
             if host not in peers:
                 peers.append(host)
                 await config.asave()
+                await autosaver.autosave_now()  # keep resume snapshot in sync
             return Response.json({"status": "added"})
 
         @server.route("DELETE", "/api/network-midi/peers/", exact=False)
@@ -1973,6 +1983,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
             if host in peers:
                 peers.remove(host)
                 await config.asave()
+                await autosaver.autosave_now()  # keep resume snapshot in sync
             return Response.json({"status": "removed"})
     else:
         @server.route("GET", "/api/network-midi")

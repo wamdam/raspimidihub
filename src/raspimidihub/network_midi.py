@@ -87,6 +87,37 @@ def hub_id() -> str:
         return socket.gethostname()[:12]
 
 
+def _pick_reachable_address(addresses: list[str]) -> str:
+    """Choose the peer address that shares a subnet with one of our
+    interfaces — a peer advertises ALL its addresses (192.168.4.1 for
+    its own AP, its ethernet IP, ...) and the first is not necessarily
+    routable from here. Falls back to the first address."""
+    if len(addresses) <= 1:
+        return addresses[0]
+    try:
+        import ipaddress
+
+        from .wifi import get_all_interfaces
+        local_nets = []
+        for info in get_all_interfaces():
+            if info.get("address") and info.get("netmask"):
+                try:
+                    local_nets.append(ipaddress.IPv4Network(
+                        f"{info['address']}/{info['netmask']}", strict=False))
+                except ValueError:
+                    pass
+        for addr in addresses:
+            try:
+                ip = ipaddress.IPv4Address(addr)
+            except ValueError:
+                continue
+            if any(ip in net for net in local_nets):
+                return addr
+    except Exception:
+        log.debug("network-midi: address selection failed", exc_info=True)
+    return addresses[0]
+
+
 class _UdpShim(asyncio.DatagramProtocol):
     """Minimal DatagramProtocol that forwards datagrams to a callback."""
 
@@ -475,8 +506,11 @@ class MirroredSession:
         self._in_port = -1             # writable: matrix routes into here
         self._ctrl_transport = None
         self._data_transport = None
-        self._remote_ctrl = (svc.addresses[0], svc.port)
-        self._remote_data = (svc.addresses[0], svc.port + 1)
+        # A peer advertises ALL its addresses (its AP, ethernet, ...);
+        # blindly taking the first can pick one we can't reach.
+        addr = _pick_reachable_address(svc.addresses)
+        self._remote_ctrl = (addr, svc.port)
+        self._remote_data = (addr, svc.port + 1)
         self._ok_future: asyncio.Future | None = None
         self._remote_ssrc: int | None = None
         self._ck_task = None
@@ -893,6 +927,14 @@ class NetworkMidiManager:
             f"{sess.service_name}.{SERVICE_TYPE}",
             port=sess.control_port,
             addresses=addresses,
+            # SRV target = the hub's real mDNS hostname. Without it,
+            # python-zeroconf defaults the SRV host to the *instance
+            # name*, which avahi-based resolvers (rtpmidid, most Linux
+            # clients) fail to resolve — they time out and never
+            # connect. avahi-daemon on the hub answers A queries for
+            # this name per-interface, so clients also get an address
+            # that is actually reachable from where they ask.
+            server=f"{self.hostname}.local.",
             properties={"rmh": "1", "hub": self.hub_id,
                         "sid": sess.stable_id, "host": self.hostname,
                         "dev": sess.device_name},
