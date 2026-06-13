@@ -21,7 +21,10 @@
 
 const SVGNS = 'http://www.w3.org/2000/svg';
 const HOLD_MS = 350;          // press-hold → peek
-const DEVICE_HOLD_MS = 500;   // press-hold on faceplate → device menu
+const DEVICE_HOLD_MS = 400;   // press-hold on faceplate → device menu.
+                              // Kept under the browser's own ~500ms long-press
+                              // so our menu opens before the native gesture
+                              // (which fires pointercancel + a haptic) can win.
 const DRAG_THRESH = 8;        // px before a jack press becomes a drag
 const HOLD_MOVE_TOL = 18;     // px of finger wobble tolerated during a device long-press
                               // (a real scroll moves much further, so it still cancels)
@@ -478,9 +481,10 @@ export function createRackEngine() {
         const u = e.target.closest('.unit');
         if (u && !inEarZone(u, e.clientX)) {
             cancelUnitHold();
+            const dev = deviceForUnit(u);
             showHoldRing(e.clientX, e.clientY, DEVICE_HOLD_MS);
-            unitHold = { x: e.clientX, y: e.clientY, fired: false, timer: setTimeout(() => {
-                unitHold.fired = true; hideHoldRing(); const dev = deviceForUnit(u); if (dev) openDeviceMenu(dev, unitHold.x, unitHold.y);
+            unitHold = { x: e.clientX, y: e.clientY, fired: false, dev, timer: setTimeout(() => {
+                unitHold.fired = true; hideHoldRing(); if (dev) openDeviceMenu(dev, unitHold.x, unitHold.y);
             }, DEVICE_HOLD_MS) };
         }
     };
@@ -547,6 +551,15 @@ export function createRackEngine() {
     // Pointer cancelled (OS/browser stole the gesture). Tear the drag
     // down cleanly rather than leaving a frozen rubber-band on screen.
     const onPointerCancel = () => {
+        // The OS cancels the touch when ITS long-press fires (the haptic
+        // the user feels). If a device long-press was pending and hadn't
+        // moved, that cancel IS the long-press — open the menu instead of
+        // dropping it. (A scroll would have moved >tol and already
+        // cancelled unitHold, so this only fires on a genuine hold.)
+        if (unitHold && !unitHold.fired && unitHold.dev) {
+            unitHold.fired = true; hideHoldRing(); suppressClick = true;
+            openDeviceMenu(unitHold.dev, unitHold.x, unitHold.y);
+        }
         cancelUnitHold(); cancelHold();
         if (drag) {
             drag = null;
