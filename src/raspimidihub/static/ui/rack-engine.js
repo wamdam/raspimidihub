@@ -70,7 +70,12 @@ export function createRackEngine() {
     // ---- cable path (hanging, Reason-style deep sag) ----------------
     function hangCps(a, b, idx) {
         const dist = Math.hypot(b.x - a.x, b.y - a.y);
-        const sag = Math.min(300, 70 + dist * 0.35) + (idx % 5) * 14;
+        // Sag scales with cable length (small floor): a short patch
+        // barely dips, a long run hangs deep. The per-cable term is
+        // proportional to length too — so parallel long cables separate
+        // without puffing up short ones (the old fixed +70/+jitter made
+        // everything sag the same).
+        const sag = Math.min(300, 16 + dist * 0.42) + (idx % 5) * dist * 0.012;
         const bow = ((idx % 7) - 3) * 8;
         return { c1x: a.x + bow, c1y: a.y + sag, c2x: b.x + bow, c2y: b.y + sag };
     }
