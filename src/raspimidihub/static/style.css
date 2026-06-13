@@ -3002,12 +3002,12 @@ body.spectator-mode * { scrollbar-width: none; }
    touch point; grows over the hold delay so a hold reads as "something
    is coming") ---- */
 .rack-hold-ring { position: fixed; z-index: 60; pointer-events: none; display: none;
-    width: 60px; height: 60px; margin: -30px 0 0 -30px; border-radius: 50%;
-    border: 3px solid var(--accent); box-sizing: border-box; }
+    width: 140px; height: 140px; margin: -70px 0 0 -70px; border-radius: 50%;
+    border: 4px solid var(--accent); box-sizing: border-box; }
 @keyframes rackHoldGrow {
-    0%   { transform: scale(0.25); opacity: 0.12; }
-    70%  { opacity: 0.55; }
-    100% { transform: scale(1); opacity: 0.95; box-shadow: 0 0 14px 3px var(--accent-glow); }
+    0%   { transform: scale(0.2); opacity: 0.12; }
+    70%  { opacity: 0.6; }
+    100% { transform: scale(1); opacity: 0.95; box-shadow: 0 0 16px 3px var(--accent-glow); }
 }
 
 /* ---- cable layer ---- */
