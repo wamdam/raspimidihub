@@ -114,9 +114,9 @@ highlight stays until you pick another jack or tap the same one
 again. Tap a cable (or its funnel badge) to open the connection's
 menu -- the same Edit / Copy / Paste / Remove menu as a matrix cell,
 where **Edit** opens the filter & mapping panel. Press and hold (or
-right-click) a unit's faceplate for its device menu -- Rename, Edit,
-and the plugin/network actions, identical to the matrix's header
-menu. The **+ Add Device** button at the foot opens the same Add
+right-click) a unit's faceplate for its device menu -- Edit (which is
+where renaming lives) and the plugin/network actions, identical to the
+matrix's header menu. The **+ Add Device** button at the foot opens the same Add
 menu as the matrix.
 
 ![The Rack view: devices as rack units, cables hanging between IN/OUT jacks. Here a source jack is held, so its cables fan out and the rest dim.](../screenshots/01-routing-rack.png){width=42%}
@@ -148,8 +148,10 @@ cell state:
 Tapping a row or column header opens a menu of device-level actions:
 
 - **Edit** -- opens the device-detail panel. For USB devices, this
-  is the rename + MIDI monitor + test-sender panel. For plugins,
-  it is the plugin-config panel.
+  is where you **rename** the device (and each port), plus the MIDI
+  monitor and test-sender. For plugins, it is the plugin-config
+  panel. (There is no separate *Rename* entry -- renaming lives in
+  this panel, which also shows the original ALSA name in grey.)
 - **Copy / Paste** (controllers, plugins) -- copies the whole
   instance. Paste creates a new instance with all parameters
   cloned.
@@ -159,8 +161,6 @@ Tapping a row or column header opens a menu of device-level actions:
   this hub's matrix. The peer's export is untouched; the session
   stays discoverable and can be re-added from the Add menu or
   Settings → Network MIDI.
-- **Rename** -- inline edit of the displayed name. The original
-  ALSA name remains shown in grey alongside.
 
 ## Adding and Renaming Devices
 
@@ -232,7 +232,7 @@ do:
    FX 6, Performance 16, XY 4) that live on the **Controller** tab.
    See chapter 12.
 3. **Play** -- fullscreen play surfaces that live on the **Play**
-   tab. Currently the Tracker, the Arpeggiator and the Euclidean
+   tab. Currently the Tracker, the Arpeggiator, the Euclidean and the Cartesian
    (chapter 13; per-plugin parameter tables in Appendix A).
 4. **Bluetooth MIDI** -- a Scan button and a list of paired
    peripherals. See chapter 14 for the pairing flow.

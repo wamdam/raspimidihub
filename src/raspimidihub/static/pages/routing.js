@@ -496,17 +496,6 @@ export function RoutingPage({ devices, connections, refresh, showToast, clockSou
         showToast('Paste failed: no free slot in destination range');
     };
 
-    const renameHardware = async (item) => {
-        const next = prompt(`Rename "${item.dev_name}":`, item.dev_name);
-        if (!next || next === item.dev_name) return;
-        const res = await api(`/devices/${item.client_id}/rename`, {
-            method: 'POST', body: JSON.stringify({ name: next.trim() }),
-        });
-        if (res && res.error) { showToast('Rename failed: ' + res.error); return; }
-        refresh();
-        showToast(`Renamed to "${next.trim()}"`);
-    };
-
     const headerMenuItems = (item, _role, fullLabel) => {
         // The matrix row/column labels are abbreviated to leave room
         // for cells. The full label gets surfaced as a styled header
@@ -560,15 +549,14 @@ export function RoutingPage({ devices, connections, refresh, showToast, clockSou
                 { label: 'Delete', danger: true, action: () => deletePlugin(item) },
             ];
         }
-        // Online network device (mirrored from a peer hub): Rename
-        // persists by stable_id like hardware; Unmirror drops it from
+        // Online network device (mirrored from a peer hub): Edit opens
+        // the device panel (rename lives there); Unmirror drops it from
         // this hub's matrix (the peer's export is untouched, and the
         // session reappears in Add Device → Network MIDI).
         if (item.is_network) {
             return [
                 ...headerItem,
                 { label: 'Edit', action: () => onDeviceOpenForMenu(item.client_id) },
-                { label: 'Rename', action: () => renameHardware(item) },
                 { divider: true },
                 { label: 'Unmirror', danger: true, action: async () => {
                     try {
@@ -580,13 +568,12 @@ export function RoutingPage({ devices, connections, refresh, showToast, clockSou
                 } },
             ];
         }
-        // Online hardware: Edit (opens device-detail panel for MIDI
-        // monitor + test sender) and Rename. Hardware can't be deleted
-        // here — unplug to remove.
+        // Online hardware: Edit opens the device-detail panel (rename
+        // field, per-port rename, MIDI monitor + test sender). Hardware
+        // can't be deleted here — unplug to remove.
         return [
             ...headerItem,
             { label: 'Edit', action: () => onDeviceOpenForMenu(item.client_id) },
-            { label: 'Rename', action: () => renameHardware(item) },
         ];
     };
 
