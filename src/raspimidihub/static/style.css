@@ -2998,6 +2998,13 @@ body.spectator-mode * { scrollbar-width: none; }
 .btn-rack-add { width: 100%; background: var(--accent); color: var(--text-on-accent); border: none;
     border-radius: 4px; padding: 8px 12px; font-size: 13px; font-weight: 600; cursor: pointer; }
 
+/* The shared context menu lives at app root (outside .rack-view), so a
+   long-press that opens it under the finger lets the OS select the
+   menu's text + raise a copy/paste bubble. Make it unselectable. */
+[data-testid="context-menu"], [data-testid="context-menu-bg"] {
+    user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
+}
+
 /* ---- long-press affordance ring (appended to body, centred on the
    touch point; grows over the hold delay so a hold reads as "something
    is coming") ---- */
