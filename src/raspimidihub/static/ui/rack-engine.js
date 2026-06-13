@@ -365,6 +365,21 @@ export function createRackEngine() {
     let suppressClick = false;
     const opp = d => d === 'out' ? 'in' : 'out';
 
+    // A long-press opens the menu while the finger is still down; the
+    // "compatibility click" fired on lift would otherwise land on the
+    // menu's full-screen scrim (its own onClose listener) and dismiss it
+    // instantly. armClickSwallow() eats that one click in the CAPTURE
+    // phase — before it reaches the scrim's bubble-phase handler.
+    let swallowClick = false, swallowTimer = null;
+    function armClickSwallow() {
+        swallowClick = true;
+        clearTimeout(swallowTimer);
+        swallowTimer = setTimeout(() => { swallowClick = false; }, 600);
+    }
+    const onClickCapture = (e) => {
+        if (swallowClick) { swallowClick = false; clearTimeout(swallowTimer); e.stopPropagation(); e.preventDefault(); }
+    };
+
     function setArmed(a) {
         armed = a;
         root.querySelectorAll('.jack.armed').forEach(j => j.classList.remove('armed'));
@@ -519,7 +534,7 @@ export function createRackEngine() {
 
     const onPointerUp = (e) => {
         if (drag && e.pointerId !== drag.pointerId) return;   // a different finger lifted
-        if (unitHold) { clearTimeout(unitHold.timer); if (unitHold.fired) suppressClick = true; unitHold = null; }
+        if (unitHold) { clearTimeout(unitHold.timer); if (unitHold.fired) { suppressClick = true; armClickSwallow(); } unitHold = null; }
         if (endHold()) { drag = null; return; }
         if (!drag) { if (armed && !(e.target.closest && e.target.closest('.jack'))) setArmed(null); return; }
         const d = drag; drag = null;
@@ -557,7 +572,7 @@ export function createRackEngine() {
         // dropping it. (A scroll would have moved >tol and already
         // cancelled unitHold, so this only fires on a genuine hold.)
         if (unitHold && !unitHold.fired && unitHold.dev) {
-            unitHold.fired = true; hideHoldRing(); suppressClick = true;
+            unitHold.fired = true; hideHoldRing(); suppressClick = true; armClickSwallow();
             openDeviceMenu(unitHold.dev, unitHold.x, unitHold.y);
         }
         cancelUnitHold(); cancelHold();
@@ -608,6 +623,7 @@ export function createRackEngine() {
         document.addEventListener('pointermove', onPointerMove);
         document.addEventListener('pointerup', onPointerUp);
         document.addEventListener('pointercancel', onPointerCancel);
+        document.addEventListener('click', onClickCapture, true);   // capture: swallow the long-press lift-click
         document.addEventListener('click', onClick);
         document.addEventListener('contextmenu', onContextMenu);
         document.addEventListener('mouseover', onMouseOver);
@@ -621,6 +637,7 @@ export function createRackEngine() {
         document.removeEventListener('pointermove', onPointerMove);
         document.removeEventListener('pointerup', onPointerUp);
         document.removeEventListener('pointercancel', onPointerCancel);
+        document.removeEventListener('click', onClickCapture, true);
         document.removeEventListener('click', onClick);
         document.removeEventListener('contextmenu', onContextMenu);
         document.removeEventListener('mouseover', onMouseOver);
