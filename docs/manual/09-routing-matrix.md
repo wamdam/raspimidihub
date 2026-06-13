@@ -101,17 +101,19 @@ mapping. Port jacks glow on MIDI activity; a jack that is sending
 MIDI Clock gets a green ring.
 
 **Patching.** Make a connection by tapping a jack and then its
-counterpart -- tap an OUT then an IN (or the reverse); valid targets
-pulse while one end is chosen. You can also **drag** from one jack to
-the other; while dragging, thin auto-scroll zones appear at the top
-and bottom edges so you can reach a unit that is off-screen, and the
-target jack shows an expanding "insert here" ring.
+counterpart -- tap an OUT then an IN (or the reverse); the chosen jack
+pulses and valid targets pulse with it. You can also **drag** from one
+jack to the other; dragging toward the top or bottom edge auto-scrolls
+the rack so you can reach an off-screen unit, and the target jack shows
+an expanding "insert here" ring. A second finger scrolls the rack
+normally while a cable is in hand.
 
 **Inspecting and editing.** Hover (desktop) or **press and hold**
-(touch) a jack to spotlight just its cables -- the others dim and the
-highlighted ones fan apart so a single cable is easy to pick out; the
-highlight stays until you pick another jack or tap the same one
-again. Tap a cable (or its funnel badge) to open the connection's
+(touch) a jack -- or just tap it -- to spotlight its cables: the others
+dim and the highlighted ones fan apart so a single cable is easy to
+pick out. Selecting a port with no connections dims *all* cables,
+making "nothing here" obvious. The highlight stays until you pick
+another jack or tap the same one again. Tap a cable (or its funnel badge) to open the connection's
 menu -- the same Edit / Copy / Paste / Remove menu as a matrix cell,
 where **Edit** opens the filter & mapping panel. Press and hold (or
 right-click) a unit's faceplate for its device menu -- Edit (which is
