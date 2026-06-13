@@ -22,7 +22,9 @@
 const SVGNS = 'http://www.w3.org/2000/svg';
 const HOLD_MS = 350;          // press-hold → peek
 const DEVICE_HOLD_MS = 500;   // press-hold on faceplate → device menu
-const DRAG_THRESH = 8;        // px before a press becomes a drag
+const DRAG_THRESH = 8;        // px before a jack press becomes a drag
+const HOLD_MOVE_TOL = 18;     // px of finger wobble tolerated during a device long-press
+                              // (a real scroll moves much further, so it still cancels)
 const EDGE = 48, MAX_SPEED = 18;
 
 export function createRackEngine() {
@@ -486,7 +488,7 @@ export function createRackEngine() {
     function cancelUnitHold() { hideHoldRing(); if (unitHold) { clearTimeout(unitHold.timer); unitHold = null; } }
 
     const onPointerMove = (e) => {
-        if (unitHold && !unitHold.fired && Math.hypot(e.clientX - unitHold.x, e.clientY - unitHold.y) > DRAG_THRESH) cancelUnitHold();
+        if (unitHold && !unitHold.fired && Math.hypot(e.clientX - unitHold.x, e.clientY - unitHold.y) > HOLD_MOVE_TOL) cancelUnitHold();
         if (!drag) return;
         if (e.pointerId !== drag.pointerId) return;      // ignore other fingers
         drag.x = e.clientX; drag.y = e.clientY;
