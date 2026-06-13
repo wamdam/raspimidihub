@@ -115,16 +115,20 @@ export function ContextMenu({ menu, onClose }) {
                         return html`<div key=${i} style="height:1px;background:var(--surface2);margin:6px 0"></div>`;
                     }
                     if (item.header) {
+                        // Styled as a caption — dim, uppercase, smaller — so it
+                        // reads as a title for the menu, not another tappable
+                        // row like "Edit" right beneath it.
                         return html`<div key=${i} data-testid="menu-header"
-                            style="padding:10px 16px 8px;font-size:13px;
-                                   font-weight:600;color:var(--text);
+                            style="padding:6px 16px 8px;font-size:11px;
+                                   font-weight:700;color:var(--text-dim);
+                                   text-transform:uppercase;letter-spacing:0.06em;
                                    white-space:nowrap;
                                    border-bottom:1px solid var(--surface2);
                                    margin-bottom:4px;
                                    max-width:280px;overflow:hidden;
                                    text-overflow:ellipsis;
                                    display:flex;align-items:center;gap:7px">
-                            ${item.color ? html`<span style="flex:none;width:11px;height:11px;border-radius:50%;background:${item.color};border:1.5px solid rgba(255,255,255,0.35)"></span>` : ''}
+                            ${item.color ? html`<span style="flex:none;width:10px;height:10px;border-radius:50%;background:${item.color};border:1.5px solid rgba(255,255,255,0.35)"></span>` : ''}
                             <span style="overflow:hidden;text-overflow:ellipsis">${item.label}</span>
                         </div>`;
                     }
