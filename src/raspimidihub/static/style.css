@@ -2412,6 +2412,15 @@ body {
 /* Step editor */
 .step-editor { padding-bottom: 4px; }
 .step-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 3px; }
+/* Cartesian 2D grid — reuses .step-cell styling; column count is set
+ * inline (side×side). The playhead cell gets a bright outline so the
+ * moving X-clock position reads at a glance. */
+.cartesian-grid { display: grid; gap: 3px; }
+.cartesian-grid .step-cell.playing {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+    box-shadow: 0 0 8px var(--accent-glow-weak);
+}
 .step-cell {
     border-radius: 5px;
     /* Dark-mode default: a slightly-darker-than-page well so the
@@ -2971,6 +2980,16 @@ body.spectator-mode * { scrollbar-width: none; }
 .rack-view .jack.clock-beat { animation: rackClockBeat 0.4s ease-out; }
 @keyframes rackClockBeat { 0% { box-shadow: 0 0 10px 3px #4caf5099, inset 0 0 4px #000; } 100% { box-shadow: 0 0 0 0 transparent, inset 0 0 4px #000; } }
 .rack-view .jack.armed { border-color: var(--accent); box-shadow: 0 0 10px 2px var(--accent-glow), inset 0 0 4px #000; }
+/* Selected port: a repeating accent "ping" ring so it clearly reads as
+   the one you picked (distinct from the green drop-target ripple and
+   the gentle target-hint pulse). */
+.rack-view .jack.armed::before { content: ''; position: absolute; inset: -5px; border-radius: 50%;
+    border: 2.5px solid var(--accent); pointer-events: none;
+    animation: rackArmedPing 1.1s ease-out infinite; }
+@keyframes rackArmedPing {
+    0%   { transform: scale(0.8); opacity: 0.95; }
+    100% { transform: scale(1.55); opacity: 0; }
+}
 .rack-view .jack.target-hint { border-color: rgba(233,69,96,0.7); animation: rackTargetPulse 0.9s ease-in-out infinite; }
 @keyframes rackTargetPulse { 50% { box-shadow: 0 0 9px 2px var(--accent-glow-weak), inset 0 0 4px #000; } }
 /* Drop target while dragging a cable. The thumb covers the jack itself,

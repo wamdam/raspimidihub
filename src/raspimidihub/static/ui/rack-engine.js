@@ -157,7 +157,7 @@ export function createRackEngine() {
         });
         dots.forEach(d => svg.appendChild(d));
 
-        if (prevPeek) { const el = jackForKey(prevPeek); if (el) peekJack(el, true, true); }
+        if (prevPeek) { const el = jackForKey(prevPeek); if (el) peekJack(el, true, true, true); }
         updateActivity();   // freshly-drawn jacks need their LED/clock classes
     }
 
@@ -295,27 +295,34 @@ export function createRackEngine() {
     function srcDkey(c) { return c.offline ? 's:' + c.src_stable_id : 'c' + c.src_client; }
     function dstDkey(c) { return c.offline ? 's:' + c.dst_stable_id : 'c' + c.dst_client; }
 
-    function peekJack(el, on, instant) {
+    // allowEmpty: when a port is deliberately SELECTED (tap/hold/sticky)
+    // we enter peek even if it has no cables — so everything mutes,
+    // making "nothing connected here" obvious. Hover (transient preview)
+    // passes allowEmpty falsy, so sweeping over empty ports does nothing.
+    function peekJack(el, on, instant, allowEmpty) {
         const key = on ? jackKey(el) : null;
         if (on && peekKey === key) return;
         endSpread();
         svg.querySelectorAll('.hl').forEach(x => x.classList.remove('hl'));
         peekKey = key;
         const conns = on ? connsForJack(el) : [];
-        if (!on || !conns.length) {
+        if (!on || (!conns.length && !allowEmpty)) {
             svg.classList.remove('peek'); peekKey = null;
             if (on && key === stickyKey) stickyKey = null;
             return;
         }
         svg.classList.add('peek');
-        const ids = new Set(conns.map(connId));
-        svg.querySelectorAll('[data-conn]').forEach(x => { if (ids.has(x.dataset.conn)) x.classList.add('hl'); });
-        startSpread(ids, instant);
+        if (conns.length) {
+            const ids = new Set(conns.map(connId));
+            svg.querySelectorAll('[data-conn]').forEach(x => { if (ids.has(x.dataset.conn)) x.classList.add('hl'); });
+            startSpread(ids, instant);
+        }
+        // empty + allowEmpty: peek on, nothing highlighted → all cables muted
     }
     function applySticky() {
         if (!stickyKey) return;
         const el = jackForKey(stickyKey);
-        if (el) peekJack(el, true); else stickyKey = null;
+        if (el) peekJack(el, true, false, true); else stickyKey = null;
     }
 
     // ---- long-press affordance (growing ring at the touch point) ----
@@ -343,7 +350,7 @@ export function createRackEngine() {
     function startHold(el, x, y) {
         cancelHold();
         showHoldRing(x, y, HOLD_MS);
-        hold = { el, active: false, timer: setTimeout(() => { hold.active = true; hideHoldRing(); peekJack(el, true); }, HOLD_MS) };
+        hold = { el, active: false, timer: setTimeout(() => { hold.active = true; hideHoldRing(); peekJack(el, true, false, true); }, HOLD_MS) };
     }
     function cancelHold() { hideHoldRing(); if (hold) { clearTimeout(hold.timer); if (hold.active) { peekJack(hold.el, false); applySticky(); } hold = null; } }
     function endHold() {
@@ -564,7 +571,7 @@ export function createRackEngine() {
                 setArmed(null); stickyKey = null; if (jel) peekJack(jel, false);
             } else {
                 setArmed({ key: d.from, dir: d.dir });
-                if (jel) { stickyKey = jackKey(jel); peekJack(jel, true); }
+                if (jel) { stickyKey = jackKey(jel); peekJack(jel, true, false, true); }
             }
             return;
         }
