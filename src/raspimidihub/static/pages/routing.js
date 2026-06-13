@@ -9,7 +9,14 @@ import { useSSESubscription } from '../ui/sse-subscriptions.js';
 import { useSharedUiState } from '../lib/spectator/shared-ui-state.js';
 import { PluginIcon } from '../ui/icons.js';
 import { ConnectionMatrix } from './matrix.js';
+import { RackView } from './rack.js';
 import { FilterPanel } from '../panels/filterpanel.js';
+
+// Which routing surface is shown — per-browser display preference, like
+// theme/density. Persisted so the choice survives reloads.
+const VIEW_KEY = 'raspimidihub:routingView';
+function loadView() { try { return localStorage.getItem(VIEW_KEY) === 'rack' ? 'rack' : 'matrix'; } catch { return 'matrix'; } }
+function saveView(v) { try { localStorage.setItem(VIEW_KEY, v); } catch {} }
 
 export function RoutingPage({ devices, connections, refresh, showToast, clockSources, clockQuarters, midiRates, onDeviceOpen, clipboard, setClipboard, showContextMenu }) {
     // The matrix shows live MIDI activity, clock pulses, message rates,
@@ -29,6 +36,11 @@ export function RoutingPage({ devices, connections, refresh, showToast, clockSou
     // will be empty unless the spectator separately fetches.
     const [filterConnId, setFilterConnId] = useSharedUiState('filterConnId', null);
     const [showAddPlugin, setShowAddPlugin] = useSharedUiState('showAddPlugin', false);
+    // Matrix vs. Rack surface. Mirrored to spectators (they should see
+    // the same view the operator picked) and persisted to localStorage
+    // for this browser via the setter below.
+    const [view, setViewState] = useSharedUiState('routingView', loadView());
+    const setView = (v) => { setViewState(v); saveView(v); };
     const [pluginTypes, setPluginTypes] = useState({});
     const loadPluginTypes = () => { api('/plugins').then(setPluginTypes).catch(() => {}); };
     // Preload the Add overlay's data on mount. The click handler used
@@ -558,11 +570,22 @@ export function RoutingPage({ devices, connections, refresh, showToast, clockSou
             clipboard=${clipboard}
             showContextMenu=${showContextMenu}
             srcClientId=${filterConn.src_client} />`}
-        <${ConnectionMatrix} devices=${devices} connections=${connections}
-            showToast=${showToast} clockSources=${clockSources} clockQuarters=${clockQuarters} midiRates=${midiRates}
-            onAddPlugin=${() => { loadPluginTypes(); loadBt(); setShowAddPlugin(true); }}
-            getCellMenuItems=${cellMenuItems} getHeaderMenuItems=${headerMenuItems}
-            showContextMenu=${showContextMenu} />
+        <div class="view-toggle">
+            <button class="view-toggle-btn ${view === 'matrix' ? 'active' : ''}" onclick=${() => setView('matrix')}>Matrix</button>
+            <button class="view-toggle-btn ${view === 'rack' ? 'active' : ''}" onclick=${() => setView('rack')}>Rack</button>
+        </div>
+        ${view === 'rack'
+            ? html`<${RackView} devices=${devices} connections=${connections}
+                clockSources=${clockSources} clockQuarters=${clockQuarters} midiRates=${midiRates}
+                onToggle=${onToggle}
+                onAddPlugin=${() => { loadPluginTypes(); loadBt(); setShowAddPlugin(true); }}
+                getCellMenuItems=${cellMenuItems} getHeaderMenuItems=${headerMenuItems}
+                showContextMenu=${showContextMenu} />`
+            : html`<${ConnectionMatrix} devices=${devices} connections=${connections}
+                showToast=${showToast} clockSources=${clockSources} clockQuarters=${clockQuarters} midiRates=${midiRates}
+                onAddPlugin=${() => { loadPluginTypes(); loadBt(); setShowAddPlugin(true); }}
+                getCellMenuItems=${cellMenuItems} getHeaderMenuItems=${headerMenuItems}
+                showContextMenu=${showContextMenu} />`}
         <div class="btn-group">
             <button class="btn btn-primary" onclick=${saveConfig} disabled=${saving || loading}>${saving ? 'Saving...' : 'Save Config'}</button>
             <button class="btn btn-secondary" onclick=${loadConfig} disabled=${saving || loading}>${loading ? 'Loading...' : 'Load Config'}</button>

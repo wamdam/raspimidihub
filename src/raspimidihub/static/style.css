@@ -2848,3 +2848,162 @@ body.spectator-mode * { scrollbar-width: none; }
 .spectator-client-link:hover { background: var(--surface2); }
 .spectator-client-name { font-size: 15px; }
 .spectator-client-meta { font-size: 12px; color: var(--text-dim); }
+
+/* ============================================================ *
+ * Rack view (pages/rack.js + ui/rack-engine.js).
+ * A second routing surface: devices as 19" rack units, cables
+ * hanging between IN/OUT jacks. Tokens are the shared theme set;
+ * everything is scoped under .rack-view (and the body.rack-dragging
+ * / .rack-scrollzone helpers for the drag auto-scroll zones).
+ * ============================================================ */
+
+/* Matrix | Rack segmented control */
+.view-toggle { display: flex; gap: 0; justify-content: center; margin: 4px 0 10px; }
+.view-toggle-btn { background: var(--surface); color: var(--text-dim);
+    border: 1px solid var(--surface-2); padding: 6px 20px; font-size: 13px; font-weight: 600;
+    cursor: pointer; }
+.view-toggle-btn:first-child { border-radius: var(--radius) 0 0 var(--radius); }
+.view-toggle-btn:last-child { border-radius: 0 var(--radius) var(--radius) 0; border-left: none; }
+.view-toggle-btn.active { background: var(--accent); color: var(--text-on-accent); border-color: var(--accent); }
+
+/* ---- rack frame + mounting rails ---- */
+.rack-view { position: relative; padding: 6px 0; user-select: none; -webkit-user-select: none;
+    -webkit-touch-callout: none; }
+.rack-view .rail { position: absolute; top: 0; bottom: 0; width: 22px; z-index: 1;
+    background:
+      repeating-linear-gradient(180deg, transparent 0 7px, rgba(0,0,0,0.55) 7px 15px, transparent 15px 22px),
+      linear-gradient(90deg, #23232d, #34343f 45%, #2a2a34);
+    background-size: 8px 22px, 100% 100%; background-position: 50% 0, 0 0; background-repeat: repeat-y, no-repeat;
+    border-left: 1px solid rgba(255,255,255,0.08); border-right: 1px solid rgba(0,0,0,0.55); }
+.rack-view .rail.left { left: 0; } .rack-view .rail.right { right: 0; }
+.rack-units { position: relative; z-index: 2; display: flex; flex-direction: column; gap: 5px; }
+
+/* ---- mounting: rack ears + screws (units and group blendes) ---- */
+.rack-view .mounted { position: relative; padding-left: 46px; padding-right: 46px; }
+.rack-view .mounted::before, .rack-view .mounted::after { content: ''; position: absolute; top: 0; bottom: 0; width: 36px;
+    background-color: #262631;
+    background-image:
+      radial-gradient(circle at 50% 17px, #c8c8d4 0, #8a8a96 2px, #3a3a44 4px, transparent 5.5px),
+      radial-gradient(circle at 50% calc(100% - 17px), #c8c8d4 0, #8a8a96 2px, #3a3a44 4px, transparent 5.5px),
+      linear-gradient(90deg, #2e2e3a, #3c3c49 40%, #2c2c37);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.10), inset 0 -1px 0 rgba(0,0,0,0.5); }
+.rack-view .mounted::before { left: 0; border-radius: 4px 0 0 4px; border-right: 1px solid rgba(0,0,0,0.45); }
+.rack-view .mounted::after { right: 0; border-radius: 0 4px 4px 0; border-left: 1px solid rgba(255,255,255,0.05); }
+.rack-view .mounted.slim::before, .rack-view .mounted.slim::after {
+    background-image:
+      radial-gradient(circle at 50% 50%, #c8c8d4 0, #8a8a96 2px, #3a3a44 4px, transparent 5.5px),
+      linear-gradient(90deg, #2e2e3a, #3c3c49 40%, #2c2c37); }
+
+/* ---- group blendes (1U separators) ---- */
+.rack-view .gpanel { display: flex; align-items: center; gap: 8px; height: 36px; cursor: pointer;
+    border-radius: 4px;
+    background: repeating-linear-gradient(180deg, rgba(255,255,255,0.02) 0 1px, transparent 1px 3px),
+      linear-gradient(180deg, #23232f 0%, #18181f 60%, #121218 100%);
+    border: 1px solid #0a0a12;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.12), inset 0 -2px 3px rgba(0,0,0,0.5), 0 2px 5px rgba(0,0,0,0.4); }
+.rack-view .gpanel .arrow { font-size: 10px; color: var(--text-dim); width: 12px; transition: transform .15s; }
+.rack-view .gpanel.collapsed .arrow { transform: rotate(-90deg); }
+.rack-view .gpanel .g-icon { display: inline-flex; width: 16px; }
+.rack-view .gpanel .g-title { font-size: 11.5px; font-weight: 700; letter-spacing: .14em; color: #aaa;
+    text-shadow: 0 1px 0 rgba(0,0,0,0.8); }
+.rack-view .gpanel.plugin .g-title { color: var(--info-plugin); }
+.rack-view .gpanel.net .g-title { color: var(--info-net); }
+.rack-view .gpanel .g-sub { font-size: 10px; color: var(--text-dim); }
+.rack-view .gpanel .g-spacer { flex: 1; }
+.rack-view .gpanel .g-badge { font-size: 10px; padding: 1.5px 8px; border-radius: 9px;
+    background: var(--accent-tint); color: #ff8fa1; border: 1px solid rgba(233,69,96,0.35); }
+.rack-view .gpanel .g-led { width: 7px; height: 7px; border-radius: 50%; background: #333;
+    box-shadow: inset 0 0 2px #000; display: none; }
+.rack-view .gpanel.collapsed .g-led { display: block; }
+.rack-view .gpanel.collapsed .g-led.lit { background: #ffcc66; box-shadow: 0 0 6px #ffcc66cc; }
+
+/* ---- device faceplates (brushed metal) ---- */
+.rack-view .unit { display: flex; flex-direction: column; min-height: 46px; padding-top: 7px; padding-bottom: 7px;
+    border-radius: 4px;
+    background: repeating-linear-gradient(180deg, rgba(255,255,255,0.025) 0 1px, transparent 1px 3px),
+      linear-gradient(180deg, #2a2f4a 0%, #1d2138 55%, #161930 100%);
+    border: 1px solid #0a0a16;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.16), inset 0 -2px 3px rgba(0,0,0,0.55), 0 3px 8px rgba(0,0,0,0.5); }
+.rack-view .unit.plugin { background: repeating-linear-gradient(180deg, rgba(255,255,255,0.02) 0 1px, transparent 1px 3px),
+      linear-gradient(180deg, #173036 0%, #102228 55%, #0c1a20 100%); }
+.rack-view .unit.remote { background: repeating-linear-gradient(180deg, rgba(255,255,255,0.02) 0 1px, transparent 1px 3px),
+      linear-gradient(180deg, #1b2a4a 0%, #141f38 55%, #10182c 100%); }
+.rack-view .unit.offline { opacity: 0.45; }
+.rack-view .u-head { align-self: flex-start; display: flex; align-items: center; gap: 7px; margin-bottom: 4px; max-width: 80%; }
+.rack-view .u-icon { display: inline-flex; width: 18px; height: 18px; color: var(--text-dim); }
+.rack-view .u-icon .dev-icon { width: 18px; height: 18px; }
+.rack-view .u-name { font-size: 12.5px; font-weight: 600; letter-spacing: .03em; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap; text-shadow: 0 1px 0 rgba(0,0,0,0.8); }
+.rack-view .unit.plugin .u-name { color: var(--info-plugin); }
+.rack-view .unit.remote .u-name { color: var(--info-net); }
+.rack-view .u-ports { display: flex; flex-direction: column; gap: 3px; align-items: stretch; width: 100%; }
+
+/* port row: label · IN · OUT (OUT pushed right) */
+.rack-view .pmod { display: flex; align-items: center; gap: 10px; padding: 3px 14px 3px 10px; border-radius: 4px;
+    background: linear-gradient(180deg, rgba(0,0,0,0.48), rgba(0,0,0,0.30));
+    box-shadow: inset 0 1px 3px rgba(0,0,0,0.65), 0 1px 0 rgba(255,255,255,0.07); }
+.rack-view .p-label { width: 56px; font-size: 9px; color: #b8b8c4; letter-spacing: .06em; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap; text-transform: uppercase; text-shadow: 0 1px 0 rgba(0,0,0,0.9); }
+.rack-view .jackbox { display: flex; align-items: center; gap: 4px; }
+.rack-view .jackbox.out-box { margin-left: auto; }
+.rack-view .jackbox.ghost { visibility: hidden; }
+.rack-view .j-sub { width: 26px; text-align: right; font-size: 8px; color: var(--text-dim); letter-spacing: .08em;
+    text-shadow: 0 1px 0 rgba(0,0,0,0.9); }
+
+/* metal-sleeve jacks */
+.rack-view .jack { position: relative; width: 24px; height: 24px; border-radius: 50%; cursor: pointer;
+    background: radial-gradient(circle at 38% 30%, #50505e, #17171f 62%, #060609);
+    border: 2px solid #5a5a68;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.8), inset 0 1px 1px rgba(255,255,255,0.30), inset 0 0 4px #000;
+    touch-action: none; }
+.rack-view .jack::after { content: ''; position: absolute; inset: 6px; border-radius: 50%;
+    background: radial-gradient(circle at 40% 35%, #1d1d26, #000 70%); }
+.rack-view .jack.live { border-color: #ffcc66; box-shadow: 0 0 8px 1px #ffcc6688, inset 0 0 4px #000; }
+.rack-view .jack.clock { border-color: var(--success); }
+.rack-view .jack.clock-beat { animation: rackClockBeat 0.4s ease-out; }
+@keyframes rackClockBeat { 0% { box-shadow: 0 0 10px 3px #4caf5099, inset 0 0 4px #000; } 100% { box-shadow: 0 0 0 0 transparent, inset 0 0 4px #000; } }
+.rack-view .jack.armed { border-color: var(--accent); box-shadow: 0 0 10px 2px var(--accent-glow), inset 0 0 4px #000; }
+.rack-view .jack.target-hint { border-color: rgba(233,69,96,0.7); animation: rackTargetPulse 0.9s ease-in-out infinite; }
+@keyframes rackTargetPulse { 50% { box-shadow: 0 0 9px 2px var(--accent-glow-weak), inset 0 0 4px #000; } }
+.rack-view .jack.drag-over { border-color: #fff; box-shadow: 0 0 14px 4px rgba(255,255,255,0.7), inset 0 0 5px #000; }
+.rack-view .jack.drag-over::before { content: ''; position: absolute; inset: -3px; border-radius: 50%;
+    border: 2px solid #fff; pointer-events: none; animation: rackRipple 0.7s ease-out infinite; }
+@keyframes rackRipple {
+    0%   { transform: scale(0.7); opacity: 0.95; box-shadow: 0 0 10px 2px rgba(255,255,255,0.8); }
+    100% { transform: scale(2.1); opacity: 0;    box-shadow: 0 0 20px 6px rgba(255,255,255,0.0); } }
+
+/* collapsed-group anchor jack (cables dock here when a group is folded) */
+.rack-view .g-jack { width: 16px; height: 16px; border-width: 2px; display: none; cursor: default; }
+.rack-view .g-jack::after { inset: 4px; }
+.rack-view .gpanel.collapsed .g-jack { display: block; }
+
+/* ---- add-device row ---- */
+.rack-add { margin-top: 6px; padding-left: 46px; padding-right: 46px; }
+.btn-rack-add { width: 100%; background: var(--accent); color: var(--text-on-accent); border: none;
+    border-radius: 4px; padding: 8px 12px; font-size: 13px; font-weight: 600; cursor: pointer; }
+
+/* ---- cable layer ---- */
+.rack-cables { position: absolute; inset: 0; z-index: 5; pointer-events: none; overflow: visible; }
+.rack-cables path.wire { fill: none; stroke-width: 3; opacity: 0.9; stroke-linecap: round;
+    filter: drop-shadow(0 1px 1px rgba(0,0,0,0.6)); pointer-events: none; }
+.rack-cables path.wire.offline { opacity: 0.3; stroke-dasharray: 5 5; }
+.rack-cables circle.plug { stroke: rgba(0,0,0,0.55); stroke-width: 1; pointer-events: none; }
+.rack-cables path.hit { fill: none; stroke: transparent; stroke-width: 13; pointer-events: none; }
+@media (pointer: coarse) { .rack-cables path.hit { stroke-width: 24; } }
+.rack-cables path.wire.glow { stroke-width: 3.5; opacity: 1; filter: drop-shadow(0 0 4px currentColor); }
+.rack-cables path.wire.sel { stroke-width: 4; opacity: 1; filter: drop-shadow(0 0 5px currentColor); }
+.rack-cables path.rubber { fill: none; stroke: #fff; stroke-width: 2; stroke-dasharray: 6 5; opacity: 0.8; }
+/* filter badge: funnel glyph in a plaque */
+.rack-cables .fdot { pointer-events: all; cursor: pointer; }
+.rack-cables .fdot .fdot-bg { fill: var(--accent-2); stroke: #d7c2f0; stroke-width: 1.5; }
+.rack-cables .fdot .fdot-glyph { fill: #fff; }
+/* peek: hovered/held jack's cables shine, the rest recede */
+.rack-cables.peek path.wire { opacity: 0.08; filter: none; }
+.rack-cables.peek circle.plug, .rack-cables.peek .fdot { opacity: 0.12; }
+.rack-cables.peek path.wire.hl { opacity: 1; stroke-width: 4.5; filter: drop-shadow(0 0 7px currentColor); }
+.rack-cables.peek circle.plug.hl, .rack-cables.peek .fdot.hl { opacity: 1; }
+
+/* ---- drag auto-scroll zones (appended to body) ---- */
+.rack-scrollzone { position: fixed; height: 48px; z-index: 40; display: none; pointer-events: none; }
+.rack-scrollzone.top { background: linear-gradient(180deg, var(--accent-glow-weak), transparent); }
+.rack-scrollzone.bottom { background: linear-gradient(0deg, var(--accent-glow-weak), transparent); }

@@ -11,6 +11,7 @@ Unreleased
 - Improved: a **direct hub-to-hub Ethernet cable works without a router** — switching Network MIDI on enables IPv4 link-local fallback on eth0, so both ends self-assign 169.254.x.x addresses when no DHCP answers (DHCP networks unaffected).
 - Added: **Manual peers** (Settings → Network MIDI) — on networks that swallow mDNS multicast, enter the other hub's IP/hostname and it is polled directly for its exports.
 - Improved: Network MIDI link loss is self-healing — a cable pull or peer power-cut is detected within ~30 s (clock-sync doubles as liveness probe), mirrored devices drop to offline, and reconnection is automatic with backoff; silently vanished network clients are reaped from exported sessions after 60 s.
+- Added: **Rack view** for the Routing tab — a Matrix/Rack toggle switches the grid for a 19" rack of devices with cables hanging between IN/OUT jacks. Patch by tapping a jack then its counterpart or by dragging (with edge auto-scroll); hold a jack to spotlight its cables; cable colour follows the source port and a funnel badge marks filtered cables. Same connections, filters, mappings, menus and Add flow as the matrix — a second view of the same routing, grouped hardware / plugins / per network hub. View choice and group-collapse are per-browser, shared with the matrix.
 
 
 2026-06-12 — Version 4.8.0

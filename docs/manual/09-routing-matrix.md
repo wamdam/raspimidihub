@@ -2,9 +2,24 @@
 
 The **Routing** tab is the central screen of RaspiMIDIHub. Every USB
 MIDI device, every Bluetooth MIDI peripheral, every plugin instance,
-and every controller instance appears here as a row, a column, or
-both. Every potential connection between them is one cell in the
-grid. This chapter is the complete reference for the matrix screen.
+and every controller instance appears here. Every potential
+connection between them can be made on this screen.
+
+The tab offers **two views of the same routing**, switched with the
+**Matrix / Rack** toggle at the top:
+
+- **Matrix** -- the dense grid where rows are sources, columns are
+  destinations, and each cell is a connection. Best for an at-a-glance
+  overview of a whole rig.
+- **Rack** -- devices drawn as 19" rack units with cables hanging
+  between IN/OUT jacks. Best for following signal flow and for touch.
+
+Both views read and write the *same* connections, filters, mappings
+and clipboard, so the cell/header menus, the Add menu and the bottom
+bar described in this chapter behave identically in either. The view
+choice is a per-browser display preference (like layout density); it
+is not part of the saved config. This chapter documents the matrix
+first, then the rack.
 
 ![The Routing matrix. Rows are sources, columns are destinations, cells are connections. The bottom-nav Routing icon carries the dirty-state asterisk.](../screenshots/01-routing.png){width=42%}
 
@@ -66,6 +81,43 @@ When the peer hub goes offline, its mirrored devices behave
 exactly like unplugged hardware: rows and columns stay, dimmed,
 with all connections, filters and mappings intact, and everything
 reconnects by itself when the peer comes back.
+
+## The Rack View
+
+Flip the **Rack** toggle and the grid becomes a 19" rack. Each
+device is a rack unit -- its name and icon at the top-left, its
+ports listed below as rows: an **IN** jack (where the device
+receives) on the left, an **OUT** jack (where it sends) pushed to
+the right. Hardware sits at the top, then plugins and controllers,
+then one collapsible sub-rack per Network-MIDI peer hub. Group
+blendes collapse and expand exactly as the matrix's hub groups do,
+sharing the same per-browser state -- fold a hub in one view and it
+is folded in the other.
+
+Connections are **cables** that hang between jacks, one colour per
+source port so a strand stays recognisable where it crosses others.
+A small **funnel badge** sits on a cable that carries a filter or
+mapping. Port jacks glow on MIDI activity; a jack that is sending
+MIDI Clock gets a green ring.
+
+**Patching.** Make a connection by tapping a jack and then its
+counterpart -- tap an OUT then an IN (or the reverse); valid targets
+pulse while one end is chosen. You can also **drag** from one jack to
+the other; while dragging, thin auto-scroll zones appear at the top
+and bottom edges so you can reach a unit that is off-screen, and the
+target jack shows an expanding "insert here" ring.
+
+**Inspecting and editing.** Hover (desktop) or **press and hold**
+(touch) a jack to spotlight just its cables -- the others dim and the
+highlighted ones fan apart so a single cable is easy to pick out; the
+highlight stays until you pick another jack or tap the same one
+again. Tap a cable (or its funnel badge) to open the connection's
+menu -- the same Edit / Copy / Paste / Remove menu as a matrix cell,
+where **Edit** opens the filter & mapping panel. Press and hold (or
+right-click) a unit's faceplate for its device menu -- Rename, Edit,
+and the plugin/network actions, identical to the matrix's header
+menu. The **+ Add Device** button at the foot opens the same Add
+menu as the matrix.
 
 ## The Cell Context Menu
 
@@ -257,3 +309,8 @@ Screenshots needed:
   hub's devices mirrored: the violet `@hub2` group row expanded
   with two device rows, and a second capture collapsed. Needs two
   real hubs on one network; not coverable by the scripted scenes.
+- `01-routing-rack.png` -- the Routing tab on the **Rack** toggle:
+  device rack units with cables hanging between IN/OUT jacks, and
+  one cable highlighted by holding its source jack (peek). Add a
+  rack scene to `scripts/screenshots/run.py` (flip the Matrix/Rack
+  toggle, hold a jack) so this regenerates with `make screenshots`.
