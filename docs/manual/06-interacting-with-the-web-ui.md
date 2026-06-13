@@ -31,7 +31,7 @@ The bottom navigation has up to four tabs:
 |------|------|---------|
 | **Routing** | `/routing` | The connection matrix and everything attached to it |
 | **Controller** | `/controller` | Fullscreen tap-to-play surfaces |
-| **Play** | `/play` | The play-surface plugins (Tracker, Arpeggiator, Euclidean) |
+| **Play** | `/play` | The play-surface plugins (Tracker, Arpeggiator, Euclidean, Cartesian) |
 | **Settings** | `/settings` | System configuration |
 
 Two of these tabs are conditional:
@@ -39,7 +39,7 @@ Two of these tabs are conditional:
 - The **Controller** tab only appears when at least one controller
   instance has been added (chapter 12).
 - The **Play** tab only appears when at least one play-surface
-  plugin (Tracker, Arpeggiator, Euclidean) has been added
+  plugin (Tracker, Arpeggiator, Euclidean, Cartesian) has been added
   (chapter 13).
 
 The **Routing** and **Settings** tabs are always there. The

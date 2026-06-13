@@ -65,8 +65,8 @@ The panel header carries three universal controls:
 
 - **Maximize (double-arrow) icon** -- opens the plugin in its
   dedicated fullscreen tab if it has one: controllers jump to the
-  **Controller** tab; the Tracker, the Arpeggiator and the
-  Euclidean jump to the **Play** tab. Only shown for plugins with
+  **Controller** tab; the Tracker, the Arpeggiator, the
+  Euclidean and the Cartesian jump to the **Play** tab. Only shown for plugins with
   a fullscreen surface. The reverse direction -- jumping from
   the fullscreen surface back into this Plugin Config panel --
   is the **pencil** icon on the Controller / Play top bar.
@@ -118,8 +118,10 @@ queue so they leave the system at the exact target time, with
 sub-millisecond jitter under heavy load.
 
 Plugins that react to *incoming* clock ticks (the **Arpeggiator**,
-the **Euclidean** and the **Tracker** all work this way) fire
-their events synchronously when the clock subdivision arrives. Timing
+the **Euclidean**, the **Cartesian** and the **Tracker** all work
+this way) fire their events synchronously when the clock
+subdivision arrives -- the Cartesian consumes two subdivisions at
+once, one per axis. Timing
 precision then follows the incoming clock -- a rock-solid clock
 source produces rock-solid output, and a jittery clock source
 produces output that tracks the same jitter.
@@ -216,6 +218,7 @@ One-line summaries. The detailed reference for each lives in
 | Plugin | Function |
 |--------|----------|
 | **Arpeggiator** | Held notes voiced as a step pattern; pattern modes (up, down, up-down, random, as-played, programmed, chord); per-step accent / offset / gate; sustain pedal acts as temporary Hold. *Play-surface plugin* — added from **Add → Play** |
+| **Cartesian** | René-style 2D grid sequencer; voices a held note (root + per-cell offset); two clocks (X steps the grid along a Path, Y advances inversions); scale-aware Fill Voicing (Unison / 5th / Triad / 7th / Scale); bidirectional Inversion; Live re-fill or Latch; second channel records cell offsets. *Play-surface plugin* — added from **Add → Play** |
 | **CC LFO** | CC waveforms (sine/triangle/square/saw/sample-and-hold); free or clock-sync up to 8 bars; live scope |
 | **CC Smoother** | Removes jitter from noisy CC inputs with configurable smoothing; dual scopes (in / out) |
 | **Chord Generator** | Input note triggers a chord (major / minor / 7th / custom intervals) with inversions |
@@ -235,13 +238,13 @@ One-line summaries. The detailed reference for each lives in
 | **Velocity Curve** | Drawable 128-point velocity response curve with shape presets |
 | **Velocity Equalizer** | Normalise velocity to a fixed value or compress the range |
 
-The **Tracker**, the **Arpeggiator** and the **Euclidean** are
-*play-surface* plugins -- they live in the routing matrix like
-every other plugin but additionally render a fullscreen play
-surface on the **Play** tab in the bottom navigation. Find them
-under **Add → Play**. All three share a dedicated chapter
-(chapter 13, "Play Surfaces") for their surface-and-workflow
-reference; their parameter tables live in **Appendix A**.
+The **Tracker**, the **Arpeggiator**, the **Euclidean** and the
+**Cartesian** are *play-surface* plugins -- they live in the routing
+matrix like every other plugin but additionally render a fullscreen
+play surface on the **Play** tab in the bottom navigation. Find them
+under **Add → Play**. They share a dedicated chapter (chapter 13,
+"Play Surfaces") for their surface-and-workflow reference; their
+parameter tables live in **Appendix A**.
 
 ## User-Supplied Plugins
 

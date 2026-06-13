@@ -19,7 +19,7 @@ the Pi into:
   (Mixer 8, FX 6, Performance 16, XY 4) that turn the phone or
   tablet into a tap-to-play MIDI controller with drop-button
   scene recall, plus three fullscreen play-surface plugins
-  (Tracker, Arpeggiator, Euclidean) on a dedicated **Play** tab.
+  (Tracker, Arpeggiator, Euclidean, Cartesian) on a dedicated **Play** tab.
 - A **MIDI access point** -- a built-in WiFi access point with a
   captive portal so the configuration UI opens automatically on a
   phone the first time it connects.

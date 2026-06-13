@@ -11,6 +11,7 @@ import { PluginButton } from './button.js';
 import { PluginXYPad } from './xypad.js';
 import { PluginDropButtonRow } from './dropbuttonrow.js';
 import { PluginStepEditor } from './stepeditor.js';
+import { PluginCartesianGrid } from './cartesiangrid.js';
 import { PluginCurveEditor } from './curveeditor.js';
 import { PluginNoteSelect } from './noteselect.js';
 import { PluginChannelSelect } from './channelselect.js';
@@ -102,6 +103,12 @@ export function renderParam(param, values, onChange, allValues, displayCtx) {
                 slotNotesParam=${param.slot_notes_param}
                 overrideMode=${param.override_mode}
                 algoUnderlayParam=${param.algo_underlay_param} />`;
+        case 'cartesiangrid':
+            return html`<${PluginCartesianGrid} name=${param.name} label=${param.label}
+                value=${val || []} onChange=${onChange} cols=${param.cols}
+                sizeParam=${param.size_param} sizes=${param.sizes}
+                playheadParam=${param.playhead_param}
+                defaultOn=${param.default_on} allValues=${allValues} />`;
         case 'curveeditor':
             return html`<${PluginCurveEditor} name=${param.name} label=${param.label}
                 value=${val} onChange=${onChange} />`;

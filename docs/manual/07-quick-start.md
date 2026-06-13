@@ -65,7 +65,7 @@ Tap **Add** at the bottom of the matrix. The Add overlay opens with a
 list of available plugins (chapter 11), controllers (chapter 12),
 play surfaces (chapter 13), and the Bluetooth scan section
 (chapter 14). Pick **Arpeggiator** under the **Play** section
-(the Tracker, the Arpeggiator and the Euclidean all render
+(the Tracker, the Arpeggiator, the Euclidean and the Cartesian all render
 fullscreen play surfaces; see chapter 13). A new row and column
 appear in the matrix for the new plugin instance.
 

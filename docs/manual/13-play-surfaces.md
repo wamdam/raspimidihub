@@ -1,11 +1,12 @@
 # Play Surfaces
 
-Three plugins live on the **Play** bottom-nav tab and share the
+Four plugins live on the **Play** bottom-nav tab and share the
 same surface-carousel pattern: the **Arpeggiator**, the
-**Euclidean**, and the **Tracker**. They are routable in the
-matrix like any other plugin (`SURFACE_KIND = "play"`; add them
-from **Add → Play**) and additionally render a fullscreen play
-surface designed for live performance.
+**Euclidean**, the **Cartesian**, and the **Tracker**. They are
+routable in the matrix like any other plugin
+(`SURFACE_KIND = "play"`; add them from **Add → Play**) and
+additionally render a fullscreen play surface designed for live
+performance.
 
 When to reach for which:
 
@@ -21,14 +22,21 @@ When to reach for which:
   where in the cycle hits are allowed. Internal scale quantiser
   + tune-spread randomiser layer melody on top. Polyrhythm comes
   from running two instances on the same clock.
+- **Cartesian** -- you want a René-style 2D sequencer: a held note
+  is the root and a square grid (2×2…4×4) of semitone offsets is
+  swept by *two* clocks -- X steps through the cells along a Path
+  (rows / cols / diagonal / knight / spiral / random), Y advances
+  the chord inversion. A scale-aware Fill Voicing knob stamps the
+  grid (Unison → 5th → Triad → 7th → Scale) so you can play whole
+  chord-arpeggios from one finger plus two knobs.
 - **Tracker** -- you want a step sequencer in the classical
   music-tracker sense: 8 voices × 16 rows × up to 16 pages, with
   per-step note + velocity + CC. Live-recordable; clock-master
   capable.
 
-All three carry an 8-slot **pattern bank** (P1..P8) at the
+All four carry an 8-slot **pattern bank** (P1..P8) at the
 bottom of their play surface. Tapping a slot switches the active
-pattern; on the Arpeggiator and Euclidean the switch is
+pattern; on the Arpeggiator, Euclidean and Cartesian the switch is
 immediate and held notes / sustain persist across the change, on
 the Tracker the switch queues to the next page-0 boundary while
 playing (Shift+Tap forces an immediate switch). Long-press any
@@ -393,6 +401,145 @@ setting them both to `chromatic` is the escape hatch when a
 shared downstream `Scale Remapper` is wanted instead.
 
 ![Euclidean device-detail panel: Setup group with the 8 learnable trigger notes expanded.](../screenshots/30-plugin-euclidean-config.png){width=35%}
+
+## The Cartesian
+
+A two-dimensional sequencer in the spirit of the Make Noise René:
+instead of a linear step row, the cells sit in a square grid that
+two independent clocks sweep along separate axes. It does not play
+a fixed melody -- it **voices a held note**, like an arpeggiator, so
+the whole figure transposes with whatever you play.
+
+### Concept
+
+A note held on **Play Ch** is the *root*. Every grid cell carries a
+semitone **offset**, and the sequencer plays `root + offset`. So a
+cell holding `+7` plays a fifth above the held note; play a C and it
+sounds G, play an E and it sounds B -- the grid is a relative
+voicing, not absolute notes.
+
+Two clocks drive the playhead:
+
+- **X clock** -- the *step* pulse. Each X tick fires the next cell
+  along the chosen **Path**.
+- **Y clock** -- the *inversion* pulse. Each Y tick advances the
+  inversion lap, re-voicing the whole grid one chord-inversion
+  further. With X fast and Y slow you sweep a chord that slowly
+  climbs through its inversions.
+
+### The Play Surface
+
+The live controls fill one fullscreen panel: **Fill Voicing** and
+**Inversion** are wide wheels at the top; **Scale** sits on its own
+row; the motion row carries **X Rate**, **Y Rate** and **Path**; a
+shaper row holds **Grid** (size), **Gate %**, **Accent Vel.**, the
+**Fill** mode switch and (in Latch) the **Apply** button. The 2D
+grid fills the centre, and the 8-slot pattern bank sits at the
+bottom. The setup-only parameters (sync, the two channels, Ctrl Ch
+and the trigger notes) live in the device-detail panel.
+
+Each grid cell works exactly like an Arpeggiator step cell: tap the
+head to cycle **off → on → accent → off**, drag the mini-wheel to
+set a manual per-cell offset.
+
+### Fill Voicing
+
+The **Fill Voicing** wheel stamps the grid with a chord, walking up
+the overtone series so the wheel sweeps from thin to rich:
+
+| Voicing | Chord tones (relative to the root) |
+|---------|------------------------------------|
+| **Unison** | root only (climbs in octaves across the cells) |
+| **5th** | root + fifth (power chord) |
+| **Triad** | root + third + fifth |
+| **7th** | root + third + fifth + seventh |
+| **Scale** | the full scale, degree by degree |
+
+The thirds and sevenths are taken from the **Scale** wheel, so a
+Triad is major on a major scale and minor on a minor scale with no
+extra control. There is no separate Root wheel -- the *played* note
+is the root; Scale only decides the chord quality / mode.
+
+The chord tones climb across the cells (`offset = chord_tone(x + y)`),
+so a 4×4 grid already reads as a ladder of inversions: row 0 is the
+root position, row 1 the first inversion, and so on.
+
+### Inversion
+
+The **Inversion** wheel is bidirectional (-4 … 0 … +4). It does not
+stack octaves -- it **re-voices**: each step lifts the lowest voice
+an octave (or, for negative values, drops the highest), keeping the
+figure in a tight register with smooth voice-leading instead of
+octave leaps. The **Y clock** walks through the inversions: with
+Inversion = +2 the grid cycles root position → 1st inversion → 2nd
+inversion and back, one step per Y tick.
+
+### Fill: Live vs Latch
+
+The **Fill** switch decides whether the voicing is generative or
+frozen:
+
+- **Live** (default) -- **Fill Voicing**, **Scale**, **Grid** and
+  **Inversion** act immediately (all CC-bindable) and re-stamp the
+  cell offsets, *preserving* your on/off + accent mask. You keep the
+  rhythm and accents you drew and sweep only the harmony with one
+  knob and one held note. The Y clock animates the inversions live.
+  This is the performance mode: a held note + two CCs is a full
+  instrument.
+- **Latch** -- the grid is frozen. Tap **Apply** once to stamp the
+  current voicing, then hand-edit individual cell offsets freely;
+  the edits persist and the Y-clock inversion sweep is paused (the
+  grid plays exactly as drawn).
+
+Re-stamping only ever touches the **offset** field, never on/off or
+accent, so switching voicings live never disturbs your groove.
+
+### Two Channels
+
+The Cartesian listens on two separate channels (both in the Setup
+panel), so one keyboard can play it while another fills it:
+
+- **Play Ch** (0 = Any) -- notes here are the played root; the most
+  recently pressed note transposes the grid. Releasing all keys
+  silences the surface.
+- **Fill Ch** (Off / 1..16) -- a recording channel. Hold notes and
+  each one writes its interval (relative to the first note of the
+  gesture) into the next cell along the Path, programmed-Arp style.
+  Touching the Fill Ch flips the surface to **Latch** so the
+  recording isn't overwritten by the live fill.
+
+### The Path
+
+The **Path** wheel changes how the X clock sweeps the active grid:
+
+| Path | Order |
+|------|-------|
+| **Rows →** | left-to-right, top-to-bottom |
+| **Cols ↓** | top-to-bottom, left-to-right |
+| **Diagonal** | along the anti-diagonals |
+| **Knight** | a knight's-move tour of the cells |
+| **Spiral in** | clockwise from the outer ring inward |
+| **Spiral out** | from the centre outward |
+| **Random** | a fresh random cell every X tick |
+
+### Time Model
+
+Clock-consuming, like the Arpeggiator and Euclidean. **Sync** =
+`transport` follows the upstream transport, `tempo` free-wheels off
+the incoming clock, and `free` runs both axes off the internal
+**BPM**. Route a clock source (Master Clock or external) into the
+instance for X and Y to advance.
+
+Screenshots needed:
+
+- `cartesian-play.png` -- the Cartesian play surface: Fill Voicing +
+  Inversion wide wheels, Scale, the X Rate / Y Rate / Path row, the
+  shaper row, and the 2D grid with the playhead highlighting the
+  swept cell. Add a `_open_cartesian` scene to
+  `scripts/screenshots/run.py` so it regenerates with
+  `make screenshots`.
+- `cartesian-config.png` -- the device-detail Setup panel showing the
+  Play Ch + Fill Ch + Ctrl Ch channels and the 8 trigger notes.
 
 ## The Tracker
 

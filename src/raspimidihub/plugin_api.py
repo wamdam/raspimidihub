@@ -410,6 +410,38 @@ class XYPad(Param):
 
 
 @dataclass
+class CartesianGrid(Param):
+    """2D grid of on/off/accent cells, each carrying a per-cell semitone
+    offset (mini-wheel). The value is a flat **row-major** list of
+    ``{on, accent, offset}`` dicts, fixed `cols`-wide (16 cells for the
+    default 4×4). The rendered + played sub-grid is ``side × side``
+    where `side` is ``sizes[size_param]`` — shrinking the grid keeps the
+    top-left cells, so cell identity (and stored offsets) survive a
+    resize. `playhead_param` names a sibling int param holding the flat
+    index (``y*cols + x``) of the cell currently under the X-playhead;
+    the renderer reads it to highlight the moving cell.
+
+    Cell head tap-cycles off → on → accent → off (same as the plain
+    StepEditor). The Cartesian plugin's Fill writes only the `offset`
+    field, leaving on/accent untouched."""
+    cols: int = 4                 # fixed storage width
+    default_on: bool = True
+    size_param: str = ""          # Wheel param; index → sizes[index] = side
+    sizes: list = field(default_factory=lambda: [2, 3, 4])
+    playhead_param: str = ""
+
+    def to_dict(self) -> dict:
+        d = super().to_dict()
+        d.update({"cols": self.cols, "default_on": self.default_on,
+                  "sizes": self.sizes})
+        if self.size_param:
+            d["size_param"] = self.size_param
+        if self.playhead_param:
+            d["playhead_param"] = self.playhead_param
+        return d
+
+
+@dataclass
 class LayoutCell:
     """One positioned cell in a LayoutGrid: a Param + (col, row, span).
 
@@ -614,6 +646,10 @@ def get_defaults(params: list) -> dict[str, Any]:
             defaults[p.name] = list(range(128))  # linear by default
         elif isinstance(p, XYPad):
             defaults[p.name] = {"x": p.default_x, "y": p.default_y}
+        elif isinstance(p, CartesianGrid):
+            n = p.cols * p.cols
+            defaults[p.name] = [{"on": p.default_on, "offset": 0}
+                                for _ in range(n)]
         elif hasattr(p, "default"):
             defaults[p.name] = p.default
     return defaults

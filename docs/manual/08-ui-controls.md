@@ -79,6 +79,16 @@ Tap a cell to toggle on or off. Drag vertically on a step to set
 its note offset. A surrounding length parameter controls how many
 cells are active; cells beyond the length appear greyed.
 
+## Cartesian Grid
+
+The two-dimensional sibling of the Step Editor, used by the
+**Cartesian** play surface (chapter 13). The same cells -- on/off
+dot, accent, per-cell mini-wheel offset, identical three-state tap
+cycle -- but arranged in a square grid (2×2 … 4×4) instead of a
+row. A surrounding size parameter sets the side length; the cell
+currently under the X-clock playhead is highlighted with a bright
+outline as the two clocks sweep the grid.
+
 ## Curve Editor
 
 A drawable 128-point canvas, one value per MIDI integer 0--127.

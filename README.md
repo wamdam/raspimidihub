@@ -45,7 +45,7 @@ See all screenshots in [docs/screenshots/](docs/screenshots/). The full **[User 
 - **Loop prevention** and **multi-port devices** fully supported
 
 ### Virtual Instruments and Plugins
-- **15 built-in routing plugins** that appear as MIDI devices in the matrix, plus **3 play-surface plugins** (Arpeggiator, Tracker and Euclidean) on the fullscreen Play tab
+- **15 built-in routing plugins** that appear as MIDI devices in the matrix, plus **4 play-surface plugins** (Arpeggiator, Tracker, Euclidean and Cartesian) on the fullscreen Play tab
 - **Plugins start unconnected** -- route them manually for precise control
 - **Custom UI controls** -- wheels, faders, knobs, XY pads, toggles, step editors, curve editors, scopes, meters
 - **MIDI clock sync** -- plugins can sync to external clock or generate their own
@@ -56,7 +56,7 @@ See all screenshots in [docs/screenshots/](docs/screenshots/). The full **[User 
 
 ### Built-in Plugins
 
-15 routing-graph plugins -- add them under **Add → Plugin**. The Arpeggiator, Tracker and Euclidean live under **Add → Play** instead and are documented in the **Play Surfaces** section below.
+15 routing-graph plugins -- add them under **Add → Plugin**. The Arpeggiator, Tracker, Euclidean and Cartesian live under **Add → Play** instead and are documented in the **Play Surfaces** section below.
 
 | Plugin | Description |
 |--------|-------------|
@@ -133,6 +133,15 @@ Plugins on the **Play** bottom-nav tab (alongside Controllers). They route in th
 - **Ctrl Ch + 8 trigger notes** -- reserve a MIDI channel and MIDI-Learn one note per slot for hardware pattern switching
 - **CC automation** -- every play-surface knob is bindable from the same long-press popup; factory defaults match the Arpeggiator where they overlap (so a single hardware controller drives both)
 - **Polyrhythm** -- two instances on the same Master Clock with co-prime pulse / step counts
+
+**Cartesian**
+- **2D grid sequencer** in the spirit of the Make Noise René -- a held note is the root and a square grid (2×2…4×4) of semitone offsets is swept by two clocks
+- **Two clocks** -- **X Rate** steps through the cells along a **Path** (Rows / Cols / Diagonal / Knight / Spiral in / Spiral out / Random); **Y Rate** advances the chord inversion, so X-fast + Y-slow climbs a chord through its inversions
+- **Fill Voicing** -- one knob stamps the grid (Unison → 5th → Triad → 7th → Scale), scale-aware so thirds and sevenths follow the **Scale** wheel; chord tones climb across the cells as a ladder of inversions
+- **Inversion** -- bidirectional (-4…+4) re-voicing, not octave stacking -- lifts the lowest voice an octave for smooth voice-leading
+- **Live vs Latch** -- in Live, Voicing / Scale / Grid / Inversion re-fill the offsets instantly (all CC-bindable) while preserving your on/off + accent mask, so a held note + two knobs is a full instrument; in Latch the grid freezes for hand-editing (tap Apply to stamp)
+- **Two channels** -- **Play Ch** holds the root, **Fill Ch** records cell offsets by holding notes (programmed-Arp style)
+- **Pattern bank + CC automation** -- same 8-slot bank and bindable knobs as the other play surfaces
 
 ### Bluetooth MIDI (BLE-MIDI)
 - **Pair, connect, disconnect, forget** any BLE-MIDI peripheral from the matrix UI -- Add Device → Bluetooth → Scan

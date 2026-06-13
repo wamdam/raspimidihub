@@ -150,7 +150,7 @@ unit *runs*:
 - The Tracker's grid contents, page count, per-track channels, and
   cursor position (the Tracker is a plugin)
 - The 8-slot pattern bank on every play-surface plugin (Tracker,
-  Arpeggiator, Euclidean), including which slot is active and the
+  Arpeggiator, Euclidean, Cartesian), including which slot is active and the
   per-slot trigger notes
 - Every device rename and every port rename
 - The default routing for new devices (Connect all / None)

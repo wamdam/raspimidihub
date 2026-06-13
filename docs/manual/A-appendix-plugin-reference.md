@@ -71,6 +71,71 @@ Bend pass through unchanged.
 
 ![Arpeggiator device-detail panel.](../screenshots/09-plugin-arpeggiator.png){width=35%}
 
+## Cartesian
+
+Detailed surface-and-workflow reference: chapter 13. Plugin-level
+metadata:
+
+| Trait | Value |
+|-------|-------|
+| Name | Cartesian |
+| Description | 2D grid sequencer — voices a held note, swept by two clocks |
+| Surface | Play tab (`SURFACE_KIND = "play"`); add from **Add → Play** |
+| Pitch model | held note (Play Ch) = root; cells hold semitone offsets; plays `root + offset` |
+| Clocks | X = step pulse (sweeps the grid along Path); Y = inversion pulse |
+| Fill voicings | Unison / 5th / Triad / 7th / Scale (5), scale-aware |
+| Paths | Rows → / Cols ↓ / Diagonal / Knight / Spiral in / Spiral out / Random (7) |
+| Grid sizes | 2×2 / 3×3 / 4×4 |
+| Scales | major / minor / dorian / mixolydian / pentatonic / blues / harmonic m / whole tone / chromatic (9) |
+| Rate range | 4/1 ... 1/32 (15 values, same as Arp) |
+| Patterns per instance | 8 numbered slots (see chapter 13) |
+
+| Surface | Parameter | Type | Range | Default |
+|---------|-----------|------|-------|---------|
+| Play    | **Fill Voicing** | Wheel (wide) | Unison / 5th / Triad / 7th / Scale | Triad |
+| Play    | **Inversion** | Wheel (wide) | -4--+4 | 0 |
+| Play    | **Scale** | Wheel (wide) | 9 scales (see above) | major |
+| Play    | **X Rate** | Wheel | 15 values | 1/16 |
+| Play    | **Y Rate** | Wheel | 15 values | 1/4 |
+| Play    | **Path** | Wheel (wide) | 7 modes (see above) | Rows → |
+| Play    | **Grid** | Wheel | 2×2 / 3×3 / 4×4 | 4×4 |
+| Play    | **Gate %** | Wheel | 10--100 | 80 |
+| Play    | **Accent Vel.** | Knob | 0--127 | 30 |
+| Play    | **Fill** | Radio | Live / Latch | Live |
+| Play    | **Apply** (visible when Fill = Latch) | Button (trigger) | stamp the voicing once | — |
+| Play    | *(grid)* | CartesianGrid | side×side cells; tap = off/on/accent, mini-wheel = per-cell offset | all on, offsets from voicing |
+| Play    | **Patterns** | PatternStrip | end-of-surface P1--P8 bank | slot 1 active |
+| Setup   | **Sync** | Radio | free / tempo / transport | transport |
+| Setup   | **Play Ch** | ChannelSelect | 1--16 or any | any |
+| Setup   | **Fill Ch** | Wheel | Off / 1--16 | Off |
+| Setup   | **Ctrl Ch** | Wheel | Off / 1--16 | Off |
+| Setup   | **BPM** (visible when Sync = free) | Wheel | 40--300 | 120 |
+| Setup   | **P1..P8** (visible when Ctrl Ch is on) | NoteSelect ×8 | one learnable trigger note per slot | C2..G2 (36..43) |
+
+CC automation (mirrors the Arp / Euclidean for shared params):
+
+| CC | Parameter | CC | Parameter |
+|----|-----------|----|-----------|
+| 70 | Fill Voicing | 75 | Y Rate |
+| 71 | Inversion    | 79 | Path |
+| 72 | Grid (size)  | 83 | Accent Vel. |
+| 73 | Gate %       | 87 | Scale |
+| 74 | X Rate       |    |    |
+
+**Input.** Notes on Play Ch (the played root), notes on Fill Ch
+(record cell offsets), CC 70..75 / 79 / 83 / 87 (parameter
+automation), 8 learnable notes on Ctrl Ch when set (each picks a
+pattern slot; consumed, not played), Clock + Transport, Aftertouch,
+Pitch Bend.
+**Output.** Notes (grid-voiced). Aftertouch and Pitch Bend pass
+through unchanged.
+**Clock.** Consumes external clock when Sync is `tempo` or
+`transport` (one subdivision per axis); free-runs at BPM when Sync
+is `free`.
+
+*Screenshots needed:* `cartesian-play.png` (play surface) and
+`cartesian-config.png` (Setup panel) — see chapter 13.
+
 ## CC LFO
 
 Generates a CC waveform on the output. Five wave shapes; free-run
