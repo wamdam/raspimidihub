@@ -122,7 +122,11 @@ export function ContextMenu({ menu, onClose }) {
                                    border-bottom:1px solid var(--surface2);
                                    margin-bottom:4px;
                                    max-width:280px;overflow:hidden;
-                                   text-overflow:ellipsis">${item.label}</div>`;
+                                   text-overflow:ellipsis;
+                                   display:flex;align-items:center;gap:7px">
+                            ${item.color ? html`<span style="flex:none;width:11px;height:11px;border-radius:50%;background:${item.color};border:1.5px solid rgba(255,255,255,0.35)"></span>` : ''}
+                            <span style="overflow:hidden;text-overflow:ellipsis">${item.label}</span>
+                        </div>`;
                     }
                     return html`<button key=${i}
                         data-testid=${'menu-item-' + (item.testId || item.label.toLowerCase().replace(/[^a-z0-9]+/g, '-'))}

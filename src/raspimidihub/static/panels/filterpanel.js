@@ -29,7 +29,7 @@ function MappingRow({ mapping, onEdit, onCopy, onRemove, showContextMenu }) {
     </div>`;
 }
 
-export function FilterPanel({ connId, filter, mappings, onClose, onApply, onMappingAdd, onMappingDelete, onMappingSave, onMappingCopy, onMappingPaste, srcClientId, clipboard, showContextMenu }) {
+export function FilterPanel({ connId, srcLabel, dstLabel, connColor, filter, mappings, onClose, onApply, onMappingAdd, onMappingDelete, onMappingSave, onMappingCopy, onMappingPaste, srcClientId, clipboard, showContextMenu }) {
     const panelRef = { current: null };
     const close = () => animateClose(panelRef.current, onClose);
     const [channelMask, setChannelMask] = useState(filter ? filter.channel_mask : 0xFFFF);
@@ -118,7 +118,10 @@ export function FilterPanel({ connId, filter, mappings, onClose, onApply, onMapp
                     <div class="panel-handle"></div>
                 </div>
                 <div class="panel-header">
-                    <h3>Connection: ${connId}</h3>
+                    <h3 style="display:flex;align-items:center;gap:8px;min-width:0">
+                        ${connColor ? html`<span style="flex:none;width:12px;height:12px;border-radius:50%;background:${connColor};border:1.5px solid rgba(255,255,255,0.35)"></span>` : ''}
+                        <span style="overflow:hidden;text-overflow:ellipsis">${srcLabel && dstLabel ? html`${srcLabel} <span style="color:var(--text-dim)">\u2192</span> ${dstLabel}` : ('Connection: ' + connId)}</span>
+                    </h3>
                     <button class="panel-close" onclick=${close}>\u2715</button>
                 </div>
                 <div class="card">

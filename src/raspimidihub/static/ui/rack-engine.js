@@ -148,6 +148,7 @@ export function createRackEngine() {
         dots.forEach(d => svg.appendChild(d));
 
         if (prevPeek) { const el = jackForKey(prevPeek); if (el) peekJack(el, true, true); }
+        updateActivity();   // freshly-drawn jacks need their LED/clock classes
     }
 
     function makeFilterBadge(c, x, y) {
@@ -395,21 +396,9 @@ export function createRackEngine() {
         return null;
     }
 
-    // ---- auto-scroll zones ------------------------------------------
-    let zoneTop = null, zoneBot = null, rubber = null;
-    function showZones(show) {
-        if (!zoneTop) {
-            zoneTop = document.createElement('div'); zoneTop.className = 'rack-scrollzone top';
-            zoneBot = document.createElement('div'); zoneBot.className = 'rack-scrollzone bottom';
-            document.body.appendChild(zoneTop); document.body.appendChild(zoneBot);
-        }
-        const r = scrollEl === document.scrollingElement
-            ? { left: 0, right: innerWidth, top: 0, bottom: innerHeight }
-            : scrollEl.getBoundingClientRect();
-        for (const z of [zoneTop, zoneBot]) { z.style.left = r.left + 'px'; z.style.width = (r.right - r.left) + 'px'; z.style.display = show ? 'block' : 'none'; }
-        zoneTop.style.top = r.top + 'px';
-        zoneBot.style.top = (r.bottom - EDGE) + 'px';
-    }
+    // ---- edge auto-scroll (no visible zones; the drag just scrolls
+    // when the pointer nears the scroll container's top/bottom) -------
+    let rubber = null;
     function edgeRect() {
         return scrollEl === document.scrollingElement
             ? { top: 0, bottom: innerHeight } : scrollEl.getBoundingClientRect();
@@ -439,13 +428,22 @@ export function createRackEngine() {
 
     const onPointerDown = (e) => {
         if (!inRack(e)) return;
+        // A drag is already in progress on another finger — ignore this
+        // pointer entirely so it scrolls the page natively (two-finger
+        // scroll while holding a cable).
+        if (drag) return;
         const j = e.target.closest('.jack');
         if (j) {
             startHold(j);
             if (!j.dataset.jack) return;                 // group anchor: peek only
             e.preventDefault();
+            // Capture the pointer on the jack so the whole drag honours
+            // the jack's `touch-action: none` — without this the browser
+            // hijacks the move for page-scroll once the finger leaves
+            // the jack and fires pointercancel, aborting the drag.
+            try { j.setPointerCapture(e.pointerId); } catch {}
             const parts = j.dataset.jack.split(':'); const dir = parts.pop();
-            drag = { from: parts.join(':'), dir, startX: e.clientX, startY: e.clientY, moved: false, x: e.clientX, y: e.clientY };
+            drag = { from: parts.join(':'), dir, startX: e.clientX, startY: e.clientY, moved: false, x: e.clientX, y: e.clientY, captureEl: j, pointerId: e.pointerId };
             return;
         }
         const u = e.target.closest('.unit');
@@ -462,13 +460,19 @@ export function createRackEngine() {
     const onPointerMove = (e) => {
         if (unitHold && !unitHold.fired && Math.hypot(e.clientX - unitHold.x, e.clientY - unitHold.y) > DRAG_THRESH) cancelUnitHold();
         if (!drag) return;
+        if (e.pointerId !== drag.pointerId) return;      // ignore other fingers
         drag.x = e.clientX; drag.y = e.clientY;
         if (!drag.moved && Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) > DRAG_THRESH) {
             cancelHold();
             drag.moved = true; document.body.classList.add('rack-dragging');
+            // Resolve the scroll container NOW (not at mount): on first
+            // mount the rack can be empty/short, so findScrollParent would
+            // wrongly fall back to the document and edge-scroll would
+            // no-op. By drag time the content is laid out.
+            scrollEl = findScrollParent(root);
             rubber = mk('path', { class: 'rubber' }); svg.appendChild(rubber);
             root.querySelectorAll('.jack.' + opp(drag.dir)).forEach(t => t.classList.add('target-hint'));
-            showZones(true); startEdgeScroll();
+            startEdgeScroll();
         }
         if (drag.moved) {
             updateRubber();
@@ -480,13 +484,13 @@ export function createRackEngine() {
     };
 
     const onPointerUp = (e) => {
+        if (drag && e.pointerId !== drag.pointerId) return;   // a different finger lifted
         if (unitHold) { clearTimeout(unitHold.timer); if (unitHold.fired) suppressClick = true; unitHold = null; }
         if (endHold()) { drag = null; return; }
         if (!drag) { if (armed && !(e.target.closest && e.target.closest('.jack'))) setArmed(null); return; }
         const d = drag; drag = null;
         document.body.classList.remove('rack-dragging');
         if (rubber) { rubber.remove(); rubber = null; }
-        showZones(false);
         root.querySelectorAll('.jack.drag-over').forEach(x => x.classList.remove('drag-over'));
         if (!d.moved) {                                  // tap on a jack
             const jel = root.querySelector(`[data-jack="${cssEsc(d.from + ':' + d.dir)}"]`);
@@ -510,11 +514,27 @@ export function createRackEngine() {
         setArmed(armed);
     };
 
+    // Pointer cancelled (OS/browser stole the gesture). Tear the drag
+    // down cleanly rather than leaving a frozen rubber-band on screen.
+    const onPointerCancel = () => {
+        cancelUnitHold(); cancelHold();
+        if (drag) {
+            drag = null;
+            document.body.classList.remove('rack-dragging');
+            if (rubber) { rubber.remove(); rubber = null; }
+            root.querySelectorAll('.jack.drag-over').forEach(x => x.classList.remove('drag-over'));
+            setArmed(armed);
+        }
+    };
+
     const onClick = (e) => {
         if (!inRack(e)) return;
         if (suppressClick) { suppressClick = false; return; }
         if (!e.target.isConnected) return;
-        if (e.target.closest('.jack') || e.target.closest('.gpanel') || e.target.closest('.fdot')) return;
+        // .g-collapse (the panel's left cluster) handles its own toggle;
+        // everywhere else on a panel a cable may cross, so fall through
+        // to the cable hit-test rather than swallowing the click.
+        if (e.target.closest('.jack') || e.target.closest('.g-collapse') || e.target.closest('.fdot')) return;
         const c = cableAtPoint(e.clientX, e.clientY);
         if (c) { e.stopPropagation(); openCableMenu(c, e.clientX, e.clientY); }
     };
@@ -527,13 +547,24 @@ export function createRackEngine() {
     const onMouseOver = (e) => { if (stickyKey || !inRack(e)) return; const j = e.target.closest('.jack'); if (j && j.dataset.jack) peekJack(j, true); };
     const onMouseOut = (e) => { if (stickyKey) return; const j = e.target.closest('.jack'); if (j && j.dataset.jack && (!hold || !hold.active)) peekJack(j, false); };
 
+    // Redraw on viewport resize / orientation change (jack positions
+    // move). rAF-coalesced so a burst of resize events costs one redraw.
+    let resizePending = false;
+    const onResize = () => {
+        if (resizePending) return;
+        resizePending = true;
+        requestAnimationFrame(() => { resizePending = false; drawCables(); });
+    };
+
     // ---- lifecycle ---------------------------------------------------
     engine.mount = ({ rootEl, svgEl }) => {
         root = rootEl; svg = svgEl;
         scrollEl = findScrollParent(rootEl);
+        addEventListener('resize', onResize);
         document.addEventListener('pointerdown', onPointerDown);
         document.addEventListener('pointermove', onPointerMove);
         document.addEventListener('pointerup', onPointerUp);
+        document.addEventListener('pointercancel', onPointerCancel);
         document.addEventListener('click', onClick);
         document.addEventListener('contextmenu', onContextMenu);
         document.addEventListener('mouseover', onMouseOver);
@@ -542,14 +573,15 @@ export function createRackEngine() {
     engine.drawCables = drawCables;
     engine.updateActivity = updateActivity;
     engine.destroy = () => {
+        removeEventListener('resize', onResize);
         document.removeEventListener('pointerdown', onPointerDown);
         document.removeEventListener('pointermove', onPointerMove);
         document.removeEventListener('pointerup', onPointerUp);
+        document.removeEventListener('pointercancel', onPointerCancel);
         document.removeEventListener('click', onClick);
         document.removeEventListener('contextmenu', onContextMenu);
         document.removeEventListener('mouseover', onMouseOver);
         document.removeEventListener('mouseout', onMouseOut);
-        if (zoneTop) zoneTop.remove(); if (zoneBot) zoneBot.remove();
         document.body.classList.remove('rack-dragging');
     };
     return engine;

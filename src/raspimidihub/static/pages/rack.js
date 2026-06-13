@@ -22,7 +22,7 @@
  *     is a no-op → the engine's classes are never clobbered.
  */
 
-import { useRef, useEffect, useState } from '../lib/hooks.module.js';
+import { useRef, useEffect, useState, useMemo } from '../lib/hooks.module.js';
 import { html } from '../ui/common.js';
 import { DeviceIcon } from '../ui/icons.js';
 import { touchTs } from '../ui/storage.js';
@@ -73,7 +73,8 @@ function buildGroups(devices) {
 // filter/menu callbacks.
 function portDesc(d, p) {
     return { client_id: d.client_id, port_id: p.port_id, stable_id: d.stable_id,
-        online: d.online !== false, dev_name: d.name, port_name: p.name };
+        online: d.online !== false, dev_name: d.name, dev_default_name: d.default_name,
+        port_name: p.name, multi: d.ports.length > 1 };
 }
 
 // The device name is already in the faceplate header, so strip it (and
@@ -126,48 +127,97 @@ export function RackView({ devices, connections, clockSources, clockQuarters, mi
     const rootRef = useRef(null);
     const svgRef = useRef(null);
     const engineRef = useRef(null);
-    const [, bump] = useState(0);   // force re-render on collapse toggle
+    const ctxRef = useRef(null);
+    const [collapseVer, setCollapseVer] = useState(0);   // bumps on a group toggle
 
-    const groups = buildGroups(devices);
-
-    // portMap: data-jack string → endpoint descriptor. The engine reads
-    // this to build connect calls and resolve cable endpoints.
-    const portMap = {};
-    for (const d of devices) {
-        const dkey = deviceKey(d);
-        for (const p of d.ports) {
-            if (p.is_input) portMap[`${dkey}:${p.port_id}:out`] = portDesc(d, p);
-            if (p.is_output) portMap[`${dkey}:${p.port_id}:in`] = portDesc(d, p);
+    // The structural model (groups, port map, signature) only depends on
+    // the device/connection set and the collapse state — NOT on MIDI
+    // activity. devices/connections keep a stable reference across
+    // activity ticks (app.js updates them only on device/connection SSE
+    // events), so this memo does not recompute on a midi-rates tick.
+    const model = useMemo(() => {
+        const groups = buildGroups(devices);
+        const portMap = {};
+        for (const d of devices) {
+            const dkey = deviceKey(d);
+            for (const p of d.ports) {
+                if (p.is_input) portMap[`${dkey}:${p.port_id}:out`] = portDesc(d, p);
+                if (p.is_output) portMap[`${dkey}:${p.port_id}:in`] = portDesc(d, p);
+            }
         }
-    }
+        // structKey changes exactly when the drawn cables/jacks would —
+        // device identity/online/ports, connection set + filtered flag,
+        // and group collapse. Used to gate the (expensive) cable redraw.
+        const structKey = JSON.stringify({
+            d: devices.map(d => [deviceKey(d), d.name, d.online, d.is_plugin, d.is_network, d.remote_hub,
+                d.ports.map(p => [p.port_id, p.name, p.is_input, p.is_output])]),
+            c: connections.map(c => [c.id || `${c.src_client}:${c.src_port}-${c.dst_client}:${c.dst_port}`,
+                !!c.offline, !!c.filtered, (c.mappings || []).length]),
+            g: groups.map(g => isCollapsed(g.collapseKey)),
+        });
+        return { groups, portMap, structKey };
+    }, [devices, connections, collapseVer]);
 
-    // Latest data + callbacks handed to the engine every render (cheap
-    // assignment); the engine reads engine.ctx at draw/event time so it
-    // always sees current connections/clipboard-aware menu builders.
+    // ctx: latest data + callbacks the engine reads at draw/event time.
+    // Reassigned every render (cheap) so connect/menu callbacks — which
+    // close over the current connections — never go stale.
     const ctx = {
-        devices, connections, portMap, deviceKey,
+        devices, connections, portMap: model.portMap, deviceKey,
         midiRates, clockQuarters, clockSources,
         onToggle, getCellMenuItems, getHeaderMenuItems, showContextMenu,
     };
+    ctxRef.current = ctx;
+    if (engineRef.current) engineRef.current.ctx = ctx;
 
     // Mount the engine once; tear down document listeners on unmount.
     useEffect(() => {
         const engine = createRackEngine();
+        engine.ctx = ctxRef.current;
         engineRef.current = engine;
         engine.mount({ rootEl: rootRef.current, svgEl: svgRef.current });
-        return () => engine.destroy();
+        engine.drawCables();
+        return () => { engine.destroy(); engineRef.current = null; };
     }, []);
 
-    // Keep the engine's context current on every render, then redraw
-    // cables (structure may have changed) and refresh activity classes.
-    if (engineRef.current) engineRef.current.ctx = ctx;
-    useEffect(() => {
-        const e = engineRef.current; if (!e) return;
-        e.drawCables();
-        e.updateActivity();
-    });
+    // Redraw cables ONLY when the structure changes (the heavy path:
+    // full SVG rebuild + forced layout). drawCables() refreshes activity
+    // for the new jacks itself.
+    useEffect(() => { engineRef.current && engineRef.current.drawCables(); }, [model.structKey]);
 
-    const toggleGroup = (g) => { setCollapsedLS(g.collapseKey, !isCollapsed(g.collapseKey)); bump(v => v + 1); };
+    // Activity is cheap (class toggles, no SVG rebuild) and runs on every
+    // MIDI tick — this is what keeps the LEDs/clock live without paying
+    // the redraw cost each tick.
+    useEffect(() => { engineRef.current && engineRef.current.updateActivity(); },
+        [midiRates, clockQuarters, clockSources]);
+
+    const toggleGroup = (g) => { setCollapsedLS(g.collapseKey, !isCollapsed(g.collapseKey)); setCollapseVer(v => v + 1); };
+
+    // The units/groups subtree is memoised on structKey, so an activity
+    // tick (which re-renders RackView) reuses the exact same vnode
+    // reference and Preact skips diffing the whole rack DOM — the
+    // engine's imperatively-set jack classes are never touched.
+    const unitsContent = useMemo(() => model.groups.map(g => {
+        const collapsed = isCollapsed(g.collapseKey);
+        const extConns = connections.filter(c => {
+            const inG = (cid, sid) => g.devices.some(d => (c.offline ? d.stable_id === sid : d.client_id === cid));
+            return inG(c.src_client, c.src_stable_id) !== inG(c.dst_client, c.dst_stable_id);
+        }).length;
+        return html`
+            <div class="gpanel mounted slim ${g.kind} ${collapsed ? 'collapsed' : ''}" data-group=${g.id}>
+                <span class="g-collapse" onclick=${() => toggleGroup(g)}>
+                    <span class="arrow">▼</span>
+                    ${g.net ? html`<span class="g-icon"><${DeviceIcon} device=${{ is_network: true }} /></span>` : ''}
+                    <span class="g-title">${g.title}</span>
+                    ${g.sub ? html`<span class="g-sub">${g.sub}</span>` : ''}
+                </span>
+                <span class="g-spacer"></span>
+                <span class="g-led" data-gled=${g.id}></span>
+                ${collapsed && extConns ? html`<span class="g-badge">● ${extConns}</span>` : ''}
+                <div class="jack g-jack" data-ganchor=${g.id}></div>
+            </div>
+            ${!collapsed ? g.devices.map(d => html`<${Unit} key=${deviceKey(d)} dev=${d} />`) : ''}
+        `;
+    }), [model.structKey]);
 
     // Always render the shell (with refs) — even with zero devices — so
     // the engine's mount effect never sees a null container. The first
@@ -178,26 +228,7 @@ export function RackView({ devices, connections, clockSources, clockQuarters, mi
             <div class="rail right"></div>
             <div class="rack-units">
                 ${!devices.length ? html`<p style="color:var(--text-dim);text-align:center;padding:24px 0">No MIDI devices connected</p>` : ''}
-                ${groups.map(g => {
-                    const collapsed = isCollapsed(g.collapseKey);
-                    const extConns = connections.filter(c => {
-                        const inG = (cid, sid) => g.devices.some(d => (c.offline ? d.stable_id === sid : d.client_id === cid));
-                        return inG(c.src_client, c.src_stable_id) !== inG(c.dst_client, c.dst_stable_id);
-                    }).length;
-                    return html`
-                        <div class="gpanel mounted slim ${g.kind} ${collapsed ? 'collapsed' : ''}" data-group=${g.id} onclick=${() => toggleGroup(g)}>
-                            <span class="arrow">▼</span>
-                            ${g.net ? html`<span class="g-icon"><${DeviceIcon} device=${{ is_network: true }} /></span>` : ''}
-                            <span class="g-title">${g.title}</span>
-                            ${g.sub ? html`<span class="g-sub">${g.sub}</span>` : ''}
-                            <span class="g-spacer"></span>
-                            <span class="g-led" data-gled=${g.id}></span>
-                            ${collapsed && extConns ? html`<span class="g-badge">● ${extConns}</span>` : ''}
-                            <div class="jack g-jack" data-ganchor=${g.id}></div>
-                        </div>
-                        ${!collapsed ? g.devices.map(d => html`<${Unit} key=${deviceKey(d)} dev=${d} />`) : ''}
-                    `;
-                })}
+                ${unitsContent}
                 <div class="rack-add">
                     <button class="btn-rack-add" onclick=${onAddPlugin}>+ Add Device</button>
                 </div>

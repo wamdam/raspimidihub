@@ -10,7 +10,32 @@ import { useSharedUiState } from '../lib/spectator/shared-ui-state.js';
 import { PluginIcon } from '../ui/icons.js';
 import { ConnectionMatrix } from './matrix.js';
 import { RackView } from './rack.js';
+import { cableColor } from '../ui/connections.js';
 import { FilterPanel } from '../panels/filterpanel.js';
+
+// "Digitone II · MIDI 1" — device name plus its port, with the device
+// name stripped off the front of the (often redundant) ALSA port name.
+// Label one endpoint of a connection. `role` is its part in THIS
+// connection ('out' = source/sends, 'in' = destination/receives).
+//
+// A bidirectional ALSA port carries one fixed name ("S-1 MIDI IN")
+// regardless of which way it's wired, so echoing it on the source side
+// reads as the wrong direction. So: single-port devices show the role
+// (OUT/IN) — unambiguous; multi-port devices show the actual port name
+// (stripped of the device-name prefix) because that's what tells the
+// ports apart, and the → arrow already conveys direction.
+function endpointLabel(devName, portName, multi, role, ...extraPrefixes) {
+    if (multi) {
+        let pn = (portName || '').trim();
+        for (const pre of [devName, ...extraPrefixes]) {
+            if (pre && pn.toLowerCase().startsWith(pre.toLowerCase())) {
+                pn = pn.slice(pre.length).replace(/^[\s:_-]+/, '').trim();
+            }
+        }
+        if (pn) return (devName || '?') + ' · ' + pn;
+    }
+    return (devName || '?') + ' · ' + (role === 'out' ? 'OUT' : 'IN');
+}
 
 // Which routing surface is shown — per-browser display preference, like
 // theme/density. Persisted so the choice survives reloads.
@@ -317,8 +342,17 @@ export function RoutingPage({ devices, connections, refresh, showToast, clockSou
 
     const cellMenuItems = (inp, out, conn) => {
         const isCompat = clipboard && clipboard.kind === 'connection';
+        // Header names the two ports and carries the cable colour (the
+        // hue the rack draws this connection in — keyed on the source
+        // port, so it matches across views).
+        const header = {
+            header: true,
+            label: `${endpointLabel(inp.dev_name, inp.port_name, inp.multi, 'out', inp.dev_default_name)}  →  ${endpointLabel(out.dev_name, out.port_name, out.multi, 'in', out.dev_default_name)}`,
+            color: cableColor(inp.stable_id, inp.port_id),
+        };
         if (conn) {
             return [
+                header, { divider: true },
                 { label: 'Edit', action: () => onFilterOpen(conn) },
                 { label: 'Copy', action: () => copyConnection(conn) },
                 { label: 'Paste', action: () => pasteConnection(inp, out, conn),
@@ -329,6 +363,7 @@ export function RoutingPage({ devices, connections, refresh, showToast, clockSou
         }
         // Empty cell: don't even render Edit / Remove.
         return [
+            header, { divider: true },
             { label: 'Add connection', action: () => onToggle(inp, out, true) },
             { label: 'Paste', action: () => pasteConnection(inp, out, null),
               disabled: !isCompat },
@@ -555,9 +590,26 @@ export function RoutingPage({ devices, connections, refresh, showToast, clockSou
         ];
     };
 
+    // Named endpoints + cable colour for the filter panel's title.
+    const connTitle = (conn) => {
+        const byClient = (cid) => devices.find(d => d.client_id === cid);
+        const byStable = (sid) => devices.find(d => d.stable_id === sid);
+        const sd = conn.offline ? byStable(conn.src_stable_id) : byClient(conn.src_client);
+        const dd = conn.offline ? byStable(conn.dst_stable_id) : byClient(conn.dst_client);
+        const pn = (dev, pid) => { const p = dev && dev.ports && dev.ports.find(x => x.port_id === pid); return p ? p.name : ''; };
+        const multi = (dev) => !!(dev && dev.ports && dev.ports.length > 1);
+        return {
+            src: endpointLabel(sd ? sd.name : 'client ' + conn.src_client, pn(sd, conn.src_port), multi(sd), 'out', sd && sd.default_name),
+            dst: endpointLabel(dd ? dd.name : 'client ' + conn.dst_client, pn(dd, conn.dst_port), multi(dd), 'in', dd && dd.default_name),
+            color: cableColor(sd ? sd.stable_id : (conn.src_stable_id || ''), conn.src_port),
+        };
+    };
+    const ft = filterConn ? connTitle(filterConn) : null;
+
     return html`
         ${filterConn && html`<${FilterPanel}
             connId=${filterConn.id}
+            srcLabel=${ft.src} dstLabel=${ft.dst} connColor=${ft.color}
             filter=${filterConn.filter || null}
             mappings=${filterConn.mappings || []}
             onClose=${() => setFilterConnId(null)}

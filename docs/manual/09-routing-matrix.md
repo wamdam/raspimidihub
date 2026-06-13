@@ -119,6 +119,8 @@ and the plugin/network actions, identical to the matrix's header
 menu. The **+ Add Device** button at the foot opens the same Add
 menu as the matrix.
 
+![The Rack view: devices as rack units, cables hanging between IN/OUT jacks. Here a source jack is held, so its cables fan out and the rest dim.](../screenshots/01-routing-rack.png){width=42%}
+
 ## The Cell Context Menu
 
 Tapping a cell opens its context menu. The entries depend on the
@@ -309,8 +311,8 @@ Screenshots needed:
   hub's devices mirrored: the violet `@hub2` group row expanded
   with two device rows, and a second capture collapsed. Needs two
   real hubs on one network; not coverable by the scripted scenes.
-- `01-routing-rack.png` -- the Routing tab on the **Rack** toggle:
-  device rack units with cables hanging between IN/OUT jacks, and
-  one cable highlighted by holding its source jack (peek). Add a
-  rack scene to `scripts/screenshots/run.py` (flip the Matrix/Rack
-  toggle, hold a jack) so this regenerates with `make screenshots`.
+- `01-routing-rack.png` -- the Routing tab on the **Rack** toggle.
+  Wired as the `_open_rack_view` scene in `scripts/screenshots/run.py`
+  (pre-setup phase, like `01-routing`), so it regenerates with
+  `make screenshots`. The committed shot was captured against a live
+  rig; rerun to refresh against the curated demo set if desired.
