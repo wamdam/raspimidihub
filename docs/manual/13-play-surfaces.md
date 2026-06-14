@@ -418,26 +418,30 @@ cell holding `+7` plays a fifth above the held note; play a C and it
 sounds G, play an E and it sounds B -- the grid is a relative
 voicing, not absolute notes.
 
-Two clocks drive the playhead:
+Two independent clocks drive it:
 
-- **X clock** -- the *step* pulse. Each X tick fires the next cell
-  along the chosen **Path**.
-- **Y clock** -- the *inversion* pulse. Each Y tick advances the
-  inversion lap, re-voicing the whole grid one chord-inversion
-  further. With X fast and Y slow you sweep a chord that slowly
-  climbs through its inversions.
+- **Rate** (the step clock) -- fires the next cell along the chosen
+  **Path**.
+- **Inv. Rate** (the inversion clock) -- advances the inversion lap,
+  re-voicing the whole grid one chord-inversion further. It is *not* a
+  second spatial axis: **Rate** drives the entire spatial sweep (the
+  Path, diagonals included), while **Inv. Rate** only walks the
+  inversions — and does nothing while Inversion = 0. With a fast Rate
+  and a slow Inv. Rate you sweep a chord that slowly climbs through its
+  inversions.
 
 ### The Play Surface
 
-The live controls fill one fullscreen panel: **Fill Voicing** and
-**Inversion** are wide wheels at the top; the **Harmony** switch and
-**Scale** (plus **Root**, in Diatonic) sit on the next row; the
-motion row carries **X Rate**, **Y Rate** and **Path**; a shaper row
-holds **Grid** (size), **Gate %**, **Accent Vel.**, the **Fill** mode
-switch and (in Latch) the **Apply** button. The 2D grid fills the
-centre, and the 8-slot pattern bank sits at the bottom. The
-setup-only parameters (sync, the two channels, Ctrl Ch and the
-trigger notes) live in the device-detail panel.
+The live controls fill one fullscreen panel: **Fill Voicing** is a
+wide wheel at the top, paired with **Inversion** and its **Inv. Rate**
+(the inversion clock sits right next to the setting it drives); the
+**Harmony** switch and **Scale** (plus **Root**, in Diatonic) sit on
+the next row; the motion row carries the step **Rate**, **Path** and
+**Grid** (size); a shaper row holds **Gate %**, **Accent Vel.** and
+the **Fill** mode switch. The 2D grid fills the centre, and the 8-slot
+pattern bank sits at the bottom. The setup-only parameters (sync, the
+two channels, Ctrl Ch and the trigger notes) live in the device-detail
+panel.
 
 Each grid cell works exactly like an Arpeggiator step cell: tap the
 head to cycle **off → on → accent → off**, drag the mini-wheel to
@@ -496,9 +500,10 @@ The **Inversion** wheel is bidirectional (-4 … 0 … +4). It does not
 stack octaves -- it **re-voices**: each step lifts the lowest voice
 an octave (or, for negative values, drops the highest), keeping the
 figure in a tight register with smooth voice-leading instead of
-octave leaps. The **Y clock** walks through the inversions: with
-Inversion = +2 the grid cycles root position → 1st inversion → 2nd
-inversion and back, one step per Y tick.
+octave leaps. The **Inv. Rate** clock walks through the inversions:
+with Inversion = +2 the grid cycles root position → 1st inversion →
+2nd inversion and back, one step per Inv. Rate tick. (Inv. Rate has no
+effect while Inversion = 0.)
 
 ### Fill: Live vs Latch
 
@@ -509,16 +514,18 @@ frozen:
   **Inversion** act immediately (all CC-bindable) and re-stamp the
   cell offsets, *preserving* your on/off + accent mask. You keep the
   rhythm and accents you drew and sweep only the harmony with one
-  knob and one held note. The Y clock animates the inversions live.
-  This is the performance mode: a held note + two CCs is a full
+  knob and one held note. The Inv. Rate clock animates the inversions
+  live. This is the performance mode: a held note + two CCs is a full
   instrument.
-- **Latch** -- the grid is frozen. Tap **Apply** once to stamp the
-  current voicing, then hand-edit individual cell offsets freely;
-  the edits persist and the Y-clock inversion sweep is paused (the
-  grid plays exactly as drawn).
+- **Latch** -- the grid **freezes exactly as it is the moment you
+  switch** — the switch itself is the commit, there is no separate
+  Apply step. You can then hand-edit individual cell offsets freely;
+  the edits persist and the inversion sweep is paused (the grid plays
+  exactly as drawn). Flip back to **Live** to re-derive a clean
+  voicing from the wheels again.
 
-Re-stamping only ever touches the **offset** field, never on/off or
-accent, so switching voicings live never disturbs your groove.
+In Live, re-stamping only ever touches the **offset** field, never
+on/off or accent, so sweeping voicings never disturbs your groove.
 
 ### Two Channels
 
@@ -536,7 +543,7 @@ panel), so one keyboard can play it while another fills it:
 
 ### The Path
 
-The **Path** wheel changes how the X clock sweeps the active grid:
+The **Path** wheel changes how the Rate clock sweeps the active grid:
 
 | Path | Order |
 |------|-------|
@@ -559,7 +566,7 @@ instance for X and Y to advance.
 Screenshots needed:
 
 - `cartesian-play.png` -- the Cartesian play surface: Fill Voicing +
-  Inversion wide wheels, Scale, the X Rate / Y Rate / Path row, the
+  Inversion + Inv. Rate, Scale, the Rate / Path / Grid row, the
   shaper row, and the 2D grid with the playhead highlighting the
   swept cell. Add a `_open_cartesian` scene to
   `scripts/screenshots/run.py` so it regenerates with

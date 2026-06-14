@@ -83,7 +83,7 @@ metadata:
 | Surface | Play tab (`SURFACE_KIND = "play"`); add from **Add → Play** |
 | Pitch model | held note (Play Ch) = root; cells hold semitone offsets; plays `root + offset` |
 | Harmony | Chordal (played note = tonic, fixed quality) / Diatonic (Root + Scale = key, in-key harmonisation) |
-| Clocks | X = step pulse (sweeps the grid along Path); Y = inversion pulse |
+| Clocks | Rate = step pulse (sweeps the grid along Path); Inv. Rate = inversion pulse (idle while Inversion = 0) |
 | Fill voicings | Unison / 5th / Triad / 7th / Scale (5), scale-aware |
 | Paths | Rows → / Cols ↓ / Diagonal / Knight / Spiral in / Spiral out / Random (7) |
 | Grid sizes | 2×2 / 3×3 / 4×4 |
@@ -94,18 +94,17 @@ metadata:
 | Surface | Parameter | Type | Range | Default |
 |---------|-----------|------|-------|---------|
 | Play    | **Fill Voicing** | Wheel (wide) | Unison / 5th / Triad / 7th / Scale | Triad |
-| Play    | **Inversion** | Wheel (wide) | -4--+4 | 0 |
+| Play    | **Inversion** | Wheel | -4--+4 | 0 |
+| Play    | **Inv. Rate** | Wheel | 15 values | 1/4 |
 | Play    | **Harmony** | Radio | Chordal / Diatonic | Chordal |
 | Play    | **Scale** | Wheel (wide) | 9 scales (see above) | major |
 | Play    | **Root** (visible when Harmony = Diatonic) | Wheel (wide) | C ... B | C |
-| Play    | **X Rate** | Wheel | 15 values | 1/16 |
-| Play    | **Y Rate** | Wheel | 15 values | 1/4 |
+| Play    | **Rate** | Wheel | 15 values | 1/16 |
 | Play    | **Path** | Wheel (wide) | 7 modes (see above) | Rows → |
 | Play    | **Grid** | Wheel | 2×2 / 3×3 / 4×4 | 4×4 |
 | Play    | **Gate %** | Wheel | 10--100 | 80 |
 | Play    | **Accent Vel.** | Knob | 0--127 | 30 |
-| Play    | **Fill** | Radio | Live / Latch | Live |
-| Play    | **Apply** (visible when Fill = Latch) | Button (trigger) | stamp the voicing once | — |
+| Play    | **Fill** | Radio | Live / Latch (switching to Latch freezes the grid) | Live |
 | Play    | *(grid)* | CartesianGrid | side×side cells; tap = off/on/accent, mini-wheel = per-cell offset | all on, offsets from voicing |
 | Play    | **Patterns** | PatternStrip | end-of-surface P1--P8 bank | slot 1 active |
 | Setup   | **Sync** | Radio | free / tempo / transport | transport |
@@ -123,8 +122,8 @@ CC automation (mirrors the Arp / Euclidean for shared params):
 | 71 | Inversion    | 83 | Accent Vel. |
 | 72 | Grid (size)  | 87 | Scale |
 | 73 | Gate %       | 88 | Root |
-| 74 | X Rate       |    |    |
-| 75 | Y Rate       |    |    |
+| 74 | Rate         |    |    |
+| 75 | Inv. Rate    |    |    |
 
 **Input.** Notes on Play Ch (the played root), notes on Fill Ch
 (record cell offsets), CC 70..75 / 79 / 83 / 87 (parameter

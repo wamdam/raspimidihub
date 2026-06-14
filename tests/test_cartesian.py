@@ -83,15 +83,35 @@ def test_latch_mode_freezes_grid_against_y_clock():
     assert _offsets(p) == before
 
 
-def test_apply_button_stamps_once_in_latch():
+def test_latch_freezes_current_grid_and_ignores_voicing_changes():
     p, _ = make_plugin(Cartesian)
+    # Live: triad is stamped. Switch to Latch — the grid freezes as-is.
+    frozen = list(_offsets(p))
     p.set_param("fill_mode", "Latch")
     p.on_param_change("fill_mode", "Latch")
-    # Hand-edit a cell, then Apply restores the voicing.
+    # Changing the voicing in Latch must NOT re-stamp the grid.
+    p.set_param("fill_voicing", 3)  # 7th
+    p.on_param_change("fill_voicing", 3)
+    assert _offsets(p) == frozen
+    # Hand-edits persist in Latch.
     grid = p.get_param("grid")
     grid[0] = {"on": True, "offset": 5}
     p.set_param("grid", grid)
-    p.on_param_change("fill_apply", True)
+    p.on_param_change("grid", grid)
+    assert _offsets(p)[0] == 5
+
+
+def test_switch_back_to_live_re_derives_from_voicing():
+    p, _ = make_plugin(Cartesian)
+    p.set_param("fill_mode", "Latch")
+    p.on_param_change("fill_mode", "Latch")
+    grid = p.get_param("grid")
+    grid[0] = {"on": True, "offset": 5}
+    p.set_param("grid", grid)
+    p.on_param_change("grid", grid)
+    # Back to Live: the voicing is re-stamped, discarding the hand-edit.
+    p.set_param("fill_mode", "Live")
+    p.on_param_change("fill_mode", "Live")
     assert _offsets(p)[0] == 0
 
 

@@ -4,14 +4,17 @@ Lives on the Play tab next to the Arpeggiator, Euclidean and Tracker
 (SURFACE_KIND = "play"). Instead of a linear step row it arranges its
 cells in a square grid (2×2 … 4×4) traversed by two independent clocks:
 
-  X clock — the *step* pulse. Each X tick fires the next cell along the
-            chosen Path (Rows / Cols / Diagonal / Knight / Spiral in /
-            Spiral out / Random).
-  Y clock — the *inversion* pulse. Each Y tick advances the inversion
-            lap, re-voicing the whole grid one chord-inversion further
-            up (or down — the Inversion wheel is bidirectional). With X
-            fast and Y slow you sweep a chord that slowly climbs through
-            its inversions.
+  Rate (step clock) — fires the next cell along the chosen Path
+            (Rows / Cols / Diagonal / Knight / Spiral in / Spiral out /
+            Random).
+  Inv. Rate (inversion clock) — advances the inversion lap, re-voicing
+            the whole grid one chord-inversion further up (or down — the
+            Inversion wheel is bidirectional). The two clocks are
+            independent: Rate drives the whole spatial sweep (Path
+            included), Inv. Rate only walks the inversions and does
+            nothing while Inversion = 0. With a fast Rate and a slow
+            Inv. Rate you sweep a chord that slowly climbs through its
+            inversions.
 
 Pitch model: arp-like. A note held on Play Ch is the **root**; the grid
 plays `root + cell-offset` (the cell offsets are semitone intervals, not
@@ -32,10 +35,11 @@ reads as a ladder of inversions.
                  (all CC-bindable) and re-stamp the offsets. on/off and
                  accents are preserved, so you keep your rhythm + accent
                  mask and sweep only the harmony with one knob + one
-                 held note. The Y clock animates inversions live.
-  Fill = Latch — the grid is frozen: stamp once with Apply, then hand-
-                 edit per-cell offsets freely. The Y-clock inversion
-                 sweep is paused (the grid plays exactly as edited).
+                 held note. The Inv. Rate clock animates inversions live.
+  Fill = Latch — the grid freezes exactly as it is the moment you
+                 switch (the switch *is* the commit — no Apply button),
+                 then you hand-edit per-cell offsets freely. The
+                 inversion sweep is paused (the grid plays as edited).
 
 Fill Ch: a second channel for *recording* offsets — hold notes and each
 one writes its interval (relative to the first note of the gesture) into
@@ -50,7 +54,6 @@ import time
 
 from raspimidihub import slot_bank
 from raspimidihub.plugin_api import (
-    Button,
     CartesianGrid,
     ChannelSelect,
     Group,
@@ -199,9 +202,10 @@ class Cartesian(PluginBase):
     HELP = """\
 A note held on Play Ch is the root; the grid plays root + each cell's
 semitone offset, so the whole figure transposes with the played note
-(arp-like). Two clocks drive it: X steps through the cells along the
-Path; Y advances the inversion lap, re-voicing the grid one inversion
-further (the Inversion wheel sets how far, and the direction).
+(arp-like). Two independent clocks drive it: Rate steps through the
+cells along the Path; Inv. Rate advances the inversion lap, re-voicing
+the grid one inversion further (the Inversion wheel sets how far and the
+direction; Inv. Rate does nothing while Inversion = 0).
 
 Harmony = Chordal makes the played note the tonic (Scale sets the chord
 quality, transposing with the note); Harmony = Diatonic adds a Root
@@ -213,15 +217,15 @@ Scale), scale-aware via the Scale wheel. In Fill = Live the voicing,
 scale, size and inversion act immediately (all CC-bindable) and re-stamp
 the offsets while preserving your on/off + accent mask — so you keep the
 rhythm and sweep only the harmony with one knob and one held note. In
-Fill = Latch the grid is frozen: tap Apply once, then hand-edit cell
-offsets; the Y-clock inversion sweep pauses.
+Fill = Latch freezes the grid exactly as it is the moment you switch,
+then you hand-edit cell offsets; the inversion sweep pauses.
 
 Fill Ch records offsets: hold notes and each writes its interval
 (relative to the first note) into the next cell along the Path. Touching
 Fill Ch flips the surface to Latch so the recording isn't overwritten.
 
 Path: Rows → / Cols ↓ / Diagonal / Knight / Spiral in / Spiral out /
-Random changes how the X-clock sweeps the grid.
+Random changes how the Rate clock sweeps the grid.
 
 Routing example:
   [Keyboard]     → [Cartesian] → [Synth]
@@ -231,13 +235,23 @@ CC automation: every play-surface knob is bindable. Long-press a control
 to pick a Channel + CC (or MIDI-Learn one)."""
 
     params = [
-        # Top wide row — the two performance knobs.
+        # Top row — Fill Voicing (wide) + the inversion pair: Inversion
+        # and the rate at which the Y-clock walks through inversions.
+        # `y_rate` keeps its internal name (saved configs / CC 75) but is
+        # labelled "Inv. Rate" and sits next to Inversion, since that is
+        # exactly what the Y-clock drives — it is not a second spatial
+        # axis. `x_rate` is the step rate; it is labelled "Rate" and
+        # lives down in the motion row next to Path.
         Wheel("fill_voicing", "Fill Voicing",
               min=0, max=len(_VOICING_OPTIONS) - 1,
               labels=_VOICING_OPTIONS, default=2,
               wide=True, span=2, play_only=True, default_cc=70),
         Wheel("inversion", "Inversion", min=-4, max=4, default=0,
-              wide=True, span=2, play_only=True, default_cc=71),
+              play_only=True, default_cc=71),
+        Wheel("y_rate", "Inv. Rate",
+              min=0, max=len(_RATE_OPTIONS) - 1,
+              labels=_RATE_OPTIONS, default=_DEFAULT_Y_RATE,
+              play_only=True, default_cc=75),
 
         # Harmony mode + the key.
         #   Chordal  — the played note is the tonic; Scale only sets the
@@ -255,33 +269,30 @@ to pick a Channel + CC (or MIDI-Learn one)."""
               labels=_NOTE_NAMES, wide=True, span=2, play_only=True,
               default_cc=88, visible_when=("harmony", "Diatonic")),
 
-        # Motion row — the two clocks + Path.
-        Wheel("x_rate", "X Rate",
+        # Motion row — the step rate + Path + grid size.
+        Wheel("x_rate", "Rate",
               min=0, max=len(_RATE_OPTIONS) - 1,
               labels=_RATE_OPTIONS, default=_DEFAULT_X_RATE,
               play_only=True, default_cc=74),
-        Wheel("y_rate", "Y Rate",
-              min=0, max=len(_RATE_OPTIONS) - 1,
-              labels=_RATE_OPTIONS, default=_DEFAULT_Y_RATE,
-              play_only=True, default_cc=75),
         Wheel("path", "Path",
               min=0, max=len(_PATH_OPTIONS) - 1,
               labels=_PATH_OPTIONS, default=0,
               wide=True, span=2, play_only=True, default_cc=79),
-
-        # Shaper row.
         Wheel("grid_size", "Grid",
               min=0, max=len(_SIZES) - 1,
               labels=[f"{s}×{s}" for s in _SIZES], default=2,
               play_only=True, default_cc=72),
+
+        # Shaper row.
         Wheel("gate", "Gate %", min=10, max=100, default=80,
               play_only=True, default_cc=73),
         Knob("accent_vel", "Accent Vel.", min=0, max=127, default=30,
              play_only=True, default_cc=83),
+        # Fill = Live re-stamps the grid from the voicing on every
+        # change; Latch freezes the grid as-is for hand-editing. The
+        # switch *is* the commit — no separate Apply button.
         Radio("fill_mode", "Fill", ["Live", "Latch"], default="Live",
               play_only=True),
-        Button("fill_apply", "Apply", trigger=True, color="blue",
-               play_only=True, visible_when=("fill_mode", "Latch")),
 
         # The grid itself (no title — the 2D grid is self-evident, and
         # "Grid" already labels the size wheel above).
@@ -350,7 +361,7 @@ to pick a Channel + CC (or MIDI-Learn one)."""
     # ----- lifecycle ----------------------------------------------------------
 
     def on_start(self):
-        self.transient_params = {"playhead", "fill_apply"}
+        self.transient_params = {"playhead"}
 
         self._held: list[tuple[int, int, int]] = []  # (note, vel, channel)
         self._playing_notes: list[tuple[int, int]] = []
@@ -680,16 +691,6 @@ to pick a Channel + CC (or MIDI-Learn one)."""
             if value is not None:
                 self.set_param("pattern_cmd", None)
             return
-        if name == "fill_apply":
-            # Latch one-shot: stamp the current voicing, reset inversion.
-            if value:
-                self._inv_lap = 0
-                self._apply_fill(0, persist=True)
-                slot_bank.record_edit(self, self._SLOT_PARAMS, "grid",
-                                      self.get_param("grid"))
-                self.set_param("fill_apply", False)
-            return
-
         slot_bank.record_edit(self, self._SLOT_PARAMS, name, value)
 
         if name == "inversion":
@@ -701,8 +702,16 @@ to pick a Channel + CC (or MIDI-Learn one)."""
             return
         if name == "fill_mode":
             if value == "Live":
+                # Re-derive the grid from the current voicing.
                 self._inv_lap = 0
                 self._apply_fill(0, persist=False)
+            else:
+                # Latch: freeze the current (Live-derived) grid by
+                # committing it as a real edit into the active slot, so
+                # the frozen state is what gets saved / hand-edited. The
+                # switch itself is the commit — no Apply button needed.
+                slot_bank.record_edit(self, self._SLOT_PARAMS, "grid",
+                                      self.get_param("grid"))
             return
         if name == "sync_mode":
             self._free_running = False
