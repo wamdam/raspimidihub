@@ -8,6 +8,7 @@ Unreleased
 
 - Fix: Network MIDI now re-binds mDNS discovery by itself when a network interface comes up after boot (e.g. a hub-to-hub Ethernet cable plugged in later) — the peer's exported devices appear without having to toggle Network MIDI off and on. Manual peers (plain unicast) were never affected.
 - Fix: the "advertised as …" line under an exported device sat misaligned below its toggle in Settings → Network MIDI; it now sits cleanly under the device name.
+- Fix: a hub that was unplugged (hard, no goodbye) lingered in other hubs' "Remote hubs" list for up to ~75 minutes — the mDNS records we advertise now carry a 2-minute TTL, so a vanished hub drops off peers' lists within ~2 minutes. (A mirrored device still goes offline in ~60 s as before.) Both hubs must run this build for the faster reap to be mutual.
 
 
 2026-06-14 — Version 5.0.0a2

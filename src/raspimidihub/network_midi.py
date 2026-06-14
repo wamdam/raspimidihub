@@ -63,6 +63,14 @@ MANUAL_PEER_INTERVAL = 30.0
 # (a hub-to-hub cable plugged in later) would otherwise never advertise
 # or discover over that link. On a change we re-bind the mDNS stack.
 LINK_WATCH_INTERVAL = 5.0
+# mDNS record TTL for the services we advertise. python-zeroconf's
+# default is 4500 s (75 min) for PTR/SRV/TXT — far too long for an
+# appliance whose cables get yanked: a hard unplug sends no goodbye, so
+# a peer's "Remote hubs" list would keep showing a vanished hub for over
+# an hour. 120 s means a peer's browser reconfirms near expiry and drops
+# a gone hub within ~2 min. (A *mirrored* device still goes offline in
+# ~60 s via clock-sync liveness — this only governs the discovery list.)
+MDNS_TTL = 120
 RECONNECT_DELAY = 2.0     # first retry; doubles up to the cap
 RECONNECT_DELAY_MAX = 30.0
 
@@ -948,7 +956,8 @@ class NetworkMidiManager:
                         "sid": sess.stable_id, "host": self.hostname,
                         "dev": sess.device_name},
         )
-        await self._aiozc.async_register_service(sess._service_info)
+        await self._aiozc.async_register_service(sess._service_info,
+                                                 ttl=MDNS_TTL)
 
     async def unregister_service(self, sess: ExportedSession) -> None:
         if self._aiozc and sess._service_info:
