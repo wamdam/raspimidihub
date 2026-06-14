@@ -382,11 +382,13 @@ a:hover { text-decoration: underline; }
 /* === Built for Stage === */
 .stage { padding: 80px 0; }
 .stage-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 24px;
 }
 .stage-card {
+  flex: 0 1 calc((100% - 48px) / 3);
   text-align: center;
   padding: 32px 20px;
   background: var(--bg-light);
@@ -496,7 +498,8 @@ dialog::backdrop { background: rgba(0,0,0,0.7); }
   .feature-phone .phone { width: 220px; }
 
   .plugin-grid { grid-template-columns: 1fr; }
-  .stage-grid { grid-template-columns: 1fr; gap: 16px; }
+  .stage-grid { gap: 16px; }
+  .stage-card { flex-basis: 100%; }
 
   .footer-inner { flex-direction: column; text-align: center; }
 }
