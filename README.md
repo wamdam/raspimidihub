@@ -138,6 +138,7 @@ Plugins on the **Play** bottom-nav tab (alongside Controllers). They route in th
 - **2D grid sequencer** in the spirit of the Make Noise René -- a held note is the root and a square grid (2×2…4×4) of semitone offsets is swept by two clocks
 - **Two clocks** -- **X Rate** steps through the cells along a **Path** (Rows / Cols / Diagonal / Knight / Spiral in / Spiral out / Random); **Y Rate** advances the chord inversion, so X-fast + Y-slow climbs a chord through its inversions
 - **Fill Voicing** -- one knob stamps the grid (Unison → 5th → Triad → 7th → Scale), scale-aware so thirds and sevenths follow the **Scale** wheel; chord tones climb across the cells as a ladder of inversions
+- **Harmony** -- **Chordal** (played note is the tonic, fixed quality, transposes with the note) or **Diatonic** (Root + Scale define a key; the played note picks a degree and is harmonised in-key, so the third gives a iii-chord, the fifth a V-chord)
 - **Inversion** -- bidirectional (-4…+4) re-voicing, not octave stacking -- lifts the lowest voice an octave for smooth voice-leading
 - **Live vs Latch** -- in Live, Voicing / Scale / Grid / Inversion re-fill the offsets instantly (all CC-bindable) while preserving your on/off + accent mask, so a held note + two knobs is a full instrument; in Latch the grid freezes for hand-editing (tap Apply to stamp)
 - **Two channels** -- **Play Ch** holds the root, **Fill Ch** records cell offsets by holding notes (programmed-Arp style)

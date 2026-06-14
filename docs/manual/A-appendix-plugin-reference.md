@@ -82,6 +82,7 @@ metadata:
 | Description | 2D grid sequencer — voices a held note, swept by two clocks |
 | Surface | Play tab (`SURFACE_KIND = "play"`); add from **Add → Play** |
 | Pitch model | held note (Play Ch) = root; cells hold semitone offsets; plays `root + offset` |
+| Harmony | Chordal (played note = tonic, fixed quality) / Diatonic (Root + Scale = key, in-key harmonisation) |
 | Clocks | X = step pulse (sweeps the grid along Path); Y = inversion pulse |
 | Fill voicings | Unison / 5th / Triad / 7th / Scale (5), scale-aware |
 | Paths | Rows → / Cols ↓ / Diagonal / Knight / Spiral in / Spiral out / Random (7) |
@@ -94,7 +95,9 @@ metadata:
 |---------|-----------|------|-------|---------|
 | Play    | **Fill Voicing** | Wheel (wide) | Unison / 5th / Triad / 7th / Scale | Triad |
 | Play    | **Inversion** | Wheel (wide) | -4--+4 | 0 |
+| Play    | **Harmony** | Radio | Chordal / Diatonic | Chordal |
 | Play    | **Scale** | Wheel (wide) | 9 scales (see above) | major |
+| Play    | **Root** (visible when Harmony = Diatonic) | Wheel (wide) | C ... B | C |
 | Play    | **X Rate** | Wheel | 15 values | 1/16 |
 | Play    | **Y Rate** | Wheel | 15 values | 1/4 |
 | Play    | **Path** | Wheel (wide) | 7 modes (see above) | Rows → |
@@ -116,11 +119,12 @@ CC automation (mirrors the Arp / Euclidean for shared params):
 
 | CC | Parameter | CC | Parameter |
 |----|-----------|----|-----------|
-| 70 | Fill Voicing | 75 | Y Rate |
-| 71 | Inversion    | 79 | Path |
-| 72 | Grid (size)  | 83 | Accent Vel. |
-| 73 | Gate %       | 87 | Scale |
+| 70 | Fill Voicing | 79 | Path |
+| 71 | Inversion    | 83 | Accent Vel. |
+| 72 | Grid (size)  | 87 | Scale |
+| 73 | Gate %       | 88 | Root |
 | 74 | X Rate       |    |    |
+| 75 | Y Rate       |    |    |
 
 **Input.** Notes on Play Ch (the played root), notes on Fill Ch
 (record cell offsets), CC 70..75 / 79 / 83 / 87 (parameter

@@ -16,6 +16,11 @@ cells in a square grid (2×2 … 4×4) traversed by two independent clocks:
 Pitch model: arp-like. A note held on Play Ch is the **root**; the grid
 plays `root + cell-offset` (the cell offsets are semitone intervals, not
 absolute notes), so the whole figure transposes with the played note.
+Harmony has two modes: **Chordal** (the played note is the tonic and
+Scale just sets the chord quality, which transposes with the note) and
+**Diatonic** (Root + Scale define a key; the played note picks a degree
+and the voicing is harmonised in-key, so playing the third gives a
+iii-chord, the fifth a V-chord, etc.).
 
 Fill: the Fill Voicing wheel stamps the grid with a chord/voicing
 (Unison / 5th / Triad / 7th / Scale), scale-aware (the Scale wheel
@@ -198,6 +203,11 @@ semitone offset, so the whole figure transposes with the played note
 Path; Y advances the inversion lap, re-voicing the grid one inversion
 further (the Inversion wheel sets how far, and the direction).
 
+Harmony = Chordal makes the played note the tonic (Scale sets the chord
+quality, transposing with the note); Harmony = Diatonic adds a Root
+wheel so Root + Scale define a key and the played note is harmonised
+in-key (third → iii-chord, fifth → V-chord, …).
+
 Fill Voicing stamps the grid with a chord (Unison / 5th / Triad / 7th /
 Scale), scale-aware via the Scale wheel. In Fill = Live the voicing,
 scale, size and inversion act immediately (all CC-bindable) and re-stamp
@@ -229,12 +239,21 @@ to pick a Channel + CC (or MIDI-Learn one)."""
         Wheel("inversion", "Inversion", min=-4, max=4, default=0,
               wide=True, span=2, play_only=True, default_cc=71),
 
-        # Scale on its own row (no Root wheel — the played note is the
-        # root; Scale only decides chord quality / mode).
+        # Harmony mode + the key.
+        #   Chordal  — the played note is the tonic; Scale only sets the
+        #              chord quality, which transposes with the note.
+        #   Diatonic — Root + Scale define a key; the played note picks a
+        #              degree and the voicing is harmonised in-key (Root
+        #              wheel appears).
+        Radio("harmony", "Harmony", ["Chordal", "Diatonic"],
+              default="Chordal", play_only=True),
         Wheel("scale", "Scale",
               min=0, max=len(_SCALE_OPTIONS) - 1,
               labels=_SCALE_OPTIONS, default=0,
-              wide=True, span=4, play_only=True, default_cc=87),
+              wide=True, span=2, play_only=True, default_cc=87),
+        Wheel("root", "Root", min=0, max=11, default=0,
+              labels=_NOTE_NAMES, wide=True, span=2, play_only=True,
+              default_cc=88, visible_when=("harmony", "Diatonic")),
 
         # Motion row — the two clocks + Path.
         Wheel("x_rate", "X Rate",
@@ -323,7 +342,8 @@ to pick a Channel + CC (or MIDI-Learn one)."""
     # Every play_only param captured into a pattern slot. `active_slot`
     # is the bank selector and excluded; `playhead` is transient.
     _SLOT_PARAMS = [
-        "fill_voicing", "inversion", "scale", "x_rate", "y_rate", "path",
+        "fill_voicing", "inversion", "harmony", "scale", "root",
+        "x_rate", "y_rate", "path",
         "grid_size", "gate", "accent_vel", "fill_mode", "grid",
     ]
 
@@ -401,16 +421,24 @@ to pick a Channel + CC (or MIDI-Learn one)."""
             name = "major"
         return SCALES.get(name, SCALES["major"])
 
-    def _voicing_intervals(self) -> list[int]:
-        """The current voicing as a sorted list of in-octave semitone
-        intervals (e.g. major triad → [0, 4, 7])."""
-        intervals = self._scale_intervals()
+    def _harmony(self) -> str:
+        return "Diatonic" if self.get_param("harmony") == "Diatonic" else "Chordal"
+
+    def _voicing_degrees(self) -> list[int]:
+        """The Fill Voicing as scale-degree indices (0=root, 2=third,
+        4=fifth, 6=seventh)."""
         try:
-            degrees = _VOICING_DEGREES[int(self.get_param("fill_voicing") or 0)]
+            return _VOICING_DEGREES[int(self.get_param("fill_voicing") or 0)]
         except (KeyError, TypeError, ValueError):
-            degrees = [0]
+            return [0]
+
+    def _voicing_intervals(self) -> list[int]:
+        """Chordal voicing as a sorted list of in-octave semitone
+        intervals relative to the played note (e.g. major triad →
+        [0, 4, 7]). The Scale wheel sets the chord quality."""
+        intervals = self._scale_intervals()
         semis = sorted({_scale_degree_semitone(intervals, d) % 12
-                        for d in degrees})
+                        for d in self._voicing_degrees()})
         return semis or [0]
 
     def _chord_tone(self, i: int, voicing: list[int]) -> int:
@@ -420,6 +448,45 @@ to pick a Channel + CC (or MIDI-Learn one)."""
         if n == 0:
             return 0
         return voicing[i % n] + 12 * (i // n)
+
+    def _fill_offset(self, k: int, ref_note: int) -> int:
+        """Semitone offset (relative to `ref_note`) for chord-tone index
+        `k`. In Chordal the played note is the tonic and the voicing is a
+        fixed-quality stack. In Diatonic, Root + Scale define a key, the
+        ref note picks a degree, and the voicing is harmonised in-key —
+        so the same grid gives a iii-chord when you play the third, etc.
+
+        Both branches return a *relative* offset; playback adds it to the
+        actually-played note. In Live we re-stamp on every root change so
+        the offsets track the held note; in Latch the stamped offsets are
+        frozen and simply transpose with whatever you play."""
+        if self._harmony() != "Diatonic":
+            return self._chord_tone(k, self._voicing_intervals())
+
+        scale = self._scale_intervals()
+        n = len(scale) or 1
+        root = int(self.get_param("root") or 0) % 12
+        degrees = self._voicing_degrees()
+        ladder = len(degrees)
+
+        rel = ref_note - root
+        octave = rel // 12
+        pc = rel % 12
+        # The played note's scale degree in the key (nearest if off-key).
+        deg0 = min(range(n), key=lambda i: abs(scale[i] - pc))
+        # Stack the voicing's degrees on deg0, wrapping +n (one octave of
+        # scale degrees) each time index k passes the chord size.
+        deg = deg0 + degrees[k % ladder] + n * (k // ladder)
+        abs_note = root + 12 * octave + _scale_degree_semitone(scale, deg)
+        return abs_note - ref_note
+
+    def _fill_ref_note(self) -> int:
+        """The note the fill is computed relative to: the most-recently
+        held note, or — when nothing is held — the key root near middle
+        C so the grid shows the tonic chord."""
+        if self._held:
+            return self._held[-1][0]
+        return 60 + (int(self.get_param("root") or 0) % 12)
 
     def _inv_step(self) -> int:
         """Chord-tone shift for the current inversion lap."""
@@ -437,8 +504,8 @@ to pick a Channel + CC (or MIDI-Learn one)."""
     def _apply_fill(self, inv_step: int, persist: bool) -> None:
         """Write the voicing into the active cells' `offset` field,
         preserving on/off + accent. Inactive cells are left untouched."""
-        voicing = self._voicing_intervals()
         side = self._side()
+        ref = self._fill_ref_note()
         grid = list(self.get_param("grid") or [])
         while len(grid) < _STORAGE * _STORAGE:
             grid.append({"on": True, "offset": 0})
@@ -448,7 +515,7 @@ to pick a Channel + CC (or MIDI-Learn one)."""
                 cell = dict(grid[idx]) if isinstance(grid[idx], dict) \
                     else {"on": True, "offset": 0}
                 if x < side and y < side:
-                    cell["offset"] = self._chord_tone(x + y + inv_step, voicing)
+                    cell["offset"] = self._fill_offset(x + y + inv_step, ref)
                 grid[idx] = cell
         self.set_param("grid", grid, persist=persist)
 
@@ -490,10 +557,14 @@ to pick a Channel + CC (or MIDI-Learn one)."""
             if was_idle:
                 self._step = 0
                 self._inv_lap = 0
-                self._live_restamp()
                 if (self.get_param("sync_mode") or "tempo") == "free" \
                         and not self._free_running:
                     self._start_free_runner()
+            # Re-stamp so the grid follows the root: always on the first
+            # note of a phrase, and on every root change in Diatonic
+            # (where the offsets depend on which degree you play).
+            if was_idle or self._harmony() == "Diatonic":
+                self._live_restamp()
 
     def on_note_off(self, channel, note):
         if slot_bank.trigger_note_index(self, channel, note) is not None:
@@ -514,6 +585,9 @@ to pick a Channel + CC (or MIDI-Learn one)."""
             if not self._held:
                 self._free_running = False
                 self._silence_all()
+            elif self._harmony() == "Diatonic":
+                # Root fell back to an earlier-held note — re-voice.
+                self._live_restamp()
 
     def on_cc(self, channel, cc, value):
         if cc != 64:
@@ -622,7 +696,7 @@ to pick a Channel + CC (or MIDI-Learn one)."""
             self._inv_lap = 0
             self._live_restamp()
             return
-        if name in ("fill_voicing", "scale", "grid_size"):
+        if name in ("fill_voicing", "scale", "grid_size", "harmony", "root"):
             self._live_restamp()
             return
         if name == "fill_mode":

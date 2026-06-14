@@ -130,3 +130,61 @@ def test_held_note_release_silences():
     p.on_note_off(0, 60)
     p.on_tick("1/16")
     assert h.note_ons == []  # nothing fires without a held root
+
+
+def _scale_idx(name):
+    from cartesian import _SCALE_OPTIONS
+    return _SCALE_OPTIONS.index(name)
+
+
+def _play_triad(p, h, note):
+    """Play one note and fire the first three cells (row 0 = the triad
+    stacked); return the MIDI notes that fired."""
+    p._held = []
+    p.on_note_on(0, note, 100)
+    p._step = 0
+    out = []
+    for _ in range(3):
+        h.clear()
+        p._advance_x()
+        out.append(h.note_ons[-1][1] if h.note_ons else None)
+    p.on_note_off(0, note)
+    return out
+
+
+def test_diatonic_harmonizes_the_played_degree_in_key():
+    p, h = make_plugin(Cartesian)
+    p.set_param("sync_mode", "tempo")
+    p.set_param("harmony", "Diatonic")
+    p.on_param_change("harmony", "Diatonic")
+    p.set_param("scale", _scale_idx("major"))
+    p.on_param_change("scale", _scale_idx("major"))
+    p.set_param("root", 0)  # C major
+    p.on_param_change("root", 0)
+    assert _play_triad(p, h, 60) == [60, 64, 67]  # C  → C E G  (I)
+    assert _play_triad(p, h, 64) == [64, 67, 71]  # E  → E G B  (iii, minor)
+    assert _play_triad(p, h, 67) == [67, 71, 74]  # G  → G B D  (V)
+    assert _play_triad(p, h, 62) == [62, 65, 69]  # D  → D F A  (ii, minor)
+
+
+def test_chordal_keeps_a_fixed_quality_on_every_root():
+    p, h = make_plugin(Cartesian)
+    p.set_param("sync_mode", "tempo")
+    p.set_param("scale", _scale_idx("major"))
+    p.on_param_change("scale", _scale_idx("major"))
+    # Chordal (default): the played note is always the tonic → major.
+    assert _play_triad(p, h, 60) == [60, 64, 67]  # C major
+    assert _play_triad(p, h, 64) == [64, 68, 71]  # E major (not E minor)
+
+
+def test_diatonic_root_moves_the_key():
+    p, h = make_plugin(Cartesian)
+    p.set_param("sync_mode", "tempo")
+    p.set_param("harmony", "Diatonic")
+    p.on_param_change("harmony", "Diatonic")
+    p.set_param("scale", _scale_idx("major"))
+    p.on_param_change("scale", _scale_idx("major"))
+    p.set_param("root", 2)  # D major
+    p.on_param_change("root", 2)
+    # In D major, playing F# (66, the third) gives the iii chord F#m: F# A C#
+    assert _play_triad(p, h, 66) == [66, 69, 73]

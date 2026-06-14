@@ -430,13 +430,14 @@ Two clocks drive the playhead:
 ### The Play Surface
 
 The live controls fill one fullscreen panel: **Fill Voicing** and
-**Inversion** are wide wheels at the top; **Scale** sits on its own
-row; the motion row carries **X Rate**, **Y Rate** and **Path**; a
-shaper row holds **Grid** (size), **Gate %**, **Accent Vel.**, the
-**Fill** mode switch and (in Latch) the **Apply** button. The 2D
-grid fills the centre, and the 8-slot pattern bank sits at the
-bottom. The setup-only parameters (sync, the two channels, Ctrl Ch
-and the trigger notes) live in the device-detail panel.
+**Inversion** are wide wheels at the top; the **Harmony** switch and
+**Scale** (plus **Root**, in Diatonic) sit on the next row; the
+motion row carries **X Rate**, **Y Rate** and **Path**; a shaper row
+holds **Grid** (size), **Gate %**, **Accent Vel.**, the **Fill** mode
+switch and (in Latch) the **Apply** button. The 2D grid fills the
+centre, and the 8-slot pattern bank sits at the bottom. The
+setup-only parameters (sync, the two channels, Ctrl Ch and the
+trigger notes) live in the device-detail panel.
 
 Each grid cell works exactly like an Arpeggiator step cell: tap the
 head to cycle **off → on → accent → off**, drag the mini-wheel to
@@ -457,12 +458,37 @@ the overtone series so the wheel sweeps from thin to rich:
 
 The thirds and sevenths are taken from the **Scale** wheel, so a
 Triad is major on a major scale and minor on a minor scale with no
-extra control. There is no separate Root wheel -- the *played* note
-is the root; Scale only decides the chord quality / mode.
+extra control.
 
 The chord tones climb across the cells (`offset = chord_tone(x + y)`),
 so a 4×4 grid already reads as a ladder of inversions: row 0 is the
 root position, row 1 the first inversion, and so on.
+
+### Harmony: Chordal vs Diatonic
+
+The **Harmony** switch decides how the played note relates to the
+voicing:
+
+- **Chordal** (default) -- the *played* note is the tonic and the
+  **Scale** wheel only sets the chord *quality*, which transposes
+  with the note. Play C with Scale = major → C major; play E → E
+  major. There is no key; every root gets the same shape. Good for
+  parallel-chord planing.
+- **Diatonic** -- a **Root** wheel appears, and Root + Scale define a
+  *key*. The played note picks a *degree* of that key and the voicing
+  is harmonised in-key, so the chord *quality follows the degree*. In
+  C major: play C → C major (I), play E → E **minor** (iii), play G →
+  G major (V), play D → D minor (ii). The whole grid stays in the key
+  no matter what you play -- one finger walks diatonic chords.
+
+Note that Diatonic ≠ Scale = chromatic. `chromatic` changes the
+*interval content* of the voicing (a Triad collapses to a 0/+2/+4
+cluster); Diatonic instead *constrains the root into a key*. They sit
+on different axes.
+
+In Live mode the grid re-voices as you change the played note (the
+offsets track the root); in Latch the stamped offsets freeze and
+simply transpose with whatever you play.
 
 ### Inversion
 
