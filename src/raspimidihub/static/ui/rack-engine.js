@@ -177,10 +177,12 @@ export function createRackEngine() {
         const rates = engine.ctx.midiRates || {};
         const clockIds = engine.ctx.clockSources ? Object.keys(engine.ctx.clockSources).map(Number) : [];
         const quarters = engine.ctx.clockQuarters || {};
-        // Per-device clock-status LED on the unit head — mirrors the
-        // matrix: green = effective sender, orange = one of ≥2 senders,
-        // dim = sending but blocked from the system clock. The blink
-        // replays on each new quarter (reflow-restart, like the jacks).
+        // Per-device clock-status LED on the unit head: green = effective
+        // sender, orange = one of ≥2 effective senders. Unlike the matrix
+        // (which keeps a near-invisible ghost for blocked senders), the
+        // rack has room to simply omit the LED for a blocked source — it
+        // drives nothing, so showing nothing is clearer. Blink replays on
+        // each new quarter (reflow-restart, like the jacks).
         const blockedById = {};
         for (const d of (engine.ctx.devices || [])) {
             if (d.client_id != null && d.clock_blocked) blockedById[d.client_id] = true;
@@ -191,12 +193,11 @@ export function createRackEngine() {
             if (!icon) continue;
             const c = unit.dataset.client;
             const cid = c === '' ? null : Number(c);
-            const sends = cid != null && clockIds.includes(cid);
+            // Effective sender only — blocked sources are hidden entirely.
+            const sends = cid != null && clockIds.includes(cid) && !blockedById[cid];
             icon.classList.toggle('sending', sends);
-            if (!sends) { icon.classList.remove('clock-warn', 'clock-blocked'); continue; }
-            const blocked = !!blockedById[cid];
-            icon.classList.toggle('clock-blocked', blocked);
-            icon.classList.toggle('clock-warn', !blocked && multiEffective);
+            if (!sends) { icon.classList.remove('clock-warn', 'beat'); continue; }
+            icon.classList.toggle('clock-warn', multiEffective);
             const q = quarters[cid];
             if (q && beatSeenUnit[cid] !== q) {
                 beatSeenUnit[cid] = q;
