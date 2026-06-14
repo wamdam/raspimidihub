@@ -158,11 +158,19 @@ class Radio(Param):
     """Tap-to-select pill buttons."""
     options: list[str] = field(default_factory=list)
     default: str = ""
+    # Opt-in: pack this radio into the inline param-row flow (like a
+    # wheel/knob) instead of forcing it onto its own full-width row.
+    # Only sensible for narrow radios (≤2-3 short options) — wide
+    # radios still want their own row. Off by default so existing
+    # layouts are unchanged.
+    inline: bool = False
     default_cc: int | None = field(default=None, kw_only=True)
 
     def to_dict(self) -> dict:
         d = super().to_dict()
         d.update({"options": self.options, "default": self.default})
+        if self.inline:
+            d["inline"] = True
         if self.default_cc is not None:
             d["default_cc"] = self.default_cc
         return d

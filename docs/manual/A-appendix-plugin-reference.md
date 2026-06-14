@@ -98,7 +98,7 @@ metadata:
 | Play    | **Inv. Rate** | Wheel | 15 values | 1/4 |
 | Play    | **Harmony** | Radio | Chordal / Diatonic | Chordal |
 | Play    | **Scale** | Wheel (wide) | 9 scales (see above) | major |
-| Play    | **Root** (visible when Harmony = Diatonic) | Wheel (wide) | C ... B | C |
+| Play    | **Root** | Wheel | C ... B (key root in Diatonic; inert in Chordal) | C |
 | Play    | **Rate** | Wheel | 15 values | 1/16 |
 | Play    | **Path** | Wheel (wide) | 7 modes (see above) | Rows → |
 | Play    | **Grid** | Wheel | 2×2 / 3×3 / 4×4 | 4×4 |

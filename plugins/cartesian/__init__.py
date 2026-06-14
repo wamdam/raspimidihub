@@ -234,14 +234,15 @@ Routing example:
 CC automation: every play-surface knob is bindable. Long-press a control
 to pick a Channel + CC (or MIDI-Learn one)."""
 
+    # Layout note: every control below is inline, so the four rows are
+    # formed purely by the column spans (4-col grid). Harmony and Fill
+    # are `inline` radios so they pack into a row instead of each taking
+    # a full-width line. `x_rate`/`y_rate` keep their internal names
+    # (saved configs / CC 74/75) but read "Rate" / "Inv. Rate": Inv.
+    # Rate sits beside Inversion (the inversion clock it drives, not a
+    # spatial axis), Rate sits in the motion row beside Path.
     params = [
-        # Top row — Fill Voicing (wide) + the inversion pair: Inversion
-        # and the rate at which the Y-clock walks through inversions.
-        # `y_rate` keeps its internal name (saved configs / CC 75) but is
-        # labelled "Inv. Rate" and sits next to Inversion, since that is
-        # exactly what the Y-clock drives — it is not a second spatial
-        # axis. `x_rate` is the step rate; it is labelled "Rate" and
-        # lives down in the motion row next to Path.
+        # Row 1 — Fill Voicing (wide) + the Inversion pair.
         Wheel("fill_voicing", "Fill Voicing",
               min=0, max=len(_VOICING_OPTIONS) - 1,
               labels=_VOICING_OPTIONS, default=2,
@@ -253,23 +254,22 @@ to pick a Channel + CC (or MIDI-Learn one)."""
               labels=_RATE_OPTIONS, default=_DEFAULT_Y_RATE,
               play_only=True, default_cc=75),
 
-        # Harmony mode + the key.
-        #   Chordal  — the played note is the tonic; Scale only sets the
-        #              chord quality, which transposes with the note.
-        #   Diatonic — Root + Scale define a key; the played note picks a
-        #              degree and the voicing is harmonised in-key (Root
-        #              wheel appears).
-        Radio("harmony", "Harmony", ["Chordal", "Diatonic"],
-              default="Chordal", play_only=True),
+        # Row 2 — the key (Scale + Root) + grid size. Root is always
+        # shown for a stable layout; it is simply inert in Chordal
+        # (where the played note is the tonic), and defines the key in
+        # Diatonic.
         Wheel("scale", "Scale",
               min=0, max=len(_SCALE_OPTIONS) - 1,
               labels=_SCALE_OPTIONS, default=0,
               wide=True, span=2, play_only=True, default_cc=87),
         Wheel("root", "Root", min=0, max=11, default=0,
-              labels=_NOTE_NAMES, wide=True, span=2, play_only=True,
-              default_cc=88, visible_when=("harmony", "Diatonic")),
+              labels=_NOTE_NAMES, play_only=True, default_cc=88),
+        Wheel("grid_size", "Grid",
+              min=0, max=len(_SIZES) - 1,
+              labels=[f"{s}×{s}" for s in _SIZES], default=2,
+              play_only=True, default_cc=72),
 
-        # Motion row — the step rate + Path + grid size.
+        # Row 3 — the step rate + Path + gate.
         Wheel("x_rate", "Rate",
               min=0, max=len(_RATE_OPTIONS) - 1,
               labels=_RATE_OPTIONS, default=_DEFAULT_X_RATE,
@@ -278,21 +278,23 @@ to pick a Channel + CC (or MIDI-Learn one)."""
               min=0, max=len(_PATH_OPTIONS) - 1,
               labels=_PATH_OPTIONS, default=0,
               wide=True, span=2, play_only=True, default_cc=79),
-        Wheel("grid_size", "Grid",
-              min=0, max=len(_SIZES) - 1,
-              labels=[f"{s}×{s}" for s in _SIZES], default=2,
-              play_only=True, default_cc=72),
-
-        # Shaper row.
         Wheel("gate", "Gate %", min=10, max=100, default=80,
               play_only=True, default_cc=73),
+
+        # Row 4 — Accent + the two mode switches (inline radios).
         Knob("accent_vel", "Accent Vel.", min=0, max=127, default=30,
              play_only=True, default_cc=83),
+        #   Chordal  — the played note is the tonic; Scale sets the chord
+        #              quality (transposes with the note).
+        #   Diatonic — Root + Scale define a key; the played note picks a
+        #              degree, harmonised in-key.
+        Radio("harmony", "Harmony", ["Chordal", "Diatonic"],
+              default="Chordal", inline=True, span=2, play_only=True),
         # Fill = Live re-stamps the grid from the voicing on every
-        # change; Latch freezes the grid as-is for hand-editing. The
-        # switch *is* the commit — no separate Apply button.
+        # change; switching to Latch freezes the grid as-is for
+        # hand-editing — the switch *is* the commit (no Apply button).
         Radio("fill_mode", "Fill", ["Live", "Latch"], default="Live",
-              play_only=True),
+              inline=True, play_only=True),
 
         # The grid itself (no title — the 2D grid is self-evident, and
         # "Grid" already labels the size wheel above).

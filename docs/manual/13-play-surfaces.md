@@ -435,7 +435,7 @@ Two independent clocks drive it:
 The live controls fill one fullscreen panel: **Fill Voicing** is a
 wide wheel at the top, paired with **Inversion** and its **Inv. Rate**
 (the inversion clock sits right next to the setting it drives); the
-**Harmony** switch and **Scale** (plus **Root**, in Diatonic) sit on
+**Harmony** switch, **Scale** and **Root** sit on
 the next row; the motion row carries the step **Rate**, **Path** and
 **Grid** (size); a shaper row holds **Gate %**, **Accent Vel.** and
 the **Fill** mode switch. The 2D grid fills the centre, and the 8-slot
@@ -477,9 +477,9 @@ voicing:
   **Scale** wheel only sets the chord *quality*, which transposes
   with the note. Play C with Scale = major → C major; play E → E
   major. There is no key; every root gets the same shape. Good for
-  parallel-chord planing.
-- **Diatonic** -- a **Root** wheel appears, and Root + Scale define a
-  *key*. The played note picks a *degree* of that key and the voicing
+  parallel-chord planing. (The **Root** wheel is inert in this mode.)
+- **Diatonic** -- **Root** + **Scale** define a *key*. The played note
+  picks a *degree* of that key and the voicing
   is harmonised in-key, so the chord *quality follows the degree*. In
   C major: play C → C major (I), play E → E **minor** (iii), play G →
   G major (V), play D → D minor (ii). The whole grid stays in the key

@@ -175,6 +175,14 @@ export function renderParam(param, values, onChange, allValues, displayCtx) {
 
 export const INLINE_TYPES = new Set(['wheel', 'knob', 'fader', 'noteselect', 'channelselect', 'button', 'display', 'xypad']);
 
+// A param flows inline (packs into a param-row with its neighbours)
+// when its type is inline, or when it's a radio that opted in via
+// `inline: true` (narrow 2-3-option radios — e.g. the Cartesian's
+// Harmony / Fill — that shouldn't each hog a full-width row).
+function isInline(p) {
+    return INLINE_TYPES.has(p.type) || (p.type === 'radio' && p.inline);
+}
+
 // Wrap a rendered inline param with a grid-column-span container if
 // the param schema declares a span > 1. Single-cell params render as-is.
 function applySpan(rendered, span) {
@@ -244,7 +252,7 @@ export function renderParamGroup(items, values, onChange, displayCtx, cols) {
         }
         const rendered = renderParam(p, values, onChange, values, displayCtx);
         if (!rendered) continue;
-        if (INLINE_TYPES.has(p.type)) {
+        if (isInline(p)) {
             inlineRun.push(withKey(applySpan(rendered, p.span), p.name));
             if (p.span && p.span > inlineMaxSpan) inlineMaxSpan = p.span;
         }
@@ -295,7 +303,7 @@ export function renderParamList(params, values, onChange, displayCtx) {
             // for grouped params, but top-level inline params (e.g. the
             // Arpeggiator's Pattern + Rate wheels) need the same path
             // so `span=2` actually widens the grid cell.
-            if (INLINE_TYPES.has(p.type)) {
+            if (isInline(p)) {
                 inlineRun.push(withKey(applySpan(rendered, p.span), p.name));
                 if (p.span && p.span > inlineMaxSpan) inlineMaxSpan = p.span;
             }
