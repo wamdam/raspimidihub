@@ -90,10 +90,14 @@ The Pi 4B and Pi 5 expose a Gigabit Ethernet port; the Pi 3B+
 exposes Fast Ethernet. The Pi Zero 2 W has no built-in Ethernet
 (a USB-Ethernet dongle is supported on any of the USB-A ports).
 
-Ethernet on RaspiMIDIHub is used exclusively for IP connectivity
--- specifically, for software updates (chapter 17.3). The Pi
-*never* uses ethernet for MIDI. See **Settings → Ethernet**
-(chapter 16.2) for the IP configuration.
+Ethernet on RaspiMIDIHub carries IP only -- never raw 5-pin / USB
+MIDI signalling. It is used for software updates (chapter 17.3) and,
+since the addition of **Network MIDI**, for **RTP-MIDI (AppleMIDI)**
+sessions -- MIDI tunnelled inside IP packets to Macs, iPads, and other
+hubs over the LAN. So MIDI *does* travel over the wire, as RTP-MIDI
+rather than a direct MIDI cable. See **Settings → Ethernet**
+(chapter 16.2) for the IP configuration and **Settings → Network MIDI**
+for sessions.
 
 ## Bluetooth
 
