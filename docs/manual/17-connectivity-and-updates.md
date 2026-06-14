@@ -113,8 +113,12 @@ router's DHCP table (WiFi-always mode).
 
 **Settings → Network MIDI** can *export* any local MIDI device as
 a standard **RTP-MIDI (AppleMIDI)** session. Each exported device
-is advertised over mDNS under its own name -- `"TX-7 @<hostname>"`
--- and anything that speaks RTP-MIDI can connect to it:
+is advertised over mDNS under its own name -- `"TX-7 @<hostname>-<id>"`,
+where `<id>` is the hardware suffix from the WiFi name (e.g.
+`@raspimidihub-735C`). The suffix keeps two hubs with the default
+hostname distinct on the wire -- without it both would advertise
+`raspimidihub.local`, and a peer could resolve a device to the wrong
+hub. Anything that speaks RTP-MIDI can connect to it:
 
 - **a second RaspiMIDIHub** -- the long-cable scenario: two hubs
   joined by an Ethernet cable (up to 100 m) or any shared network,
