@@ -37,6 +37,19 @@ export function createRackEngine() {
     // ---- geometry helpers -------------------------------------------
     function originRect() { return root.getBoundingClientRect(); }
 
+    // The cable SVG's viewBox is in *unscaled* layout pixels
+    // (root.scrollWidth/scrollHeight), but getBoundingClientRect()
+    // returns *screen* pixels — which the spectator view scales via a
+    // CSS transform on an ancestor (.spectator-stage). On the source
+    // that scale is 1, but on a spectator it's <1, so rect-derived
+    // anchors would shrink toward the origin and the cables criss-cross.
+    // Dividing every rect-derived coord by this factor maps it back
+    // into the unscaled viewBox space the paths are drawn in.
+    function rootScale() {
+        const w = root.offsetWidth;
+        return w ? root.getBoundingClientRect().width / w : 1;
+    }
+
     // dkey → group id, matching pages/rack.js group ids, so a cable to a
     // device hidden inside a collapsed group can anchor at the group
     // blende instead of a (non-existent) jack.
@@ -64,8 +77,12 @@ export function createRackEngine() {
             }
         }
         if (!el || !el.offsetParent) return null;
-        const b = el.getBoundingClientRect(), o = originRect();
-        return { x: b.left + b.width / 2 - o.left, y: b.top + b.height / 2 - o.top, el };
+        const b = el.getBoundingClientRect(), o = originRect(), s = rootScale();
+        return {
+            x: (b.left + b.width / 2 - o.left) / s,
+            y: (b.top + b.height / 2 - o.top) / s,
+            el,
+        };
     }
     // CSS.escape isn't safe for attribute *values* with colons in all
     // engines via template; quote-escaping is enough here (keys are our
@@ -518,8 +535,8 @@ export function createRackEngine() {
         // (and the scroll-shifted origin) move per frame.
         if (!drag || !rubber || !drag.anchor) return;
         const a = drag.anchor;
-        const o = originRect();
-        const bx = drag.x - o.left, by = drag.y - o.top;
+        const o = originRect(), s = rootScale();
+        const bx = (drag.x - o.left) / s, by = (drag.y - o.top) / s;
         rubber.setAttribute('d', `M ${a.x} ${a.y} C ${a.x} ${a.y + 40}, ${bx} ${by + 40}, ${bx} ${by}`);
     }
 
