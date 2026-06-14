@@ -226,6 +226,21 @@ class NoteSelect(Param):
 
 
 @dataclass
+class CCSelect(Param):
+    """Wheel of CC numbers (Off, CC 0..127) with an inline MIDI-Learn
+    button. Learn captures the next incoming CC from the midi-activity
+    stream. Value -1 = unbound ("Off"); 0..127 = CC number."""
+    default: int = -1  # Off / unbound
+    learnable: bool = True
+
+    def to_dict(self) -> dict:
+        d = super().to_dict()
+        d["default"] = self.default
+        d["learnable"] = self.learnable
+        return d
+
+
+@dataclass
 class ChannelSelect(Param):
     """Wheel for MIDI channel 1-16. Set `allow_any=True` to add a
     leading "Any" tick at value 0 — used by channel filters where 0

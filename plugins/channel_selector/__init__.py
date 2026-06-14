@@ -9,10 +9,7 @@ arpeggiator, a Euclidean voice, ...). The "Active Channel" wheel mirrors
 the live selection, giving the visual feedback the controller lacks.
 """
 
-from raspimidihub.plugin_api import Button, Group, PluginBase, Wheel
-
-# Wheel value 0 = "off" (no CC bound), value v>=1 = CC number (v - 1).
-_CC_LABELS = ["—"] + [f"CC {i}" for i in range(128)]
+from raspimidihub.plugin_api import CCSelect, Group, PluginBase, Wheel
 
 
 class ChannelSelector(PluginBase):
@@ -32,9 +29,9 @@ sent on. Wire your routing matrix's channel filters downstream as usual
 and the buttons now choose the destination.
 
 The "Active Channel" wheel always shows the current selection (and can
-be scrolled by hand as an override). To bind a button: scroll Active
-Channel to the target, tap "Learn CC", then press the button on the
-controller — its CC is captured into that channel's slot.
+be scrolled by hand as an override). To bind a button: tap "Learn" under
+the channel's slot, then press the button on the controller — its CC is
+captured into that slot. Each slot has its own Learn.
 
 Selector CCs are swallowed (never forwarded); any other CC passes through
 on the active channel."""
@@ -45,13 +42,9 @@ on the active channel."""
     params = [
         Wheel("active_ch", "Active Channel", min=1, max=16, default=1,
               wide=True, span=2),
-        Group("Trigger", [
-            Wheel("threshold", "Trigger ≥", min=1, max=127, default=64),
-            Button("learn", "Learn CC", trigger=True, color="blue"),
-        ]),
+        Wheel("threshold", "Trigger ≥", min=1, max=127, default=64),
         Group("CC → Channel", [
-            Wheel(f"cc_ch{n}", f"Ch {n}", min=0, max=128, default=0,
-                  labels=_CC_LABELS, mini=True)
+            CCSelect(f"cc_ch{n}", f"Ch {n}", default=-1)
             for n in range(1, 17)
         ], config_only=True),
     ]
@@ -62,8 +55,6 @@ on the active channel."""
         # a channel switch still gets its Note Off on the original channel
         # (no stuck notes on the channel we just left).
         self._held: dict[int, int] = {}
-        # Armed by tapping "Learn CC"; the next incoming CC is captured.
-        self._armed = False
 
     # --- helpers ---
 
@@ -72,22 +63,17 @@ on the active channel."""
         return int(self.get_param("active_ch") or 1) - 1
 
     def _channel_for_cc(self, cc: int) -> int | None:
-        """1-based channel whose slot is bound to this CC, or None."""
+        """1-based channel whose slot is bound to this CC, or None.
+        Slot value -1 = unbound; 0..127 = the bound CC number."""
         for n in range(1, 17):
-            v = int(self.get_param(f"cc_ch{n}") or 0)
-            if v >= 1 and (v - 1) == cc:
+            v = self.get_param(f"cc_ch{n}")
+            if v is not None and v >= 0 and v == cc:
                 return n
         return None
 
     # --- handlers ---
 
     def on_cc(self, channel, cc, value):
-        if self._armed and value > 0:
-            target = int(self.get_param("active_ch") or 1)
-            self.set_param(f"cc_ch{target}", cc + 1)  # +1: 0 = unbound sentinel
-            self._armed = False
-            self.set_param("learn", False)
-            return
         slot_ch = self._channel_for_cc(cc)
         if slot_ch is not None:
             # A bound selector button: switch on a real press, but always
@@ -99,10 +85,6 @@ on the active channel."""
                 self.set_param("active_ch", slot_ch, persist=False)
             return
         self.send_cc(self._out_ch(), cc, value)
-
-    def on_param_change(self, name, value):
-        if name == "learn" and value:
-            self._armed = True
 
     def on_note_on(self, channel, note, velocity):
         if velocity == 0:

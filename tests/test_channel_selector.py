@@ -55,14 +55,10 @@ def _flatten(params):
     return out
 
 
-def test_default_labels_cover_off_plus_128_ccs():
+def test_slots_default_to_unbound():
     p, _ = _make()
-    # value 0 -> "—", value 128 -> "CC 127"
-    from raspimidihub_plugin_channel_selector import _CC_LABELS  # noqa
-    assert _CC_LABELS[0] == "—"
-    assert _CC_LABELS[1] == "CC 0"
-    assert _CC_LABELS[128] == "CC 127"
-    assert len(_CC_LABELS) == 129
+    for n in range(1, 17):
+        assert p.get_param(f"cc_ch{n}") == -1
 
 
 def test_input_channel_ignored_notes_restamped_to_active():
@@ -74,7 +70,7 @@ def test_input_channel_ignored_notes_restamped_to_active():
 
 def test_selector_cc_switches_active_and_is_swallowed():
     p, sent = _make()
-    p._param_values["cc_ch2"] = 22  # Ch 2 bound to CC 21 (value 22 -> CC 21)
+    p._param_values["cc_ch2"] = 21  # Ch 2 bound to CC 21
     p.on_cc(channel=0, cc=21, value=127)
     assert p.get_param("active_ch") == 2
     assert sent["cc"] == []  # selector CC must not pass through
@@ -82,7 +78,7 @@ def test_selector_cc_switches_active_and_is_swallowed():
 
 def test_selector_release_below_threshold_swallowed_no_switch():
     p, sent = _make()
-    p._param_values["cc_ch3"] = 31  # CC 30
+    p._param_values["cc_ch3"] = 30  # CC 30 -> Ch 3
     p._param_values["active_ch"] = 1
     p.on_cc(channel=0, cc=30, value=0)  # release
     assert p.get_param("active_ch") == 1  # no switch on release
@@ -96,10 +92,27 @@ def test_unbound_cc_passes_through_on_active_channel():
     assert sent["cc"] == [(3, 74, 64)]
 
 
+def test_cc_zero_does_not_match_unbound_slots():
+    # Off is -1, not 0 — so CC 0 must pass through, not match a default slot.
+    p, sent = _make()
+    p._param_values["active_ch"] = 2
+    p.on_cc(channel=0, cc=0, value=127)
+    assert p.get_param("active_ch") == 2       # no spurious switch
+    assert sent["cc"] == [(1, 0, 127)]         # CC 0 forwarded
+
+
+def test_cc_zero_is_a_valid_binding():
+    p, sent = _make()
+    p._param_values["cc_ch5"] = 0  # Ch 5 bound to CC 0
+    p.on_cc(channel=0, cc=0, value=127)
+    assert p.get_param("active_ch") == 5
+    assert sent["cc"] == []
+
+
 def test_note_off_returns_to_original_channel_after_switch():
     p, sent = _make()
     p._param_values["active_ch"] = 1
-    p._param_values["cc_ch8"] = 51  # CC 50 -> Ch 8
+    p._param_values["cc_ch8"] = 50  # CC 50 -> Ch 8
     p.on_note_on(channel=0, note=64, velocity=100)   # held on ch 1 (0-based 0)
     p.on_cc(channel=0, cc=50, value=127)             # switch to ch 8
     p.on_note_off(channel=0, note=64)
@@ -113,20 +126,6 @@ def test_velocity_zero_note_on_is_note_off():
     p.on_note_on(channel=0, note=60, velocity=100)
     p.on_note_on(channel=0, note=60, velocity=0)  # running-status note off
     assert sent["notes_off"] == [(1, 60)]
-
-
-def test_learn_captures_next_cc_into_active_channel_slot():
-    p, sent = _make()
-    p._param_values["active_ch"] = 6
-    p.on_param_change("learn", True)   # arm
-    p.on_cc(channel=0, cc=42, value=127)
-    # value 43 stored => CC 42
-    assert p.get_param("cc_ch6") == 43
-    assert sent["cc"] == []            # captured CC not forwarded
-    # next press of that CC now switches (slot is bound)
-    p._param_values["active_ch"] = 1
-    p.on_cc(channel=0, cc=42, value=127)
-    assert p.get_param("active_ch") == 6
 
 
 def test_pitchbend_and_pc_restamped():

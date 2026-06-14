@@ -195,15 +195,14 @@ channel filter in the routing matrix decides where the signal goes.
 | Parameter | Type | Range | Default |
 |-----------|------|-------|---------|
 | **Active Channel** | Wheel | 1--16 | 1 |
-| Trigger -- **Trigger ≥** | Wheel | 1--127 | 64 |
-| Trigger -- **Learn CC** | Button (trigger) | -- | -- |
-| CC → Channel -- **Ch 1**..**Ch 16** | Wheel | --, CC 0--127 | -- (unbound) |
+| **Trigger ≥** | Wheel | 1--127 | 64 |
+| CC → Channel -- **Ch 1**..**Ch 16** | CCSelect | Off, CC 0--127 | Off (unbound) |
 
 **Active Channel** mirrors the live selection and can be scrolled by
 hand as a manual override; a live button press updates it without
-marking the config dirty. **Learn CC**: scroll Active Channel to the
-target, tap Learn, then press the button on the controller -- its CC
-is captured into that channel's slot. Slots left at "--" are unbound.
+marking the config dirty. Each **Ch** slot has its own **Learn** button:
+tap it, then press the button on the controller -- the next incoming CC
+is captured into that slot. Slots left at "Off" are unbound.
 
 A note held while you switch channels still receives its Note Off on
 the channel it started on, so a mid-phrase switch leaves no stuck note.

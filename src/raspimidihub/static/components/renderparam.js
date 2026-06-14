@@ -14,6 +14,7 @@ import { PluginStepEditor } from './stepeditor.js';
 import { PluginCartesianGrid } from './cartesiangrid.js';
 import { PluginCurveEditor } from './curveeditor.js';
 import { PluginNoteSelect } from './noteselect.js';
+import { PluginCCSelect } from './ccselect.js';
 import { PluginChannelSelect } from './channelselect.js';
 import { PluginGroup } from './group.js';
 import { PluginLayoutGrid } from './layoutgrid.js';
@@ -116,6 +117,10 @@ export function renderParam(param, values, onChange, allValues, displayCtx) {
             return html`<${PluginNoteSelect} name=${param.name} label=${param.label}
                 value=${val != null ? val : param.default || 60} onChange=${onChange}
                 learnable=${param.learnable !== false} onBindRequest=${onBind} />`;
+        case 'ccselect':
+            return html`<${PluginCCSelect} name=${param.name} label=${param.label}
+                value=${val != null ? val : (param.default != null ? param.default : -1)}
+                onChange=${onChange} />`;
         case 'channelselect':
             return html`<${PluginChannelSelect} name=${param.name} label=${param.label}
                 value=${val != null ? val : (param.default != null ? param.default : 1)}
@@ -173,7 +178,7 @@ export function renderParam(param, values, onChange, allValues, displayCtx) {
     }
 }
 
-export const INLINE_TYPES = new Set(['wheel', 'knob', 'fader', 'noteselect', 'channelselect', 'button', 'display', 'xypad']);
+export const INLINE_TYPES = new Set(['wheel', 'knob', 'fader', 'noteselect', 'ccselect', 'channelselect', 'button', 'display', 'xypad']);
 
 function isInline(p) {
     return INLINE_TYPES.has(p.type);
