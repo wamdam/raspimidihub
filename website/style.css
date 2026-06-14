@@ -214,7 +214,7 @@ a:hover { text-decoration: underline; }
      edge on the side. A smaller box plus gradients that reach full
      transparency well before that box edge keep it soft all round. */
   width: 110%;
-  max-width: 900px;
+  max-width: 1000px;
   height: calc(100% + 200px);
   background:
     radial-gradient(ellipse 38% 45% at 50% 50%, rgba(233,69,96,0.5) 0%, transparent 72%),
@@ -227,8 +227,12 @@ a:hover { text-decoration: underline; }
   position: relative;
   z-index: 1;
 }
-.hero-phones .phone { width: 224px; opacity: 0.82; transform: scale(0.95); }
-.hero-phones .phone-front { opacity: 1; transform: scale(1.08); width: 234px; z-index: 2; box-shadow: 0 30px 80px rgba(233,69,96,0.15), 0 20px 60px rgba(0,0,0,0.5), inset 0 0 0 2px rgba(255,255,255,0.08); }
+/* Viewport-relative width so the trio grows on wide screens instead of
+   looking lost at ~224 px on full-HD. Clamped: a floor for small
+   desktops, a ceiling so the 1:2 portrait phones don't get absurdly
+   tall. Mobile (<=768px) overrides these with its own fixed sizes. */
+.hero-phones .phone { width: clamp(224px, 22vw, 300px); opacity: 0.82; transform: scale(0.95); }
+.hero-phones .phone-front { opacity: 1; transform: scale(1.08); width: clamp(240px, 24vw, 320px); z-index: 2; box-shadow: 0 30px 80px rgba(233,69,96,0.15), 0 20px 60px rgba(0,0,0,0.5), inset 0 0 0 2px rgba(255,255,255,0.08); }
 /* Side phones tuck a little behind the center one (which sits on top
    via z-index 2). Negative margins pull the center over their inner
    edges for a fanned-stack look. */
