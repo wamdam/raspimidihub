@@ -33,6 +33,14 @@ def _get_mac_suffix() -> str:
         return "0000"
 
 
+def default_ap_ssid() -> str:
+    """The AP SSID used when none is configured: RaspiMIDIHub-<MAC
+    suffix> (e.g. RaspiMIDIHub-735C). The suffix is hardware-derived
+    and not configurable; a user-set `wifi.ap_ssid` overrides the whole
+    name."""
+    return f"RaspiMIDIHub-{_get_mac_suffix()}"
+
+
 def _run(cmd: list[str], check: bool = True, timeout: int = 10) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, capture_output=True, text=True, check=check, timeout=timeout)
 
@@ -365,7 +373,7 @@ no-hosts
         and (re)spawns whichever process actually changed.
         """
         if not ssid:
-            ssid = f"RaspiMIDIHub-{_get_mac_suffix()}"
+            ssid = default_ap_ssid()
         self._ssid = ssid
 
         # Re-use channel from the existing config if present. /run is tmpfs,

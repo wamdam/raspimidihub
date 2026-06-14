@@ -70,13 +70,22 @@ The asterisk is a reminder that *the running unit is not yet what
 the next boot will look like*. It is the single most important
 indicator in the UI and worth memorising.
 
-## The "Stale, Reload" Header Badge
+## The Header Badge
+
+The header reads `RaspiMIDIHub v<version> · <name>`, where `<name>`
+is the hub's WiFi name -- the access-point SSID with the redundant
+`RaspiMIDIHub-` prefix stripped, so the factory default shows just
+its MAC suffix (e.g. `735C`) and a custom SSID shows verbatim. It is
+the same identifier you pick the hub by in the WiFi list, so two
+hubs on one bench are told apart at a glance. Change it by setting a
+custom **AP SSID** under **Settings → WiFi** (the `735C` suffix
+itself is the wlan0 MAC and not separately editable).
 
 When the server has been redeployed and the SPA running in the
-browser is older than the backend, a small "stale, reload" link
-appears in the header. Tapping it reloads the SPA. The same effect
-is available manually from **Settings → Reload App**, which busts
-mobile Safari's bf-cache reliably.
+browser is older than the backend, a small red dot appears next to
+the title. Tapping it reloads the SPA. The same effect is available
+manually from **Settings → Reload App**, which busts mobile Safari's
+bf-cache reliably.
 
 ## Universal Gestures
 

@@ -403,7 +403,13 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
     @server.route("GET", "/api/system")
     async def api_system(req: Request) -> Response:
         import subprocess
+
+        from .wifi import default_ap_ssid
         hostname = socket.gethostname()
+        # The AP SSID is what the user sees in the WiFi list and the
+        # header badge mirrors it. Configured name wins; else the
+        # RaspiMIDIHub-<MAC suffix> default.
+        ap_ssid = config.wifi.get("ap_ssid") or default_ap_ssid()
 
         # IP addresses
         ips = []
@@ -482,7 +488,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         # in the window (frontend renders "—" for those). Round to 1 dp.
         latency_max = {k: round(v, 1) for k, v in server._latency_max.items()}
         return Response.json({
-            "hostname": hostname, "version": __version__,
+            "hostname": hostname, "ap_ssid": ap_ssid, "version": __version__,
             "build_token": server._build_token,
             "ip_addresses": ips, "cpu_temp_c": temp, "ram": ram,
             "uptime_seconds": uptime, "load1": load1,

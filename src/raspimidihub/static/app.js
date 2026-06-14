@@ -31,22 +31,27 @@ import { SpectatorContext, useSharedUiState } from './lib/spectator/shared-ui-st
 import { useSourceBroadcaster } from './lib/spectator/broadcast.js';
 import { SpectatorView } from './lib/spectator/view.js';
 
-// Header badge: "RaspiMIDIHub [● if stale] v2.0.9·a1b2c3d4". The red
-// dot is the only visual when the loaded JS bundle's build token
-// differs from the server's current one — clicking it triggers
-// hardReload, same as the old "stale, reload" link did.
-function VersionBadge({ version, loadedBuild, serverBuild }) {
+// Header badge: "RaspiMIDIHub [● if stale] v2.0.9 · 735C". The build
+// token is no longer shown (cache-busting reload is reliable now);
+// instead we show the hub's WiFi name — the AP SSID, with the
+// redundant "RaspiMIDIHub-" prefix stripped so the default reads as
+// just its MAC suffix ("735C") and a custom SSID shows verbatim. The
+// red dot still appears when the loaded JS bundle's build token
+// differs from the server's current one (a redeploy happened); tapping
+// it triggers hardReload, same as the old "stale, reload" link.
+function VersionBadge({ version, apSsid, loadedBuild, serverBuild }) {
     if (!version) return html`<h1>RaspiMIDIHub</h1>`;
     // loadedBuild looks like "2.0.9-69ee5610" (?v=<version>-<token>);
     // serverBuild is just "69ee5610" — strip the version prefix so we
     // compare apples to apples.
     const loadedToken = loadedBuild ? loadedBuild.split('-').pop() : '';
     const stale = serverBuild && loadedToken && serverBuild !== loadedToken;
+    const name = apSsid ? apSsid.replace(/^RaspiMIDIHub-/i, '') : '';
     return html`<h1>RaspiMIDIHub${stale ? html`<span class="stale-dot"
             title="Server has been redeployed since this tab loaded — tap to reload"
             onclick=${hardReload}></span>` : ''}
         <span style="font-size:11px;font-weight:400;color:var(--text-dim);margin-left:10px">
-            v${version}${loadedToken ? '·' + loadedToken : ''}
+            v${version}${name ? ' · ' + name : ''}
         </span>
     </h1>`;
 }
@@ -149,6 +154,7 @@ function App({ onSpectatorWatched, onRouteChange }) {
     const [toast, setToast] = useSharedUiState('toast', '');
     const [configFallback, setConfigFallback] = useState(false);
     const [version, setVersion] = useState('');
+    const [apSsid, setApSsid] = useState('');
     // Server's current build token vs the one this JS bundle was loaded
     // against. They diverge after a redeploy → user needs to reload to
     // pick up new JS. The badge in the header makes that visible at a
@@ -237,6 +243,7 @@ function App({ onSpectatorWatched, onRouteChange }) {
         api('/system').then(s => {
             setConfigFallback(s.config_fallback);
             setVersion(s.version || '');
+            setApSsid(s.ap_ssid || '');
             setServerBuild(s.build_token || '');
             setConfigDirty(!!s.config_dirty);
         });
@@ -539,7 +546,7 @@ function App({ onSpectatorWatched, onRouteChange }) {
 
     return html`
         <div class="header">
-            <${VersionBadge} version=${version} loadedBuild=${loadedBuild} serverBuild=${serverBuild} />
+            <${VersionBadge} version=${version} apSsid=${apSsid} loadedBuild=${loadedBuild} serverBuild=${serverBuild} />
             <div class="header-right">
                 <span class="status ${sseConnected ? (devices.length > 0 ? 'ok' : '') : 'err'}">${sseConnected ? `${devices.length} device${devices.length !== 1 ? 's' : ''}` : 'Connection lost'}</span>
                 <${FullscreenButton} />
