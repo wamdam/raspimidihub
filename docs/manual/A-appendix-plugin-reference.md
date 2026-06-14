@@ -181,6 +181,43 @@ and output side by side -- makes the smoothing visible.
 
 ![CC Smoother with input and output scopes.](../screenshots/11-plugin-cc-smoother.png){width=35%}
 
+## Channel Selector
+
+Turns a set of momentary CC buttons into a channel picker for
+controllers without a display. Each channel slot is bound to one CC
+number; pressing that button (a CC value at or above the trigger
+threshold) makes that channel the active one. The input channel is
+ignored entirely -- notes, CC, pitch bend, aftertouch and program
+change are all re-stamped onto the active channel, so a downstream
+channel filter in the routing matrix decides where the signal goes.
+
+| Parameter | Type | Range | Default |
+|-----------|------|-------|---------|
+| **Active Channel** | Wheel | 1--16 | 1 |
+| Trigger -- **Trigger ≥** | Wheel | 1--127 | 64 |
+| Trigger -- **Learn CC** | Button (trigger) | -- | -- |
+| CC → Channel -- **Ch 1**..**Ch 16** | Wheel | --, CC 0--127 | -- (unbound) |
+
+**Active Channel** mirrors the live selection and can be scrolled by
+hand as a manual override; a live button press updates it without
+marking the config dirty. **Learn CC**: scroll Active Channel to the
+target, tap Learn, then press the button on the controller -- its CC
+is captured into that channel's slot. Slots left at "--" are unbound.
+
+A note held while you switch channels still receives its Note Off on
+the channel it started on, so a mid-phrase switch leaves no stuck note.
+Selector CCs are swallowed (press and release); any other CC passes
+through on the active channel.
+
+**Input.** Notes / CC / Pitchbend / Aftertouch / Program Change
+(input channel ignored).
+**Output.** Every event re-stamped onto the active channel.
+**Clock.** None.
+
+Screenshots needed: `XX-plugin-channel-selector.png` -- the config
+panel showing the Active Channel wheel, Trigger group, and the
+4×4 CC → Channel grid.
+
 ## Chord Generator
 
 Each incoming Note On triggers a chord. Selectable chord type,

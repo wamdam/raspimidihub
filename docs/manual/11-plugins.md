@@ -221,6 +221,7 @@ One-line summaries. The detailed reference for each lives in
 | **Cartesian** | René-style 2D grid sequencer; voices a held note (root + per-cell offset); two clocks (X steps the grid along a Path, Y advances inversions); scale-aware Fill Voicing (Unison / 5th / Triad / 7th / Scale); bidirectional Inversion; Live re-fill or Latch; second channel records cell offsets. *Play-surface plugin* — added from **Add → Play** |
 | **CC LFO** | CC waveforms (sine/triangle/square/saw/sample-and-hold); free or clock-sync up to 8 bars; live scope |
 | **CC Smoother** | Removes jitter from noisy CC inputs with configurable smoothing; dual scopes (in / out) |
+| **Channel Selector** | Momentary CC buttons each select an output channel; the input channel is ignored and everything is re-stamped onto the active channel. For displayless controllers -- a live "Active Channel" wheel shows the selection. Pair with the matrix's channel filters to choose a destination by button |
 | **Chord Generator** | Input note triggers a chord (major / minor / 7th / custom intervals) with inversions |
 | **Clock Divider** | Emit one MIDI Clock for every N received (2..32) |
 | **Euclidean** | Held notes voiced through a Bjorklund-distributed step pattern; per-step manual overrides on top; chord mode; internal Scale + Root; Jitter, Tune Spread, Fade In / Out. *Play-surface plugin* — added from **Add → Play** |
