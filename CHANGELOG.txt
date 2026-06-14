@@ -4,6 +4,13 @@ User-visible changes. Short tagged one-liners, no code or commit
 hashes. Tags: Added, Improved, Fix, Changed, Removed.
 
 
+2026-06-14 — Version 5.0.0a2
+
+- Added: **Channel Selector** plugin — turns a controller's buttons into a channel picker. Assign one CC per channel (each slot has its own **MIDI-Learn**); pressing that button makes that channel the active one, and every event — notes, CC, pitch bend, aftertouch, program change — is re-stamped onto it, regardless of which channel the controller actually sent on. A live **Active Channel** wheel shows the current selection, the visual feedback a displayless keyboard lacks. Pair it with the routing matrix's channel filters and the buttons switch the destination (plain / Arp / Euclidean / Cartesian / …) hands-free; a note held across a switch still gets its Note Off on the channel it started on, so there are no stuck notes. Add from **Add → Plugin**.
+- Improved: the **Rack view** got a light-mode reskin, snappier dragging and scrolling, and a per-device clock-activity LED (hidden for sources whose clock is filtered out). Spectators now see the same cable peek / spread highlights and live drag-patching as the operator.
+- Changed: the play-surface plugins (**Cartesian**, **Euclidean**, **Scale Remapper**) show the **Root** selector before **Scale**, so the readout reads naturally ("D minor", not "minor D").
+
+
 2026-06-14 — Version 5.0.0a1
 
 - Added: **Cartesian** play surface — a René-style 2D grid sequencer that voices a held note (root + per-cell semitone offset). Two independent clocks sweep it: **Rate** steps the grid along a **Path** (Rows / Cols / Diagonal / Knight / Spiral in / Spiral out / Random), **Inv. Rate** advances the chord inversion. A scale-aware **Fill Voicing** knob (Unison → 5th → Triad → 7th → Scale) stamps the grid; **Inversion** (-4…+4) re-voices without octave stacking. The **Root** wheel doubles as the harmony selector — "No root" = chordal (played note = tonic, fixed quality), a root C..B = diatonic (Root + Scale define a key; the played note is harmonised in-key — third → iii-chord, fifth → V-chord). The **Autofill** toggle re-fills the voicing instantly while preserving your on/off + accent mask (a held note + two CCs is a full instrument); turn it off to freeze the grid for hand-editing. A separate **Fill Ch** records cell offsets by holding notes. 8-slot pattern bank and bindable knobs like the other play surfaces. Add from **Add → Play**.
