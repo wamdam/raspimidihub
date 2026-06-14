@@ -182,6 +182,18 @@ function applySpan(rendered, span) {
     return html`<div class="param-cell" style="grid-column: span ${span}">${rendered}</div>`;
 }
 
+// Stamp a stable key on a vnode so Preact reconciles params by identity,
+// not sibling index. Without this, a `visible_when` param appearing or
+// disappearing shifts indices and Preact reuses a neighbour's component
+// instance for a different param — bleeding its internal state (e.g. a
+// Wheel's last displayed value). Keying by param name pins each control
+// to its own instance. (Preact reads vnode.key at diff time, so setting
+// it post-construction is honoured.)
+function withKey(vnode, key) {
+    if (vnode && typeof vnode === 'object') vnode.key = key;
+    return vnode;
+}
+
 export function renderParamGroup(items, values, onChange, displayCtx, cols) {
     const result = [];
     let inlineRun = [];
@@ -225,7 +237,7 @@ export function renderParamGroup(items, values, onChange, displayCtx, cols) {
         // through to renderParam's `Unknown` default.
         if (p.type === 'group') {
             flushInline();
-            result.push(html`<${PluginGroup} title=${p.title}>
+            result.push(html`<${PluginGroup} key=${`group:${p.title}`} title=${p.title}>
                 ${renderParamGroup(p.children, values, onChange, displayCtx, p.cols)}
             <//>`);
             continue;
@@ -233,10 +245,10 @@ export function renderParamGroup(items, values, onChange, displayCtx, cols) {
         const rendered = renderParam(p, values, onChange, values, displayCtx);
         if (!rendered) continue;
         if (INLINE_TYPES.has(p.type)) {
-            inlineRun.push(applySpan(rendered, p.span));
+            inlineRun.push(withKey(applySpan(rendered, p.span), p.name));
             if (p.span && p.span > inlineMaxSpan) inlineMaxSpan = p.span;
         }
-        else { flushInline(); result.push(rendered); }
+        else { flushInline(); result.push(withKey(rendered, p.name)); }
     }
     flushInline();
     return result;
@@ -273,7 +285,7 @@ export function renderParamList(params, values, onChange, displayCtx) {
     for (const p of expanded) {
         if (p._isGroup) {
             flushInline();
-            result.push(html`<${PluginGroup} title=${p.title}>
+            result.push(html`<${PluginGroup} key=${`group:${p.title}`} title=${p.title}>
                 ${renderParamGroup(p.children, values, onChange, displayCtx, p.cols)}
             <//>`);
         } else {
@@ -284,10 +296,10 @@ export function renderParamList(params, values, onChange, displayCtx) {
             // Arpeggiator's Pattern + Rate wheels) need the same path
             // so `span=2` actually widens the grid cell.
             if (INLINE_TYPES.has(p.type)) {
-                inlineRun.push(applySpan(rendered, p.span));
+                inlineRun.push(withKey(applySpan(rendered, p.span), p.name));
                 if (p.span && p.span > inlineMaxSpan) inlineMaxSpan = p.span;
             }
-            else { flushInline(); result.push(rendered); }
+            else { flushInline(); result.push(withKey(rendered, p.name)); }
         }
     }
     flushInline();
