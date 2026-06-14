@@ -121,8 +121,22 @@ export function createRackEngine() {
     }
 
     // ---- connection ↔ key helpers -----------------------------------
-    function srcKeyOf(c) { return (c.offline ? 's:' + c.src_stable_id : 'c' + c.src_client) + ':' + c.src_port + ':out'; }
-    function dstKeyOf(c) { return (c.offline ? 's:' + c.dst_stable_id : 'c' + c.dst_client) + ':' + c.dst_port + ':in'; }
+    // A connection is flagged `offline` when EITHER endpoint is offline,
+    // and the API keys it by stable_id on both ends. But the *other*
+    // endpoint may still be online — its jack is rendered keyed by
+    // client_id (`c<id>`), not stable_id (`s:<sid>`). Resolve each
+    // endpoint to the online client-key when that device is currently
+    // present, else the offline ghost's stable-key. Without this a
+    // half-offline cable (e.g. an offline network device → a live local
+    // synth) finds no anchor for the live side and vanishes — the matrix
+    // still shows it muted because it looks up the cell by both keys.
+    function dkeyForStable(sid) {
+        for (const d of (engine.ctx.devices || []))
+            if (d.stable_id === sid && d.client_id != null) return 'c' + d.client_id;
+        return 's:' + sid;
+    }
+    function srcKeyOf(c) { return (c.offline ? dkeyForStable(c.src_stable_id) : 'c' + c.src_client) + ':' + c.src_port + ':out'; }
+    function dstKeyOf(c) { return (c.offline ? dkeyForStable(c.dst_stable_id) : 'c' + c.dst_client) + ':' + c.dst_port + ':in'; }
     function srcStableOf(c) { return c.offline ? c.src_stable_id : srcStableFromClient(c.src_client); }
     function srcStableFromClient(cid) {
         for (const d of (engine.ctx.devices || [])) if (d.client_id === cid) return d.stable_id;
@@ -361,8 +375,8 @@ export function createRackEngine() {
             ? (srcDkey(c) === dkey && c.src_port === Number(port))
             : (dstDkey(c) === dkey && c.dst_port === Number(port)));
     }
-    function srcDkey(c) { return c.offline ? 's:' + c.src_stable_id : 'c' + c.src_client; }
-    function dstDkey(c) { return c.offline ? 's:' + c.dst_stable_id : 'c' + c.dst_client; }
+    function srcDkey(c) { return c.offline ? dkeyForStable(c.src_stable_id) : 'c' + c.src_client; }
+    function dstDkey(c) { return c.offline ? dkeyForStable(c.dst_stable_id) : 'c' + c.dst_client; }
 
     // allowEmpty: when a port is deliberately SELECTED (tap/hold/sticky)
     // we enter peek even if it has no cables — so everything mutes,
