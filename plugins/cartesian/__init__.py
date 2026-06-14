@@ -31,13 +31,13 @@ decides major/minor thirds & sevenths). The chord tones climb across
 the cells (``offset = chord_tone(x + y + inversion)``) so a 4×4 already
 reads as a ladder of inversions.
 
-  Fill = Live  — Voicing / Scale / Size / Inversion act immediately
+  Autofill ON  — Voicing / Scale / Size / Inversion act immediately
                  (all CC-bindable) and re-stamp the offsets. on/off and
                  accents are preserved, so you keep your rhythm + accent
                  mask and sweep only the harmony with one knob + one
                  held note. The Inv. Rate clock animates inversions live.
-  Fill = Latch — the grid freezes exactly as it is the moment you
-                 switch (the switch *is* the commit — no Apply button),
+  Autofill OFF — the grid freezes exactly as it is the moment you
+                 switch it off (that *is* the commit — no Apply button),
                  then you hand-edit per-cell offsets freely. The
                  inversion sweep is paused (the grid plays as edited).
 
@@ -214,12 +214,12 @@ quality, transposing with the note); picking a root C..B defines a key
 iii-chord, fifth → V-chord, …).
 
 Fill Voicing stamps the grid with a chord (Unison / 5th / Triad / 7th /
-Scale), scale-aware via the Scale wheel. In Fill = Live the voicing,
+Scale), scale-aware via the Scale wheel. With Autofill ON the voicing,
 scale, size and inversion act immediately (all CC-bindable) and re-stamp
 the offsets while preserving your on/off + accent mask — so you keep the
-rhythm and sweep only the harmony with one knob and one held note. In
-Fill = Latch freezes the grid exactly as it is the moment you switch,
-then you hand-edit cell offsets; the inversion sweep pauses.
+rhythm and sweep only the harmony with one knob and one held note.
+Autofill OFF freezes the grid exactly as it is the moment you switch it
+off, then you hand-edit cell offsets; the inversion sweep pauses.
 
 Fill Ch records offsets: hold notes and each writes its interval
 (relative to the first note) into the next cell along the Path. Touching
@@ -241,12 +241,12 @@ to pick a Channel + CC (or MIDI-Learn one)."""
     # Rate": Inv. Rate sits beside Inversion (the inversion clock it
     # drives, not a spatial axis).
     params = [
-        # Row 1 — Fill live toggle, Fill Voicing, then the Inversion pair.
-        # "Fill live" toggle (latching, LED). ON (default) = Live: the
-        # grid re-stamps from the voicing on every change. OFF = the
-        # grid is frozen as-is for hand-editing — switching it off *is*
-        # the commit (no Apply button).
-        Button("fill_mode", "Fill live", default=True, color="green",
+        # Row 1 — Autofill toggle, Fill Voicing, then the Inversion pair.
+        # "Autofill" toggle (latching, LED). ON (default): the grid
+        # re-stamps from the voicing on every change. OFF: the grid is
+        # frozen as-is for hand-editing — switching it off *is* the
+        # commit (no Apply button).
+        Button("fill_mode", "Autofill", default=True, color="green",
                play_only=True),
         Wheel("fill_voicing", "Fill Voicing",
               min=0, max=len(_VOICING_OPTIONS) - 1,
@@ -400,7 +400,7 @@ to pick a Channel + CC (or MIDI-Learn one)."""
     # ----- helpers ------------------------------------------------------------
 
     def _mode(self) -> str:
-        # "Fill live" is a latching button: True/on = Live, False/off =
+        # "Autofill" is a latching button: True/on = Live, False/off =
         # Latch (frozen). Tolerate the legacy "Live"/"Latch" strings too
         # so configs saved under the old radio still load correctly.
         v = self.get_param("fill_mode")
@@ -641,7 +641,7 @@ to pick a Channel + CC (or MIDI-Learn one)."""
             self._fill_ref = note
             self._fill_cursor = 0
             if self._mode() != "Latch":
-                self.set_param("fill_mode", False)  # Fill live off = Latch
+                self.set_param("fill_mode", False)  # Autofill off = Latch
         x, y = path[self._fill_cursor % len(path)]
         idx = y * _STORAGE + x
         grid = list(self.get_param("grid") or [])
@@ -708,7 +708,7 @@ to pick a Channel + CC (or MIDI-Learn one)."""
             self._live_restamp()
             return
         if name == "fill_mode":
-            # "Fill live" button: True/on = Live, False/off = Latch.
+            # "Autofill" button: True/on = Live, False/off = Latch.
             live = not (value is False or value == "Latch")
             if live:
                 # Re-derive the grid from the current voicing.

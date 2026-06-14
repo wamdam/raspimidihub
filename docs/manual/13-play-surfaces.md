@@ -503,7 +503,7 @@ with Inversion = +2 the grid cycles root position → 1st inversion →
 2nd inversion and back, one step per Inv. Rate tick. (Inv. Rate has no
 effect while Inversion = 0.)
 
-### Fill live
+### Autofill
 
 A latching toggle (LED) that decides whether the voicing is generative
 or frozen:
@@ -519,10 +519,10 @@ or frozen:
   it off** — turning it off *is* the commit, there is no separate Apply
   step. You can then hand-edit individual cell offsets freely; the
   edits persist and the inversion sweep is paused (the grid plays
-  exactly as drawn). Turn **Fill live** back on to re-derive a clean
+  exactly as drawn). Turn **Autofill** back on to re-derive a clean
   voicing from the wheels again.
 
-While Fill live is on, re-stamping only ever touches the **offset**
+While Autofill is on, re-stamping only ever touches the **offset**
 field, never on/off or accent, so sweeping voicings never disturbs
 your groove.
 
@@ -537,7 +537,7 @@ panel), so one keyboard can play it while another fills it:
 - **Fill Ch** (Off / 1..16) -- a recording channel. Hold notes and
   each one writes its interval (relative to the first note of the
   gesture) into the next cell along the Path, programmed-Arp style.
-  Touching the Fill Ch turns **Fill live** off (freezing the grid) so
+  Touching the Fill Ch turns **Autofill** off (freezing the grid) so
   the recording isn't overwritten by the live fill.
 
 ### The Path
@@ -564,7 +564,7 @@ instance for X and Y to advance.
 
 Screenshots needed:
 
-- `cartesian-play.png` -- the Cartesian play surface: the Fill live /
+- `cartesian-play.png` -- the Cartesian play surface: the Autofill /
   Fill Voicing / Inversion / Inv. Rate row, the Scale / Root / Path
   row, the Rate / Gate / Accent / Grid row, and the 2D grid with the
   playhead highlighting the swept cell. Add a `_open_cartesian` scene to

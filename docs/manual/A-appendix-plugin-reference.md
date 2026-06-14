@@ -103,7 +103,7 @@ metadata:
 | Play    | **Grid** | Wheel | 2×2 / 3×3 / 4×4 | 4×4 |
 | Play    | **Gate %** | Wheel | 10--100 | 80 |
 | Play    | **Accent Vel.** | Knob | 0--127 | 30 |
-| Play    | **Fill live** | Button (latching) | on = Live (re-stamps), off = Latch (frozen) | on |
+| Play    | **Autofill** | Button (latching) | on = Live (re-stamps), off = Latch (frozen) | on |
 | Play    | *(grid)* | CartesianGrid | side×side cells; tap = off/on/accent, mini-wheel = per-cell offset | all on, offsets from voicing |
 | Play    | **Patterns** | PatternStrip | end-of-surface P1--P8 bank | slot 1 active |
 | Setup   | **Sync** | Radio | free / tempo / transport | transport |

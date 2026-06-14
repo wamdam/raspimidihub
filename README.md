@@ -140,7 +140,7 @@ Plugins on the **Play** bottom-nav tab (alongside Controllers). They route in th
 - **Fill Voicing** -- one knob stamps the grid (Unison → 5th → Triad → 7th → Scale), scale-aware so thirds and sevenths follow the **Scale** wheel; chord tones climb across the cells as a ladder of inversions
 - **Root** -- doubles as the harmony selector: **No root** = chordal (played note is the tonic, fixed quality, transposes with the note); a root **C..B** = diatonic (Root + Scale define a key; the played note picks a degree and is harmonised in-key, so the third gives a iii-chord, the fifth a V-chord)
 - **Inversion** -- bidirectional (-4…+4) re-voicing, not octave stacking -- lifts the lowest voice an octave for smooth voice-leading
-- **Fill live** -- a latching toggle: on, Voicing / Scale / Root / Grid / Inversion re-fill the offsets instantly (all CC-bindable) while preserving your on/off + accent mask, so a held note + two knobs is a full instrument; turn it off and the grid freezes as-is for hand-editing
+- **Autofill** -- a latching toggle: on, Voicing / Scale / Root / Grid / Inversion re-fill the offsets instantly (all CC-bindable) while preserving your on/off + accent mask, so a held note + two knobs is a full instrument; turn it off and the grid freezes as-is for hand-editing
 - **Two channels** -- **Play Ch** holds the root, **Fill Ch** records cell offsets by holding notes (programmed-Arp style)
 - **Pattern bank + CC automation** -- same 8-slot bank and bindable knobs as the other play surfaces
 
