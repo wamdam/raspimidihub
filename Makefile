@@ -1,5 +1,12 @@
 PACKAGE = raspimidihub
-VERSION = 4.8.0
+VERSION = 5.0.0-alpha1
+# Debian Version field: pre-release tags MUST use a tilde so dpkg/apt
+# sort them BELOW the final release (e.g. 5.0.0~alpha1 << 5.0.0).
+# A hyphen would sort the pre-release *above* the final (the bug that
+# burned us before). The git tag / GitHub release / deb *filename* keep
+# the hyphen form (git refs can't contain '~', and the OTA updater
+# parses the hyphen tag), so only the control Version field is rewritten.
+DEB_VERSION = $(subst -alpha,~alpha,$(subst -beta,~beta,$(subst -rc,~rc,$(VERSION))))
 DEB_NAME = $(PACKAGE)_$(VERSION)-1_all
 BUILD_DIR = build/$(DEB_NAME)
 DEB_FILE = dist/$(DEB_NAME).deb
@@ -84,7 +91,7 @@ $(DEB_FILE): src/raspimidihub/*.py src/raspimidihub/plugin_host/*.py src/raspimi
 	@mkdir -p $(BUILD_DIR)/etc/systemd/system/bluetooth.service.d
 	cp systemd/bluetooth-no-midi.conf $(BUILD_DIR)/etc/systemd/system/bluetooth.service.d/no-midi.conf
 	@echo "Package: $(PACKAGE)" > $(BUILD_DIR)/DEBIAN/control
-	@echo "Version: $(VERSION)-1" >> $(BUILD_DIR)/DEBIAN/control
+	@echo "Version: $(DEB_VERSION)-1" >> $(BUILD_DIR)/DEBIAN/control
 	@echo "Architecture: all" >> $(BUILD_DIR)/DEBIAN/control
 	@echo "Maintainer: Daniel Kraft <wam@poplr.de>" >> $(BUILD_DIR)/DEBIAN/control
 	@echo "Depends: python3 (>= 3.9), libasound2t64 | libasound2, alsa-utils, avahi-daemon, hostapd, dnsmasq, iw, rfkill, bluez, inotify-tools, python3-zeroconf" >> $(BUILD_DIR)/DEBIAN/control

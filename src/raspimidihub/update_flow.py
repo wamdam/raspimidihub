@@ -257,12 +257,15 @@ def _rw_rootfs():
                        check=False, capture_output=True, timeout=5)
 
 
-# Accept an optional alpha/beta tag after the patch number — e.g.
-# 3.0.0a, 3.0.0a1, 3.0.0b2 — so prereleases land in the stored list
-# and get parsed by parse_version (which sorts them below the
-# matching plain version).
+# Accept an optional pre-release tag after the patch number, in either
+# the suffix form (3.0.0a, 3.0.0b2) or the hyphen-separated form
+# (5.0.0-alpha1, 5.0.0-rc2) — so prereleases land in the stored list and
+# get parsed by parse_version (which sorts them below the matching plain
+# version). The deb *filename* uses the hyphen form to match the git tag;
+# only the deb's internal Version field uses a tilde (for dpkg/apt).
 _DEB_NAME_RE = re.compile(
-    r"^raspimidihub_(?P<ver>[0-9]+\.[0-9]+\.[0-9]+[a-z0-9]*)-(?P<rev>\d+)_all\.deb$"
+    r"^raspimidihub_(?P<ver>[0-9]+\.[0-9]+\.[0-9]+(?:-?[a-z]+[0-9]*)?)"
+    r"-(?P<rev>\d+)_all\.deb$"
 )
 
 
