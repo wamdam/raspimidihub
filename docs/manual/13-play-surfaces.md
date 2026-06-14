@@ -432,16 +432,14 @@ Two independent clocks drive it:
 
 ### The Play Surface
 
-The live controls fill one fullscreen panel: **Fill Voicing** is a
-wide wheel at the top, paired with **Inversion** and its **Inv. Rate**
-(the inversion clock sits right next to the setting it drives); the
-**Harmony** switch, **Scale** and **Root** sit on
-the next row; the motion row carries the step **Rate**, **Path** and
-**Grid** (size); a shaper row holds **Gate %**, **Accent Vel.** and
-the **Fill** mode switch. The 2D grid fills the centre, and the 8-slot
-pattern bank sits at the bottom. The setup-only parameters (sync, the
-two channels, Ctrl Ch and the trigger notes) live in the device-detail
-panel.
+The live controls fill one fullscreen panel in four rows: **Fill
+Voicing** (wide) with **Inversion** and its **Inv. Rate** (the
+inversion clock sits right next to the setting it drives); then
+**Scale** + **Root**; then the step **Rate**, **Path** and **Grid**
+(size); then **Gate %**, **Accent Vel.** and the **Fill live** toggle.
+The 2D grid fills the centre, and the 8-slot pattern bank sits at the
+bottom. The setup-only parameters (sync, the two channels, Ctrl Ch and
+the trigger notes) live in the device-detail panel.
 
 Each grid cell works exactly like an Arpeggiator step cell: tap the
 head to cycle **off → on → accent → off**, drag the mini-wheel to
@@ -468,31 +466,31 @@ The chord tones climb across the cells (`offset = chord_tone(x + y)`),
 so a 4×4 grid already reads as a ladder of inversions: row 0 is the
 root position, row 1 the first inversion, and so on.
 
-### Harmony: Chordal vs Diatonic
+### Root: chordal vs diatonic harmony
 
-The **Harmony** switch decides how the played note relates to the
-voicing:
+The **Root** wheel doubles as the harmony selector — its first
+position is **No root**, the rest are the twelve keys:
 
-- **Chordal** (default) -- the *played* note is the tonic and the
-  **Scale** wheel only sets the chord *quality*, which transposes
-  with the note. Play C with Scale = major → C major; play E → E
-  major. There is no key; every root gets the same shape. Good for
-  parallel-chord planing. (The **Root** wheel is inert in this mode.)
-- **Diatonic** -- **Root** + **Scale** define a *key*. The played note
-  picks a *degree* of that key and the voicing
-  is harmonised in-key, so the chord *quality follows the degree*. In
-  C major: play C → C major (I), play E → E **minor** (iii), play G →
-  G major (V), play D → D minor (ii). The whole grid stays in the key
-  no matter what you play -- one finger walks diatonic chords.
+- **No root** (default) -- *chordal*: the *played* note is the tonic
+  and the **Scale** wheel only sets the chord *quality*, which
+  transposes with the note. Play C with Scale = major → C major; play
+  E → E major. There is no key; every root gets the same shape. Good
+  for parallel-chord planing.
+- **A root C..B** -- *diatonic*: Root + Scale define a *key*. The
+  played note picks a *degree* of that key and the voicing is
+  harmonised in-key, so the chord *quality follows the degree*. In C
+  major: play C → C major (I), play E → E **minor** (iii), play G → G
+  major (V), play D → D minor (ii). The whole grid stays in the key no
+  matter what you play -- one finger walks diatonic chords.
 
-Note that Diatonic ≠ Scale = chromatic. `chromatic` changes the
+Note that diatonic ≠ Scale = chromatic. `chromatic` changes the
 *interval content* of the voicing (a Triad collapses to a 0/+2/+4
-cluster); Diatonic instead *constrains the root into a key*. They sit
-on different axes.
+cluster); a Root constrains the playing *into a key*. They sit on
+different axes.
 
-In Live mode the grid re-voices as you change the played note (the
-offsets track the root); in Latch the stamped offsets freeze and
-simply transpose with whatever you play.
+In Live the grid re-voices as you change the played note (the offsets
+track the root); in Latch the stamped offsets freeze and simply
+transpose with whatever you play.
 
 ### Inversion
 
@@ -505,27 +503,28 @@ with Inversion = +2 the grid cycles root position → 1st inversion →
 2nd inversion and back, one step per Inv. Rate tick. (Inv. Rate has no
 effect while Inversion = 0.)
 
-### Fill: Live vs Latch
+### Fill live
 
-The **Fill** switch decides whether the voicing is generative or
-frozen:
+A latching toggle (LED) that decides whether the voicing is generative
+or frozen:
 
-- **Live** (default) -- **Fill Voicing**, **Scale**, **Grid** and
-  **Inversion** act immediately (all CC-bindable) and re-stamp the
-  cell offsets, *preserving* your on/off + accent mask. You keep the
-  rhythm and accents you drew and sweep only the harmony with one
-  knob and one held note. The Inv. Rate clock animates the inversions
-  live. This is the performance mode: a held note + two CCs is a full
-  instrument.
-- **Latch** -- the grid **freezes exactly as it is the moment you
-  switch** — the switch itself is the commit, there is no separate
-  Apply step. You can then hand-edit individual cell offsets freely;
-  the edits persist and the inversion sweep is paused (the grid plays
-  exactly as drawn). Flip back to **Live** to re-derive a clean
+- **On** (default) -- *live*: **Fill Voicing**, **Scale**, **Root**,
+  **Grid** and **Inversion** act immediately (all CC-bindable) and
+  re-stamp the cell offsets, *preserving* your on/off + accent mask.
+  You keep the rhythm and accents you drew and sweep only the harmony
+  with one knob and one held note. The Inv. Rate clock animates the
+  inversions live. This is the performance mode: a held note + two CCs
+  is a full instrument.
+- **Off** -- the grid **freezes exactly as it is the moment you switch
+  it off** — turning it off *is* the commit, there is no separate Apply
+  step. You can then hand-edit individual cell offsets freely; the
+  edits persist and the inversion sweep is paused (the grid plays
+  exactly as drawn). Turn **Fill live** back on to re-derive a clean
   voicing from the wheels again.
 
-In Live, re-stamping only ever touches the **offset** field, never
-on/off or accent, so sweeping voicings never disturbs your groove.
+While Fill live is on, re-stamping only ever touches the **offset**
+field, never on/off or accent, so sweeping voicings never disturbs
+your groove.
 
 ### Two Channels
 
@@ -538,8 +537,8 @@ panel), so one keyboard can play it while another fills it:
 - **Fill Ch** (Off / 1..16) -- a recording channel. Hold notes and
   each one writes its interval (relative to the first note of the
   gesture) into the next cell along the Path, programmed-Arp style.
-  Touching the Fill Ch flips the surface to **Latch** so the
-  recording isn't overwritten by the live fill.
+  Touching the Fill Ch turns **Fill live** off (freezing the grid) so
+  the recording isn't overwritten by the live fill.
 
 ### The Path
 

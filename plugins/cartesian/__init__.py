@@ -19,11 +19,11 @@ cells in a square grid (2×2 … 4×4) traversed by two independent clocks:
 Pitch model: arp-like. A note held on Play Ch is the **root**; the grid
 plays `root + cell-offset` (the cell offsets are semitone intervals, not
 absolute notes), so the whole figure transposes with the played note.
-Harmony has two modes: **Chordal** (the played note is the tonic and
-Scale just sets the chord quality, which transposes with the note) and
-**Diatonic** (Root + Scale define a key; the played note picks a degree
-and the voicing is harmonised in-key, so playing the third gives a
-iii-chord, the fifth a V-chord, etc.).
+The **Root** wheel selects the harmony mode: **No root** (the played
+note is the tonic and Scale just sets the chord quality, which
+transposes with the note) or any root **C..B** (Root + Scale define a
+key; the played note picks a degree and the voicing is harmonised
+in-key, so playing the third gives a iii-chord, the fifth a V-chord).
 
 Fill: the Fill Voicing wheel stamps the grid with a chord/voicing
 (Unison / 5th / Triad / 7th / Scale), scale-aware (the Scale wheel
@@ -54,6 +54,7 @@ import time
 
 from raspimidihub import slot_bank
 from raspimidihub.plugin_api import (
+    Button,
     CartesianGrid,
     ChannelSelect,
     Group,
@@ -207,10 +208,10 @@ cells along the Path; Inv. Rate advances the inversion lap, re-voicing
 the grid one inversion further (the Inversion wheel sets how far and the
 direction; Inv. Rate does nothing while Inversion = 0).
 
-Harmony = Chordal makes the played note the tonic (Scale sets the chord
-quality, transposing with the note); Harmony = Diatonic adds a Root
-wheel so Root + Scale define a key and the played note is harmonised
-in-key (third → iii-chord, fifth → V-chord, …).
+Root = No root makes the played note the tonic (Scale sets the chord
+quality, transposing with the note); picking a root C..B defines a key
+(with Scale) so the played note is harmonised in-key (third →
+iii-chord, fifth → V-chord, …).
 
 Fill Voicing stamps the grid with a chord (Unison / 5th / Triad / 7th /
 Scale), scale-aware via the Scale wheel. In Fill = Live the voicing,
@@ -234,13 +235,11 @@ Routing example:
 CC automation: every play-surface knob is bindable. Long-press a control
 to pick a Channel + CC (or MIDI-Learn one)."""
 
-    # Layout note: every control below is inline, so the four rows are
-    # formed purely by the column spans (4-col grid). Harmony and Fill
-    # are `inline` radios so they pack into a row instead of each taking
-    # a full-width line. `x_rate`/`y_rate` keep their internal names
-    # (saved configs / CC 74/75) but read "Rate" / "Inv. Rate": Inv.
-    # Rate sits beside Inversion (the inversion clock it drives, not a
-    # spatial axis), Rate sits in the motion row beside Path.
+    # Layout note: every control is inline, so the four rows form purely
+    # from the column spans (4-col grid). `x_rate`/`y_rate` keep their
+    # internal names (saved configs / CC 74/75) but read "Rate" / "Inv.
+    # Rate": Inv. Rate sits beside Inversion (the inversion clock it
+    # drives, not a spatial axis), Rate sits in the motion row by Path.
     params = [
         # Row 1 — Fill Voicing (wide) + the Inversion pair.
         Wheel("fill_voicing", "Fill Voicing",
@@ -254,22 +253,21 @@ to pick a Channel + CC (or MIDI-Learn one)."""
               labels=_RATE_OPTIONS, default=_DEFAULT_Y_RATE,
               play_only=True, default_cc=75),
 
-        # Row 2 — the key (Scale + Root) + grid size. Root is always
-        # shown for a stable layout; it is simply inert in Chordal
-        # (where the played note is the tonic), and defines the key in
-        # Diatonic.
+        # Row 2 — Scale + the Root selector (which doubles as the harmony
+        # mode). Position 0 = "No root" → Chordal (played note is the
+        # tonic, Scale just sets the chord quality); any actual root
+        # C..B → Diatonic in that key (the played note picks a degree,
+        # harmonised in-key). One wheel instead of a separate Harmony
+        # switch + Root wheel.
         Wheel("scale", "Scale",
               min=0, max=len(_SCALE_OPTIONS) - 1,
               labels=_SCALE_OPTIONS, default=0,
               wide=True, span=2, play_only=True, default_cc=87),
-        Wheel("root", "Root", min=0, max=11, default=0,
-              labels=_NOTE_NAMES, play_only=True, default_cc=88),
-        Wheel("grid_size", "Grid",
-              min=0, max=len(_SIZES) - 1,
-              labels=[f"{s}×{s}" for s in _SIZES], default=2,
-              play_only=True, default_cc=72),
+        Wheel("key", "Root", min=0, max=12,
+              labels=["No root"] + _NOTE_NAMES, default=0,
+              wide=True, span=2, play_only=True, default_cc=88),
 
-        # Row 3 — the step rate + Path + gate.
+        # Row 3 — the step rate + Path + grid size.
         Wheel("x_rate", "Rate",
               min=0, max=len(_RATE_OPTIONS) - 1,
               labels=_RATE_OPTIONS, default=_DEFAULT_X_RATE,
@@ -278,23 +276,22 @@ to pick a Channel + CC (or MIDI-Learn one)."""
               min=0, max=len(_PATH_OPTIONS) - 1,
               labels=_PATH_OPTIONS, default=0,
               wide=True, span=2, play_only=True, default_cc=79),
+        Wheel("grid_size", "Grid",
+              min=0, max=len(_SIZES) - 1,
+              labels=[f"{s}×{s}" for s in _SIZES], default=2,
+              play_only=True, default_cc=72),
+
+        # Row 4 — Gate, Accent, and the Fill-live toggle.
         Wheel("gate", "Gate %", min=10, max=100, default=80,
               play_only=True, default_cc=73),
-
-        # Row 4 — Accent + the two mode switches (inline radios).
         Knob("accent_vel", "Accent Vel.", min=0, max=127, default=30,
              play_only=True, default_cc=83),
-        #   Chordal  — the played note is the tonic; Scale sets the chord
-        #              quality (transposes with the note).
-        #   Diatonic — Root + Scale define a key; the played note picks a
-        #              degree, harmonised in-key.
-        Radio("harmony", "Harmony", ["Chordal", "Diatonic"],
-              default="Chordal", inline=True, span=2, play_only=True),
-        # Fill = Live re-stamps the grid from the voicing on every
-        # change; switching to Latch freezes the grid as-is for
-        # hand-editing — the switch *is* the commit (no Apply button).
-        Radio("fill_mode", "Fill", ["Live", "Latch"], default="Live",
-              inline=True, play_only=True),
+        # "Fill live" toggle (latching, LED). ON (default) = Live: the
+        # grid re-stamps from the voicing on every change. OFF = the
+        # grid is frozen as-is for hand-editing — switching it off *is*
+        # the commit (no Apply button).
+        Button("fill_mode", "Fill live", default=True, color="green",
+               span=2, play_only=True),
 
         # The grid itself (no title — the 2D grid is self-evident, and
         # "Grid" already labels the size wheel above).
@@ -355,7 +352,7 @@ to pick a Channel + CC (or MIDI-Learn one)."""
     # Every play_only param captured into a pattern slot. `active_slot`
     # is the bank selector and excluded; `playhead` is transient.
     _SLOT_PARAMS = [
-        "fill_voicing", "inversion", "harmony", "scale", "root",
+        "fill_voicing", "inversion", "scale", "key",
         "x_rate", "y_rate", "path",
         "grid_size", "gate", "accent_vel", "fill_mode", "grid",
     ]
@@ -380,6 +377,18 @@ to pick a Channel + CC (or MIDI-Learn one)."""
         self._fill_ref: int | None = None  # first note of the gesture
         self._fill_cursor = 0              # next Path index to write
         self._fill_held: set[tuple[int, int]] = set()
+
+        # Migrate legacy configs: the separate `harmony` (Chordal/
+        # Diatonic) + `root` (0..11) controls were merged into one `key`
+        # wheel (0 = No root/Chordal; 1..12 = C..B).
+        pv = self._param_values
+        if "key" not in pv and ("harmony" in pv or "root" in pv):
+            if pv.get("harmony") == "Diatonic":
+                pv["key"] = (int(pv.get("root") or 0) % 12) + 1
+            else:
+                pv["key"] = 0
+            pv.pop("harmony", None)
+            pv.pop("root", None)
 
         slot_bank.init_slot_bank(self, self._SLOT_PARAMS)
 
@@ -406,7 +415,11 @@ to pick a Channel + CC (or MIDI-Learn one)."""
     # ----- helpers ------------------------------------------------------------
 
     def _mode(self) -> str:
-        return "Latch" if self.get_param("fill_mode") == "Latch" else "Live"
+        # "Fill live" is a latching button: True/on = Live, False/off =
+        # Latch (frozen). Tolerate the legacy "Live"/"Latch" strings too
+        # so configs saved under the old radio still load correctly.
+        v = self.get_param("fill_mode")
+        return "Latch" if (v is False or v == "Latch") else "Live"
 
     def _side(self) -> int:
         v = self.get_param("grid_size")
@@ -434,8 +447,15 @@ to pick a Channel + CC (or MIDI-Learn one)."""
             name = "major"
         return SCALES.get(name, SCALES["major"])
 
+    def _key(self) -> int:
+        """The Root selector: 0 = No root (Chordal); 1..12 = C..B."""
+        try:
+            return int(self.get_param("key") or 0)
+        except (TypeError, ValueError):
+            return 0
+
     def _harmony(self) -> str:
-        return "Diatonic" if self.get_param("harmony") == "Diatonic" else "Chordal"
+        return "Diatonic" if self._key() > 0 else "Chordal"
 
     def _voicing_degrees(self) -> list[int]:
         """The Fill Voicing as scale-degree indices (0=root, 2=third,
@@ -478,7 +498,7 @@ to pick a Channel + CC (or MIDI-Learn one)."""
 
         scale = self._scale_intervals()
         n = len(scale) or 1
-        root = int(self.get_param("root") or 0) % 12
+        root = (self._key() - 1) % 12  # key 1..12 → C..B
         degrees = self._voicing_degrees()
         ladder = len(degrees)
 
@@ -499,7 +519,7 @@ to pick a Channel + CC (or MIDI-Learn one)."""
         C so the grid shows the tonic chord."""
         if self._held:
             return self._held[-1][0]
-        return 60 + (int(self.get_param("root") or 0) % 12)
+        return 60 + ((self._key() - 1) % 12)  # only used in Diatonic
 
     def _inv_step(self) -> int:
         """Chord-tone shift for the current inversion lap."""
@@ -636,7 +656,7 @@ to pick a Channel + CC (or MIDI-Learn one)."""
             self._fill_ref = note
             self._fill_cursor = 0
             if self._mode() != "Latch":
-                self.set_param("fill_mode", "Latch")
+                self.set_param("fill_mode", False)  # Fill live off = Latch
         x, y = path[self._fill_cursor % len(path)]
         idx = y * _STORAGE + x
         grid = list(self.get_param("grid") or [])
@@ -699,11 +719,13 @@ to pick a Channel + CC (or MIDI-Learn one)."""
             self._inv_lap = 0
             self._live_restamp()
             return
-        if name in ("fill_voicing", "scale", "grid_size", "harmony", "root"):
+        if name in ("fill_voicing", "scale", "grid_size", "key"):
             self._live_restamp()
             return
         if name == "fill_mode":
-            if value == "Live":
+            # "Fill live" button: True/on = Live, False/off = Latch.
+            live = not (value is False or value == "Latch")
+            if live:
                 # Re-derive the grid from the current voicing.
                 self._inv_lap = 0
                 self._apply_fill(0, persist=False)

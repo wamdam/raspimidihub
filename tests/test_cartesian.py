@@ -87,8 +87,8 @@ def test_latch_freezes_current_grid_and_ignores_voicing_changes():
     p, _ = make_plugin(Cartesian)
     # Live: triad is stamped. Switch to Latch — the grid freezes as-is.
     frozen = list(_offsets(p))
-    p.set_param("fill_mode", "Latch")
-    p.on_param_change("fill_mode", "Latch")
+    p.set_param("fill_mode", False)  # Fill live off = Latch
+    p.on_param_change("fill_mode", False)
     # Changing the voicing in Latch must NOT re-stamp the grid.
     p.set_param("fill_voicing", 3)  # 7th
     p.on_param_change("fill_voicing", 3)
@@ -103,15 +103,16 @@ def test_latch_freezes_current_grid_and_ignores_voicing_changes():
 
 def test_switch_back_to_live_re_derives_from_voicing():
     p, _ = make_plugin(Cartesian)
-    p.set_param("fill_mode", "Latch")
-    p.on_param_change("fill_mode", "Latch")
+    p.set_param("fill_mode", False)  # Latch
+    p.on_param_change("fill_mode", False)
     grid = p.get_param("grid")
     grid[0] = {"on": True, "offset": 5}
     p.set_param("grid", grid)
     p.on_param_change("grid", grid)
-    # Back to Live: the voicing is re-stamped, discarding the hand-edit.
-    p.set_param("fill_mode", "Live")
-    p.on_param_change("fill_mode", "Live")
+    # Back to Live (Fill live on): the voicing is re-stamped, discarding
+    # the hand-edit.
+    p.set_param("fill_mode", True)
+    p.on_param_change("fill_mode", True)
     assert _offsets(p)[0] == 0
 
 
@@ -122,7 +123,7 @@ def test_fill_channel_records_intervals_and_flips_to_latch():
     p.on_note_on(1, 67, 100)  # +7
     p.on_note_on(1, 55, 100)  # -5
     g = p.get_param("grid")
-    assert p.get_param("fill_mode") == "Latch"
+    assert p.get_param("fill_mode") is False  # flipped to Latch (Fill live off)
     assert (g[0]["offset"], g[1]["offset"], g[2]["offset"]) == (0, 7, -5)
 
 
@@ -175,12 +176,10 @@ def _play_triad(p, h, note):
 def test_diatonic_harmonizes_the_played_degree_in_key():
     p, h = make_plugin(Cartesian)
     p.set_param("sync_mode", "tempo")
-    p.set_param("harmony", "Diatonic")
-    p.on_param_change("harmony", "Diatonic")
     p.set_param("scale", _scale_idx("major"))
     p.on_param_change("scale", _scale_idx("major"))
-    p.set_param("root", 0)  # C major
-    p.on_param_change("root", 0)
+    p.set_param("key", 1)  # Root = C → C major (key 0 = No root/Chordal)
+    p.on_param_change("key", 1)
     assert _play_triad(p, h, 60) == [60, 64, 67]  # C  → C E G  (I)
     assert _play_triad(p, h, 64) == [64, 67, 71]  # E  → E G B  (iii, minor)
     assert _play_triad(p, h, 67) == [67, 71, 74]  # G  → G B D  (V)
@@ -200,11 +199,25 @@ def test_chordal_keeps_a_fixed_quality_on_every_root():
 def test_diatonic_root_moves_the_key():
     p, h = make_plugin(Cartesian)
     p.set_param("sync_mode", "tempo")
-    p.set_param("harmony", "Diatonic")
-    p.on_param_change("harmony", "Diatonic")
     p.set_param("scale", _scale_idx("major"))
     p.on_param_change("scale", _scale_idx("major"))
-    p.set_param("root", 2)  # D major
-    p.on_param_change("root", 2)
+    p.set_param("key", 3)  # Root = D → D major (key 3 = D)
+    p.on_param_change("key", 3)
     # In D major, playing F# (66, the third) gives the iii chord F#m: F# A C#
     assert _play_triad(p, h, 66) == [66, 69, 73]
+
+
+def test_legacy_harmony_root_migrates_to_key():
+    from helpers import PluginHarness
+    p = Cartesian()
+    from raspimidihub.plugin_api import get_defaults
+    p._param_values = get_defaults(Cartesian.params)
+    # Simulate a config saved under the old split controls.
+    p._param_values.pop("key", None)
+    p._param_values["harmony"] = "Diatonic"
+    p._param_values["root"] = 2  # D
+    PluginHarness(p)
+    p.on_start()
+    assert p.get_param("key") == 3        # D → key index 3
+    assert "harmony" not in p._param_values
+    assert "root" not in p._param_values

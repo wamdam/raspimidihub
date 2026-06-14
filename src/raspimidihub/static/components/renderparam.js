@@ -175,12 +175,8 @@ export function renderParam(param, values, onChange, allValues, displayCtx) {
 
 export const INLINE_TYPES = new Set(['wheel', 'knob', 'fader', 'noteselect', 'channelselect', 'button', 'display', 'xypad']);
 
-// A param flows inline (packs into a param-row with its neighbours)
-// when its type is inline, or when it's a radio that opted in via
-// `inline: true` (narrow 2-3-option radios — e.g. the Cartesian's
-// Harmony / Fill — that shouldn't each hog a full-width row).
 function isInline(p) {
-    return INLINE_TYPES.has(p.type) || (p.type === 'radio' && p.inline);
+    return INLINE_TYPES.has(p.type);
 }
 
 // Wrap a rendered inline param with a grid-column-span container if
