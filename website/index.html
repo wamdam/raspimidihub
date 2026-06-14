@@ -307,14 +307,30 @@
   <div class="container">
     <h2>Plugin Showcase</h2>
     <p class="section-subtitle">Every plugin runs in its own thread, syncs to MIDI clock, and can be automated via hardware CCs.</p>
+        <h3 class="plugin-group-title">Play Surfaces</h3>
     <div class="plugin-grid">
       <div class="plugin-card">
         <h4>Arpeggiator</h4>
-        <p>Pattern player with step sequencer, accents, gate, and transport sync. Fullscreen play surface for live performance — Pattern and Rate as wide wheels, four shapers, eight-step grid.</p>
+        <p>Pattern player with step sequencer, accents, gate, and transport sync. Fullscreen play surface — Pattern and Rate as wide wheels, four shapers, eight-step grid.</p>
       </div>
       <div class="plugin-card">
         <h4>Euclidean</h4>
         <p>Bjorklund-distributed step patterns from held notes. Algorithm (Pulses / Steps / Rotate), window wave (Phase / Cycles / Open) and per-step manual overrides on top. Internal Scale + Root, Jitter, Tune Spread, Fade In / Out.</p>
+      </div>
+      <div class="plugin-card">
+        <h4>Cartesian</h4>
+        <p>René-style 2D grid sequencer. A held note is the root; a square grid (2&times;2&ndash;4&times;4) of intervals is swept by two clocks &mdash; Rate steps the cells along a Path (rows / cols / diagonal / knight / spiral), Inv. Rate climbs chord inversions. One Fill Voicing knob fills the grid scale-aware (Unison &rarr; Triad &rarr; 7th &rarr; Scale); the Root wheel switches chordal &harr; diatonic harmony.</p>
+      </div>
+      <div class="plugin-card">
+        <h4>Tracker</h4>
+        <p>8-voice step sequencer on a dedicated Play panel. Per-track channels, live recording, keyboard note entry, Cut/Copy/Paste with sub-cell selection.</p>
+      </div>
+    </div>
+    <h3 class="plugin-group-title">Generators &amp; Clock</h3>
+    <div class="plugin-grid">
+      <div class="plugin-card">
+        <h4>Master Clock</h4>
+        <p>Internal BPM clock with start/stop transport. Drives all your synced gear from one place.</p>
       </div>
       <div class="plugin-card">
         <h4>CC LFO</h4>
@@ -324,10 +340,47 @@
         <h4>Chord Generator</h4>
         <p>Play a single note, hear a full chord. 11 chord types with inversions and velocity scaling.</p>
       </div>
+    </div>
+    <h3 class="plugin-group-title">Notes &amp; Pitch</h3>
+    <div class="plugin-grid">
       <div class="plugin-card">
-        <h4>Master Clock</h4>
-        <p>Internal BPM clock with start/stop transport. Drives all your synced gear from one place.</p>
+        <h4>Note Transpose</h4>
+        <p>Shift all notes up or down by semitones. Simple, instant, automatable via CC.</p>
       </div>
+      <div class="plugin-card">
+        <h4>Note Splitter</h4>
+        <p>Split your keyboard at any note into two MIDI channels with independent transpose per zone.</p>
+      </div>
+      <div class="plugin-card">
+        <h4>Scale Remapper</h4>
+        <p>Quantize notes to musical scales -- major, minor, pentatonic, blues, and more. Never hit a wrong note.</p>
+      </div>
+      <div class="plugin-card">
+        <h4>Pitch CC</h4>
+        <p>Each Note On emits a pitch CC (base value &plusmn; semitones from a base note) before the Note On itself. Turns a keyboard into a chromatic player for samplers like the Volca Sample whose pitch is a CC, not a note.</p>
+      </div>
+      <div class="plugin-card">
+        <h4>Hold</h4>
+        <p>Latch notes without a sustain pedal. MIDI-Learn the release note for hands-free toggling on stage.</p>
+      </div>
+    </div>
+    <h3 class="plugin-group-title">Velocity &amp; CC</h3>
+    <div class="plugin-grid">
+      <div class="plugin-card">
+        <h4>Velocity Curve</h4>
+        <p>Draw a custom 128-point velocity response curve. Presets for soft, hard, exponential, S-curve.</p>
+      </div>
+      <div class="plugin-card">
+        <h4>Velocity Equalizer</h4>
+        <p>Normalize velocity to a fixed value or compress the range. Tame those dynamics.</p>
+      </div>
+      <div class="plugin-card">
+        <h4>CC Smoother</h4>
+        <p>Remove jitter from noisy knobs with configurable smoothing. Dual scopes show before and after.</p>
+      </div>
+    </div>
+    <h3 class="plugin-group-title">Timing</h3>
+    <div class="plugin-grid">
       <div class="plugin-card">
         <h4>MIDI Delay</h4>
         <p>Note delay with feedback repeats and velocity decay. Circular buffer architecture for rock-solid timing.</p>
@@ -337,52 +390,19 @@
         <p>Shift every MIDI event forward by 1&ndash;100&nbsp;ms to compensate synths whose own MIDI-in lands the sound late. ALSA-queue scheduled for sub-ms jitter; clock and transport pass through.</p>
       </div>
       <div class="plugin-card">
-        <h4>Scale Remapper</h4>
-        <p>Quantize notes to musical scales -- major, minor, pentatonic, blues, and more. Never hit a wrong note.</p>
-      </div>
-      <div class="plugin-card">
-        <h4>CC Smoother</h4>
-        <p>Remove jitter from noisy knobs with configurable smoothing. Dual scopes show before and after.</p>
-      </div>
-      <div class="plugin-card">
-        <h4>Velocity Curve</h4>
-        <p>Draw a custom 128-point velocity response curve. Presets for soft, hard, exponential, S-curve.</p>
-      </div>
-      <div class="plugin-card">
-        <h4>Note Splitter</h4>
-        <p>Split your keyboard at any note into two MIDI channels with independent transpose per zone.</p>
-      </div>
-      <div class="plugin-card">
-        <h4>Note Transpose</h4>
-        <p>Shift all notes up or down by semitones. Simple, instant, automatable via CC.</p>
-      </div>
-      <div class="plugin-card">
-        <h4>Pitch CC</h4>
-        <p>Each Note On emits a pitch CC (base value ± semitones from a base note) before the Note On itself. Turns a keyboard into a chromatic player for samplers like the Volca Sample whose pitch is a CC, not a note.</p>
-      </div>
-      <div class="plugin-card">
-        <h4>Velocity Equalizer</h4>
-        <p>Normalize velocity to a fixed value or compress the range. Tame those dynamics.</p>
-      </div>
-      <div class="plugin-card">
-        <h4>Hold</h4>
-        <p>Latch notes without a sustain pedal. MIDI-Learn the release note for hands-free toggling on stage.</p>
-      </div>
-      <div class="plugin-card">
         <h4>Clock Divider</h4>
         <p>Divide an incoming clock by 2..32. Drive a slow LFO from a fast master, or feed half-tempo to one synth.</p>
       </div>
-      <div class="plugin-card">
-        <h4>SysEx Sender</h4>
-        <p>Pick a .syx file in the panel; bytes stream straight to the connected synth (256-byte chunks, 5 ms gaps). Nothing saved.</p>
-      </div>
+    </div>
+    <h3 class="plugin-group-title">Utility</h3>
+    <div class="plugin-grid">
       <div class="plugin-card">
         <h4>Panic Button</h4>
         <p>All Notes Off + All Sound Off on all 16 channels. The emergency stop you always need on stage.</p>
       </div>
       <div class="plugin-card">
-        <h4>Tracker</h4>
-        <p>8-voice step sequencer on a dedicated Play panel. Per-track channels, live recording, keyboard note entry, Cut/Copy/Paste with sub-cell selection.</p>
+        <h4>SysEx Sender</h4>
+        <p>Pick a .syx file in the panel; bytes stream straight to the connected synth (256-byte chunks, 5 ms gaps). Nothing saved.</p>
       </div>
     </div>
   </div>

@@ -347,6 +347,16 @@ a:hover { text-decoration: underline; }
   gap: 20px;
   margin-top: 8px;
 }
+.plugin-group-title {
+  margin-top: 36px;
+  margin-bottom: 4px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--turquoise);
+}
+.plugin-group-title:first-of-type { margin-top: 16px; }
 .plugin-card {
   background: var(--bg);
   padding: 24px;
