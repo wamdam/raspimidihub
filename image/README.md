@@ -21,6 +21,12 @@ Three files dropped onto a fresh RPi OS Lite image:
 The unit is gated by `ConditionPathExists=!/var/lib/raspimidihub/bootstrap-done`
 so it can never re-run after a successful install.
 
+The build also runs `systemctl enable ssh` so that sshd comes up on first
+boot. Stock RPi OS / cloud-init does **not** reliably enable sshd, which left
+a failed bootstrap undiagnosable — the fail-LED tells the user to "SSH in and
+run `journalctl`", but there was nothing listening. With ssh enabled at build
+time, the wizard's user (key or password) can actually get in.
+
 ## Build prerequisites (one-time)
 
 On a Debian/Ubuntu host (x86_64 is fine — `virt-customize` handles ARM via
@@ -58,7 +64,8 @@ The script:
 2. Downloads it into `cache/` **only if newer** than the local copy (curl
    `--time-cond`).
 3. Decompresses to `work/`, runs `virt-customize` to drop in the three files
-   above and enable the systemd unit.
+   above, enable the systemd unit, and `systemctl enable ssh` (so a failed
+   first boot is diagnosable over SSH).
 4. Runs `virt-sparsify` (needs sudo) to zero unused blocks.
 5. Compresses with `xz -T0 -9`.
 6. Emits `dist/raspimidihub-bootstrap-<date>.img.xz` and `dist/os-list.json`

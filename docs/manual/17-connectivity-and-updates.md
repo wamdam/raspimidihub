@@ -249,7 +249,10 @@ trigger the fallback.
 
 A console (USB keyboard + HDMI display, or SSH from another
 network with `ssh user@raspimidihub.local`) gives access to the
-underlying Pi OS. A few commands are commonly useful:
+underlying Pi OS. The bootstrap image ships with **sshd enabled**
+so SSH works out of the box with the user and key/password set in
+the Pi Imager wizard -- this is also what makes a failed first
+boot diagnosable (chapter 3). A few commands are commonly useful:
 
 - `sudo reset-wifi` -- forces AP mode with default credentials.
   Use when the WiFi state is wedged or when access to the unit

@@ -100,7 +100,14 @@ sudo virt-customize -a "$WORK_IMG" \
     --copy-in raspimidihub-apply-wifi-country.service:/etc/systemd/system/ \
     --mkdir /etc/systemd/system/multi-user.target.wants \
     --link /etc/systemd/system/raspimidihub-bootstrap.service:/etc/systemd/system/multi-user.target.wants/raspimidihub-bootstrap.service \
-    --link /etc/systemd/system/raspimidihub-apply-wifi-country.service:/etc/systemd/system/multi-user.target.wants/raspimidihub-apply-wifi-country.service
+    --link /etc/systemd/system/raspimidihub-apply-wifi-country.service:/etc/systemd/system/multi-user.target.wants/raspimidihub-apply-wifi-country.service \
+    --run-command 'systemctl enable ssh'
+    # sshd is enabled at build time so a FAILED first-boot bootstrap is
+    # diagnosable: the user can SSH in (with the key/password set in the Pi
+    # Imager wizard) and read `journalctl -u raspimidihub-bootstrap`. Stock
+    # RPi OS / cloud-init does NOT reliably bring sshd up on first boot, so we
+    # cannot rely on it. This persists onto the finished appliance — acceptable
+    # under the trusted-environment / AP-password security model.
 sudo chown "$USER:$(id -gn)" "$WORK_IMG"
 
 # --- 6. virt-sparsify: zero free blocks so xz can compress them away --------

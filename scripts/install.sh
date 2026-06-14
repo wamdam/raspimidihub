@@ -52,7 +52,12 @@ fi
 
 echo ""
 echo "Installing (this will download dependencies and start the service)..."
-sudo apt install -y $PACKAGES
+# Refresh the apt index first. The bootstrap image ships a baked index that
+# goes stale as Debian trixie rolls dependencies to new point-releases; the
+# cached index then points at .deb files no longer in the pool → 404 → abort.
+# An update before install makes the bootstrap robust regardless of image age.
+sudo apt-get update
+sudo apt install -y --fix-missing $PACKAGES
 
 rm -rf "$TMPDIR"
 
