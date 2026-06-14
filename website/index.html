@@ -335,11 +335,11 @@
       </div>
       <div class="plugin-card">
         <h4>Euclidean</h4>
-        <p>Bjorklund-distributed step patterns from held notes. Algorithm (Pulses / Steps / Rotate), window wave (Phase / Cycles / Open) and per-step manual overrides on top. Internal Scale + Root, Jitter, Tune Spread, Fade In / Out.</p>
+        <p>Hold a chord; the Bjorklund algorithm voices it as an evenly-spread step pattern. Internal scale, per-step overrides, jitter and fades.</p>
       </div>
       <div class="plugin-card">
         <h4>Cartesian</h4>
-        <p>René-style 2D grid sequencer. A held note is the root; a square grid (2&times;2&ndash;4&times;4) of intervals is swept by two clocks &mdash; Rate steps the cells along a Path (rows / cols / diagonal / knight / spiral), Inv. Rate climbs chord inversions. One Fill Voicing knob fills the grid scale-aware (Unison &rarr; Triad &rarr; 7th &rarr; Scale); the Root wheel switches chordal &harr; diatonic harmony.</p>
+        <p>René-style 2D grid sequencer. A held note is swept across a grid of intervals by two independent clocks; one knob fills it scale-aware, the Root wheel flips chordal &harr; diatonic.</p>
       </div>
       <div class="plugin-card">
         <h4>Tracker</h4>
@@ -373,7 +373,7 @@
       </div>
       <div class="plugin-card">
         <h4>Channel Selector</h4>
-        <p>Turn a controller's buttons into a channel picker. Each momentary CC selects an output channel; the input channel is ignored and everything is re-stamped onto the active one. A live wheel shows the selection &mdash; perfect for displayless keyboards driving a channel-filtered routing matrix.</p>
+        <p>Momentary CC buttons pick the output channel; everything is re-stamped onto it and a live wheel shows the choice. Channel-switching for displayless keyboards.</p>
       </div>
       <div class="plugin-card">
         <h4>Scale Remapper</h4>
@@ -381,7 +381,7 @@
       </div>
       <div class="plugin-card">
         <h4>Pitch CC</h4>
-        <p>Each Note On emits a pitch CC (base value &plusmn; semitones from a base note) before the Note On itself. Turns a keyboard into a chromatic player for samplers like the Volca Sample whose pitch is a CC, not a note.</p>
+        <p>Each Note On emits a pitch CC before the note &mdash; chromatic playback for samplers like the Volca Sample that pitch via CC, not note.</p>
       </div>
       <div class="plugin-card">
         <h4>Hold</h4>
@@ -411,7 +411,7 @@
       </div>
       <div class="plugin-card">
         <h4>Latency</h4>
-        <p>Shift every MIDI event forward by 1&ndash;100&nbsp;ms to compensate synths whose own MIDI-in lands the sound late. ALSA-queue scheduled for sub-ms jitter; clock and transport pass through.</p>
+        <p>Shift every MIDI event forward 1&ndash;100&nbsp;ms to compensate sluggish synths. ALSA-queue scheduled; clock and transport pass through.</p>
       </div>
       <div class="plugin-card">
         <h4>Clock Divider</h4>
