@@ -95,15 +95,19 @@ function PortRow({ dkey, dev, port }) {
     const plabel = portShortLabel(dev, port);
     // is_input  → device is a source you route FROM → render an OUT jack
     // is_output → device is a destination you route TO → render an IN jack
+    // IN on the far left, OUT on the far right, label centred between.
+    // A jack the port doesn't have renders as a hidden ghost so the
+    // left/right slots (and the centred label) stay aligned across rows.
     const inJack = port.is_output
-        ? html`<div class="jackbox"><span class="j-sub">IN</span><div class="jack in" data-jack="${dkey}:${port.port_id}:in"></div></div>`
-        : html`<div class="jackbox ghost"><span class="j-sub">IN</span><div class="jack"></div></div>`;
+        ? html`<div class="jackbox in-box"><div class="jack in" data-jack="${dkey}:${port.port_id}:in"></div><span class="j-sub">IN</span></div>`
+        : html`<div class="jackbox in-box ghost"><div class="jack"></div><span class="j-sub">IN</span></div>`;
     const outJack = port.is_input
         ? html`<div class="jackbox out-box"><span class="j-sub">OUT</span><div class="jack out" data-jack="${dkey}:${port.port_id}:out"></div></div>`
-        : '';
+        : html`<div class="jackbox out-box ghost"><span class="j-sub">OUT</span><div class="jack"></div></div>`;
     return html`<div class="pmod">
+        ${inJack}
         <span class="p-label" title="${port.name || ''}">${plabel}</span>
-        ${inJack}${outJack}
+        ${outJack}
     </div>`;
 }
 

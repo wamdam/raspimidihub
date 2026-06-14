@@ -2972,15 +2972,16 @@ body.spectator-mode * { scrollbar-width: none; }
 .rack-view .u-ports { display: flex; flex-direction: column; gap: 3px; align-items: stretch; width: 100%; }
 
 /* port row: label · IN · OUT (OUT pushed right) */
-.rack-view .pmod { display: flex; align-items: center; gap: 10px; padding: 3px 14px 3px 10px; border-radius: 4px;
+.rack-view .pmod { display: flex; align-items: center; gap: 8px; padding: 3px 10px; border-radius: 4px;
     background: linear-gradient(180deg, rgba(0,0,0,0.48), rgba(0,0,0,0.30));
     box-shadow: inset 0 1px 3px rgba(0,0,0,0.65), 0 1px 0 rgba(255,255,255,0.07); }
-.rack-view .p-label { width: 56px; font-size: 9px; color: #b8b8c4; letter-spacing: .06em; overflow: hidden;
+/* Layout: [jack] IN  ·  NAME (centred, fills the middle)  ·  OUT [jack] */
+.rack-view .p-label { flex: 1; min-width: 0; text-align: center; font-size: 9px; color: #b8b8c4; letter-spacing: .06em; overflow: hidden;
     text-overflow: ellipsis; white-space: nowrap; text-transform: uppercase; text-shadow: 0 1px 0 rgba(0,0,0,0.9); }
-.rack-view .jackbox { display: flex; align-items: center; gap: 4px; }
-.rack-view .jackbox.out-box { margin-left: auto; }
+.rack-view .jackbox { display: flex; align-items: center; gap: 4px; flex: none; }
+.rack-view .jackbox.in-box .j-sub { text-align: left; }
 .rack-view .jackbox.ghost { visibility: hidden; }
-.rack-view .j-sub { width: 26px; text-align: right; font-size: 8px; color: var(--text-dim); letter-spacing: .08em;
+.rack-view .j-sub { width: 22px; text-align: right; font-size: 8px; color: var(--text-dim); letter-spacing: .08em;
     text-shadow: 0 1px 0 rgba(0,0,0,0.9); }
 
 /* metal-sleeve jacks */
