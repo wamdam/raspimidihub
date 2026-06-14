@@ -4,7 +4,7 @@ User-visible changes. Short tagged one-liners, no code or commit
 hashes. Tags: Added, Improved, Fix, Changed, Removed.
 
 
-Unreleased
+2026-06-14 — Version 5.0.0a3
 
 - Fix: Network MIDI now re-binds mDNS discovery by itself when a network interface comes up after boot (e.g. a hub-to-hub Ethernet cable plugged in later) — the peer's exported devices appear without having to toggle Network MIDI off and on. Manual peers (plain unicast) were never affected.
 - Fix: the "advertised as …" line under an exported device sat misaligned below its toggle in Settings → Network MIDI; it now sits cleanly under the device name.
