@@ -121,7 +121,7 @@ where renaming lives) and the plugin/network actions, identical to the
 matrix's header menu. The **+ Add Device** button at the foot opens the same Add
 menu as the matrix.
 
-![The Rack view: devices as rack units, cables hanging between IN/OUT jacks. Here a source jack is held, so its cables fan out and the rest dim.](../screenshots/01-routing-rack.png){width=42%}
+![The Rack view: devices as 19" rack units, patch cables hanging between their IN and OUT jacks; each cable's colour follows its source port.](../screenshots/01-routing-rack.png){width=42%}
 
 ## The Cell Context Menu
 

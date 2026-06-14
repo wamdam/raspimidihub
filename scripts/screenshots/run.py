@@ -288,31 +288,12 @@ def _open_settings_backup(page) -> None:
 
 
 def _open_rack_view(page) -> None:
-    """Routing tab → flip to the Rack view, then press-and-hold a source
-    jack so its cables fan out (sticky peek). Captured against the user's
-    real config in the pre-setup phase, like 01-routing."""
+    """Routing tab → flip to the Rack view and show it as-is: all cables
+    at rest, no jack held / no peek. Captured against the user's real
+    config in the pre-setup phase, like 01-routing."""
     page.locator(".view-toggle-btn", has_text="Rack").click()
     page.wait_for_selector(".rack-cables path.wire", timeout=4000)
-    time.sleep(0.4)
-    box = page.evaluate(
-        """() => {
-            const wire = document.querySelector('.rack-cables path.wire:not(.offline)');
-            if (!wire) return null;
-            const src = wire.dataset.conn.split('-')[0];   // '<sc>:<sp>'
-            const jack = document.querySelector('[data-jack="c' + src + ':out"]');
-            if (!jack) return null;
-            jack.scrollIntoView({ block: 'center' });
-            const r = jack.getBoundingClientRect();
-            return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
-        }"""
-    )
-    if box:
-        # Hold > 350 ms (engine HOLD_MS) → sticky peek without arming.
-        page.mouse.move(box["x"], box["y"])
-        page.mouse.down()
-        time.sleep(0.45)
-        page.mouse.up()
-        time.sleep(0.4)
+    time.sleep(0.5)
 
 
 def build_scenes(target: str, instances: dict[str, dict]) -> list[dict]:
