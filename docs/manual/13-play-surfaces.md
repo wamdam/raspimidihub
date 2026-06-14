@@ -562,16 +562,9 @@ the incoming clock, and `free` runs both axes off the internal
 **BPM**. Route a clock source (Master Clock or external) into the
 instance for X and Y to advance.
 
-Screenshots needed:
+![Cartesian play surface: the Autofill / Fill Voicing / Inversion / Inv. Rate row, the Root / Scale / Path row, the Rate / Gate / Accent / Grid row, and the 2D grid.](../screenshots/cartesian-play.png){width=42%}
 
-- `cartesian-play.png` -- the Cartesian play surface: the Autofill /
-  Fill Voicing / Inversion / Inv. Rate row, the Root / Scale / Path
-  row, the Rate / Gate / Accent / Grid row, and the 2D grid with the
-  playhead highlighting the swept cell. Add a `_open_cartesian` scene to
-  `scripts/screenshots/run.py` so it regenerates with
-  `make screenshots`.
-- `cartesian-config.png` -- the device-detail Setup panel showing the
-  Play Ch + Fill Ch + Ctrl Ch channels and the 8 trigger notes.
+![Cartesian device-detail Setup panel: Play Ch + Fill Ch + Ctrl Ch channels and the trigger notes.](../screenshots/cartesian-config.png){width=35%}
 
 ## The Tracker
 

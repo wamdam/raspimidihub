@@ -135,8 +135,9 @@ through unchanged.
 `transport` (one subdivision per axis); free-runs at BPM when Sync
 is `free`.
 
-*Screenshots needed:* `cartesian-play.png` (play surface) and
-`cartesian-config.png` (Setup panel) — see chapter 13.
+![Cartesian play surface.](../screenshots/cartesian-play.png){width=42%}
+
+![Cartesian device-detail panel.](../screenshots/cartesian-config.png){width=35%}
 
 ## CC LFO
 
@@ -214,9 +215,7 @@ through on the active channel.
 **Output.** Every event re-stamped onto the active channel.
 **Clock.** None.
 
-Screenshots needed: `XX-plugin-channel-selector.png` -- the config
-panel showing the Active Channel wheel, Trigger group, and the
-4×4 CC → Channel grid.
+![Channel Selector config panel.](../screenshots/35-plugin-channel-selector.png){width=35%}
 
 ## Chord Generator
 
@@ -387,8 +386,7 @@ the matching on.
 **Output.** All events (delayed) plus clock + transport (immediate).
 **Clock.** Pass-through (not delayed).
 
-*Screenshots needed:* `screenshots/XX-plugin-latency.png` showing the
-config panel with the single Delay (ms) fader.
+![Latency config panel with the single Delay (ms) fader.](../screenshots/31-plugin-latency.png){width=35%}
 
 ## Master Clock
 

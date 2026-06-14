@@ -50,12 +50,15 @@ VIEWPORT_PRESETS = {
 # determines (alphabetical) where instances land in the matrix.
 DEMO_PLUGINS = [
     ("arpeggiator", "Arpeggiator"),
+    ("cartesian", "Cartesian"),
     ("cc_lfo", "CC LFO"),
     ("cc_smoother", "CC Smoother"),
+    ("channel_selector", "Channel Selector"),
     ("chord_generator", "Chord Generator"),
     ("clock_divider", "Clock Divider"),
     ("euclidean", "Euclidean"),
     ("hold", "Hold"),
+    ("latency", "Latency"),
     ("master_clock", "Master Clock"),
     ("midi_delay", "MIDI Delay"),
     ("note_splitter", "Note Splitter"),
@@ -367,6 +370,9 @@ def build_scenes(target: str, instances: dict[str, dict]) -> list[dict]:
     # Euclidean play-surface — third SURFACE_KIND="play" plugin.
     if (eu := instances.get("euclidean")) is not None:
         scenes.append({"name": "euclidean-play", "path": f"/play/{eu['id']}"})
+    # Cartesian play-surface — fourth SURFACE_KIND="play" plugin.
+    if (cart := instances.get("cartesian")) is not None:
+        scenes.append({"name": "cartesian-play", "path": f"/play/{cart['id']}"})
     # 4.1.0: the long-press CcBinding popup, captured over the
     # Arpeggiator's Accent Vel. knob. The plugin popup carries the
     # subtitle "Incoming MIDI CC that drives this control." plus the
@@ -412,9 +418,12 @@ def build_scenes(target: str, instances: dict[str, dict]) -> list[dict]:
     # historical naming under docs/screenshots/.
     plugin_scene_names = {
         "arpeggiator": "09-plugin-arpeggiator",
+        "cartesian": "cartesian-config",
         "cc_lfo": "10-plugin-cc-lfo",
         "cc_smoother": "11-plugin-cc-smoother",
+        "channel_selector": "35-plugin-channel-selector",
         "chord_generator": "12-plugin-chord-generator",
+        "latency": "31-plugin-latency",
         "master_clock": "13-plugin-master-clock",
         "midi_delay": "14-plugin-midi-delay",
         "note_splitter": "15-plugin-note-splitter",
