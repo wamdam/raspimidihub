@@ -96,8 +96,8 @@ metadata:
 | Play    | **Fill Voicing** | Wheel (wide) | Unison / 5th / Triad / 7th / Scale | Triad |
 | Play    | **Inversion** | Wheel | -4--+4 | 0 |
 | Play    | **Inv. Rate** | Wheel | 15 values | 1/4 |
-| Play    | **Scale** | Wheel (wide) | 9 scales (see above) | major |
 | Play    | **Root** | Wheel (wide) | No root / C ... B (No root = chordal; a root = diatonic key) | No root |
+| Play    | **Scale** | Wheel (wide) | 9 scales (see above) | major |
 | Play    | **Rate** | Wheel | 15 values | 1/16 |
 | Play    | **Path** | Wheel (wide) | 7 modes (see above) | Rows → |
 | Play    | **Grid** | Wheel | 2×2 / 3×3 / 4×4 | 4×4 |
@@ -250,8 +250,8 @@ metadata:
 | Play    | **Jitter %** | Knob | 0--100 | 0 |
 | Play    | **Tune Spread** | Knob | 0--100 | 0 |
 | Play    | **Snap** | Wheel | free / octaves / 5ths+oct. | octaves |
-| Play    | **Scale** | Wheel | 9 scales (see above) | major |
 | Play    | **Root** | Wheel | C ... B | C |
+| Play    | **Scale** | Wheel | 9 scales (see above) | major |
 | Play    | **Step Pattern** | StepEditor (override mode) | per-step default / force-on / force-on+accent / force-off + offset | all default |
 | Play    | **Patterns** | PatternStrip | end-of-surface P1--P8 bank | slot 1 active |
 | Setup   | **Arp Ch** | ChannelSelect | 1--16 or any | any |
@@ -476,8 +476,8 @@ the root pitch and a radio for the scale type.
 
 | Parameter | Type | Range | Default |
 |-----------|------|-------|---------|
-| **Scale** | Radio | major / minor / harmonic minor / melodic minor / pentatonic major / pentatonic minor / blues / chromatic / ... | major |
 | **Root** | Wheel | 0--11 (note names) | C (CC 74 default) |
+| **Scale** | Radio | major / minor / harmonic minor / melodic minor / pentatonic major / pentatonic minor / blues / chromatic / ... | major |
 
 **Input.** Notes.
 **Output.** Notes snapped to the nearest in-scale pitch.

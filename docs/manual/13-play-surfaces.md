@@ -435,7 +435,7 @@ Two independent clocks drive it:
 The live controls fill one fullscreen panel in three rows: the **Fill
 live** toggle, **Fill Voicing**, **Inversion** and its **Inv. Rate**
 (the inversion clock sits right next to the setting it drives); then
-**Scale**, **Root** and **Path**; then the utility row — the step
+**Root**, **Scale** and **Path**; then the utility row — the step
 **Rate**, **Gate %**, **Accent Vel.** and **Grid** (size). The 2D grid
 fills the centre, and the 8-slot pattern bank sits at the bottom. The
 setup-only parameters (sync, the two channels, Ctrl Ch and the trigger
@@ -565,7 +565,7 @@ instance for X and Y to advance.
 Screenshots needed:
 
 - `cartesian-play.png` -- the Cartesian play surface: the Autofill /
-  Fill Voicing / Inversion / Inv. Rate row, the Scale / Root / Path
+  Fill Voicing / Inversion / Inv. Rate row, the Root / Scale / Path
   row, the Rate / Gate / Accent / Grid row, and the 2D grid with the
   playhead highlighting the swept cell. Add a `_open_cartesian` scene to
   `scripts/screenshots/run.py` so it regenerates with

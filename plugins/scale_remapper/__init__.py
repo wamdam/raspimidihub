@@ -21,10 +21,11 @@ snaps to C-D-E-G-A. Great for jamming, live performance, or making
 a grid controller always sound musical."""
 
     params = [
-        Radio("scale", "Scale", list(SCALES.keys()), default="major"),
+        # Root before Scale so it reads "D minor", not "minor D".
         Wheel("root", "Root", min=0, max=11, default=0,
               labels=["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"],
               default_cc=74),
+        Radio("scale", "Scale", list(SCALES.keys()), default="major"),
     ]
 
     inputs = ["Notes", "CC (long-press Root to bind)"]

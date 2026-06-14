@@ -259,18 +259,19 @@ to pick a Channel + CC (or MIDI-Learn one)."""
               labels=_RATE_OPTIONS, default=_DEFAULT_Y_RATE,
               play_only=True, default_cc=75),
 
-        # Row 2 — Scale (wide) + the Root selector + Path. Root doubles
-        # as the harmony mode: position 0 = "No root" → Chordal (played
-        # note is the tonic, Scale just sets the chord quality); any
-        # actual root C..B → Diatonic in that key. One wheel instead of
-        # a separate Harmony switch + Root wheel.
+        # Row 2 — the Root selector + Scale (wide) + Path. Root before
+        # Scale so it reads "D minor", not "minor D". Root doubles as the
+        # harmony mode: position 0 = "No root" → Chordal (played note is
+        # the tonic, Scale just sets the chord quality); any actual root
+        # C..B → Diatonic in that key. One wheel instead of a separate
+        # Harmony switch + Root wheel.
+        Wheel("key", "Root", min=0, max=12,
+              labels=["No root"] + _NOTE_NAMES, default=0,
+              play_only=True, default_cc=88),
         Wheel("scale", "Scale",
               min=0, max=len(_SCALE_OPTIONS) - 1,
               labels=_SCALE_OPTIONS, default=0,
               wide=True, span=2, play_only=True, default_cc=87),
-        Wheel("key", "Root", min=0, max=12,
-              labels=["No root"] + _NOTE_NAMES, default=0,
-              play_only=True, default_cc=88),
         Wheel("path", "Path",
               min=0, max=len(_PATH_OPTIONS) - 1,
               labels=_PATH_OPTIONS, default=0,

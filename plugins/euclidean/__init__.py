@@ -252,12 +252,13 @@ default-CC table."""
               min=0, max=len(_SNAP_OPTIONS) - 1,
               labels=_SNAP_OPTIONS, default=1, play_only=True, default_cc=86),
 
-        # Pitch quantiser (reuses Scale Remapper's catalogue).
+        # Pitch quantiser (reuses Scale Remapper's catalogue). Root
+        # before Scale so it reads "D minor", not "minor D".
+        Wheel("root", "Root", min=0, max=11, default=0,
+              labels=_NOTE_NAMES, play_only=True, default_cc=88),
         Wheel("scale", "Scale",
               min=0, max=len(_SCALE_OPTIONS) - 1,
               labels=_SCALE_OPTIONS, default=0, play_only=True, default_cc=87),
-        Wheel("root", "Root", min=0, max=11, default=0,
-              labels=_NOTE_NAMES, play_only=True, default_cc=88),
 
         # Layer 3 — override grid + per-step semitone offset.
         StepEditor("steps_grid", "Step Pattern",
