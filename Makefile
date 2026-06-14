@@ -1,12 +1,17 @@
 PACKAGE = raspimidihub
-VERSION = 5.0.0-alpha1
-# Debian Version field: pre-release tags MUST use a tilde so dpkg/apt
-# sort them BELOW the final release (e.g. 5.0.0~alpha1 << 5.0.0).
-# A hyphen would sort the pre-release *above* the final (the bug that
-# burned us before). The git tag / GitHub release / deb *filename* keep
-# the hyphen form (git refs can't contain '~', and the OTA updater
-# parses the hyphen tag), so only the control Version field is rewritten.
-DEB_VERSION = $(subst -alpha,~alpha,$(subst -beta,~beta,$(subst -rc,~rc,$(VERSION))))
+# Pre-releases use the PEP440-style suffix form (5.0.0a1 / 5.0.0b2 /
+# 5.0.0rc1) — NOT a hyphen. The running 4.8.0+ OTA updater parses deb
+# filenames with a regex that only accepts this suffix form; a hyphen
+# (5.0.0-alpha1) makes the downloaded deb invisible to it.
+VERSION = 5.0.0a1
+# Debian Version field: a pre-release suffix MUST be tilde-separated so
+# dpkg/apt sort it BELOW the final release (5.0.0~a1 << 5.0.0). A bare
+# suffix (5.0.0a1) or hyphen sorts the pre-release *above* the final
+# (the bug that burned us before). Insert a '~' before the first letter.
+# The git tag / GitHub release / deb *filename* keep the bare suffix
+# form (the OTA updater + git need it); only the control Version field
+# is rewritten.
+DEB_VERSION = $(shell echo '$(VERSION)' | sed -E 's/([0-9])([a-z])/\1~\2/')
 DEB_NAME = $(PACKAGE)_$(VERSION)-1_all
 BUILD_DIR = build/$(DEB_NAME)
 DEB_FILE = dist/$(DEB_NAME).deb
@@ -172,13 +177,19 @@ image-release: image
 # Usage: make release NOTES="changelog text here"
 # This builds the deb, tags, pushes, and creates a GitHub release with all required assets.
 
-release: $(DEB_FILE) $(ROSETUP_DEB_FILE) $(MANUAL_PDF)
+release: $(DEB_FILE) $(ROSETUP_DEB_FILE)
 	@if git diff --quiet && git diff --cached --quiet; then \
 		echo "Working tree clean, proceeding..."; \
 	else \
 		echo "Error: uncommitted changes. Commit first."; exit 1; \
 	fi
 	@echo "=== Releasing v$(VERSION) ==="
+	@# Always rebuild the manual from scratch for a release — never ship
+	@# a stale PDF. (mtime-based prereqs have skipped a rebuild before,
+	@# uploading the previous version's manual; the PDF is gitignored so
+	@# this never dirties the tree.)
+	rm -f $(MANUAL_PDF)
+	$(MAKE) $(MANUAL_PDF)
 	@# Bake the version into a copy of install.sh so the uploaded
 	@# script always installs THIS release, not whatever happens to be
 	@# /latest at the moment a user runs it. Source scripts/install.sh
