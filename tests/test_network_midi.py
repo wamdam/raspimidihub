@@ -616,3 +616,50 @@ class TestManagerPolicy:
         # And offline (unknown) devices are rejected too
         ok, reason = mgr.is_exportable("usb-1-2-aaaa:bbbb")
         assert not ok
+
+
+def test_link_watcher_rebinds_only_when_addresses_change():
+    """The link watcher must re-bind mDNS exactly when the set of local
+    IPv4 addresses changes (e.g. eth0 comes up after boot), and never on
+    a stable or momentarily-empty reading — the bug was that a late eth0
+    stayed mDNS-dark with no re-bind at all."""
+    from raspimidihub.network_midi import NetworkMidiManager
+
+    class FakeConfig:
+        data = {"network_midi": {}}
+
+    nm = NetworkMidiManager(engine=None, config=FakeConfig(), server=None)
+    nm._started = True
+    addrs = {"v": ["10.1.1.2"]}
+    rebinds = []
+
+    async def fake_local():
+        return list(addrs["v"])
+
+    async def fake_rebind():
+        rebinds.append(1)
+
+    nm._local_addresses = fake_local
+    nm._rebind_mdns = fake_rebind
+
+    # Stable address set → no re-bind.
+    prev = asyncio.run(nm._check_links({"10.1.1.2"}))
+    assert rebinds == []
+    assert prev == {"10.1.1.2"}
+
+    # eth0 comes up (new address appears) → re-bind once.
+    addrs["v"] = ["10.1.1.2", "169.254.5.5"]
+    prev = asyncio.run(nm._check_links(prev))
+    assert rebinds == [1]
+    assert prev == {"10.1.1.2", "169.254.5.5"}
+
+    # Unchanged again → no further re-bind.
+    prev = asyncio.run(nm._check_links(prev))
+    assert rebinds == [1]
+
+    # Every link momentarily down (empty reading) → ignored, prev kept,
+    # so the address's return is still seen as a change next time.
+    addrs["v"] = []
+    prev2 = asyncio.run(nm._check_links(prev))
+    assert rebinds == [1]
+    assert prev2 == prev

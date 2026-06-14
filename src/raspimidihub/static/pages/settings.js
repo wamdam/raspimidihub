@@ -1337,19 +1337,19 @@ function SettingsNetworkMidi({ showToast }) {
             ${exportable.map(d => {
                 const sess = sessions[d.stable_id];
                 return html`
-                    <div key=${d.stable_id}>
-                        <label class="msg-toggle">
-                            <input type="checkbox"
-                                checked=${!!d.exported}
-                                onchange=${e => setExport(d.stable_id, e.target.checked)} />
-                            <span>${d.name}</span>
-                        </label>
-                        ${sess && html`
-                            <p style="font-size:11px;color:var(--text-dim);margin:-4px 0 8px 26px">
-                                advertised as "${sess.name}"${sess.participants.length
-                                    ? ` · ${sess.participants.length} connected` : ''}
-                            </p>`}
-                    </div>`;
+                    <label key=${d.stable_id} class="msg-toggle" style="margin-bottom:6px">
+                        <input type="checkbox"
+                            checked=${!!d.exported}
+                            onchange=${e => setExport(d.stable_id, e.target.checked)} />
+                        <div style="flex:1;min-width:0">
+                            <div>${d.name}</div>
+                            ${sess && html`
+                                <div style="font-size:11px;color:var(--text-dim);margin-top:2px">
+                                    advertised as "${sess.name}"${sess.participants.length
+                                        ? ` · ${sess.participants.length} connected` : ''}
+                                </div>`}
+                        </div>
+                    </label>`;
             })}
         </div>`}
         ${nm.enabled && html`<div class="card">

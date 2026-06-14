@@ -4,6 +4,12 @@ User-visible changes. Short tagged one-liners, no code or commit
 hashes. Tags: Added, Improved, Fix, Changed, Removed.
 
 
+Unreleased
+
+- Fix: Network MIDI now re-binds mDNS discovery by itself when a network interface comes up after boot (e.g. a hub-to-hub Ethernet cable plugged in later) — the peer's exported devices appear without having to toggle Network MIDI off and on. Manual peers (plain unicast) were never affected.
+- Fix: the "advertised as …" line under an exported device sat misaligned below its toggle in Settings → Network MIDI; it now sits cleanly under the device name.
+
+
 2026-06-14 — Version 5.0.0a2
 
 - Added: **Channel Selector** plugin — turns a controller's buttons into a channel picker. Assign one CC per channel (each slot has its own **MIDI-Learn**); pressing that button makes that channel the active one, and every event — notes, CC, pitch bend, aftertouch, program change — is re-stamped onto it, regardless of which channel the controller actually sent on. A live **Active Channel** wheel shows the current selection, the visual feedback a displayless keyboard lacks. Pair it with the routing matrix's channel filters and the buttons switch the destination (plain / Arp / Euclidean / Cartesian / …) hands-free; a note held across a switch still gets its Note Off on the channel it started on, so there are no stuck notes. Add from **Add → Plugin**.

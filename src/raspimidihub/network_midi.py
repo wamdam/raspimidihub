@@ -57,6 +57,12 @@ PORT_RANGE = 200          # how far above BASE_PORT we probe for free pairs
 PARTICIPANT_TIMEOUT = 60.0
 HOUSEKEEPING_INTERVAL = 2.0
 MANUAL_PEER_INTERVAL = 30.0
+# How often we re-check the set of local IPv4 addresses. zeroconf only
+# joins the mDNS multicast group on interfaces that had an address when
+# AsyncZeroconf was constructed; an eth0 that comes up *after* start
+# (a hub-to-hub cable plugged in later) would otherwise never advertise
+# or discover over that link. On a change we re-bind the mDNS stack.
+LINK_WATCH_INTERVAL = 5.0
 RECONNECT_DELAY = 2.0     # first retry; doubles up to the cap
 RECONNECT_DELAY_MAX = 30.0
 
@@ -744,6 +750,7 @@ class NetworkMidiManager:
         self._notify_task = None
         self._housekeeping_task = None
         self._manual_peers_task = None
+        self._link_watch_task = None
         self._reconnect_tasks: dict[str, asyncio.Task] = {}
         self.hub_id = hub_id()
         # Hotplug reconcile: exported device unplugged → its session
@@ -814,6 +821,7 @@ class NetworkMidiManager:
         self._housekeeping_task = self._loop.create_task(self._housekeeping())
         self._manual_peers_task = self._loop.create_task(
             self._poll_manual_peers())
+        self._link_watch_task = self._loop.create_task(self._watch_links())
         log.info("network-midi: up (hub id %s)", self.hub_id)
 
     async def stop(self) -> None:
@@ -821,10 +829,11 @@ class NetworkMidiManager:
             return
         self._started = False
         for task in (self._housekeeping_task, self._manual_peers_task,
-                     *self._reconnect_tasks.values()):
+                     self._link_watch_task, *self._reconnect_tasks.values()):
             if task:
                 task.cancel()
         self._housekeeping_task = self._manual_peers_task = None
+        self._link_watch_task = None
         self._reconnect_tasks.clear()
         if self._browser:
             try:
@@ -955,6 +964,80 @@ class NetworkMidiManager:
         from .wifi import get_all_interfaces
         infos = await asyncio.to_thread(get_all_interfaces)
         return [i["address"] for i in infos if i.get("address")]
+
+    # --- link watcher (re-bind mDNS when an interface comes up late) ---
+
+    async def _watch_links(self) -> None:
+        """Re-bind the mDNS stack whenever the set of local IPv4
+        addresses changes. zeroconf joins the multicast group only on
+        the interfaces present when AsyncZeroconf was built, so an eth0
+        brought up after start (a hub-to-hub cable plugged in later)
+        would otherwise stay mDNS-dark until a manual toggle. Manual
+        peers ride plain unicast and are unaffected — this closes the
+        mDNS-only gap."""
+        try:
+            prev = set(await self._local_addresses())
+        except Exception:
+            prev = set()
+        while self._started:
+            await asyncio.sleep(LINK_WATCH_INTERVAL)
+            prev = await self._check_links(prev)
+
+    async def _check_links(self, prev: set[str]) -> set[str]:
+        """One address-set comparison. Returns the set to compare
+        against next time. Re-binds mDNS when a non-empty set differs
+        from the last one. An empty reading (every link momentarily
+        down) is ignored — we keep `prev` so the address's return is
+        seen as a change and triggers a re-bind then."""
+        try:
+            cur = set(await self._local_addresses())
+        except Exception:
+            return prev
+        if not cur:
+            return prev
+        if cur != prev:
+            log.info("network-midi: local addresses changed %s -> %s; "
+                     "re-binding mDNS", sorted(prev), sorted(cur))
+            await self._rebind_mdns()
+        return cur
+
+    async def _rebind_mdns(self) -> None:
+        """Recreate the zeroconf instance + browser so it re-enumerates
+        interfaces (joining the multicast group on any newly-up link),
+        then re-advertise every live export with the current addresses.
+        RTP sessions, mirrors, ALSA and participants keep running — only
+        the mDNS sockets are recycled. The fresh browser re-discovers
+        peers (Added/Updated refresh `_discovered`; `_apply_mirror_policy`
+        is idempotent, so live mirrors are not doubled)."""
+        if not self._started:
+            return
+        from zeroconf import IPVersion
+        from zeroconf.asyncio import AsyncServiceBrowser, AsyncZeroconf
+        if self._browser:
+            try:
+                await self._browser.async_cancel()
+            except Exception:
+                pass
+            self._browser = None
+        if self._aiozc:
+            try:
+                await self._aiozc.async_close()
+            except Exception:
+                pass
+            self._aiozc = None
+        self._aiozc = AsyncZeroconf(ip_version=IPVersion.V4Only)
+        for sess in self._exports.values():
+            sess._service_info = None
+            try:
+                await self.register_service(sess)
+            except Exception:
+                log.warning("network-midi: re-advertise of %s failed",
+                            sess.service_name, exc_info=True)
+        self._browser = AsyncServiceBrowser(
+            self._aiozc.zeroconf, SERVICE_TYPE,
+            handlers=[self._on_service_state])
+        log.info("network-midi: mDNS re-bound on %d interface address(es)",
+                 len(await self._local_addresses()))
 
     # --- ALSA → network dispatch ---
 

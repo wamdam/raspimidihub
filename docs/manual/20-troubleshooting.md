@@ -121,12 +121,21 @@ warnings instead.
 - **First check.** Is **Network MIDI enabled on both hubs**, and
   does the *other* hub actually export anything? Only exported
   devices are advertised.
-- **Second check.** Direct cable: give both ends ~30 seconds
-  after plugging in to self-assign their `169.254.x.x` link-local
-  addresses (Settings → Network shows what `eth0` got).
+- **Second check.** Are both hubs on the **same subnet**? A direct
+  cable with one end on a static IP (say `10.1.1.2/24`) and the
+  other on DHCP won't work: with no DHCP server the DHCP end falls
+  back to `169.254.x.x` link-local, a different subnet, and the two
+  can't reach each other. Either let *both* fall back to link-local
+  (both DHCP, no server) or give both a static address in the same
+  `/24` (Settings → Network; leave the gateway blank for a direct
+  link). Give a freshly-plugged direct cable ~30 seconds to settle.
+  *The hub re-binds mDNS by itself when `eth0` gains an address, so
+  a cable plugged in after boot is discovered without toggling
+  Network MIDI off and on.*
 - **Third check.** On a routed LAN or behind a managed switch,
   multicast (mDNS) may not get through -- add the peer's IP under
-  **Settings → Network MIDI → Manual peers**.
+  **Settings → Network MIDI → Manual peers**. (Manual peers use
+  plain unicast and work regardless of multicast.)
 - **Diagnose.** Over SSH: `journalctl -u raspimidihub -e`, look
   for `network-midi:` lines.
 
