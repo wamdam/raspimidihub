@@ -28,6 +28,7 @@ class FakeTransport:
 
 class StubManager:
     hostname = "testhub"
+    node_name = "testhub-735C"
     hub_id = "abc123def456"
 
     def __init__(self):
@@ -79,7 +80,7 @@ class TestResponderHandshake:
         assert ok.command == apple_midi.CMD_ACCEPT
         assert ok.initiator_token == 7
         assert ok.ssrc == sess.ssrc
-        assert ok.name == "TX-7 @testhub"
+        assert ok.name == "TX-7 @testhub-735C"
         part = sess.participants[0x1111]
         assert not part.connected  # data-port leg still missing
 
@@ -392,6 +393,7 @@ class TestMirrorPolicy:
                 self.stable_id = svc.stable_id
                 self.state = "connected"
                 self.latency_ms = None
+                self.remote_addr = svc.addresses[0] if svc.addresses else ""
 
             async def start(self):
                 started.append(self.svc.service)
@@ -441,6 +443,50 @@ class TestMirrorPolicy:
         svc = make_discovered(sid="")
         asyncio.run(mgr._apply_mirror_policy(svc))
         assert started == []
+
+    def test_self_address_not_mirrored(self, monkeypatch):
+        """A peer service resolving only to one of our own addresses
+        (hostname collision) must not be mirrored — that self-loop would
+        answer its own clock-sync and never reap."""
+        from raspimidihub import wifi
+        monkeypatch.setattr(wifi, "get_all_interfaces", lambda: [
+            {"address": "192.0.2.20", "netmask": "255.255.255.0"}])
+        mgr, started = self.make_manager({}, monkeypatch)
+        svc = make_discovered()  # addresses == ["192.0.2.20"]
+        asyncio.run(mgr._apply_mirror_policy(svc))
+        assert started == []
+        assert svc.service not in mgr._mirrors
+
+    def test_self_address_dropped_but_real_peer_kept(self, monkeypatch):
+        """When a service resolves to our own address AND a real peer
+        address, the self address is filtered and the mirror still forms
+        against the reachable one."""
+        from raspimidihub import wifi
+        monkeypatch.setattr(wifi, "get_all_interfaces", lambda: [
+            {"address": "192.168.4.1", "netmask": "255.255.255.0"}])
+        mgr, started = self.make_manager({}, monkeypatch)
+        svc = make_discovered()
+        svc.addresses = ["192.168.4.1", "10.1.1.3"]
+        asyncio.run(mgr._apply_mirror_policy(svc))
+        assert started == [svc.service]
+        assert svc.addresses == ["10.1.1.3"]
+
+    def test_stale_self_mirror_rebuilt_against_peer(self, monkeypatch):
+        """An existing mirror aimed at one of our own addresses is torn
+        down and rebuilt against the real peer address on the next pass."""
+        from raspimidihub import wifi
+        monkeypatch.setattr(wifi, "get_all_interfaces", lambda: [
+            {"address": "192.168.4.1", "netmask": "255.255.255.0"}])
+        mgr, started = self.make_manager({}, monkeypatch)
+        svc = make_discovered()
+        svc.addresses = ["192.168.4.1", "10.1.1.3"]
+        # Seed a live self-loop mirror (remote_addr is our own AP IP).
+        stale = network_midi.MirroredSession(mgr, svc)
+        mgr._mirrors[svc.service] = stale
+        asyncio.run(mgr._apply_mirror_policy(svc))
+        assert started == [svc.service]
+        assert mgr._mirrors[svc.service] is not stale
+        assert mgr._mirrors[svc.service].remote_addr == "10.1.1.3"
 
 
 class TestLifecycle:
@@ -531,6 +577,7 @@ class TestManualPeers:
                 self.stable_id = svc.stable_id
                 self.state = "connected"
                 self.latency_ms = None
+                self.remote_addr = svc.addresses[0] if svc.addresses else ""
 
             async def start(self):
                 started.append(self.svc.service)

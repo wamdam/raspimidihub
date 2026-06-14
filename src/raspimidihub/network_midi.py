@@ -256,7 +256,7 @@ class ExportedSession:
 
     @property
     def service_name(self) -> str:
-        return f"{self.device_name} @{self._manager.hostname}"
+        return f"{self.device_name} @{self._manager.node_name}"
 
     # --- lifecycle ---
 
@@ -539,6 +539,10 @@ class MirroredSession:
     def alsa_client_id(self) -> int | None:
         return self._alsa.client_id if self._alsa else None
 
+    @property
+    def remote_addr(self) -> str:
+        return self._remote_ctrl[0]
+
     # --- lifecycle ---
 
     async def start(self) -> None:
@@ -779,6 +783,22 @@ class NetworkMidiManager:
         return socket.gethostname()
 
     @property
+    def node_name(self) -> str:
+        """The hub's network identity for mDNS / AppleMIDI: the system
+        hostname plus the hardware MAC suffix (e.g. raspimidihub-735C),
+        the same token as the WiFi AP name.
+
+        Two hubs with the default hostname would both advertise
+        `raspimidihub.local`; the colliding A-records let a peer's
+        service resolve to THIS hub's *own* address, so the hub mirrors
+        its own export — a self-loop that answers its own clock-sync and
+        therefore never reaps. The suffix keeps each hub's mDNS records
+        distinct and makes the matrix '@'-group header tell two hubs
+        apart at a glance."""
+        from .wifi import _get_mac_suffix
+        return f"{self.hostname}-{_get_mac_suffix()}"
+
+    @property
     def alsa(self):
         return self._alsa
 
@@ -951,9 +971,9 @@ class NetworkMidiManager:
             # connect. avahi-daemon on the hub answers A queries for
             # this name per-interface, so clients also get an address
             # that is actually reachable from where they ask.
-            server=f"{self.hostname}.local.",
+            server=f"{self.node_name}.local.",
             properties={"rmh": "1", "hub": self.hub_id,
-                        "sid": sess.stable_id, "host": self.hostname,
+                        "sid": sess.stable_id, "host": self.node_name,
                         "dev": sess.device_name},
         )
         await self._aiozc.async_register_service(sess._service_info,
@@ -1130,16 +1150,33 @@ class NetworkMidiManager:
         deliberate share); foreign sessions (Macs, DAWs) only when the
         user added them — a Mac's advert is not an invitation, and a
         studio WLAN full of DAWs must not flood the matrix."""
+        # Never mirror via one of our own addresses. With a hostname
+        # collision a peer's service can resolve to THIS hub's IP; the
+        # resulting self-loop answers its own clock-sync and so never
+        # reaps (the device hangs in the matrix forever). Drop self
+        # addresses up front and treat a service that resolves to
+        # nothing else as not-present.
+        own = set(await self._local_addresses())
+        reachable = [a for a in svc.addresses if a not in own]
+
         if svc.service in self._mirrors:
-            return
+            # An existing mirror aimed at one of our own addresses is a
+            # stale self-loop (e.g. formed during an address flap) — tear
+            # it down so it can rebuild against a real peer address below.
+            existing = self._mirrors[svc.service]
+            if existing.remote_addr in own:
+                await self.on_mirror_lost(existing)
+            else:
+                return
         if svc.is_hub:
             want = (bool(svc.sid)
                     and svc.service not in
                     self.settings.get("mirror_disabled", []))
         else:
             want = svc.service in self.settings.get("mirrored_foreign", [])
-        if not want or not svc.addresses:
+        if not want or not reachable:
             return
+        svc.addresses = reachable
         mirror = MirroredSession(self, svc)
         try:
             await mirror.start()
