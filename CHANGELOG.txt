@@ -4,9 +4,9 @@ User-visible changes. Short tagged one-liners, no code or commit
 hashes. Tags: Added, Improved, Fix, Changed, Removed.
 
 
-Unreleased
+2026-06-14 — Version 5.0.0a4
 
-- Changed: the header now shows the hub's **WiFi name** next to the version (e.g. `RaspiMIDIHub v5.0.0a3 · 735C`) instead of the JavaScript build hash — the same name you pick the hub by in the WiFi list, so two hubs on one bench are easy to tell apart. It's the AP SSID with the `RaspiMIDIHub-` prefix stripped; set a custom one under Settings → WiFi (the `735C` suffix is the wlan0 MAC and isn't separately editable). A redeploy-pending reload is now a small red dot by the title rather than the hash.
+- Changed: the header now shows the hub's **WiFi name** next to the version (e.g. `RaspiMIDIHub v5.0.0a4 · 735C`) instead of the JavaScript build hash — the same name you pick the hub by in the WiFi list, so two hubs on one bench are easy to tell apart. It's the AP SSID with the `RaspiMIDIHub-` prefix stripped; set a custom one under Settings → WiFi (the `735C` suffix is the wlan0 MAC and isn't separately editable). A redeploy-pending reload is now a small red dot by the title rather than the hash.
 
 
 2026-06-14 — Version 5.0.0a3
