@@ -28,6 +28,10 @@ const DEVICE_HOLD_MS = 400;   // press-hold on faceplate → device menu.
 const DRAG_THRESH = 8;        // px before a jack press becomes a drag
 const HOLD_MOVE_TOL = 18;     // px of finger wobble tolerated during a device long-press
                               // (a real scroll moves much further, so it still cancels)
+const UNIT_HOLD_MIN_MS = 280; // min press time before a pointercancel counts as a
+                              // genuine long-press. A scroll-takeover cancel fires
+                              // within ~100ms of the touch, so anything below this is
+                              // a scroll, not a hold — don't open the device menu.
 const EDGE = 56, MAX_SPEED = 34;
 
 export function createRackEngine() {
@@ -65,7 +69,11 @@ export function createRackEngine() {
     // Resolve a jack key (`dkey:port:role`) to a point in the SVG's
     // coordinate space + the element it anchored to. Falls back to the
     // collapsed group's anchor jack when the unit isn't rendered.
-    function anchor(key, groupMap) {
+    // o (originRect) and s (rootScale) are pure DOM reads that force a
+    // layout flush; anchor() runs twice per cable per draw, so the hot
+    // callers compute them ONCE per pass and pass them in. The defaults
+    // keep stray standalone calls correct.
+    function anchor(key, groupMap, o, s) {
         let el = root.querySelector(`[data-jack="${cssEsc(key)}"]`);
         if (!el || !el.offsetParent) {
             const parts = key.split(':'); parts.pop(); parts.pop();
@@ -77,7 +85,9 @@ export function createRackEngine() {
             }
         }
         if (!el || !el.offsetParent) return null;
-        const b = el.getBoundingClientRect(), o = originRect(), s = rootScale();
+        if (o === undefined) o = originRect();
+        if (s === undefined) s = rootScale();
+        const b = el.getBoundingClientRect();
         return {
             x: (b.left + b.width / 2 - o.left) / s,
             y: (b.top + b.height / 2 - o.top) / s,
@@ -151,10 +161,11 @@ export function createRackEngine() {
         svg.style.width = w + 'px'; svg.style.height = h + 'px';
 
         const groupMap = dkeyGroupMap();
+        const o = originRect(), s = rootScale();
         const dots = [];
         (engine.ctx.connections || []).forEach((c, idx) => {
-            const a = anchor(srcKeyOf(c), groupMap);
-            const b = anchor(dstKeyOf(c), groupMap);
+            const a = anchor(srcKeyOf(c), groupMap, o, s);
+            const b = anchor(dstKeyOf(c), groupMap, o, s);
             if (!a || !b || a.el === b.el) return;     // both inside one collapsed group
             const cp = hangCps(a, b, idx);
             const d = cpsPath(a, b, cp);
@@ -248,13 +259,14 @@ export function createRackEngine() {
     function startSpread(ids, instant) {
         endSpread();
         const items = [];
+        const groupMap = dkeyGroupMap();
+        const o = originRect(), s = rootScale();
         (engine.ctx.connections || []).forEach((c, idx) => {
             const id = connId(c); if (!ids.has(id)) return;
             const wire = svg.querySelector(`path.wire[data-conn="${cssEsc(id)}"]`);
             const hit = svg.querySelector(`path.hit[data-conn="${cssEsc(id)}"]`);
             if (!wire || !hit) return;
-            const groupMap = dkeyGroupMap();
-            const a = anchor(srcKeyOf(c), groupMap), b = anchor(dstKeyOf(c), groupMap);
+            const a = anchor(srcKeyOf(c), groupMap, o, s), b = anchor(dstKeyOf(c), groupMap, o, s);
             if (!a || !b || a.el === b.el) return;
             const fdot = svg.querySelector(`g.fdot[data-conn="${cssEsc(id)}"]`);
             items.push({ a, b, idx, wire, hit, fdot });
@@ -318,6 +330,18 @@ export function createRackEngine() {
 
     // ---- peek (highlight a jack's cables) ----------------------------
     let peekKey = null, stickyKey = null;
+    // Spectator mirroring: the source publishes its current peeked jack
+    // (engine.onPeek) so a watcher re-runs the same peek/spread locally
+    // (engine.applyRemotePeek). remoteApplying guards the source-side
+    // notify from firing while we're applying an incoming value.
+    let remoteApplying = false, lastPeekNotified;
+    function notifyPeek() {
+        if (remoteApplying) return;
+        const k = peekKey || null;
+        if (k === lastPeekNotified) return;
+        lastPeekNotified = k;
+        if (engine.onPeek) { try { engine.onPeek(k); } catch {} }
+    }
     function jackForKey(key) {
         return key && key.startsWith('g:')
             ? root.querySelector(`[data-ganchor="${cssEsc(key.slice(2))}"]`)
@@ -344,7 +368,13 @@ export function createRackEngine() {
     // we enter peek even if it has no cables — so everything mutes,
     // making "nothing connected here" obvious. Hover (transient preview)
     // passes allowEmpty falsy, so sweeping over empty ports does nothing.
+    // Every peek state change (hover, tap-select, hold, sticky restore)
+    // funnels through this wrapper so the source mirrors it to watchers.
     function peekJack(el, on, instant, allowEmpty) {
+        peekJackImpl(el, on, instant, allowEmpty);
+        notifyPeek();
+    }
+    function peekJackImpl(el, on, instant, allowEmpty) {
         const key = on ? jackKey(el) : null;
         if (on && peekKey === key) return;
         endSpread();
@@ -512,6 +542,20 @@ export function createRackEngine() {
     // ---- edge auto-scroll (no visible zones; the drag just scrolls
     // when the pointer nears the scroll container's top/bottom) -------
     let rubber = null;
+    // Spectator mirroring of the in-progress drag (the rubber-band before
+    // a patch lands). The source emits the source-jack key + the moving
+    // endpoint in *unscaled viewBox coords* (so it transfers 1:1 to the
+    // watcher's identically-laid-out rack), throttled to ~30 Hz. null
+    // ends the drag — the real cable then arrives via the normal
+    // connection redraw. emitDrag is a no-op until a source sets onDrag.
+    let remoteRubber = null, lastDragEmit = 0;
+    function emitDrag(state, force) {
+        if (!engine.onDrag) return;
+        const now = performance.now();
+        if (!force && now - lastDragEmit < 33) return;
+        lastDragEmit = now;
+        try { engine.onDrag(state); } catch {}
+    }
     function edgeRect() {
         return scrollEl === document.scrollingElement
             ? { top: 0, bottom: innerHeight } : scrollEl.getBoundingClientRect();
@@ -535,9 +579,17 @@ export function createRackEngine() {
         // (and the scroll-shifted origin) move per frame.
         if (!drag || !rubber || !drag.anchor) return;
         const a = drag.anchor;
-        const o = originRect(), s = rootScale();
+        const o = originRect(), s = drag.scale || 1;
         const bx = (drag.x - o.left) / s, by = (drag.y - o.top) / s;
         rubber.setAttribute('d', `M ${a.x} ${a.y} C ${a.x} ${a.y + 40}, ${bx} ${by + 40}, ${bx} ${by}`);
+        // Transfer the free endpoint as a *fraction* of the content box,
+        // not an absolute viewBox coord: a watcher's rack can lay out at a
+        // different width (CSS media queries see the watcher's real window,
+        // not the fixed mirror wrap), so absolute coords wouldn't line up.
+        // The from-anchor is resolved locally on the watcher, so only the
+        // free end needs the proportional remap.
+        emitDrag({ from: drag.from + ':' + drag.dir,
+            fx: bx / (root.scrollWidth || 1), fy: by / (root.scrollHeight || 1) });
     }
 
     // ---- pointer / mouse handlers -----------------------------------
@@ -568,7 +620,7 @@ export function createRackEngine() {
             cancelUnitHold();
             const dev = deviceForUnit(u);
             showHoldRing(e.clientX, e.clientY, DEVICE_HOLD_MS);
-            unitHold = { x: e.clientX, y: e.clientY, fired: false, dev, timer: setTimeout(() => {
+            unitHold = { x: e.clientX, y: e.clientY, downT: performance.now(), fired: false, dev, timer: setTimeout(() => {
                 unitHold.fired = true; hideHoldRing(); armCtxGuard(); if (dev) openDeviceMenu(dev, unitHold.x, unitHold.y);
             }, DEVICE_HOLD_MS) };
         }
@@ -590,8 +642,11 @@ export function createRackEngine() {
             // no-op. By drag time the content is laid out.
             scrollEl = findScrollParent(root);
             rubber = mk('path', { class: 'rubber' }); svg.appendChild(rubber);
-            // Cache the (fixed) source anchor once — see updateRubber.
-            drag.anchor = anchor(drag.from + ':' + drag.dir, dkeyGroupMap());
+            // Cache the (fixed) source anchor + scale once — see updateRubber.
+            // The scale can't change mid-drag, so reading it per frame would
+            // only thrash layout.
+            drag.scale = rootScale();
+            drag.anchor = anchor(drag.from + ':' + drag.dir, dkeyGroupMap(), originRect(), drag.scale);
             drag.over = null;
             root.querySelectorAll('.jack.' + opp(drag.dir)).forEach(t => t.classList.add('target-hint'));
             startEdgeScroll();
@@ -617,7 +672,7 @@ export function createRackEngine() {
         if (!drag) { if (armed && !(e.target.closest && e.target.closest('.jack'))) setArmed(null); return; }
         const d = drag; drag = null;
         document.body.classList.remove('rack-dragging');
-        if (rubber) { rubber.remove(); rubber = null; }
+        if (rubber) { rubber.remove(); rubber = null; emitDrag(null, true); }
         root.querySelectorAll('.jack.drag-over').forEach(x => x.classList.remove('drag-over'));
         if (!d.moved) {                                  // tap on a jack
             const jel = root.querySelector(`[data-jack="${cssEsc(d.from + ':' + d.dir)}"]`);
@@ -647,9 +702,13 @@ export function createRackEngine() {
         // The OS cancels the touch when ITS long-press fires (the haptic
         // the user feels). If a device long-press was pending and hadn't
         // moved, that cancel IS the long-press — open the menu instead of
-        // dropping it. (A scroll would have moved >tol and already
-        // cancelled unitHold, so this only fires on a genuine hold.)
-        if (unitHold && !unitHold.fired && unitHold.dev) {
+        // dropping it. But a touch-scroll also cancels the pointer, often
+        // before the finger crosses HOLD_MOVE_TOL (the browser commits to
+        // scrolling within a frame or two). Distinguish the two by press
+        // duration: a genuine hold has been down a while; a scroll-takeover
+        // fires almost immediately. Below the threshold → it's a scroll.
+        if (unitHold && !unitHold.fired && unitHold.dev
+                && performance.now() - unitHold.downT >= UNIT_HOLD_MIN_MS) {
             unitHold.fired = true; hideHoldRing(); suppressClick = true; armClickSwallow(); armCtxGuard();
             openDeviceMenu(unitHold.dev, unitHold.x, unitHold.y);
         }
@@ -657,7 +716,7 @@ export function createRackEngine() {
         if (drag) {
             drag = null;
             document.body.classList.remove('rack-dragging');
-            if (rubber) { rubber.remove(); rubber = null; }
+            if (rubber) { rubber.remove(); rubber = null; emitDrag(null, true); }
             root.querySelectorAll('.jack.drag-over').forEach(x => x.classList.remove('drag-over'));
             setArmed(armed);
         }
@@ -710,6 +769,36 @@ export function createRackEngine() {
     };
     engine.drawCables = drawCables;
     engine.updateActivity = updateActivity;
+    // Spectator hooks. Source sets onPeek to a broadcaster; a watcher
+    // calls applyRemotePeek with each incoming key to reproduce the
+    // source's peek/spread on its own (locally-drawn) cables.
+    engine.onPeek = null;
+    engine.applyRemotePeek = (key) => {
+        if (!svg || !root) return;
+        const want = key || null;
+        if ((peekKey || null) === want) return;
+        remoteApplying = true;
+        try {
+            if (want) { const el = jackForKey(want); if (el) peekJackImpl(el, true, true, true); }
+            else if (peekKey) { const el = jackForKey(peekKey); if (el) peekJackImpl(el, false); }
+        } finally { remoteApplying = false; }
+    };
+    engine.onDrag = null;
+    engine.applyRemoteDrag = (st) => {
+        if (!svg || !root) return;
+        if (!st || !st.from) {
+            if (remoteRubber) { remoteRubber.remove(); remoteRubber = null; }
+            return;
+        }
+        const a = anchor(st.from, dkeyGroupMap());
+        if (!a) { if (remoteRubber) { remoteRubber.remove(); remoteRubber = null; } return; }
+        // Map the source's fractional endpoint into our own content box.
+        const x = (st.fx || 0) * (root.scrollWidth || 1);
+        const y = (st.fy || 0) * (root.scrollHeight || 1);
+        if (!remoteRubber) { remoteRubber = mk('path', { class: 'rubber' }); svg.appendChild(remoteRubber); }
+        remoteRubber.setAttribute('d',
+            `M ${a.x} ${a.y} C ${a.x} ${a.y + 40}, ${x} ${y + 40}, ${x} ${y}`);
+    };
     engine.destroy = () => {
         removeEventListener('resize', onResize);
         document.removeEventListener('pointerdown', onPointerDown);

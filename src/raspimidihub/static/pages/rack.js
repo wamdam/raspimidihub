@@ -22,11 +22,12 @@
  *     is a no-op → the engine's classes are never clobbered.
  */
 
-import { useRef, useEffect, useState, useMemo } from '../lib/hooks.module.js';
+import { useRef, useEffect, useState, useMemo, useContext } from '../lib/hooks.module.js';
 import { html } from '../ui/common.js';
 import { DeviceIcon } from '../ui/icons.js';
 import { touchTs } from '../ui/storage.js';
 import { createRackEngine } from '../ui/rack-engine.js';
+import { useSharedUiState, SpectatorContext } from '../lib/spectator/shared-ui-state.js';
 
 // Collapse persistence. Network hubs reuse the matrix's key so the two
 // views share one collapsed/expanded state per hub; the local groups
@@ -135,6 +136,15 @@ export function RackView({ devices, connections, clockSources, clockQuarters, mi
     const ctxRef = useRef(null);
     const [collapseVer, setCollapseVer] = useState(0);   // bumps on a group toggle
 
+    // Spectator mirroring of the peek/spread highlight. The source pushes
+    // its current peeked jack key over the wire; a watcher re-runs the
+    // same peek locally so the cable fan looks identical (it has no
+    // pointer of its own to trigger one). See rack-engine onPeek /
+    // applyRemotePeek.
+    const spectatorCtx = useContext(SpectatorContext);
+    const isSpectator = spectatorCtx.kind === 'spectator';
+    const [sharedPeek, setSharedPeek] = useSharedUiState('rack-peek', null);
+
     // The structural model (groups, port map, signature) only depends on
     // the device/connection set and the collapse state — NOT on MIDI
     // activity. devices/connections keep a stable reference across
@@ -194,6 +204,38 @@ export function RackView({ devices, connections, clockSources, clockQuarters, mi
     // the redraw cost each tick.
     useEffect(() => { engineRef.current && engineRef.current.updateActivity(); },
         [midiRates, clockQuarters, clockSources]);
+
+    // Source: broadcast the engine's peek changes (set once — re-running
+    // on every local peek would needlessly churn the hook).
+    useEffect(() => {
+        const e = engineRef.current;
+        if (!e || isSpectator) return undefined;
+        e.onPeek = (key) => setSharedPeek(key);
+        return () => { if (engineRef.current) engineRef.current.onPeek = null; };
+    }, [isSpectator, setSharedPeek]);
+
+    // Spectator: reproduce the incoming peek locally. Re-applied after a
+    // structural redraw too (drawCables rebuilds the cable layer).
+    useEffect(() => {
+        const e = engineRef.current;
+        if (e && isSpectator) e.applyRemotePeek(sharedPeek);
+    }, [isSpectator, sharedPeek, model.structKey]);
+
+    // In-progress drag (the rubber-band). High-frequency, so it bypasses
+    // useSharedUiState (whose setValue would re-render on every frame)
+    // and rides the SpectatorContext broadcast/subscribe directly — the
+    // source's local rubber is unaffected, the watcher draws its own.
+    useEffect(() => {
+        const e = engineRef.current;
+        if (!e) return undefined;
+        if (isSpectator) {
+            const cb = (st) => engineRef.current && engineRef.current.applyRemoteDrag(st);
+            spectatorCtx.subscribe('ui:rack-drag', cb);
+            return () => spectatorCtx.unsubscribe('ui:rack-drag', cb);
+        }
+        e.onDrag = (st) => spectatorCtx.broadcast('ui:rack-drag', st);
+        return () => { if (engineRef.current) engineRef.current.onDrag = null; };
+    }, [isSpectator, spectatorCtx]);
 
     const toggleGroup = (g) => { setCollapsedLS(g.collapseKey, !isCollapsed(g.collapseKey)); setCollapseVer(v => v + 1); };
 

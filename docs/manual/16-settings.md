@@ -77,7 +77,10 @@ The mirror tab opens at the source's viewport size, applies its
 density and theme, mirrors every popup (context menu, CC-binding
 popup with live wheel values, Cell-binding popup, Plugin Control
 Mappings), the matrix horizontal scroll, the bottom-bar toast, and
-the Save/Load/Panic button state. A touch overlay paints fading
+the Save/Load/Panic button state. In the rack view it also mirrors
+the cable highlight (the peek/spread fan when the source selects a
+jack) and the live patch cable while the source is dragging one. A
+touch overlay paints fading
 ripples where the source is being touched (`?touches=1`, on by
 default). If the source disconnects, the mirror shows a "Source
 disconnected" notice and waits for it to come back.
