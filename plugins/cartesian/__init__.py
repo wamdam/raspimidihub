@@ -235,17 +235,23 @@ Routing example:
 CC automation: every play-surface knob is bindable. Long-press a control
 to pick a Channel + CC (or MIDI-Learn one)."""
 
-    # Layout note: every control is inline, so the four rows form purely
+    # Layout note: every control is inline, so the three rows form purely
     # from the column spans (4-col grid). `x_rate`/`y_rate` keep their
     # internal names (saved configs / CC 74/75) but read "Rate" / "Inv.
     # Rate": Inv. Rate sits beside Inversion (the inversion clock it
-    # drives, not a spatial axis), Rate sits in the motion row by Path.
+    # drives, not a spatial axis).
     params = [
-        # Row 1 — Fill Voicing (wide) + the Inversion pair.
+        # Row 1 — Fill live toggle, Fill Voicing, then the Inversion pair.
+        # "Fill live" toggle (latching, LED). ON (default) = Live: the
+        # grid re-stamps from the voicing on every change. OFF = the
+        # grid is frozen as-is for hand-editing — switching it off *is*
+        # the commit (no Apply button).
+        Button("fill_mode", "Fill live", default=True, color="green",
+               play_only=True),
         Wheel("fill_voicing", "Fill Voicing",
               min=0, max=len(_VOICING_OPTIONS) - 1,
               labels=_VOICING_OPTIONS, default=2,
-              wide=True, span=2, play_only=True, default_cc=70),
+              play_only=True, default_cc=70),
         Wheel("inversion", "Inversion", min=-4, max=4, default=0,
               play_only=True, default_cc=71),
         Wheel("y_rate", "Inv. Rate",
@@ -253,45 +259,36 @@ to pick a Channel + CC (or MIDI-Learn one)."""
               labels=_RATE_OPTIONS, default=_DEFAULT_Y_RATE,
               play_only=True, default_cc=75),
 
-        # Row 2 — Scale + the Root selector (which doubles as the harmony
-        # mode). Position 0 = "No root" → Chordal (played note is the
-        # tonic, Scale just sets the chord quality); any actual root
-        # C..B → Diatonic in that key (the played note picks a degree,
-        # harmonised in-key). One wheel instead of a separate Harmony
-        # switch + Root wheel.
+        # Row 2 — Scale (wide) + the Root selector + Path. Root doubles
+        # as the harmony mode: position 0 = "No root" → Chordal (played
+        # note is the tonic, Scale just sets the chord quality); any
+        # actual root C..B → Diatonic in that key. One wheel instead of
+        # a separate Harmony switch + Root wheel.
         Wheel("scale", "Scale",
               min=0, max=len(_SCALE_OPTIONS) - 1,
               labels=_SCALE_OPTIONS, default=0,
               wide=True, span=2, play_only=True, default_cc=87),
         Wheel("key", "Root", min=0, max=12,
               labels=["No root"] + _NOTE_NAMES, default=0,
-              wide=True, span=2, play_only=True, default_cc=88),
+              play_only=True, default_cc=88),
+        Wheel("path", "Path",
+              min=0, max=len(_PATH_OPTIONS) - 1,
+              labels=_PATH_OPTIONS, default=0,
+              play_only=True, default_cc=79),
 
-        # Row 3 — the step rate + Path + grid size.
+        # Row 3 — the utility row: step Rate, Gate, Accent, grid size.
         Wheel("x_rate", "Rate",
               min=0, max=len(_RATE_OPTIONS) - 1,
               labels=_RATE_OPTIONS, default=_DEFAULT_X_RATE,
               play_only=True, default_cc=74),
-        Wheel("path", "Path",
-              min=0, max=len(_PATH_OPTIONS) - 1,
-              labels=_PATH_OPTIONS, default=0,
-              wide=True, span=2, play_only=True, default_cc=79),
-        Wheel("grid_size", "Grid",
-              min=0, max=len(_SIZES) - 1,
-              labels=[f"{s}×{s}" for s in _SIZES], default=2,
-              play_only=True, default_cc=72),
-
-        # Row 4 — Gate, Accent, and the Fill-live toggle.
         Wheel("gate", "Gate %", min=10, max=100, default=80,
               play_only=True, default_cc=73),
         Knob("accent_vel", "Accent Vel.", min=0, max=127, default=30,
              play_only=True, default_cc=83),
-        # "Fill live" toggle (latching, LED). ON (default) = Live: the
-        # grid re-stamps from the voicing on every change. OFF = the
-        # grid is frozen as-is for hand-editing — switching it off *is*
-        # the commit (no Apply button).
-        Button("fill_mode", "Fill live", default=True, color="green",
-               span=2, play_only=True),
+        Wheel("grid_size", "Grid",
+              min=0, max=len(_SIZES) - 1,
+              labels=[f"{s}×{s}" for s in _SIZES], default=2,
+              play_only=True, default_cc=72),
 
         # The grid itself (no title — the 2D grid is self-evident, and
         # "Grid" already labels the size wheel above).
