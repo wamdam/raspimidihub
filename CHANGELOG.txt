@@ -4,7 +4,7 @@ User-visible changes. Short tagged one-liners, no code or commit
 hashes. Tags: Added, Improved, Fix, Changed, Removed.
 
 
-Unreleased
+2026-06-14 — Version 5.0.0-alpha1
 
 - Added: **Cartesian** play surface — a René-style 2D grid sequencer that voices a held note (root + per-cell semitone offset). Two independent clocks sweep it: **Rate** steps the grid along a **Path** (Rows / Cols / Diagonal / Knight / Spiral in / Spiral out / Random), **Inv. Rate** advances the chord inversion. A scale-aware **Fill Voicing** knob (Unison → 5th → Triad → 7th → Scale) stamps the grid; **Inversion** (-4…+4) re-voices without octave stacking. The **Root** wheel doubles as the harmony selector — "No root" = chordal (played note = tonic, fixed quality), a root C..B = diatonic (Root + Scale define a key; the played note is harmonised in-key — third → iii-chord, fifth → V-chord). The **Fill live** toggle re-fills the voicing instantly while preserving your on/off + accent mask (a held note + two CCs is a full instrument); turn it off to freeze the grid for hand-editing. A separate **Fill Ch** records cell offsets by holding notes. 8-slot pattern bank and bindable knobs like the other play surfaces. Add from **Add → Play**.
 - Added: **Network MIDI** (Settings → Network MIDI) — export any local device as a standard **RTP-MIDI (AppleMIDI)** session, advertised over mDNS as "Name @hostname". Macs (Audio MIDI Setup), iPads, rtpmidid, and a second RaspiMIDIHub can connect; several clients per device at once. Notes, CCs, clock and SysEx cross the wire with sub-millisecond LAN latency. Exports survive reboots; the advert exists only while the device is present.
