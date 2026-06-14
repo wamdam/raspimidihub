@@ -221,6 +221,26 @@
 
     <div class="feature-row reverse">
       <div class="feature-text">
+        <h3>Cartesian &mdash; Ren&eacute;-Style 2D Sequencer</h3>
+        <p>Hold a note and the Cartesian voices it across a square grid (2&times;2&ndash;4&times;4) of semitone offsets, swept by two independent clocks: <strong>Rate</strong> steps the cells along a Path, while <strong>Inv. Rate</strong> climbs the chord through its inversions. One Fill Voicing knob fills the whole grid scale-aware &mdash; and the Root wheel flips between chordal and in-key diatonic harmony.</p>
+        <ul class="feature-list">
+          <li>Two clocks: Rate sweeps the grid (Rows / Cols / Diagonal / Knight / Spiral / Random); Inv. Rate walks chord inversions</li>
+          <li>Fill Voicing &mdash; Unison &rarr; 5th &rarr; Triad &rarr; 7th &rarr; Scale, scale-aware (thirds &amp; sevenths follow the Scale wheel)</li>
+          <li>Root wheel doubles as harmony mode: &ldquo;No root&rdquo; = chordal (played note is the tonic); a key C..B = diatonic (third &rarr; iii-chord, fifth &rarr; V-chord)</li>
+          <li>Autofill re-fills the offsets live while preserving your on/off + accent mask &mdash; a held note plus two knobs is a full instrument</li>
+          <li>Fill Ch records cell offsets by holding notes; 8-slot pattern bank like the other play surfaces</li>
+        </ul>
+      </div>
+      <div class="feature-phone">
+        <div class="phone">
+          <div class="phone-notch"></div>
+          <img src="screenshots/cartesian-play.png" data-light-src="screenshots/cartesian-play.png" data-dark-src="screenshots/cartesian-play-dark.png" alt="Cartesian play surface" loading="lazy">
+        </div>
+      </div>
+    </div>
+
+    <div class="feature-row">
+      <div class="feature-text">
         <h3>Controllers — Tap-to-Play Surfaces</h3>
         <p>Fullscreen play surfaces (Mixer 8, FX 6, Performance 16, XY 4) that send CCs over MIDI in real time. Each cell is renameable, MIDI-Learnable, and themable. Four drop buttons per controller capture and replay snapshots, quantised to bar boundaries.</p>
         <ul class="feature-list">
@@ -242,7 +262,7 @@
       </div>
     </div>
 
-    <div class="feature-row">
+    <div class="feature-row reverse">
       <div class="feature-text">
         <h3>Test & Monitor</h3>
         <p>Every device gets a detail panel with a scrollable piano keyboard, CC slider, and live MIDI monitor. Test your setup without touching your gear.</p>
@@ -261,7 +281,7 @@
       </div>
     </div>
 
-    <div class="feature-row reverse">
+    <div class="feature-row">
       <div class="feature-text">
         <h3>Master Clock & Tight Timing</h3>
         <p>Internal BPM clock with start/stop transport drives every synced plugin and external synth from one place. Clock ticks are pre-scheduled through the kernel-side ALSA queue for sub-millisecond jitter even under heavy CPU load.</p>
@@ -281,7 +301,7 @@
       </div>
     </div>
 
-    <div class="feature-row">
+    <div class="feature-row reverse">
       <div class="feature-text">
         <h3>Velocity Curve Editor</h3>
         <p>Draw a custom 128-point velocity response curve to match your playing style or your hardware's quirks. Pick from preset shapes or freehand-draw your own — soft pads, hard drums, S-curves, anything in between.</p>
