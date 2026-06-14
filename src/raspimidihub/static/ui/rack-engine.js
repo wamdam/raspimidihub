@@ -28,7 +28,7 @@ const DEVICE_HOLD_MS = 400;   // press-hold on faceplate → device menu.
 const DRAG_THRESH = 8;        // px before a jack press becomes a drag
 const HOLD_MOVE_TOL = 18;     // px of finger wobble tolerated during a device long-press
                               // (a real scroll moves much further, so it still cancels)
-const EDGE = 48, MAX_SPEED = 18;
+const EDGE = 56, MAX_SPEED = 34;
 
 export function createRackEngine() {
     let root = null, svg = null, scrollEl = null;
@@ -171,11 +171,38 @@ export function createRackEngine() {
 
     // ---- activity (LEDs + clock) ------------------------------------
     const beatSeen = {};
+    const beatSeenUnit = {};
     function updateActivity() {
         if (!root || !engine.ctx) return;
         const rates = engine.ctx.midiRates || {};
         const clockIds = engine.ctx.clockSources ? Object.keys(engine.ctx.clockSources).map(Number) : [];
         const quarters = engine.ctx.clockQuarters || {};
+        // Per-device clock-status LED on the unit head — mirrors the
+        // matrix: green = effective sender, orange = one of ≥2 senders,
+        // dim = sending but blocked from the system clock. The blink
+        // replays on each new quarter (reflow-restart, like the jacks).
+        const blockedById = {};
+        for (const d of (engine.ctx.devices || [])) {
+            if (d.client_id != null && d.clock_blocked) blockedById[d.client_id] = true;
+        }
+        const multiEffective = clockIds.filter(id => !blockedById[id]).length > 1;
+        for (const unit of root.querySelectorAll('.unit[data-client]')) {
+            const icon = unit.querySelector('.u-clock');
+            if (!icon) continue;
+            const c = unit.dataset.client;
+            const cid = c === '' ? null : Number(c);
+            const sends = cid != null && clockIds.includes(cid);
+            icon.classList.toggle('sending', sends);
+            if (!sends) { icon.classList.remove('clock-warn', 'clock-blocked'); continue; }
+            const blocked = !!blockedById[cid];
+            icon.classList.toggle('clock-blocked', blocked);
+            icon.classList.toggle('clock-warn', !blocked && multiEffective);
+            const q = quarters[cid];
+            if (q && beatSeenUnit[cid] !== q) {
+                beatSeenUnit[cid] = q;
+                icon.classList.remove('beat'); void icon.offsetWidth; icon.classList.add('beat');
+            }
+        }
         for (const jack of root.querySelectorAll('.jack[data-jack]')) {
             const key = jack.dataset.jack;
             const parts = key.split(':'); const role = parts.pop(); const port = parts.pop();
@@ -483,12 +510,16 @@ export function createRackEngine() {
         requestAnimationFrame(step);
     }
     function updateRubber() {
-        if (!drag || !rubber) return;
-        const groupMap = dkeyGroupMap();
-        const a = anchor(drag.from + ':' + drag.dir, groupMap);
+        // The source anchor is fixed for the whole drag (layout doesn't
+        // reflow mid-drag), so it's cached at drag start — recomputing
+        // dkeyGroupMap()+anchor() every pointermove AND every scroll
+        // frame was what made dragging feel sluggish. Only the endpoint
+        // (and the scroll-shifted origin) move per frame.
+        if (!drag || !rubber || !drag.anchor) return;
+        const a = drag.anchor;
         const o = originRect();
         const bx = drag.x - o.left, by = drag.y - o.top;
-        if (a) rubber.setAttribute('d', `M ${a.x} ${a.y} C ${a.x} ${a.y + 40}, ${bx} ${by + 40}, ${bx} ${by}`);
+        rubber.setAttribute('d', `M ${a.x} ${a.y} C ${a.x} ${a.y + 40}, ${bx} ${by + 40}, ${bx} ${by}`);
     }
 
     // ---- pointer / mouse handlers -----------------------------------
@@ -541,15 +572,23 @@ export function createRackEngine() {
             // no-op. By drag time the content is laid out.
             scrollEl = findScrollParent(root);
             rubber = mk('path', { class: 'rubber' }); svg.appendChild(rubber);
+            // Cache the (fixed) source anchor once — see updateRubber.
+            drag.anchor = anchor(drag.from + ':' + drag.dir, dkeyGroupMap());
+            drag.over = null;
             root.querySelectorAll('.jack.' + opp(drag.dir)).forEach(t => t.classList.add('target-hint'));
             startEdgeScroll();
         }
         if (drag.moved) {
             updateRubber();
-            root.querySelectorAll('.jack.drag-over').forEach(x => x.classList.remove('drag-over'));
+            // Only touch the DOM when the hovered target actually changes
+            // (querySelectorAll on every move was extra per-move cost).
             const t = document.elementFromPoint(e.clientX, e.clientY);
-            const tj = t && t.closest && t.closest('.jack.' + opp(drag.dir));
-            if (tj) tj.classList.add('drag-over');
+            const tj = (t && t.closest && t.closest('.jack.' + opp(drag.dir))) || null;
+            if (tj !== drag.over) {
+                if (drag.over) drag.over.classList.remove('drag-over');
+                if (tj) tj.classList.add('drag-over');
+                drag.over = tj;
+            }
         }
     };
 

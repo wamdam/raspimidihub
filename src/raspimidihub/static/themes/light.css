@@ -413,3 +413,78 @@
     border-color: rgba(0, 0, 0, 0.10);
     opacity: 0.45;
 }
+
+/* === Rack view: light brushed-aluminium reskin ==================== *
+ * Unlike a single knob (a dark object that reads fine on any desk),
+ * the rack fills the whole view — a dark rack on the light page is a
+ * mis-themed island, and worse, the theme-adapted (now dark) port /
+ * group text lands on dark faceplates with no contrast. So in light
+ * mode the rack metal flips to light aluminium; the brushed-sheen
+ * highlights flip from white-on-dark to dark-groove-on-light, and the
+ * baked-in dark text-shadows flip to light so labels stay crisp. */
+[data-theme="light"] .rack-view .rail {
+    background:
+      repeating-linear-gradient(180deg, transparent 0 7px, rgba(0,0,0,0.16) 7px 15px, transparent 15px 22px),
+      linear-gradient(90deg, #c6c8cd, #e6e8ec 45%, #d0d2d8);
+    border-left: 1px solid rgba(255,255,255,0.8);
+    border-right: 1px solid rgba(0,0,0,0.22);
+}
+[data-theme="light"] .rack-view .mounted::before,
+[data-theme="light"] .rack-view .mounted::after {
+    background-color: #d6d8de;
+    background-image:
+      radial-gradient(circle at 50% 17px, #ffffff 0, #b0b3bc 2px, #7c7f8a 4px, transparent 5.5px),
+      radial-gradient(circle at 50% calc(100% - 17px), #ffffff 0, #b0b3bc 2px, #7c7f8a 4px, transparent 5.5px),
+      linear-gradient(90deg, #d0d2d9, #e4e6ec 40%, #ccced6);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.85), inset 0 -1px 0 rgba(0,0,0,0.18);
+}
+[data-theme="light"] .rack-view .mounted::before { border-right: 1px solid rgba(0,0,0,0.18); }
+[data-theme="light"] .rack-view .mounted::after { border-left: 1px solid rgba(255,255,255,0.7); }
+[data-theme="light"] .rack-view .mounted.slim::before,
+[data-theme="light"] .rack-view .mounted.slim::after {
+    background-image:
+      radial-gradient(circle at 50% 50%, #ffffff 0, #b0b3bc 2px, #7c7f8a 4px, transparent 5.5px),
+      linear-gradient(90deg, #d0d2d9, #e4e6ec 40%, #ccced6);
+}
+[data-theme="light"] .rack-view .gpanel {
+    background: repeating-linear-gradient(180deg, rgba(0,0,0,0.03) 0 1px, transparent 1px 3px),
+      linear-gradient(180deg, #edeff3 0%, #e0e2e8 60%, #d4d6de 100%);
+    border: 1px solid #bcc0ca;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.9), inset 0 -2px 3px rgba(0,0,0,0.08), 0 2px 5px rgba(0,0,0,0.12);
+}
+[data-theme="light"] .rack-view .gpanel .g-title {
+    color: var(--text-dim); text-shadow: 0 1px 0 rgba(255,255,255,0.7);
+}
+[data-theme="light"] .rack-view .gpanel .g-led {
+    background: #c4c6ce; box-shadow: inset 0 0 2px rgba(0,0,0,0.3);
+}
+[data-theme="light"] .rack-view .unit {
+    background: repeating-linear-gradient(180deg, rgba(0,0,0,0.03) 0 1px, transparent 1px 3px),
+      linear-gradient(180deg, #eef0f5 0%, #e2e4ec 55%, #d6d9e2 100%);
+    border: 1px solid #b6bac6;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.9), inset 0 -2px 3px rgba(0,0,0,0.10), 0 3px 8px rgba(0,0,0,0.14);
+}
+[data-theme="light"] .rack-view .unit.plugin {
+    background: repeating-linear-gradient(180deg, rgba(0,0,0,0.025) 0 1px, transparent 1px 3px),
+      linear-gradient(180deg, #e0eef0 0%, #d6e6e9 55%, #cfe0e3 100%);
+}
+[data-theme="light"] .rack-view .unit.remote {
+    background: repeating-linear-gradient(180deg, rgba(0,0,0,0.025) 0 1px, transparent 1px 3px),
+      linear-gradient(180deg, #e4e8f4 0%, #dbe0f0 55%, #d2d9ec 100%);
+}
+[data-theme="light"] .rack-view .u-name { text-shadow: 0 1px 0 rgba(255,255,255,0.7); }
+/* recessed port row — a FLAT opaque plate so the faceplate's brushed
+ * lines don't bleed through (a translucent bg let them show). */
+[data-theme="light"] .rack-view .pmod {
+    background: #d7dae2;
+    box-shadow: inset 0 1px 3px rgba(0,0,0,0.18), 0 1px 0 rgba(255,255,255,0.7);
+}
+/* drag preview cable — white is invisible on the light page; go dark */
+[data-theme="light"] .rack-cables path.rubber { stroke: #2a2a3a; opacity: 0.9; }
+[data-theme="light"] .rack-view .p-label,
+[data-theme="light"] .rack-view .j-sub {
+    color: var(--text-dim); text-shadow: 0 1px 0 rgba(255,255,255,0.7);
+}
+/* Jacks stay dark metal — a real jack is a dark hole on any panel —
+ * but lift the sleeve a touch so it reads as seated in light metal. */
+[data-theme="light"] .rack-view .jack { border-color: #8a8d99; }

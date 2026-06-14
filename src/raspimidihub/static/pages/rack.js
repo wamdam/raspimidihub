@@ -115,7 +115,8 @@ function Unit({ dev }) {
         + (dev.online === false ? ' offline' : '');
     return html`<div class=${cls} data-dkey=${dkey} data-client=${dev.client_id == null ? '' : dev.client_id}>
         <div class="u-head"><span class="u-icon"><${DeviceIcon} device=${dev} /></span>
-            <span class="u-name">${dev.name}</span></div>
+            <span class="u-name">${dev.name}</span>
+            <span class="u-clock" title="Sending clock"></span></div>
         <div class="u-ports">
             ${dev.ports.map(p => html`<${PortRow} key=${p.port_id} dkey=${dkey} dev=${dev} port=${p} />`)}
         </div>
