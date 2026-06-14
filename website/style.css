@@ -118,6 +118,13 @@ a:hover { text-decoration: underline; }
 }
 .btn-secondary:hover { background: var(--bg-light); }
 
+.btn-discord {
+  background: #5865F2;
+  color: #fff;
+  box-shadow: 0 4px 24px rgba(88,101,242,0.35);
+}
+.btn-discord:hover { box-shadow: 0 8px 32px rgba(88,101,242,0.5); }
+
 .gh-icon { width: 20px; height: 20px; }
 
 /* === Phone Mockup === */

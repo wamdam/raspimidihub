@@ -8,7 +8,10 @@ With the built-in plugin system, you can add virtual instruments and effects (ar
 
 The Raspberry Pi runs on a **read-only filesystem**, so you can pull the power at any time without risk of SD card corruption.
 
-![License](https://img.shields.io/badge/license-LGPL-blue.svg)
+[![License](https://img.shields.io/badge/license-LGPL-blue.svg)](LICENSE)
+[![Discord](https://img.shields.io/badge/Discord-Join%20the%20community-5865F2?logo=discord&logoColor=white)](https://discord.gg/DYQ7keGm)
+
+> 💬 **Join the community on [Discord](https://discord.gg/DYQ7keGm)** -- questions, setups, feature ideas, and distributed-jam experiments. New here? Say hi!
 
 ## Watch the Demo
 
