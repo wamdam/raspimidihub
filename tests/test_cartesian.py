@@ -205,19 +205,3 @@ def test_diatonic_root_moves_the_key():
     p.on_param_change("key", 3)
     # In D major, playing F# (66, the third) gives the iii chord F#m: F# A C#
     assert _play_triad(p, h, 66) == [66, 69, 73]
-
-
-def test_legacy_harmony_root_migrates_to_key():
-    from helpers import PluginHarness
-    p = Cartesian()
-    from raspimidihub.plugin_api import get_defaults
-    p._param_values = get_defaults(Cartesian.params)
-    # Simulate a config saved under the old split controls.
-    p._param_values.pop("key", None)
-    p._param_values["harmony"] = "Diatonic"
-    p._param_values["root"] = 2  # D
-    PluginHarness(p)
-    p.on_start()
-    assert p.get_param("key") == 3        # D → key index 3
-    assert "harmony" not in p._param_values
-    assert "root" not in p._param_values

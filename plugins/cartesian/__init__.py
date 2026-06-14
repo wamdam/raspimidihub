@@ -378,18 +378,6 @@ to pick a Channel + CC (or MIDI-Learn one)."""
         self._fill_cursor = 0              # next Path index to write
         self._fill_held: set[tuple[int, int]] = set()
 
-        # Migrate legacy configs: the separate `harmony` (Chordal/
-        # Diatonic) + `root` (0..11) controls were merged into one `key`
-        # wheel (0 = No root/Chordal; 1..12 = C..B).
-        pv = self._param_values
-        if "key" not in pv and ("harmony" in pv or "root" in pv):
-            if pv.get("harmony") == "Diatonic":
-                pv["key"] = (int(pv.get("root") or 0) % 12) + 1
-            else:
-                pv["key"] = 0
-            pv.pop("harmony", None)
-            pv.pop("root", None)
-
         slot_bank.init_slot_bank(self, self._SLOT_PARAMS)
 
         # Live mode: stamp the grid from the current voicing so a fresh
