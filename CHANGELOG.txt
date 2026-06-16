@@ -4,6 +4,12 @@ User-visible changes. Short tagged one-liners, no code or commit
 hashes. Tags: Added, Improved, Fix, Changed, Removed.
 
 
+2026-06-16 — Version 5.0.2
+
+- Added: the **Ethernet** card in Settings → Network now lists *every* IPv4 address the interface holds, not just one — a DHCP lease and a `169.254.x.x` link-local fallback can coexist, and the link-local one is tagged. Quick way to confirm a direct hub-to-hub cable came up without SSHing in: if the only address is a `169.254.x.x`, the ends self-assigned link-local because no DHCP answered, and can still reach each other.
+- Fix: a hub that booted with **Network MIDI** already enabled did not set up the IPv4 link-local fallback on `eth0`, so two hubs joined only by a direct Ethernet cable (no DHCP server) never got `169.254.x.x` addresses and couldn't find each other until the feature was toggled off and on again. The fallback is now applied on every bring-up, boot included — not just the moment the switch is flipped. (The on-disk fix is a one-time profile edit and survives reboots; existing direct-cable setups get it automatically on the next boot after updating.)
+
+
 2026-06-14 — Version 5.0.1
 
 - Fix: a mirrored network device whose hub went away (cable pull / power-cut) could hang in the routing matrix forever instead of dropping off. Two hubs with the default hostname both advertised `raspimidihub.local`; the colliding mDNS records let a hub resolve the peer's device to its *own* address and mirror its own export — a self-loop that answered its own keep-alive and so never timed out. Each hub now advertises under a unique name (hostname + the WiFi suffix, e.g. `raspimidihub-735C`), and a mirror will never connect to one of the hub's own addresses. A vanished device now drops in ~30 s as intended. Both hubs need this build.

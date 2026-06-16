@@ -823,3 +823,45 @@ class TestRegressionFalsePositive:
         pids = WifiManager._find_pids(
             "hostapd", "/run/raspimidihub/hostapd.conf", proc_root=proc)
         assert pids == []
+
+
+class TestInterfaceAddresses:
+    """get_interface_info must surface *every* IPv4 address (a DHCP lease
+    and a 169.254.x.x link-local fallback can coexist) and pick a routable
+    one as the primary that prefills the static-IP form."""
+
+    def _fake_run(self, addr_out):
+        def run(cmd, *a, **k):
+            if "addr" in cmd:
+                return SimpleNamespace(stdout=addr_out, returncode=0)
+            return SimpleNamespace(stdout="", returncode=0)
+        return run
+
+    def test_collects_all_skips_link_local_for_primary(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(wifi, "NM_CONN_DIR", tmp_path)
+        out = ("2: eth0: <BROADCAST,MULTICAST,UP> mtu 1500\n"
+               "    inet 192.168.1.50/24 brd 192.168.1.255 scope global eth0\n"
+               "    inet 169.254.5.5/16 brd 169.254.255.255 scope link eth0\n")
+        monkeypatch.setattr(subprocess, "run", self._fake_run(out))
+        info = wifi.get_interface_info("eth0")
+        assert info["addresses"] == ["192.168.1.50/24", "169.254.5.5/16"]
+        assert info["address"] == "192.168.1.50"
+        assert info["netmask"] == "255.255.255.0"
+        assert info["up"] is True
+
+    def test_link_local_only_still_shown(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(wifi, "NM_CONN_DIR", tmp_path)
+        out = "    inet 169.254.5.5/16 brd 169.254.255.255 scope link eth0\n"
+        monkeypatch.setattr(subprocess, "run", self._fake_run(out))
+        info = wifi.get_interface_info("eth0")
+        assert info["addresses"] == ["169.254.5.5/16"]
+        assert info["address"] == "169.254.5.5"
+        assert info["up"] is True
+
+    def test_no_address(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(wifi, "NM_CONN_DIR", tmp_path)
+        monkeypatch.setattr(subprocess, "run", self._fake_run(""))
+        info = wifi.get_interface_info("eth0")
+        assert info["addresses"] == []
+        assert info["address"] == ""
+        assert info["up"] is False

@@ -37,7 +37,11 @@ function NetworkCard({ iface, showToast }) {
     return html`
         <div class="card">
             <h3>${iface.interface} ${iface.up ? html`<span style="color:var(--success);font-size:12px">\u25cf</span>` : html`<span style="color:var(--text-dim);font-size:12px">\u25cb</span>`}</h3>
-            ${iface.address && html`<p style="font-size:13px;color:var(--text-dim);margin-bottom:8px">${iface.address}/${iface.netmask}${iface.gateway ? ` gw ${iface.gateway}` : ''}</p>`}
+            ${(iface.addresses?.length || iface.address) && html`<div style="font-size:13px;color:var(--text-dim);margin-bottom:8px">
+                ${(iface.addresses?.length ? iface.addresses : [`${iface.address}/${iface.netmask}`]).map(a => html`
+                    <div>${a}${a.startsWith('169.254.') ? html` <span style="opacity:.7">(link-local)</span>` : ''}</div>`)}
+                ${iface.gateway ? html`<div>gw ${iface.gateway}</div>` : ''}
+            </div>`}
             <div class="form-group">
                 <label>Mode</label>
                 <select value=${method} onChange=${e => setMethod(e.target.value)}>

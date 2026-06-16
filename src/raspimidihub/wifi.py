@@ -678,22 +678,35 @@ NM_CONN_DIR = Path("/etc/NetworkManager/system-connections")
 
 def get_interface_info(iface: str) -> dict:
     """Get current IP configuration for a network interface."""
-    info = {"interface": iface, "method": "disabled", "address": "", "netmask": "", "gateway": ""}
+    info = {"interface": iface, "method": "disabled", "address": "",
+            "netmask": "", "gateway": "", "addresses": []}
     try:
         result = _run(["ip", "-4", "addr", "show", iface], check=False, timeout=5)
+        # An interface can carry several IPv4 addresses at once -- a DHCP
+        # lease *and* a 169.254.x.x link-local fallback, for instance. Keep
+        # them all (as CIDR) for display; pick a routable one as the
+        # primary that prefills the static-IP form.
         for line in result.stdout.splitlines():
             line = line.strip()
             if line.startswith("inet "):
-                parts = line.split()
-                addr_cidr = parts[1]
-                addr, prefix = addr_cidr.split("/")
-                info["address"] = addr
-                # Convert CIDR prefix to netmask
-                bits = int(prefix)
-                mask = (0xFFFFFFFF << (32 - bits)) & 0xFFFFFFFF
-                info["netmask"] = f"{(mask >> 24) & 0xFF}.{(mask >> 16) & 0xFF}.{(mask >> 8) & 0xFF}.{mask & 0xFF}"
+                addr_cidr = line.split()[1]
+                info["addresses"].append(addr_cidr)
     except Exception:
         pass
+
+    # Primary = first non-link-local address, else the first one. This is
+    # what the manual form prefills (the routable IP, not the fallback).
+    primary = next((a for a in info["addresses"]
+                    if not a.startswith("169.254.")), None)
+    if primary is None and info["addresses"]:
+        primary = info["addresses"][0]
+    if primary:
+        addr, prefix = primary.split("/")
+        info["address"] = addr
+        bits = int(prefix)
+        mask = (0xFFFFFFFF << (32 - bits)) & 0xFFFFFFFF
+        info["netmask"] = (f"{(mask >> 24) & 0xFF}.{(mask >> 16) & 0xFF}."
+                           f"{(mask >> 8) & 0xFF}.{mask & 0xFF}")
 
     # Get gateway
     try:

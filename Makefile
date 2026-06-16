@@ -3,7 +3,7 @@ PACKAGE = raspimidihub
 # 5.0.0rc1) — NOT a hyphen. The running 4.8.0+ OTA updater parses deb
 # filenames with a regex that only accepts this suffix form; a hyphen
 # (5.0.0-alpha1) makes the downloaded deb invisible to it.
-VERSION = 5.0.1
+VERSION = 5.0.2
 # Debian Version field: a pre-release suffix MUST be tilde-separated so
 # dpkg/apt sort it BELOW the final release (5.0.0~a1 << 5.0.0). A bare
 # suffix (5.0.0a1) or hyphen sorts the pre-release *above* the final

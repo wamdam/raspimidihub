@@ -828,6 +828,16 @@ class NetworkMidiManager:
         if not self.availability()["available"]:
             log.info("network-midi: zeroconf not installed, feature off")
             return
+        # Direct-cable story: ensure eth0 self-assigns a 169.254.x.x when
+        # no DHCP answers, so two hubs on a back-to-back cable find each
+        # other over mDNS. Runs on every bring-up — boot-restore of an
+        # already-enabled state included, not just the set_enabled()
+        # toggle (blocking nmcli/file work, marshalled off the loop).
+        from .wifi import ensure_eth_link_local
+        if not await asyncio.to_thread(ensure_eth_link_local):
+            log.warning("network-midi: eth0 IPv4 link-local fallback not "
+                        "set; a direct hub-to-hub cable may not get an "
+                        "address")
         from zeroconf import IPVersion
         from zeroconf.asyncio import AsyncServiceBrowser, AsyncZeroconf
 
@@ -892,11 +902,8 @@ class NetworkMidiManager:
         """Flip the master switch (config mutation + asave is the API
         handler's job, same split as the WiFi endpoints)."""
         if enabled:
-            # Direct-cable story: make sure eth0 self-assigns a
-            # 169.254.x.x when no DHCP answers (blocking nmcli work,
-            # off-loop).
-            from .wifi import ensure_eth_link_local
-            await asyncio.to_thread(ensure_eth_link_local)
+            # eth0 link-local fallback is set up inside start() now, so it
+            # also covers boot-restore of an already-enabled state.
             await self.start()
         else:
             await self.stop()

@@ -287,9 +287,15 @@ Configures the wired interface. Two modes:
 - **Static** -- four fields (Address, Netmask, Gateway, DNS) for
   manual configuration.
 
-When `eth0` is connected and has an address, the card shows the
-resulting URL (typically `http://raspimidihub.local/` or the IP)
-as a clickable link.
+When `eth0` is connected, the card lists **every** IPv4 address the
+interface currently holds, just above the Mode pulldown. An
+interface often has more than one: a DHCP lease *and* a
+`169.254.x.x` link-local address, the latter tagged
+*(link-local)*. This is the quickest way to confirm a direct
+hub-to-hub cable came up -- if the only address shown is a
+`169.254.x.x`, the two ends self-assigned link-local because no
+DHCP server answered (see chapter 17's *direct cable* note), and
+they can still reach each other.
 
 ## Network MIDI
 
