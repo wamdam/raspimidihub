@@ -174,15 +174,16 @@ millisecond.
 ### The direct cable, and life without mDNS
 
 A direct Ethernet cable between two hubs needs no router:
-whenever Network MIDI is enabled, the hub turns on IPv4
-link-local fallback on `eth0`, so both ends self-assign a
-`169.254.x.x` address when no DHCP server answers, and discovery
-rides on that. This is applied every time the feature comes up --
-on each boot, not only the moment you flip the switch -- so a hub
-that powers on with Network MIDI already enabled gets its
-link-local address without you re-toggling anything. (Networks
-with DHCP are unaffected -- the fallback only kicks in when DHCP
-doesn't answer.)
+whenever Network MIDI is enabled, the hub puts a fixed IPv4
+link-local address (`169.254.x.y`, derived from the hub's own MAC
+so two hubs never collide) on `eth0`, and discovery rides on that.
+The address is added directly and *additively* -- it sits
+alongside any DHCP or static address the interface already has,
+so it is present in every mode and does not depend on a DHCP
+server answering. It is re-applied on each boot, and re-asserted
+every few seconds, so a hub that powers on with Network MIDI
+enabled gets its link-local address with no re-toggling, and it
+returns within seconds if anything clears it.
 
 On networks that swallow multicast (routed LANs, some managed
 switches), add the other hub's IP or hostname under **Manual

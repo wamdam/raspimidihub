@@ -749,71 +749,52 @@ def get_all_interfaces() -> list[dict]:
     return interfaces
 
 
-def ensure_eth_link_local(iface: str = "eth0") -> bool:
-    """Make a direct hub-to-hub Ethernet cable work without a router:
-    add `link-local=enabled` to the [ipv4] section of the interface's
-    NM profile (NetworkManager ≥ 1.40; Pi-OS Bookworm ships 1.42).
-    With DHCP present nothing changes; without it, NM self-assigns a
-    169.254.x.x address instead of failing the connection — which is
-    what mDNS discovery between two hubs rides on. Profiles with
-    method=manual are left alone (the user chose static addressing).
-    Called when Network MIDI is switched on. Returns True if the
-    profile already had the key or was upgraded."""
-    conn_file = None
-    conn_name = None
-    for nm_file in NM_CONN_DIR.glob("*.nmconnection"):
-        try:
-            content = nm_file.read_text()
-            if f"interface-name={iface}" in content:
-                conn_file = nm_file
-                for line in content.splitlines():
-                    if line.startswith("id="):
-                        conn_name = line[3:]
-                break
-        except OSError:
-            pass
+def _derive_link_local(iface: str) -> str | None:
+    """A deterministic 169.254.x.y for this host's `iface`, derived from
+    its MAC so two hubs on a direct cable land on distinct addresses in
+    the same /16. Returns None if the MAC can't be read.
+
+    RFC 3927 reserves 169.254.0.0/24 and 169.254.255.0/24, so the third
+    octet is kept in 1..254."""
     try:
-        if conn_file is None:
-            # No profile yet: create one via the normal path (DHCP),
-            # then re-enter to add the link-local key to it.
-            if not configure_interface(iface, "auto"):
-                return False
-            return ensure_eth_link_local(iface)
+        mac = Path(f"/sys/class/net/{iface}/address").read_text().strip()
+        octets = [int(x, 16) for x in mac.split(":")]
+        if len(octets) < 6:
+            return None
+        return f"169.254.{(octets[4] % 254) + 1}.{octets[5]}"
+    except Exception:
+        return None
 
-        content = conn_file.read_text()
-        if "link-local=enabled" in content:
-            return True
-        if "method=manual" in content:
-            return True  # static config: the user chose addressing
 
-        new_lines = []
-        in_ipv4 = False
-        for line in content.splitlines():
-            if line.strip() == "[ipv4]":
-                in_ipv4 = True
-                new_lines.append(line)
-                new_lines.append("link-local=enabled")
-                continue
-            if in_ipv4 and line.startswith("link-local"):
-                continue
-            if line.startswith("["):
-                in_ipv4 = False
-            new_lines.append(line)
-        with _rw_rootfs():
-            conn_file.write_text("\n".join(new_lines) + "\n")
-        try:
-            _run(["nmcli", "connection", "reload"], check=False, timeout=10)
-            if conn_name:
-                _run(["nmcli", "connection", "up", conn_name],
-                     check=False, timeout=15)
-        except subprocess.TimeoutExpired:
-            log.warning("nmcli apply timed out after link-local upgrade")
-        log.info("Enabled IPv4 link-local fallback on %s", iface)
+def ensure_eth_link_local(iface: str = "eth0") -> bool:
+    """Put a deterministic IPv4 link-local address (169.254.x.y/16) on
+    `iface`, additively and unconditionally.
+
+    A direct hub-to-hub Ethernet cable has no DHCP server, and asking
+    NetworkManager to self-assign a link-local (`ipv4.link-local`) does
+    not survive here: with IPv6 disabled and `method=auto`, a failed
+    DHCP leaves no successful address family, so NM tears the whole
+    connection — link-local included — down. Instead we add the address
+    directly with `ip`: it is non-routable and coexists with whatever
+    DHCP or static address the interface already has, so it is safe to
+    assert in any mode, and it does not depend on NM's connection state.
+    Idempotent, and pure `ip` — no NetworkManager, no filesystem write
+    (so it is immune to the read-only-rootfs window). Re-asserted by the
+    link watcher in case NM flushes it on a DHCP retry."""
+    addr = _derive_link_local(iface)
+    if not addr:
+        log.warning("link-local: could not derive an address for %s", iface)
+        return False
+    try:
+        r = _run(["ip", "addr", "add", f"{addr}/16", "dev", iface,
+                  "scope", "link"], check=False, timeout=5)
+        if r.returncode != 0 and "File exists" not in (r.stderr or ""):
+            log.warning("link-local: `ip addr add %s` on %s failed: %s",
+                        addr, iface, (r.stderr or "").strip())
+            return False
         return True
     except Exception:
-        # Old NM without ipv4.link-local support, or read-only hiccup —
-        # the user can still set static IPs via the Network settings.
-        log.exception("link-local upgrade for %s failed", iface)
+        log.exception("link-local: assigning %s on %s failed", addr, iface)
         return False
 
 

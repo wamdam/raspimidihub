@@ -289,13 +289,13 @@ Configures the wired interface. Two modes:
 
 When `eth0` is connected, the card lists **every** IPv4 address the
 interface currently holds, just above the Mode pulldown. An
-interface often has more than one: a DHCP lease *and* a
-`169.254.x.x` link-local address, the latter tagged
-*(link-local)*. This is the quickest way to confirm a direct
-hub-to-hub cable came up -- if the only address shown is a
-`169.254.x.x`, the two ends self-assigned link-local because no
-DHCP server answered (see chapter 17's *direct cable* note), and
-they can still reach each other.
+interface often has more than one: a DHCP lease (or static
+address) *and* the `169.254.x.y` link-local address that Network
+MIDI keeps on `eth0`, the latter tagged *(link-local)*. The
+link-local one is always there while Network MIDI is on (see
+chapter 17's *direct cable* note); if it is the *only* address
+shown, no DHCP server answered and nothing static is set -- two
+hubs on a back-to-back cable still reach each other over it.
 
 ## Network MIDI
 

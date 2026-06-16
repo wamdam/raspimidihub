@@ -4,6 +4,11 @@ User-visible changes. Short tagged one-liners, no code or commit
 hashes. Tags: Added, Improved, Fix, Changed, Removed.
 
 
+2026-06-16 — Version 5.0.3
+
+- Fix: the direct hub-to-hub Ethernet cable still did not come up. 5.0.2 asked NetworkManager for a link-local fallback (`ipv4.link-local`), but with no DHCP server and IPv6 disabled on `eth0`, NM treated the connection as failed and tore the link-local address down with it — so two cabled hubs never got a `169.254.x.x` and couldn't see each other. The hub now assigns a fixed `169.254.x.y` (derived from its own MAC, so two hubs never collide) directly on `eth0`, additively: it sits alongside any DHCP or static address, is present in every mode regardless of whether a DHCP server answers, is re-applied on each boot, and is re-asserted every few seconds so it returns at once if anything clears it. No NetworkManager dependency and no filesystem write, so the read-only root is a non-issue.
+
+
 2026-06-16 — Version 5.0.2
 
 - Added: the **Ethernet** card in Settings → Network now lists *every* IPv4 address the interface holds, not just one — a DHCP lease and a `169.254.x.x` link-local fallback can coexist, and the link-local one is tagged. Quick way to confirm a direct hub-to-hub cable came up without SSHing in: if the only address is a `169.254.x.x`, the ends self-assigned link-local because no DHCP answered, and can still reach each other.

@@ -1015,8 +1015,15 @@ class NetworkMidiManager:
             prev = set(await self._local_addresses())
         except Exception:
             prev = set()
+        from .wifi import ensure_eth_link_local
         while self._started:
             await asyncio.sleep(LINK_WATCH_INTERVAL)
+            # Re-assert the eth0 link-local address: NetworkManager can
+            # flush it on a DHCP retry or carrier flap, and a direct
+            # hub-to-hub cable has nothing else to fall back on. Cheap and
+            # idempotent; if it had vanished, re-adding it makes the next
+            # _check_links see the change and re-bind mDNS.
+            await asyncio.to_thread(ensure_eth_link_local)
             prev = await self._check_links(prev)
 
     async def _check_links(self, prev: set[str]) -> set[str]:

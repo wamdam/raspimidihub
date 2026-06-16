@@ -865,3 +865,62 @@ class TestInterfaceAddresses:
         assert info["addresses"] == []
         assert info["address"] == ""
         assert info["up"] is False
+
+
+class TestEnsureLinkLocal:
+    """The eth0 link-local address is derived deterministically from the
+    MAC (so two hubs differ) and asserted directly with `ip addr add`,
+    additively — no NetworkManager, no filesystem write."""
+
+    def test_derive_is_deterministic_from_mac(self, monkeypatch):
+        class FakePath:
+            def __init__(self, *a):
+                pass
+
+            def read_text(self):
+                return "b8:27:eb:1f:26:09\n"
+        monkeypatch.setattr(wifi, "Path", FakePath)
+        # 0x26 -> 38, 38 % 254 + 1 = 39 ; 0x09 -> 9
+        assert wifi._derive_link_local("eth0") == "169.254.39.9"
+
+    def test_derive_two_macs_differ(self, monkeypatch):
+        macs = iter(["b8:27:eb:1f:26:09\n", "dc:a6:32:aa:10:42\n"])
+
+        class FakePath:
+            def __init__(self, *a):
+                pass
+
+            def read_text(self):
+                return next(macs)
+        monkeypatch.setattr(wifi, "Path", FakePath)
+        a = wifi._derive_link_local("eth0")
+        b = wifi._derive_link_local("eth0")
+        assert a != b
+
+    def test_issues_ip_addr_add_scope_link(self, monkeypatch):
+        monkeypatch.setattr(wifi, "_derive_link_local", lambda i: "169.254.39.9")
+        calls = []
+
+        def run(cmd, *a, **k):
+            calls.append(cmd)
+            return SimpleNamespace(returncode=0, stderr="")
+        monkeypatch.setattr(subprocess, "run", run)
+        assert wifi.ensure_eth_link_local("eth0") is True
+        assert calls == [["ip", "addr", "add", "169.254.39.9/16",
+                          "dev", "eth0", "scope", "link"]]
+
+    def test_idempotent_when_already_present(self, monkeypatch):
+        monkeypatch.setattr(wifi, "_derive_link_local", lambda i: "169.254.39.9")
+        monkeypatch.setattr(subprocess, "run", lambda *a, **k: SimpleNamespace(
+            returncode=2, stderr="RTNETLINK answers: File exists"))
+        assert wifi.ensure_eth_link_local("eth0") is True
+
+    def test_reports_real_failure(self, monkeypatch):
+        monkeypatch.setattr(wifi, "_derive_link_local", lambda i: "169.254.39.9")
+        monkeypatch.setattr(subprocess, "run", lambda *a, **k: SimpleNamespace(
+            returncode=1, stderr="RTNETLINK answers: Operation not permitted"))
+        assert wifi.ensure_eth_link_local("eth0") is False
+
+    def test_false_when_mac_unreadable(self, monkeypatch):
+        monkeypatch.setattr(wifi, "_derive_link_local", lambda i: None)
+        assert wifi.ensure_eth_link_local("eth0") is False
