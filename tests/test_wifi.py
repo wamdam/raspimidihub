@@ -849,13 +849,18 @@ class TestInterfaceAddresses:
         assert info["netmask"] == "255.255.255.0"
         assert info["up"] is True
 
-    def test_link_local_only_still_shown(self, monkeypatch, tmp_path):
+    def test_link_local_only_shown_but_not_prefilled(self, monkeypatch, tmp_path):
+        # Cable unplugged: eth0 carries only the 169.254.x.x fallback. It
+        # must still be *listed* (for display), but must NOT become the
+        # primary/static prefill -- otherwise a Save writes the link-local
+        # as the static IP and clobbers the real one.
         monkeypatch.setattr(wifi, "NM_CONN_DIR", tmp_path)
         out = "    inet 169.254.5.5/16 brd 169.254.255.255 scope link eth0\n"
         monkeypatch.setattr(subprocess, "run", self._fake_run(out))
         info = wifi.get_interface_info("eth0")
         assert info["addresses"] == ["169.254.5.5/16"]
-        assert info["address"] == "169.254.5.5"
+        assert info["address"] == ""
+        assert info["netmask"] == ""
         assert info["up"] is True
 
     def test_no_address(self, monkeypatch, tmp_path):
@@ -903,22 +908,67 @@ class TestEnsureLinkLocal:
 
         def run(cmd, *a, **k):
             calls.append(cmd)
-            return SimpleNamespace(returncode=0, stderr="")
+            # `ip addr show` reports the address absent -> add proceeds.
+            return SimpleNamespace(returncode=0, stderr="", stdout="")
         monkeypatch.setattr(subprocess, "run", run)
         assert wifi.ensure_eth_link_local("eth0") is True
-        assert calls == [["ip", "addr", "add", "169.254.39.9/16",
-                          "dev", "eth0", "scope", "link"]]
+        # Checks presence first, then issues the additive scope-link add.
+        assert calls == [
+            ["ip", "-4", "addr", "show", "dev", "eth0"],
+            ["ip", "addr", "add", "169.254.39.9/16",
+             "dev", "eth0", "scope", "link"],
+        ]
 
-    def test_idempotent_when_already_present(self, monkeypatch):
+    def test_skips_add_when_already_present(self, monkeypatch):
+        """If the address is already on the interface, never re-run
+        `ip addr add` — re-poking NM is what flushed the lease."""
         monkeypatch.setattr(wifi, "_derive_link_local", lambda i: "169.254.39.9")
-        monkeypatch.setattr(subprocess, "run", lambda *a, **k: SimpleNamespace(
-            returncode=2, stderr="RTNETLINK answers: File exists"))
+        calls = []
+
+        def run(cmd, *a, **k):
+            calls.append(cmd)
+            return SimpleNamespace(
+                returncode=0, stderr="",
+                stdout="    inet 169.254.39.9/16 scope link eth0\n")
+        monkeypatch.setattr(subprocess, "run", run)
+        assert wifi.ensure_eth_link_local("eth0") is True
+        assert calls == [["ip", "-4", "addr", "show", "dev", "eth0"]]
+
+    def test_idempotent_old_iproute2_file_exists(self, monkeypatch):
+        monkeypatch.setattr(wifi, "_derive_link_local", lambda i: "169.254.39.9")
+
+        def run(cmd, *a, **k):
+            if cmd[:2] == ["ip", "-4"]:
+                return SimpleNamespace(returncode=0, stderr="", stdout="")
+            return SimpleNamespace(
+                returncode=2, stderr="RTNETLINK answers: File exists", stdout="")
+        monkeypatch.setattr(subprocess, "run", run)
+        assert wifi.ensure_eth_link_local("eth0") is True
+
+    def test_idempotent_new_iproute2_already_assigned(self, monkeypatch):
+        """Bookworm/Trixie iproute2 reports the duplicate via extack as
+        'Address already assigned', not 'File exists'."""
+        monkeypatch.setattr(wifi, "_derive_link_local", lambda i: "169.254.39.9")
+
+        def run(cmd, *a, **k):
+            if cmd[:2] == ["ip", "-4"]:
+                return SimpleNamespace(returncode=0, stderr="", stdout="")
+            return SimpleNamespace(
+                returncode=2, stderr="Error: ipv4: Address already assigned.",
+                stdout="")
+        monkeypatch.setattr(subprocess, "run", run)
         assert wifi.ensure_eth_link_local("eth0") is True
 
     def test_reports_real_failure(self, monkeypatch):
         monkeypatch.setattr(wifi, "_derive_link_local", lambda i: "169.254.39.9")
-        monkeypatch.setattr(subprocess, "run", lambda *a, **k: SimpleNamespace(
-            returncode=1, stderr="RTNETLINK answers: Operation not permitted"))
+
+        def run(cmd, *a, **k):
+            if cmd[:2] == ["ip", "-4"]:
+                return SimpleNamespace(returncode=0, stderr="", stdout="")
+            return SimpleNamespace(
+                returncode=1, stderr="RTNETLINK answers: Operation not permitted",
+                stdout="")
+        monkeypatch.setattr(subprocess, "run", run)
         assert wifi.ensure_eth_link_local("eth0") is False
 
     def test_false_when_mac_unreadable(self, monkeypatch):

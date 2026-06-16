@@ -694,12 +694,15 @@ def get_interface_info(iface: str) -> dict:
     except Exception:
         pass
 
-    # Primary = first non-link-local address, else the first one. This is
-    # what the manual form prefills (the routable IP, not the fallback).
+    # Primary = first non-link-local address. This is what the manual
+    # form prefills (the routable IP). We deliberately do NOT fall back
+    # to a 169.254.x.x link-local here: with the cable unplugged that is
+    # the only address eth0 carries, and prefilling it into the static-IP
+    # form let a Save write the link-local *as* the static address,
+    # clobbering the real one. No routable address -> empty prefill.
+    # The link-local still appears in info["addresses"] for display.
     primary = next((a for a in info["addresses"]
                     if not a.startswith("169.254.")), None)
-    if primary is None and info["addresses"]:
-        primary = info["addresses"][0]
     if primary:
         addr, prefix = primary.split("/")
         info["address"] = addr
@@ -730,10 +733,11 @@ def get_interface_info(iface: str) -> dict:
         except OSError:
             pass
 
-    if info["address"]:
-        info["up"] = True
-    else:
-        info["up"] = False
+    # "up" means the interface carries any IPv4 address (a link-local
+    # counts -- the cable is plugged, there's just no DHCP/static lease).
+    # Don't tie this to the routable primary, which is now empty in the
+    # link-local-only case.
+    info["up"] = bool(info["addresses"])
 
     return info
 
@@ -786,11 +790,25 @@ def ensure_eth_link_local(iface: str = "eth0") -> bool:
         log.warning("link-local: could not derive an address for %s", iface)
         return False
     try:
+        # Check-first, then add. Re-running `ip addr add` every few
+        # seconds on an NM-managed interface prods NetworkManager into
+        # reconciling eth0, which can briefly flush its DHCP/static
+        # address — observed as the hub "losing its IP". If the address
+        # is already present we must NOT touch it again. (The duplicate-
+        # add error also varies by iproute2 version: older kernels say
+        # "File exists", newer extack says "Address already assigned" —
+        # parsing either is fragile, so we check presence instead.)
+        present = _run(["ip", "-4", "addr", "show", "dev", iface],
+                       check=False, timeout=5)
+        if present.returncode == 0 and f"{addr}/" in (present.stdout or ""):
+            return True
         r = _run(["ip", "addr", "add", f"{addr}/16", "dev", iface,
                   "scope", "link"], check=False, timeout=5)
-        if r.returncode != 0 and "File exists" not in (r.stderr or ""):
+        stderr = (r.stderr or "")
+        if r.returncode != 0 and "File exists" not in stderr \
+                and "already assigned" not in stderr.lower():
             log.warning("link-local: `ip addr add %s` on %s failed: %s",
-                        addr, iface, (r.stderr or "").strip())
+                        addr, iface, stderr.strip())
             return False
         return True
     except Exception:

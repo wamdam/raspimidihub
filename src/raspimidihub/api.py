@@ -1781,6 +1781,13 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
 
         if method == "manual" and not address:
             return Response.error("address required for static IP")
+        # A 169.254.x.x link-local is never a valid static IP. It's the
+        # fallback eth0 carries when the cable is unplugged; refusing it
+        # here stops a stale form prefill from clobbering the real static
+        # address with the link-local.
+        if method == "manual" and address.startswith("169.254."):
+            return Response.error(
+                "link-local (169.254.x.x) cannot be used as a static IP")
 
         loop = asyncio.get_event_loop()
         ok = await loop.run_in_executor(None, configure_interface,

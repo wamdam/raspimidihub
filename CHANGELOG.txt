@@ -6,6 +6,8 @@ hashes. Tags: Added, Improved, Fix, Changed, Removed.
 
 Unreleased
 
+- Fix: a hub with a **static Ethernet IP** could lose it and come back on a `169.254.x.x` link-local address instead. With the cable unplugged the only address `eth0` carried was the link-local fallback, and the Network settings form prefilled *that* as the static IP — so a Save wrote the link-local in as the static address, clobbering the real one. The form no longer treats a link-local as a routable address, and the hub refuses a `169.254.x.x` value for a static IP outright.
+- Fix: WiFi — the hub no longer re-adds its `eth0` link-local address every few seconds when it is already there. The needless repeat could prod NetworkManager into briefly dropping the interface's DHCP/static lease; it now checks first and only assigns the address when it is actually missing.
 - Fix: WiFi — choosing **AP for updates** (or **WiFi always**), saving home WiFi credentials, or changing the AP password now survives a restart or update. The choice was written to the saved config but not to the resume snapshot the hub loads first on boot, so after a redeploy it fell back to **AP only**. (Network MIDI settings were already handled this way; the WiFi page wasn't.)
 
 
