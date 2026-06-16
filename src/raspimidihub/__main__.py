@@ -341,6 +341,16 @@ async def async_main() -> None:
         # Start web server
         await server.start()
 
+        # One-time migration: drop a leftover NM `link-local=enabled` on
+        # eth0 from pre-5.0.3 units (we now assign the link-local directly
+        # with `ip`). Idempotent; no-op on clean profiles.
+        try:
+            from .wifi import cleanup_eth_link_local_nm_leftover
+            await asyncio.get_event_loop().run_in_executor(
+                None, cleanup_eth_link_local_nm_leftover)
+        except Exception:
+            log.warning("eth0 link-local NM cleanup skipped", exc_info=True)
+
         # Start WiFi AP if configured
         wifi_cfg = config.wifi
         if wifi_cfg.get("mode") == "client" and wifi_cfg.get("client_ssid"):
@@ -355,6 +365,8 @@ async def async_main() -> None:
                 wifi.start_ap(
                     ssid=wifi_cfg.get("ap_ssid", ""),
                     password=wifi_cfg.get("ap_password", "midihub1"),
+                    band=wifi_cfg.get("ap_band", "2.4"),
+                    country=wifi_cfg.get("ap_country", ""),
                 )
             except Exception:
                 log.warning("WiFi AP setup failed (no wlan0?), continuing without AP")

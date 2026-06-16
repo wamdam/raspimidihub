@@ -18,6 +18,11 @@ associates as a client. No internet on the Pi. This is the right
 default for stage / studio use where the Pi is meant to be a
 self-contained appliance.
 
+The AP runs on 2.4 GHz by default. On a dual-band Pi it can be
+moved to 5 GHz (Settings → Network → *AP radio*, chapter 16) --
+worth doing when BLE-MIDI is unreliable, since it frees the
+2.4 GHz band the onboard Bluetooth shares (chapter 14, *Limits*).
+
 Software updates from AP-only require an alternative internet
 path (ethernet or USB tethering -- sections 17.3 and 17.4) or a
 temporary mode switch.

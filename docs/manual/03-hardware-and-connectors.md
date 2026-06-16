@@ -121,9 +121,16 @@ binds to the on-board adapter only.
 
 ## WiFi
 
-The Pi 4B, Pi 5, Pi Zero 2 W, and Pi 3B+ all have on-board WiFi.
-The Pi 4B and Pi 5 support 2.4 GHz and 5 GHz; the Pi 3B+ and Pi
-Zero 2 W support 2.4 GHz only.
+The Pi 4B, Pi 5, Pi Zero 2 W, Pi 3B+, and Pi 3B all have on-board
+WiFi. The Pi 4B, Pi 5, and Pi 3B+ are dual-band (2.4 GHz and
+5 GHz); the Pi 3B and Pi Zero 2 W are 2.4 GHz only.
+
+The access point runs on 2.4 GHz by default, and can be switched to
+5 GHz on a dual-band Pi (Settings → Network → *AP radio*, chapter
+16). Running the AP on 5 GHz keeps it off the 2.4 GHz band that
+Bluetooth shares, which is the fix for the BLE-MIDI coexistence
+trouble on the combo-chip boards (see *Bluetooth* above and chapter
+14, *Limits*).
 
 The on-board radio is used both for the access point and for
 client mode (chapter 17.1). It is one radio shared between two

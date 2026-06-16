@@ -256,6 +256,30 @@ the first time the unit is used in any environment outside a
 personal home.
 :::
 
+### AP radio
+
+Sets the band the access point runs on and the regulatory country.
+
+- **Band** -- **2.4 GHz** (default) works on every supported Pi and
+  has the longest range, but shares the one combo-chip radio with
+  Bluetooth, which can disrupt BLE-MIDI on the Pi 3-class boards
+  (chapter 14, *Limits*). **5 GHz** moves the AP off the 2.4 GHz
+  band so it stops competing with Bluetooth -- the fix when BLE-MIDI
+  is flaky on a 5 GHz-capable Pi (3B+, 4, 5). 5 GHz has shorter
+  range and needs a 5 GHz-capable phone; the option is greyed out on
+  radios that can't do it (Pi 3B, Zero 2 W).
+- **Country** -- the regulatory domain. Leave on **Auto-detect** to
+  use the Pi's kernel regdomain (falling back to DE), or pick a
+  country. It must match where the Pi is physically used, and is
+  **required for 5 GHz** -- without it the 5 GHz channels are not
+  permitted.
+
+Saving restarts the AP, so phones drop for a few seconds and
+reconnect. 5 GHz is brought up on a non-DFS channel (36/40/44/48) so
+there is no radar-detection wait. If a 5 GHz bring-up fails for any
+reason, the Pi falls back to 2.4 GHz automatically -- the AP is the
+only path to the UI, so it always comes back up.
+
 ### WiFi mode
 
 Three radio buttons:

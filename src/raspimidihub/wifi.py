@@ -23,6 +23,13 @@ DHCP_RANGE = "192.168.4.10,192.168.4.100,12h"
 WLAN_IFACE = "wlan0"
 CLIENT_TIMEOUT = 30  # seconds to wait for client connection
 
+# Non-DFS 5 GHz channels (UNII-1). DFS channels (52-144) require radar
+# detection — a 1-10 min channel-availability-check wait plus a possible
+# forced channel switch — which is wrong for an appliance AP that has to
+# come up instantly and is the only path to the UI. We only ever use
+# these four.
+NON_DFS_5GHZ_CHANNELS = [36, 40, 44, 48]
+
 
 def _get_mac_suffix() -> str:
     """Get last 4 hex digits of wlan0 MAC for unique SSID."""
@@ -62,6 +69,12 @@ class WifiManager:
         self._mode = "unknown"
         self._ssid = ""
         self._fallback_task: asyncio.Task | None = None
+        # AP radio: band ("2.4"/"5") and regulatory country. Set from
+        # config on each start_ap; remembered so internal callers (the
+        # client-fallback path) that don't carry config still bring the
+        # AP back on the right band.
+        self._ap_band = "2.4"
+        self._ap_country = ""
 
     @property
     def mode(self) -> str:
@@ -84,6 +97,70 @@ class WifiManager:
         except Exception:
             pass
         return ""
+
+    @staticmethod
+    def _resolve_country(country: str = "") -> str:
+        """The regulatory country to feed hostapd. An explicit two-letter
+        code wins; otherwise read the kernel regdomain (`iw reg get`) and
+        fall back to DE if it is unset / world ("00"). Required for 5 GHz
+        and makes the 2.4 GHz AP regulatory-correct too."""
+        cc = (country or "").strip().upper()
+        if len(cc) == 2 and cc.isalpha():
+            return cc
+        try:
+            r = _run(["iw", "reg", "get"], check=False, timeout=5)
+            for line in (r.stdout or "").splitlines():
+                m = re.search(r"country\s+([A-Z]{2}):", line)
+                if m and m.group(1) != "00":
+                    return m.group(1)
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            pass
+        return "DE"
+
+    @staticmethod
+    def radio_supports_5ghz() -> bool:
+        """True if wlan0's PHY advertises any 5 GHz channel. Pi 3B+, 4,
+        and 5 do; Pi 3B and Zero 2 W are 2.4-only. Used to auto-gate the
+        5 GHz AP option so it can never be selected into a dead radio."""
+        try:
+            r = _run(["iw", "phy"], check=False, timeout=5)
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            return False
+        # A 5 GHz-capable PHY lists frequencies in the 5xxx MHz range
+        # (e.g. "* 5180 MHz [36]"); a 2.4-only PHY only has 24xx MHz.
+        return bool(re.search(r"\b5\d{3}(?:\.\d+)?\s*MHz", r.stdout or ""))
+
+    def survey_ap_channel_5ghz(self) -> int:
+        """Least-busy of the non-DFS 5 GHz channels {36,40,44,48} from a
+        quick scan; 36 on any failure. Same scan/scoring shape as the
+        2.4 GHz survey, over the UNII-1 channels."""
+        try:
+            _run(["ip", "link", "set", WLAN_IFACE, "up"], check=False, timeout=3)
+            result = _run(["iwlist", WLAN_IFACE, "scan"], check=False, timeout=8)
+        except (subprocess.TimeoutExpired, FileNotFoundError) as e:
+            log.warning("5 GHz channel survey: scan failed (%s), defaulting to 36", e)
+            return 36
+        if result.returncode != 0 or not result.stdout:
+            log.warning("5 GHz channel survey: empty scan, defaulting to 36")
+            return 36
+        scores = {c: 0.0 for c in NON_DFS_5GHZ_CHANNELS}
+        ch = None
+        for line in result.stdout.splitlines():
+            m = re.search(r"Channel\s*[:=]\s*(\d+)", line)
+            if m:
+                ch = int(m.group(1))
+                continue
+            m = re.search(r"Signal level\s*=\s*(-?\d+)\s*dBm", line)
+            if m and ch is not None:
+                power = 10 ** (int(m.group(1)) / 10.0)
+                for target in scores:
+                    if abs(ch - target) <= 2:
+                        scores[target] += power
+                ch = None
+        best = min(scores, key=scores.get)
+        log.info("5 GHz channel survey: scores=%s, picked %d",
+                 {k: f"{v:.2e}" for k, v in scores.items()}, best)
+        return best
 
     def survey_ap_channel(self) -> int:
         """Pick the least-busy of {1, 6, 11} from a quick 2.4 GHz scan.
@@ -138,8 +215,12 @@ class WifiManager:
                  ap_count, {k: f"{v:.2e}" for k, v in scores.items()}, best)
         return best
 
-    def _render_hostapd_conf(self, ssid: str, password: str, channel: int) -> str:
+    def _render_hostapd_conf(self, ssid: str, password: str, channel: int,
+                             band: str = "2.4", country: str = "") -> str:
         """Build the hostapd config text without writing it.
+
+        band: "2.4" (hw_mode=g) or "5" (hw_mode=a, 802.11n/20 MHz).
+        country: regulatory code; empty omits country_code/ieee80211d.
 
         hostapd runs as raspimidihub-hostapd.service (Type=simple, no
         -B), so its stderr lands in journald automatically — no need
@@ -147,20 +228,36 @@ class WifiManager:
         the `raspimidihub-hostapd` unit, not interleaved with the main
         service log.
         """
-        return f"""interface={WLAN_IFACE}
-driver=nl80211
-ssid={ssid}
-hw_mode=g
-channel={channel}
-wmm_enabled=0
-macaddr_acl=0
-auth_algs=1
-ignore_broadcast_ssid=0
-wpa=2
-wpa_passphrase={password}
-wpa_key_mgmt=WPA-PSK
-rsn_pairwise=CCMP
-"""
+        lines = [
+            f"interface={WLAN_IFACE}",
+            "driver=nl80211",
+            f"ssid={ssid}",
+        ]
+        if band == "5":
+            # 802.11n at 20 MHz on a non-DFS 5 GHz channel. WMM is
+            # mandatory for 11n. We deliberately skip HT40/VHT and DFS
+            # channels for instant, reliable bring-up — throughput is
+            # ample for the control UI, and getting the AP off the
+            # 2.4 GHz band (so it stops fighting Bluetooth) is the point,
+            # not gigabit WiFi.
+            lines += ["hw_mode=a", f"channel={channel}",
+                      "ieee80211n=1", "wmm_enabled=1"]
+        else:
+            lines += ["hw_mode=g", f"channel={channel}", "wmm_enabled=0"]
+        # country_code + ieee80211d makes both bands regulatory-correct
+        # and is what unlocks the 5 GHz channels at all.
+        if country:
+            lines += [f"country_code={country}", "ieee80211d=1"]
+        lines += [
+            "macaddr_acl=0",
+            "auth_algs=1",
+            "ignore_broadcast_ssid=0",
+            "wpa=2",
+            f"wpa_passphrase={password}",
+            "wpa_key_mgmt=WPA-PSK",
+            "rsn_pairwise=CCMP",
+        ]
+        return "\n".join(lines) + "\n"
 
     def _render_dnsmasq_conf(self) -> str:
         """Build the dnsmasq AP config text without writing it."""
@@ -363,7 +460,8 @@ no-hosts
             return False
         return (r.stdout or "").strip() == "active"
 
-    def start_ap(self, ssid: str = "", password: str = "midihub1"):
+    def start_ap(self, ssid: str = "", password: str = "midihub1",
+                 band: str | None = None, country: str | None = None):
         """Bring up WiFi AP mode. Idempotent.
 
         If the candidate config matches the on-disk config, our hostapd +
@@ -371,23 +469,53 @@ no-hosts
         without touching wlan0 — so a service restart doesn't blink the
         SSID and confuse client devices. Otherwise (re)writes the configs
         and (re)spawns whichever process actually changed.
+
+        band ("2.4"/"5") and country are remembered on the instance when
+        passed, so the internal client-fallback path (which has no config)
+        brings the AP back on the right radio. 5 GHz auto-falls back to
+        2.4 on a 2.4-only radio and if the 5 GHz bring-up fails — the AP
+        is the only path to the UI, so it must always come up.
         """
         if not ssid:
             ssid = default_ap_ssid()
         self._ssid = ssid
+        if band is not None:
+            self._ap_band = band
+        if country is not None:
+            self._ap_country = country
+        band = self._ap_band or "2.4"
+        country = self._resolve_country(self._ap_country)
 
-        # Re-use channel from the existing config if present. /run is tmpfs,
-        # so a real reboot clears it and the next survey runs naturally.
+        # Auto-gate: never try 5 GHz on a radio that can't do it.
+        if band == "5" and not self.radio_supports_5ghz():
+            log.warning("WiFi AP: 5 GHz requested but the radio is 2.4-only "
+                        "— using 2.4 GHz")
+            band = "2.4"
+
+        # Set the kernel regdomain so hostapd is allowed the channels it
+        # asks for (mandatory before 5 GHz channels are usable at all).
+        _run(["iw", "reg", "set", country], check=False, timeout=5)
+
+        # Re-use channel from the existing config if present AND it is for
+        # the same band; otherwise survey fresh for the requested band.
+        # /run is tmpfs, so a real reboot clears it and the survey runs
+        # naturally.
         existing_hostapd = HOSTAPD_CONF.read_text() if HOSTAPD_CONF.is_file() else None
         existing_dnsmasq = DNSMASQ_AP_CONF.read_text() if DNSMASQ_AP_CONF.is_file() else None
+        existing_band = "5" if (existing_hostapd and "hw_mode=a" in existing_hostapd) \
+            else "2.4"
 
-        if existing_hostapd:
-            channel = self._channel_from_conf(existing_hostapd) or 11
+        if existing_hostapd and existing_band == band:
+            channel = self._channel_from_conf(existing_hostapd) \
+                or (36 if band == "5" else 11)
             log.info("WiFi AP: re-using channel %d from prior config", channel)
+        elif band == "5":
+            channel = self.survey_ap_channel_5ghz()
         else:
             channel = self.survey_ap_channel()
 
-        candidate_hostapd = self._render_hostapd_conf(ssid, password, channel)
+        candidate_hostapd = self._render_hostapd_conf(
+            ssid, password, channel, band, country)
         candidate_dnsmasq = self._render_dnsmasq_conf()
 
         # Idempotency guard: only skip restart when ALL three hold —
@@ -463,6 +591,22 @@ no-hosts
                 self._claim_wlan0_for_ap()
                 if not self._spawn_hostapd():
                     log.error("hostapd retry also failed — AP is not running")
+
+            # Lockout guard: if a 5 GHz bring-up didn't take (bad regdomain,
+            # marginal radio, driver quirk), fall back to 2.4 GHz so the AP
+            # — the only path to the UI — always comes up. The user's saved
+            # band choice is untouched; the next explicit start retries 5 GHz.
+            if band == "5" and not self._hostapd_active():
+                log.error("5 GHz AP failed to start — falling back to 2.4 GHz "
+                          "so the AP stays reachable")
+                band = "2.4"
+                channel = self.survey_ap_channel()
+                candidate_hostapd = self._render_hostapd_conf(
+                    ssid, password, channel, band, country)
+                HOSTAPD_CONF.write_text(candidate_hostapd)
+                self._claim_wlan0_for_ap()
+                if not self._spawn_hostapd():
+                    log.error("2.4 GHz fallback also failed — AP is not running")
 
         if not dnsmasq_ok:
             DNSMASQ_AP_CONF.parent.mkdir(parents=True, exist_ok=True)
@@ -814,6 +958,44 @@ def ensure_eth_link_local(iface: str = "eth0") -> bool:
     except Exception:
         log.exception("link-local: assigning %s on %s failed", addr, iface)
         return False
+
+
+def cleanup_eth_link_local_nm_leftover(iface: str = "eth0") -> bool:
+    """One-time migration: strip a leftover `link-local=enabled` from
+    `iface`'s NetworkManager profile.
+
+    Releases up to 5.0.2 asked NM to self-assign an IPv4 link-local by
+    writing `link-local=enabled` into the [ipv4] section of the eth0
+    profile. 5.0.3 switched to assigning the address directly with `ip`
+    and stopped writing the key, but never removed it from already-
+    migrated units. The leftover makes NM put its own second link-local
+    on top of ours — harmless but confusing (and one more thing prodding
+    NM on eth0). Remove it.
+
+    Edits the keyfile directly under a remount-rw window and reloads NM
+    (never via `nmcli con mod`, which fails EROFS on this appliance even
+    after a remount). No-op, and no reload, when the key isn't present."""
+    try:
+        for nm_file in NM_CONN_DIR.glob("*.nmconnection"):
+            try:
+                content = nm_file.read_text()
+            except OSError:
+                continue
+            if f"interface-name={iface}" not in content:
+                continue
+            if "link-local=enabled" not in content:
+                return True  # already clean
+            new_lines = [ln for ln in content.splitlines()
+                         if ln.strip() != "link-local=enabled"]
+            with _rw_rootfs():
+                nm_file.write_text("\n".join(new_lines) + "\n")
+            _run(["nmcli", "connection", "reload"], check=False, timeout=10)
+            log.info("link-local: removed leftover link-local=enabled from %s",
+                     nm_file.name)
+            return True
+    except Exception:
+        log.exception("link-local: NM leftover cleanup failed")
+    return False
 
 
 def configure_interface(iface: str, method: str, address: str = "",

@@ -122,6 +122,17 @@ DEFAULT_CONFIG = {
         "mode": "ap",
         "ap_ssid": "",
         "ap_password": "midihub1",
+        # AP radio band: "2.4" (default, every supported Pi) or "5"
+        # (Pi 3B+/4/5 only — auto-falls back to 2.4 on 2.4-only radios
+        # and if a 5 GHz bring-up fails, so it can never lock the AP
+        # out). 5 GHz keeps the AP off the 2.4 GHz band Bluetooth shares,
+        # which relieves BLE-MIDI coexistence on the combo-chip Pis.
+        "ap_band": "2.4",
+        # Regulatory country (ISO 3166 alpha-2, e.g. "DE"). Required for
+        # 5 GHz and makes the 2.4 GHz AP regulatory-correct too. Empty =
+        # auto-detect from the kernel regdomain (`iw reg get`), falling
+        # back to DE.
+        "ap_country": "",
         "client_ssid": "",
         "client_password": "",
         # Phase 5.5: how aggressively the Pi should reach the internet

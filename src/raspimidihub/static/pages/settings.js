@@ -503,6 +503,14 @@ function WiFiCard({ showToast }) {
                     buttonLabel="Edit"
                     testId="edit-ap-password"
                     onClick=${() => setEditing('ap-password')} />
+                <${ConfigRow} label="AP radio"
+                    value=${html`${wifi.ap_band === '5' ? '5 GHz' : '2.4 GHz'} · ${
+                        wifi.ap_country
+                            ? wifi.ap_country
+                            : html`<span style="color:var(--text-dim)">${wifi.resolved_country || '—'} (auto)</span>`}`}
+                    buttonLabel="Edit"
+                    testId="edit-ap-radio"
+                    onClick=${() => setEditing('ap-radio')} />
             </div>
 
             ${editing === 'home-wifi' && html`
@@ -514,6 +522,11 @@ function WiFiCard({ showToast }) {
                 <${APPasswordModal} showToast=${showToast}
                     onClose=${() => setEditing(null)}
                     onSaved=${() => { setEditing(null); refresh(); }} />
+            `}
+            ${editing === 'ap-radio' && html`
+                <${APRadioModal} wifi=${wifi} showToast=${showToast}
+                    onClose=${() => setEditing(null)}
+                    onSaved=${() => { setEditing(null); setTimeout(refresh, 1500); setTimeout(refresh, 4000); }} />
             `}
         </div>
     `;
@@ -698,6 +711,104 @@ function APPasswordModal({ showToast, onClose, onSaved }) {
                     <button class="btn btn-secondary" onclick=${onClose} disabled=${busy}>Cancel</button>
                     <button class="btn btn-primary" data-testid="ap-password-save"
                         onclick=${save} disabled=${busy || password.length < 8}>
+                        ${busy ? 'Saving...' : 'Save'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+// Curated regulatory-country list for the AP-radio dropdown. Empty
+// value = auto-detect from the kernel regdomain. Kept short and common
+// rather than the full ISO 3166 set; any saved code not in the list is
+// appended so it never silently disappears.
+const AP_COUNTRIES = [
+    ['DE', 'Germany'], ['AT', 'Austria'], ['CH', 'Switzerland'],
+    ['FR', 'France'], ['IT', 'Italy'], ['ES', 'Spain'], ['PT', 'Portugal'],
+    ['NL', 'Netherlands'], ['BE', 'Belgium'], ['LU', 'Luxembourg'],
+    ['GB', 'United Kingdom'], ['IE', 'Ireland'], ['DK', 'Denmark'],
+    ['SE', 'Sweden'], ['NO', 'Norway'], ['FI', 'Finland'], ['PL', 'Poland'],
+    ['CZ', 'Czechia'], ['SK', 'Slovakia'], ['HU', 'Hungary'],
+    ['US', 'United States'], ['CA', 'Canada'], ['AU', 'Australia'],
+    ['NZ', 'New Zealand'], ['JP', 'Japan'],
+];
+
+function APRadioModal({ wifi, showToast, onClose, onSaved }) {
+    const [band, setBand] = useState(wifi.ap_band === '5' ? '5' : '2.4');
+    const [country, setCountry] = useState(wifi.ap_country || '');
+    const [busy, setBusy] = useState(false);
+    const supports5 = !!wifi.band_5ghz_supported;
+
+    // Surface a saved code that isn't in the curated list.
+    const extras = (country && !AP_COUNTRIES.some(([c]) => c === country))
+        ? [[country, country]] : [];
+
+    const save = async () => {
+        setBusy(true);
+        const res = await api('/wifi/ap-radio', {
+            method: 'POST', body: JSON.stringify({ band, country }),
+        });
+        setBusy(false);
+        if (res.error) {
+            showToast('Save failed: ' + res.error);
+            return;
+        }
+        showToast(res.switched ? 'Applying radio change — the AP restarts briefly...' : 'AP radio saved');
+        onSaved();
+    };
+
+    // Band option rendered as a compact selectable row (NOT inside a
+    // .form-group — that stretches the radio input to full width).
+    const BandRow = ({ value, title, desc, disabled }) => html`
+        <label style="display:flex;align-items:flex-start;gap:10px;padding:10px;margin-bottom:6px;
+                      border:1px solid ${band === value ? 'var(--accent)' : 'var(--surface-2)'};
+                      border-radius:6px;cursor:${disabled ? 'not-allowed' : 'pointer'};
+                      opacity:${disabled ? 0.5 : 1};background:var(--bg)">
+            <input type="radio" name="ap-band"
+                style="width:16px;height:16px;min-height:0;flex:none;margin-top:2px;accent-color:var(--accent)"
+                checked=${band === value} disabled=${busy || disabled}
+                onChange=${() => setBand(value)} />
+            <span style="flex:1;min-width:0">
+                <div style="font-size:13px;font-weight:600">${title}</div>
+                <div style="font-size:11px;color:var(--text-dim);line-height:1.4">${desc}</div>
+            </span>
+        </label>`;
+
+    return html`
+        <div onclick=${onClose} style="position:fixed;inset:0;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;z-index:1000;padding:20px">
+            <div onclick=${e => e.stopPropagation()} style="background:var(--surface);border-radius:8px;padding:20px;max-width:420px;width:100%;max-height:90vh;overflow-y:auto">
+                <h3 style="margin-top:0">AP radio</h3>
+                <div style="margin-bottom:14px">
+                    <div style="font-size:12px;color:var(--text-dim);margin-bottom:6px">Band</div>
+                    <${BandRow} value="2.4" title="2.4 GHz"
+                        desc="Works on every Pi. Longest range. Shares the band with Bluetooth." />
+                    <div data-testid="ap-band-5">
+                        <${BandRow} value="5"
+                            title=${supports5 ? '5 GHz' : '5 GHz — not supported on this Pi'}
+                            desc="Frees the 2.4 GHz band for Bluetooth — best when BLE-MIDI is flaky. Shorter range; needs a 5 GHz-capable phone."
+                            disabled=${!supports5} />
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Country (regulatory)</label>
+                    <select data-testid="ap-country-select" disabled=${busy}
+                        value=${country} onChange=${e => setCountry(e.target.value)}>
+                        <option value="">Auto-detect (${wifi.resolved_country || 'DE'})</option>
+                        ${[...AP_COUNTRIES, ...extras].map(([code, name]) => html`
+                            <option value=${code}>${name} (${code})</option>`)}
+                    </select>
+                    <p style="font-size:11px;color:var(--text-dim);margin-top:4px">
+                        Required for 5 GHz and must match where the Pi is used.
+                    </p>
+                </div>
+                <p style="font-size:11px;color:var(--warn);margin-bottom:12px">
+                    Saving restarts the access point — phones on the AP drop for a few seconds and reconnect. If 5 GHz fails to come up, the Pi falls back to 2.4 GHz automatically.
+                </p>
+                <div style="display:flex;justify-content:flex-end;gap:8px">
+                    <button class="btn btn-secondary" onclick=${onClose} disabled=${busy}>Cancel</button>
+                    <button class="btn btn-primary" data-testid="ap-radio-save"
+                        onclick=${save} disabled=${busy}>
                         ${busy ? 'Saving...' : 'Save'}
                     </button>
                 </div>

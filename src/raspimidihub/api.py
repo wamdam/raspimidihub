@@ -2020,12 +2020,22 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         # Settings UI can show "Update WiFi: HomeWiFi - change?" without
         # the user re-entering it on every visit. wifi_mode_pref drives
         # the AP-only / WiFi-for-updates / WiFi-always radio.
+        from .wifi import WifiManager
+        loop = asyncio.get_event_loop()
+        band_5ghz_supported = await loop.run_in_executor(
+            None, WifiManager.radio_supports_5ghz)
+        resolved_country = await loop.run_in_executor(
+            None, WifiManager._resolve_country, config.wifi.get("ap_country", ""))
         return Response.json({
             "mode": wifi.mode,
             "ssid": wifi.ssid,
             "ip": wifi.ip,
             "saved_client_ssid": config.wifi.get("client_ssid", ""),
             "wifi_mode_pref": config.wifi.get("wifi_mode_pref", "ap_only"),
+            "ap_band": config.wifi.get("ap_band", "2.4"),
+            "ap_country": config.wifi.get("ap_country", ""),
+            "resolved_country": resolved_country,
+            "band_5ghz_supported": band_5ghz_supported,
         })
 
     # ----- Home WiFi credentials --------------------------------------
@@ -2081,6 +2091,51 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         await autosaver.autosave_now()  # keep the resume snapshot in sync
         return Response.json({"status": "saved"})
 
+    @server.route("POST", "/api/wifi/ap-radio")
+    async def api_wifi_ap_radio(req: Request) -> Response:
+        """Set the AP radio band (2.4 / 5 GHz) and regulatory country,
+        then restart the AP to apply. Restarting drops wlan0, which would
+        kill a phone's held-open request, so the restart runs as a
+        backgrounded task — same pattern as apply-mode. 5 GHz on a
+        2.4-only radio is rejected up front; a 5 GHz bring-up that fails
+        later still self-heals to 2.4 inside start_ap."""
+        data = req.json
+        band = str(data.get("band", "")).strip()
+        country = str(data.get("country", "")).strip().upper()
+        if band not in ("2.4", "5"):
+            return Response.error("band must be '2.4' or '5'")
+        if country and not (len(country) == 2 and country.isalpha()):
+            return Response.error(
+                "country must be a 2-letter ISO code (or empty for auto)")
+        loop = asyncio.get_event_loop()
+        if band == "5":
+            from .wifi import WifiManager
+            if not await loop.run_in_executor(
+                    None, WifiManager.radio_supports_5ghz):
+                return Response.error(
+                    "This Pi's radio does not support 5 GHz", 400)
+        cfg_wifi = config.wifi
+        cfg_wifi["ap_band"] = band
+        cfg_wifi["ap_country"] = country
+        await config.asave()
+        await autosaver.autosave_now()  # appliance setting — keep resume snapshot
+        # Only restart when actually in AP mode; in client mode the new
+        # band applies the next time the AP comes up.
+        if wifi.mode != "ap":
+            return Response.json({"status": "saved", "switched": False})
+        ap_ssid = cfg_wifi.get("ap_ssid", "")
+        ap_password = cfg_wifi.get("ap_password", "midihub1")
+
+        async def restart():
+            try:
+                await loop.run_in_executor(
+                    None, wifi.start_ap, ap_ssid, ap_password, band, country)
+            except Exception:
+                log.exception("ap-radio restart failed")
+
+        loop.create_task(restart())
+        return Response.json({"status": "saved", "switched": True, "band": band})
+
     # The mode-pref is the only thing that drives the live wlan0 state.
     # Apply saves the pref and triggers the underlying mode flip (if
     # any) as a backgrounded asyncio task — same reason as
@@ -2125,7 +2180,9 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
                         saved_ssid, client_password, ap_ssid, ap_password)
                 else:
                     await loop.run_in_executor(
-                        None, wifi.start_ap, ap_ssid, ap_password)
+                        None, wifi.start_ap, ap_ssid, ap_password,
+                        cfg_wifi.get("ap_band", "2.4"),
+                        cfg_wifi.get("ap_country", ""))
             except Exception:
                 log.exception("apply-mode switch failed")
 

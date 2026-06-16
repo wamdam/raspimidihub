@@ -88,6 +88,8 @@ The `wifi` object:
 | `mode` | string | Current mode -- `"ap"` or `"client"`. |
 | `ap_ssid` | string | AP SSID (auto-generated when empty). |
 | `ap_password` | string | AP password (default `"midihub1"`). |
+| `ap_band` | string | AP radio band -- `"2.4"` (default) or `"5"`. 5 GHz auto-falls back to 2.4 on a 2.4-only radio or a failed bring-up. |
+| `ap_country` | string | Regulatory country (ISO alpha-2, e.g. `"DE"`). Empty = auto-detect from the kernel regdomain. Required for 5 GHz. |
 | `client_ssid` | string | Home WiFi SSID. |
 | `client_password` | string | Home WiFi password. |
 | `wifi_mode_pref` | string | Mode preference -- `"ap_only"`, `"wifi_for_updates"`, or `"wifi_always"`. |

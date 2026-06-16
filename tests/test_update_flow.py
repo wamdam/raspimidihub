@@ -201,7 +201,7 @@ class _FakeWifi:
             # back to AP before returning when join fails.
             self.mode = "ap"
 
-    def start_ap(self, ssid="", password=""):
+    def start_ap(self, ssid="", password="", band=None, country=None):
         self.ap_calls.append((ssid, password))
         self.mode = "ap"
 
@@ -423,7 +423,7 @@ class TestUpdateFetcher:
                 self.mode = "unknown"
                 raise RuntimeError("nmcli timed out")
 
-            def start_ap(self, ssid="", password=""):
+            def start_ap(self, ssid="", password="", band=None, country=None):
                 # Even the AP restore fails — e.g. hostapd unit refuses
                 # to start, dnsmasq port collision, etc.
                 self.ap_calls.append((ssid, password))

@@ -614,6 +614,8 @@ class UpdateFetcher:
                 None, self.wifi.start_ap,
                 wifi_cfg.get("ap_ssid", ""),
                 wifi_cfg.get("ap_password", "midihub1"),
+                wifi_cfg.get("ap_band", "2.4"),
+                wifi_cfg.get("ap_country", ""),
             )
         except Exception:
             log.exception("failed to return to AP mode (watchdog will retry)")

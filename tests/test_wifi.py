@@ -485,8 +485,13 @@ class TestStartApRestartPath:
         # Hand-rolled — won't happen organically since _render_dnsmasq_conf
         # is deterministic, but the branch must exist for future edits.
         m = WifiManager()
+        # Render the existing config the way start_ap now does (band +
+        # resolved country) so it matches the candidate and hostapd is
+        # left alone — otherwise the country_code line alone would force
+        # a restart and defeat the point of the test.
+        country = m._resolve_country("")
         fake_fs.hostapd.write_text(
-            m._render_hostapd_conf("MyAP", "midihub1", 11))
+            m._render_hostapd_conf("MyAP", "midihub1", 11, "2.4", country))
         fake_fs.dnsmasq.write_text("# stale dnsmasq conf\n")
 
         spawned = {"n": 0}
@@ -974,3 +979,98 @@ class TestEnsureLinkLocal:
     def test_false_when_mac_unreadable(self, monkeypatch):
         monkeypatch.setattr(wifi, "_derive_link_local", lambda i: None)
         assert wifi.ensure_eth_link_local("eth0") is False
+
+
+class TestApBandCountry:
+    """5 GHz AP band, regulatory country, capability gating, and the
+    lockout-safe fallback to 2.4 GHz."""
+
+    def test_render_5ghz_band_and_country(self):
+        conf = WifiManager()._render_hostapd_conf(
+            "AP", "midihub1", 36, band="5", country="DE")
+        assert "hw_mode=a" in conf
+        assert "channel=36" in conf
+        assert "ieee80211n=1" in conf
+        assert "wmm_enabled=1" in conf
+        assert "country_code=DE" in conf
+        assert "ieee80211d=1" in conf
+
+    def test_render_24_default_has_no_country(self):
+        conf = WifiManager()._render_hostapd_conf("AP", "midihub1", 6)
+        assert "hw_mode=g" in conf
+        assert "country_code" not in conf
+        assert "ieee80211d" not in conf
+
+    def test_resolve_country_explicit_wins(self):
+        assert WifiManager._resolve_country("de") == "DE"
+        assert WifiManager._resolve_country("AT") == "AT"
+
+    def test_resolve_country_from_regdomain(self, monkeypatch):
+        monkeypatch.setattr(wifi, "_run", lambda *a, **k: SimpleNamespace(
+            returncode=0, stdout="global\ncountry AT: DFS-ETSI\n", stderr=""))
+        assert WifiManager._resolve_country("") == "AT"
+
+    def test_resolve_country_fallback_de_when_world(self, monkeypatch):
+        monkeypatch.setattr(wifi, "_run", lambda *a, **k: SimpleNamespace(
+            returncode=0, stdout="global\ncountry 00: DFS-UNSET\n", stderr=""))
+        assert WifiManager._resolve_country("") == "DE"
+
+    def test_radio_supports_5ghz_true(self, monkeypatch):
+        monkeypatch.setattr(wifi, "_run", lambda *a, **k: SimpleNamespace(
+            returncode=0, stdout="\t* 2412 MHz [1]\n\t* 5180 MHz [36]\n", stderr=""))
+        assert WifiManager.radio_supports_5ghz() is True
+
+    def test_radio_supports_5ghz_false(self, monkeypatch):
+        monkeypatch.setattr(wifi, "_run", lambda *a, **k: SimpleNamespace(
+            returncode=0, stdout="\t* 2412 MHz [1]\n\t* 2437 MHz [6]\n", stderr=""))
+        assert WifiManager.radio_supports_5ghz() is False
+
+    def test_5ghz_falls_back_to_24_when_bringup_fails(
+            self, monkeypatch, fake_fs, stub_run, stub_kill):
+        """Lockout guard: if a 5 GHz AP won't come up, the hub must
+        rewrite the config as 2.4 GHz and spawn again so the AP — the
+        only path to the UI — is never left down."""
+        m = WifiManager()
+        monkeypatch.setattr(m, "radio_supports_5ghz", lambda: True)
+        monkeypatch.setattr(m, "survey_ap_channel_5ghz", lambda: 36)
+        monkeypatch.setattr(m, "survey_ap_channel", lambda: 11)
+        # hostapd never reports active -> the 5 GHz spawn is judged failed
+        # and the fallback path runs.
+        _stub_helpers(monkeypatch, hostapd_active=False,
+                      dnsmasq_pids=[101], wlan_mode="managed")
+        monkeypatch.setattr(WifiManager, "_spawn_hostapd",
+                            classmethod(lambda cls: True))
+        monkeypatch.setattr(WifiManager, "_claim_wlan0_for_ap",
+                            classmethod(lambda cls: None))
+
+        m.start_ap(ssid="AP", password="midihub1", band="5", country="DE")
+
+        conf = fake_fs.hostapd.read_text()
+        assert "hw_mode=g" in conf      # fell back to 2.4 GHz
+        assert "channel=11" in conf
+        assert "hw_mode=a" not in conf
+
+
+class TestNmLeftoverCleanup:
+    def test_strips_link_local_enabled(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(wifi, "NM_CONN_DIR", tmp_path)
+        monkeypatch.setattr(wifi, "_run", lambda *a, **k: SimpleNamespace(
+            returncode=0, stdout="", stderr=""))
+        f = tmp_path / "eth0.nmconnection"
+        f.write_text("[connection]\nid=eth0\ninterface-name=eth0\n"
+                     "[ipv4]\nmethod=manual\naddress1=10.1.1.9/24\n"
+                     "link-local=enabled\n")
+        assert wifi.cleanup_eth_link_local_nm_leftover("eth0") is True
+        assert "link-local=enabled" not in f.read_text()
+        assert "address1=10.1.1.9/24" in f.read_text()  # static preserved
+
+    def test_noop_when_clean(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(wifi, "NM_CONN_DIR", tmp_path)
+        reloaded = []
+        monkeypatch.setattr(wifi, "_run",
+                            lambda cmd, *a, **k: reloaded.append(cmd) or SimpleNamespace(
+                                returncode=0, stdout="", stderr=""))
+        f = tmp_path / "eth0.nmconnection"
+        f.write_text("[connection]\ninterface-name=eth0\n[ipv4]\nmethod=manual\n")
+        assert wifi.cleanup_eth_link_local_nm_leftover("eth0") is True
+        assert reloaded == []  # no NM reload when nothing changed
