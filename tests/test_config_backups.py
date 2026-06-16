@@ -357,3 +357,39 @@ def test_autosave_status_survives_fragment_cache_path(store, monkeypatch):
     st = fresh.autosave_status()
     assert st["same_session"] is True
     assert st["age_seconds"] == 45
+
+
+# ---- boot priority vs. appliance settings -------------------------------
+# Appliance settings (wifi_mode_pref, AP password, network_midi) are
+# written to config.json immediately via asave(), but they are NOT MIDI
+# edits — they never bump the dirty counter that drives the autosave. On
+# boot, load() prefers the autosave slot over config.json, so a setting
+# saved only to config.json is shadowed by a staler resume snapshot and
+# reverts on the next restart/update. The fix: the API forces an autosave
+# after these writes (api.py wifi/network_midi endpoints, autosave_now()).
+# These pin both the hazard and the invariant the fix relies on.
+
+def test_boot_autosave_shadows_config_json(store):
+    """A staler autosave wins over config.json on boot — this is the
+    hazard that makes forcing an autosave after an appliance write
+    necessary."""
+    c = cfg.Config()
+    c._data["wifi"]["wifi_mode_pref"] = "ap_only"
+    c.write_autosave()                                   # older snapshot
+    c._data["wifi"]["wifi_mode_pref"] = "wifi_for_updates"
+    c.save()                                             # config.json only
+    fresh = cfg.Config()
+    fresh.load()
+    assert fresh._data["wifi"]["wifi_mode_pref"] == "ap_only"
+
+
+def test_appliance_setting_survives_boot_when_autosave_refreshed(store):
+    """When the appliance write also refreshes the autosave (what the API
+    now does via autosave_now), the setting survives the boot."""
+    c = cfg.Config()
+    c._data["wifi"]["wifi_mode_pref"] = "wifi_for_updates"
+    c.save()
+    c.write_autosave()                                   # the forced refresh
+    fresh = cfg.Config()
+    fresh.load()
+    assert fresh._data["wifi"]["wifi_mode_pref"] == "wifi_for_updates"

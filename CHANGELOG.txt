@@ -4,6 +4,11 @@ User-visible changes. Short tagged one-liners, no code or commit
 hashes. Tags: Added, Improved, Fix, Changed, Removed.
 
 
+Unreleased
+
+- Fix: WiFi — choosing **AP for updates** (or **WiFi always**), saving home WiFi credentials, or changing the AP password now survives a restart or update. The choice was written to the saved config but not to the resume snapshot the hub loads first on boot, so after a redeploy it fell back to **AP only**. (Network MIDI settings were already handled this way; the WiFi page wasn't.)
+
+
 2026-06-16 — Version 5.0.5
 
 - Fix: **Rack view** — really make cables clickable along their whole length on older browsers. 5.0.4 widened the cable's tap target, but those browsers ignore a cable's stroke width entirely when hit-testing, so only the plug at each end ever registered a tap. The hub now measures how close the tap landed to the cable itself instead of relying on the browser's stroke test, so the whole length of every cable is tappable.

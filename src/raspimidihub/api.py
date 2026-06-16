@@ -2042,6 +2042,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
             if cfg_wifi.get("wifi_mode_pref") in ("wifi_for_updates", "wifi_always"):
                 cfg_wifi["wifi_mode_pref"] = "ap_only"
             await config.asave()
+            await autosaver.autosave_now()  # keep the resume snapshot in sync
             return Response.json({"status": "forgotten"})
 
         ssid = data.get("ssid", "").strip()
@@ -2053,6 +2054,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         if "password" in data and data["password"] != "":
             cfg_wifi["client_password"] = data["password"]
         await config.asave()
+        await autosaver.autosave_now()  # keep the resume snapshot in sync
         return Response.json({"status": "saved", "ssid": ssid})
 
     @server.route("POST", "/api/wifi/ap-password")
@@ -2069,6 +2071,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
             return Response.error(str(e))
         config.wifi["ap_password"] = password
         await config.asave()
+        await autosaver.autosave_now()  # keep the resume snapshot in sync
         return Response.json({"status": "saved"})
 
     # The mode-pref is the only thing that drives the live wlan0 state.
@@ -2089,6 +2092,11 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
 
         cfg_wifi["wifi_mode_pref"] = pref
         await config.asave()
+        # Appliance setting (not a MIDI edit), so it never bumps the dirty
+        # counter — without forcing the autosave here, boot would prefer a
+        # staler resume snapshot and the mode would revert to ap_only on the
+        # next restart/update. Mirrors the network_midi endpoints.
+        await autosaver.autosave_now()
 
         # Decide whether the live wlan0 mode needs to change. Only two
         # of the four (current_mode, target_pref) combinations are
