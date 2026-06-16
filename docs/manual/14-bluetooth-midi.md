@@ -117,6 +117,18 @@ is not a replacement for a hard cable on a busy session.
   tested. BlueZ supports multiple simultaneous BLE connections on
   the Pi 4 / 5 onboard adapter, but two BLE-MIDI peripherals at
   once is not a tested configuration.
+- **BLE-MIDI competes with the access point for the 2.4 GHz radio
+  on Pi 3-class boards.** The Pi 3B, 3B+, and Zero 2 W use a single
+  combo chip and antenna for both Bluetooth and WiFi. When the hub
+  runs its access point (the normal case), the constant 2.4 GHz
+  beaconing can starve BLE *central* connections: the link reaches
+  "connected" for an instant and is then aborted locally, surfacing
+  as **Connection failed** in the matrix. Whether it happens is
+  unit- and chip-dependent -- some Pi 3 boards tolerate it, others
+  fail every time. Pi 4 / 5 use separate radios, coexist cleanly,
+  and are the right choice when BLE-MIDI is in the critical path
+  (chapter 21.1). See Troubleshooting below to confirm and work
+  around it.
 - **Active Sensing / Reset filtered** -- see 14.6.
 - **External Bluetooth USB dongles** are not supported. Only the
   Pi's onboard radio is used.
@@ -145,4 +157,32 @@ If the source side shows no events, the BLE link is up but the
 peripheral isn't actually sending -- check its power /
 sleep-mode behaviour. If the source shows events but the
 destination doesn't, look at the cell's filter and mappings.
+
+**"Connection failed" on a Pi 3-class board that's running the
+access point.**
+The Pi 3B / 3B+ / Zero 2 W share one 2.4 GHz radio between WiFi
+and Bluetooth. With the AP active, a BLE connect can be aborted by
+the local controller before it finishes -- the device flashes
+"connected" and immediately drops (BlueZ logs
+`le-connection-abort-by-local`; the matrix shows **Connection
+failed**). To confirm it's coexistence and not the peripheral:
+
+1. Connect to the Pi over **Ethernet** so stopping WiFi won't
+   cut your session.
+2. Stop the access point: `systemctl stop raspimidihub-hostapd`.
+3. Re-scan and Connect. If it now succeeds, it was coexistence.
+4. Restart the AP: `systemctl start raspimidihub-hostapd`.
+
+There is no software fix -- it is an RF limit of the shared radio.
+Mitigations: keep the peripheral close during the first connect,
+reduce the number of WiFi clients, or move BLE-MIDI to a Pi 4 / 5
+(recommended for any BLE-critical rig).
+
+One thing to check first: `dmesg | grep -i "default device
+address"`. If the Bluetooth controller came up on a generic
+fallback address (e.g. `43:45:c0:...`) instead of its real
+`B8:27:EB:...` one, its BT init didn't complete cleanly -- that
+leaves even less RF headroom and makes the coexistence failure far
+more likely. A board whose BT address initialised correctly is
+more likely to tolerate the AP.
 

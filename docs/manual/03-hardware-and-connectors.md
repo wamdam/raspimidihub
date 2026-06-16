@@ -102,9 +102,19 @@ for sessions.
 ## Bluetooth
 
 The Pi 4B, Pi 5, and Pi Zero 2 W have on-board Bluetooth and use
-it for BLE-MIDI peripherals (chapter 14). The Pi 3B+ also has
-on-board Bluetooth and works for BLE-MIDI, though the radio is
+it for BLE-MIDI peripherals (chapter 14). The Pi 3B and 3B+ also
+have on-board Bluetooth and work for BLE-MIDI, though the radio is
 older and connection ranges are shorter.
+
+On the Pi 3B, Pi 3B+, and Pi Zero 2 W, Bluetooth and WiFi share a
+single combo chip and antenna. Running the access point (the
+normal mode) loads the 2.4 GHz band continuously, and on some of
+these boards that stops BLE-MIDI peripherals from connecting at
+all -- the link is aborted the instant it forms. It is unit-
+dependent: some Pi 3 boards are fine, others fail every time. For
+a rig that depends on BLE-MIDI, use a Pi 4 or Pi 5, whose separate
+radios coexist cleanly. Chapter 14's *Limits* and *Troubleshooting*
+cover how to confirm and work around it.
 
 External Bluetooth USB dongles are not supported -- the bridge
 binds to the on-board adapter only.

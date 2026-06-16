@@ -58,6 +58,15 @@ ARMv8 system.
 
 - On-board BLE used for BLE-MIDI peripherals.
 - External Bluetooth USB dongles are **not** supported.
+- **WiFi/BT coexistence (Pi 3-class).** Pi 3B / 3B+ / Zero 2 W
+  share one 2.4 GHz radio between hostapd (the AP) and BLE. With
+  the AP up, BLE *central* connects may be aborted locally
+  (`le-connection-abort-by-local`), surfacing as **Connection
+  failed**; confirmed by the connect succeeding once
+  `raspimidihub-hostapd` is stopped. Unit/chip-dependent -- a
+  controller that booted on a generic fallback BD address (`dmesg`:
+  "Using default device address") has even less margin. Pi 4 / 5
+  use separate radios and are unaffected. Chapter 14, *Limits*.
 
 ### Audio
 
