@@ -1,3 +1,3 @@
 """RaspiMIDIHub - Automatic USB MIDI hub for Raspberry Pi."""
 
-__version__ = "5.0.5"
+__version__ = "5.1.0"

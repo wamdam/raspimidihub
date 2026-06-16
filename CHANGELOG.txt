@@ -4,7 +4,7 @@ User-visible changes. Short tagged one-liners, no code or commit
 hashes. Tags: Added, Improved, Fix, Changed, Removed.
 
 
-Unreleased
+2026-06-16 — Version 5.1.0
 
 - Added: **5 GHz access point.** Settings → Network → *AP radio* now lets you run the AP on 5 GHz instead of 2.4 GHz on a dual-band Pi (3B+, 4, 5), plus pick the regulatory **country**. Running the AP on 5 GHz frees the 2.4 GHz band the onboard Bluetooth shares — the fix when BLE-MIDI keeps failing to connect on the combo-chip boards. It comes up instantly on a non-DFS channel, and if a 5 GHz bring-up ever fails it falls back to 2.4 GHz automatically so the AP is never left down. The option is greyed out on 2.4-only radios (Pi 3B, Zero 2 W).
 - Fix: removed a leftover NetworkManager `link-local=enabled` on `eth0` from older builds — it made NM assign a second, stray `169.254.x.x` on top of the one the hub manages. Cleaned up once on boot.
