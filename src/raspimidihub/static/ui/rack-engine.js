@@ -33,6 +33,14 @@ const UNIT_HOLD_MIN_MS = 280; // min press time before a pointercancel counts as
                               // within ~100ms of the touch, so anything below this is
                               // a scroll, not a hold — don't open the device menu.
 const EDGE = 56, MAX_SPEED = 34;
+// Cable hit-target width, mirrored from style.css (.rack-cables path.hit).
+// Set as a presentation ATTRIBUTE on each hit path, not just via CSS:
+// older SVG engines compute isPointInStroke() against the attribute and
+// ignore the CSS stroke-width, falling back to a 1px stroke that's only
+// hittable dead-on the curve (you can still land the plug endpoints, but
+// not the span between them). Baking it in keeps cables clickable there.
+const HIT_WIDTH = (typeof matchMedia === 'function'
+    && matchMedia('(pointer: coarse)').matches) ? 24 : 13;
 
 export function createRackEngine() {
     let root = null, svg = null, scrollEl = null;
@@ -188,7 +196,7 @@ export function createRackEngine() {
             const offline = !!c.offline;
             const wire = mk('path', { d, class: 'wire' + (offline ? ' offline' : '') + (selectedConn === id ? ' sel' : ''), stroke: color });
             wire.style.color = color; wire.dataset.conn = id;
-            const hit = mk('path', { d, class: 'hit' }); hit.dataset.conn = id;
+            const hit = mk('path', { d, class: 'hit', 'stroke-width': HIT_WIDTH }); hit.dataset.conn = id;
             svg.appendChild(wire); svg.appendChild(hit);
             svg.appendChild(mk('circle', { cx: a.x, cy: a.y, r: 7, class: 'plug', fill: color, 'data-conn': id }));
             svg.appendChild(mk('circle', { cx: b.x, cy: b.y, r: 7, class: 'plug', fill: color, 'data-conn': id }));

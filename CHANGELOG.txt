@@ -4,6 +4,11 @@ User-visible changes. Short tagged one-liners, no code or commit
 hashes. Tags: Added, Improved, Fix, Changed, Removed.
 
 
+2026-06-16 — Version 5.0.4
+
+- Fix: in the **Rack view**, tapping a cable to open its filters/menu only worked dead-on the plug at each end on some older browsers — taps along the rest of the cable did nothing. The clickable band runs the whole length of the cable again (its hit-target width was defined only in CSS, which those browsers ignored when hit-testing, so the cable fell back to a hairline-thin target).
+
+
 2026-06-16 — Version 5.0.3
 
 - Fix: the direct hub-to-hub Ethernet cable still did not come up. 5.0.2 asked NetworkManager for a link-local fallback (`ipv4.link-local`), but with no DHCP server and IPv6 disabled on `eth0`, NM treated the connection as failed and tore the link-local address down with it — so two cabled hubs never got a `169.254.x.x` and couldn't see each other. The hub now assigns a fixed `169.254.x.y` (derived from its own MAC, so two hubs never collide) directly on `eth0`, additively: it sits alongside any DHCP or static address, is present in every mode regardless of whether a DHCP server answers, is re-applied on each boot, and is re-asserted every few seconds so it returns at once if anything clears it. No NetworkManager dependency and no filesystem write, so the read-only root is a non-issue.
