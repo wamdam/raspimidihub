@@ -33,12 +33,9 @@ const UNIT_HOLD_MIN_MS = 280; // min press time before a pointercancel counts as
                               // within ~100ms of the touch, so anything below this is
                               // a scroll, not a hold — don't open the device menu.
 const EDGE = 56, MAX_SPEED = 34;
-// Cable hit-target width, mirrored from style.css (.rack-cables path.hit).
-// Set as a presentation ATTRIBUTE on each hit path, not just via CSS:
-// older SVG engines compute isPointInStroke() against the attribute and
-// ignore the CSS stroke-width, falling back to a 1px stroke that's only
-// hittable dead-on the curve (you can still land the plug endpoints, but
-// not the span between them). Baking it in keeps cables clickable there.
+// Cable tap-target width, mirrored from style.css (.rack-cables path.hit).
+// Doubles as the tolerance for cableAtPoint()'s manual distance test (we
+// don't trust isPointInStroke's stroke-width — see there). Wider on touch.
 const HIT_WIDTH = (typeof matchMedia === 'function'
     && matchMedia('(pointer: coarse)').matches) ? 24 : 13;
 
@@ -549,16 +546,40 @@ export function createRackEngine() {
     }
 
     // ---- cable hit-testing (cables have pointer-events:none) --------
+    // We measure the click's distance to each cable path ourselves rather
+    // than calling hit.isPointInStroke(): older WebKit/Blink ignore the
+    // path's stroke-width in isPointInStroke() and test against a 1px
+    // hairline regardless of CSS *or* the presentation attribute, so only
+    // points dead-on the curve (e.g. the plug endpoints) ever register.
+    // getTotalLength()/getPointAtLength() are SVG 1.1 and work everywhere
+    // (already used for filter-badge placement). createSVGPoint() likewise
+    // predates DOMPoint, which some old engines lack entirely.
     function cableAtPoint(x, y) {
-        const pt = new DOMPoint(x, y).matrixTransform(svg.getScreenCTM().inverse());
+        if (!svg) return null;
+        const ctm = svg.getScreenCTM();
+        if (!ctm) return null;
+        const sp = svg.createSVGPoint(); sp.x = x; sp.y = y;
+        const pt = sp.matrixTransform(ctm.inverse());   // click in viewBox user units
+        const tol = HIT_WIDTH / 2 + 2;                    // half the stroke band + slack
         const hits = [...svg.querySelectorAll('path.hit')];
         const hlIds = new Set([...svg.querySelectorAll('path.wire.hl')].map(w => w.dataset.conn));
         const peeking = svg.classList.contains('peek');
+        let best = null, bestD = tol;
         for (const hit of hits) {
             if (peeking && !hlIds.has(hit.dataset.conn)) continue;   // dimmed cables aren't hittable
-            if (hit.isPointInStroke(pt)) return (engine.ctx.connections || []).find(c => connId(c) === hit.dataset.conn) || null;
+            const bb = hit.getBBox();                                 // cheap reject: skip far cables
+            if (pt.x < bb.x - tol || pt.x > bb.x + bb.width + tol ||
+                pt.y < bb.y - tol || pt.y > bb.y + bb.height + tol) continue;
+            const total = hit.getTotalLength();
+            const step = Math.max(4, total / 120);                    // ~4px sampling along the curve
+            for (let l = 0; l <= total; l += step) {
+                const q = hit.getPointAtLength(l);
+                const d = Math.hypot(q.x - pt.x, q.y - pt.y);
+                if (d < bestD) { bestD = d; best = hit; }
+            }
         }
-        return null;
+        if (!best) return null;
+        return (engine.ctx.connections || []).find(c => connId(c) === best.dataset.conn) || null;
     }
 
     // ---- edge auto-scroll (no visible zones; the drag just scrolls

@@ -4,6 +4,11 @@ User-visible changes. Short tagged one-liners, no code or commit
 hashes. Tags: Added, Improved, Fix, Changed, Removed.
 
 
+2026-06-16 — Version 5.0.5
+
+- Fix: **Rack view** — really make cables clickable along their whole length on older browsers. 5.0.4 widened the cable's tap target, but those browsers ignore a cable's stroke width entirely when hit-testing, so only the plug at each end ever registered a tap. The hub now measures how close the tap landed to the cable itself instead of relying on the browser's stroke test, so the whole length of every cable is tappable.
+
+
 2026-06-16 — Version 5.0.4
 
 - Fix: in the **Rack view**, tapping a cable to open its filters/menu only worked dead-on the plug at each end on some older browsers — taps along the rest of the cable did nothing. The clickable band runs the whole length of the cable again (its hit-target width was defined only in CSS, which those browsers ignored when hit-testing, so the cable fell back to a hairline-thin target).
