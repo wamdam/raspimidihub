@@ -171,18 +171,19 @@ a:hover { text-decoration: underline; }
    light backdrop. */
 :root[data-theme="light"] .hero { background: none; }
 :root[data-theme="light"] .hero-phones::before { display: none; }
-.hero-logo {
-  display: block;
-  width: 96px;
-  height: 96px;
-  margin: 0 auto 24px;
-  border-radius: 22px;
-  box-shadow: 0 10px 34px rgba(0,0,0,0.28);
+/* The bare "M" mark, sat to the left of the wordmark. No border or
+   background — just the styled glyph, scaled to the title's height. */
+.hero-title {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  margin-bottom: 20px;
 }
-/* The icon's own navy ground blends into the dark page background —
-   a hairline ring keeps the rounded square's edge defined. */
-:root[data-theme="dark"] .hero-logo {
-  box-shadow: 0 0 0 1px rgba(255,255,255,0.10), 0 10px 34px rgba(0,0,0,0.5);
+.hero-mark {
+  height: 60px;
+  width: auto;
+  flex: none;
 }
 .hero-badge {
   display: inline-block;
@@ -198,7 +199,7 @@ a:hover { text-decoration: underline; }
 .hero h1 {
   font-size: 3.5rem;
   font-weight: 800;
-  margin-bottom: 20px;
+  margin-bottom: 0;  /* spacing now carried by .hero-title wrapper */
   letter-spacing: -1px;
 }
 .accent { color: var(--accent); }

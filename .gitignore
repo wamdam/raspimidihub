@@ -59,6 +59,7 @@ node_modules/
 !docs/screenshots/*.png
 !website/screenshots/*.png
 !website/logo.png
+!website/logo-mark.png
 masquerade.sh
 
 # Image build artifacts (Pi OS bootstrap image)
