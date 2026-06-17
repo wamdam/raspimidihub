@@ -203,6 +203,14 @@ a:hover { text-decoration: underline; }
   letter-spacing: -1px;
 }
 .accent { color: var(--accent); }
+.hero-tagline {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--text-bright);
+  max-width: 640px;
+  margin: 0 auto 14px;
+  line-height: 1.25;
+}
 .hero-subtitle {
   font-size: 1.2rem;
   color: var(--text-muted);
