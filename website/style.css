@@ -171,6 +171,19 @@ a:hover { text-decoration: underline; }
    light backdrop. */
 :root[data-theme="light"] .hero { background: none; }
 :root[data-theme="light"] .hero-phones::before { display: none; }
+.hero-logo {
+  display: block;
+  width: 96px;
+  height: 96px;
+  margin: 0 auto 24px;
+  border-radius: 22px;
+  box-shadow: 0 10px 34px rgba(0,0,0,0.28);
+}
+/* The icon's own navy ground blends into the dark page background —
+   a hairline ring keeps the rounded square's edge defined. */
+:root[data-theme="dark"] .hero-logo {
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.10), 0 10px 34px rgba(0,0,0,0.5);
+}
 .hero-badge {
   display: inline-block;
   padding: 6px 16px;
