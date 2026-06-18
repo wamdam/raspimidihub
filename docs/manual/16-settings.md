@@ -314,12 +314,14 @@ Configures the wired interface. Two modes:
 When `eth0` is connected, the card lists **every** IPv4 address the
 interface currently holds, just above the Mode pulldown. An
 interface often has more than one: a DHCP lease (or static
-address) *and* the `169.254.x.y` link-local address that Network
-MIDI keeps on `eth0`, the latter tagged *(link-local)*. The
-link-local one is always there while Network MIDI is on (see
-chapter 17's *direct cable* note); if it is the *only* address
-shown, no DHCP server answered and nothing static is set -- two
-hubs on a back-to-back cable still reach each other over it.
+address) *and* the `169.254.x.y` link-local address the hub keeps
+on `eth0`, the latter tagged *(link-local)*. The link-local one is
+always present whenever `eth0` is up -- independent of the Network
+MIDI toggle (see chapter 17's *direct cable* note); if it is the
+*only* address shown, no DHCP server answered and nothing static is
+set -- two hubs on a back-to-back cable still reach each other over
+it. (The same addresses appear, one row per address, on the **Sys
+Info** sub-page.)
 
 ## Network MIDI
 

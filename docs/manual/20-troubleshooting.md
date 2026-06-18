@@ -121,17 +121,20 @@ warnings instead.
 - **First check.** Is **Network MIDI enabled on both hubs**, and
   does the *other* hub actually export anything? Only exported
   devices are advertised.
-- **Second check.** Are both hubs on the **same subnet**? A direct
-  cable with one end on a static IP (say `10.1.1.2/24`) and the
-  other on DHCP won't work: with no DHCP server the DHCP end falls
-  back to `169.254.x.x` link-local, a different subnet, and the two
-  can't reach each other. Either let *both* fall back to link-local
-  (both DHCP, no server) or give both a static address in the same
-  `/24` (Settings → Network; leave the gateway blank for a direct
-  link). Give a freshly-plugged direct cable ~30 seconds to settle.
+- **Second check (direct cable).** Both hubs always carry a
+  `169.254.x.y/16` link-local on `eth0` (maintained from boot,
+  independent of the Network MIDI toggle), so two hubs on a
+  back-to-back cable **share that subnet and reach each other even
+  if their other addresses don't match** -- one on a static
+  `10.1.1.2/24` and the other on DHCP-with-no-server still meet over
+  link-local. Give a freshly-plugged cable ~30 seconds to settle.
   *The hub re-binds mDNS by itself when `eth0` gains an address, so
   a cable plugged in after boot is discovered without toggling
   Network MIDI off and on.*
+- **Same subnet (via a switch/router).** When the hubs are *not*
+  directly cabled, mirroring uses whatever routable addresses they
+  advertise -- make sure both are reachable from each other (same
+  `/24`, or DHCP leases on the same network).
 - **Third check.** On a routed LAN or behind a managed switch,
   multicast (mDNS) may not get through -- add the peer's IP under
   **Settings → Network MIDI → Manual peers**. (Manual peers use
@@ -160,9 +163,10 @@ quote it in a bug report and it points straight at the cause:
 - **`NETMIDI-E02` -- no reachable address.** The peer advertised only
   an address that is also one of *this* hub's own addresses (classically
   the shared `192.168.4.1` access-point address) and no routable path
-  was left. On a direct cable this means the hubs aren't sharing a
-  usable subnet -- see *Peer hub not discovered* above; both ends on
-  link-local, or both on the same static `/24`.
+  was left. On a direct cable this should be rare -- both hubs always
+  carry a `169.254.x` link-local that gives a shared subnet -- so if
+  you hit it there, check the link-local is actually present on `eth0`
+  (Settings → Network, or `ip -4 addr show eth0`).
 - **`NETMIDI-E03` -- handshake timed out.** The invitation reached no
   one that answered (`no OK`): a firewall, the wrong address advertised,
   or the peer's session port is blocked. Check both hubs are on the

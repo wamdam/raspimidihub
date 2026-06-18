@@ -17,6 +17,7 @@ from .led import LedController
 from .midi_engine import MidiEngine
 from .plugin_host import PluginHost
 from .runtime.loops import (
+    link_local_maintainer,
     loop_lag_meter,
     pending_param_flusher,
     rate_meter,
@@ -396,6 +397,12 @@ async def async_main() -> None:
 
         # WiFi client mode watchdog — fall back to AP if connection lost
         asyncio.ensure_future(wifi_watchdog(wifi, config, server))
+
+        # Keep eth0's link-local present regardless of the Network MIDI
+        # toggle, so a direct hub-to-hub cable always has its 169.254.x
+        # address and discovery works the moment Network MIDI is enabled
+        # on both ends (no longer gated on the feature being on).
+        asyncio.ensure_future(link_local_maintainer())
 
         # MIDI rate meter — snapshot and broadcast every second
         asyncio.ensure_future(rate_meter(engine, server))
