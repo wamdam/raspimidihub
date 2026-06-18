@@ -10,8 +10,9 @@ topics without re-reading what came before.
 RaspiMIDIHub is a software appliance for the Raspberry Pi. It turns
 the Pi into:
 
-- A **MIDI routing hub** with an all-to-all default and a tap-to-
-  edit matrix UI for everything beyond the default.
+- A **MIDI routing hub** where new devices arrive disconnected by
+  default (flip to all-to-all in Settings) and a tap-to-edit matrix
+  UI wires up everything.
 - A **host for virtual MIDI instruments** -- the built-in plugins
   for LFO, chord generator, delay, scale remapper, velocity curve,
   and more.

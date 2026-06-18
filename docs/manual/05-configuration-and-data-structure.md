@@ -49,7 +49,7 @@ The exported / saved JSON has the following top-level keys:
 |-----|------|---------|
 | `version` | int | Schema version. Currently `1`. |
 | `mode` | string | `"all-to-all"` -- routing mode. |
-| `default_routing` | string | `"all"` for **Connect all**, `"none"` for **None**. |
+| `default_routing` | string | `"none"` (default) -- new devices arrive disconnected; `"all"` -- auto-connect every new device to every other. |
 | `connections` | list | Every saved connection in the matrix. |
 | `disconnected` | list | Connections explicitly toggled off but kept for re-enable. |
 | `wifi` | object | WiFi configuration; see 5.4. |

@@ -22,6 +22,7 @@ from .midi_filter import (
     MidiMapping,
     validate_new_mapping,
 )
+from .network_midi import ERR_SESSION_NOT_FOUND
 from .plugin_api import LayoutGrid, get_all_params, get_default_cc_map
 from .update_flow import (
     NoInternetError,
@@ -61,6 +62,7 @@ class _Autosaver:
         self._last_seq = engine._change_seq
         self._last_write = 0.0
         self._running = True
+        self._suspended = False
 
     def _plugin_seqs(self):
         """Per-instance encode-seq map, read on the loop right after the
@@ -108,6 +110,8 @@ class _Autosaver:
         forced write a power cut just after a Load would resume the
         PRE-Load state."""
         try:
+            if self._suspended:
+                return  # factory reset cleared the snapshot; don't recreate it
             if not force and self._engine._change_seq == self._last_seq:
                 return
             self._snapshot()
@@ -134,6 +138,14 @@ class _Autosaver:
 
     def stop(self) -> None:
         self._running = False
+
+    def disable(self) -> None:
+        """Permanently silence autosave (factory reset): stop the poll
+        loop AND neuter the shutdown flush, so the just-cleared resume
+        snapshot can't be recreated from the still-live old engine state
+        before the reboot."""
+        self._running = False
+        self._suspended = True
 
 
 def _parse_conn_id(conn_id: str) -> tuple[int, int, int, int]:
@@ -1280,6 +1292,25 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         return Response.json({"status": "rebooting"})
 
     # ================================================================
+    # POST /api/system/factory-reset — wipe to defaults, keep backups +
+    # WiFi, then reboot clean. Recoverable via Settings → Backup.
+    # ================================================================
+
+    @server.route("POST", "/api/system/factory-reset")
+    async def api_factory_reset(req: Request) -> Response:
+        import subprocess
+        # Silence autosave first: the shutdown flush would otherwise
+        # recreate the resume snapshot from the still-live old engine
+        # state and undo the reset on the next boot.
+        autosaver.disable()
+        ok = await config.afactory_reset(keep_wifi=True)
+        if not ok:
+            return Response.error("Factory reset failed — see the hub log.")
+        # Reboot so the appliance comes up clean from the reset config.
+        asyncio.get_event_loop().call_later(1, lambda: subprocess.Popen(["sudo", "reboot"]))
+        return Response.json({"status": "reset"})
+
+    # ================================================================
     # Phase 5.5 update flow: orchestrator-backed check & install
     #
     # Check: WiFi dance → fetch release list + download newer debs →
@@ -1935,7 +1966,8 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
             key = req.json.get("service") or req.json.get("stable_id", "")
             svc = network_midi.service_for(key)
             if svc is None:
-                return Response.error("session not found")
+                return Response.error(
+                    f"Session not found ({ERR_SESSION_NOT_FOUND}).")
             cfg = config.data.setdefault("network_midi", {})
             if svc.is_hub:
                 # Hub sessions auto-mirror; "mirror" = clear the opt-out.
@@ -1965,7 +1997,8 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
             key = req.json.get("service") or req.json.get("stable_id", "")
             svc = network_midi.service_for(key)
             if svc is None:
-                return Response.error("session not found")
+                return Response.error(
+                    f"Session not found ({ERR_SESSION_NOT_FOUND}).")
             cfg = config.data.setdefault("network_midi", {})
             if svc.is_hub:
                 disabled = cfg.setdefault("mirror_disabled", [])

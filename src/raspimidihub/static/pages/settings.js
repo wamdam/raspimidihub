@@ -8,7 +8,7 @@
  * it when bouncing through other bottom-nav tabs.
  */
 
-import { useState, useEffect } from '../lib/hooks.module.js';
+import { useState, useEffect, useCallback } from '../lib/hooks.module.js';
 import { html, api, hardReload } from '../ui/common.js';
 import { UPDATE_LABELS } from '../state/constants.js';
 import { getSoundsEnabled, setSoundsEnabled,
@@ -17,7 +17,7 @@ import { getSoundsEnabled, setSoundsEnabled,
 import { getTheme, setTheme, listThemes } from '../lib/theme.js';
 import { getSSEConnectionId, getSpectatorLabel, setSpectatorLabel } from '../ui/sse-subscriptions.js';
 
-function NetworkCard({ iface, showToast }) {
+function NetworkCard({ iface, showToast, reload }) {
     const [method, setMethod] = useState(iface.method || 'auto');
     const [address, setAddress] = useState(iface.address || '');
     const [netmask, setNetmask] = useState(iface.netmask || '255.255.255.0');
@@ -30,8 +30,13 @@ function NetworkCard({ iface, showToast }) {
         if (method === 'manual') { body.address = address; body.netmask = netmask; body.gateway = gateway; }
         const res = await api(`/network/${iface.interface}`, { method: 'POST', body: JSON.stringify(body) });
         setSaving(false);
-        if (res.error) showToast(res.error);
-        else showToast(`${iface.interface} configured`);
+        if (res.error) { showToast(res.error); return; }
+        showToast(`${iface.interface} configured`);
+        // NetworkManager takes a moment to apply the new address; re-fetch
+        // so the address list above the form reflects what eth0 actually
+        // carries now, not the pre-apply snapshot (which often showed only
+        // the link-local fallback).
+        if (reload) { reload(); setTimeout(reload, 1800); }
     };
 
     return html`
@@ -878,6 +883,17 @@ function SettingsSysInfo({ showToast, isUpgrading }) {
         }
     };
 
+    const factoryReset = async () => {
+        if (!confirm('Factory reset: erase ALL routing, plugins, filters and '
+            + 'settings, then reboot.\n\nWiFi / access-point settings and your '
+            + 'saved backups are kept (restore one from Settings → Backup).\n\n'
+            + 'Continue?')) return;
+        if (!confirm('Really reset to factory defaults? This cannot be undone '
+            + 'except by restoring a backup.')) return;
+        showToast('Factory reset — resetting and rebooting...');
+        fetch('/api/system/factory-reset', { method: 'POST' }).catch(() => {});
+    };
+
     const uptimeStr = sys && sys.uptime_seconds != null
         ? `${Math.floor(sys.uptime_seconds/3600)}h ${Math.floor((sys.uptime_seconds%3600)/60)}m`
         : '?';
@@ -941,27 +957,33 @@ function SettingsSysInfo({ showToast, isUpgrading }) {
         `}
         <div class="card">
             <button class="btn btn-secondary btn-block" style="margin-bottom:8px" onclick=${hardReload} disabled=${isUpgrading}>Reload App</button>
-            <button class="btn btn-danger btn-block" onclick=${rebootPi} disabled=${isUpgrading}>${isUpgrading ? 'Upgrade in progress...' : 'Reboot Pi'}</button>
+            <button class="btn btn-danger btn-block" style="margin-bottom:8px" onclick=${rebootPi} disabled=${isUpgrading}>${isUpgrading ? 'Upgrade in progress...' : 'Reboot Pi'}</button>
+            <button class="btn btn-danger btn-block" onclick=${factoryReset} disabled=${isUpgrading}>Factory Reset</button>
+            <p style="font-size:11px;color:var(--text-dim);margin:8px 2px 0">
+                Factory Reset erases routing, plugins and settings and reboots.
+                WiFi/AP settings and your backups are kept.
+            </p>
         </div>
     `;
 }
 
 function SettingsNetwork({ showToast }) {
     const [ifaces, setIfaces] = useState([]);
-    useEffect(() => { api('/network').then(setIfaces).catch(() => {}); }, []);
+    const reload = useCallback(() => { api('/network').then(setIfaces).catch(() => {}); }, []);
+    useEffect(() => { reload(); }, [reload]);
     return html`
         <${WiFiCard} showToast=${showToast} />
         <${UsbTetherCard} />
         ${ifaces.filter(i => i.interface !== 'wlan0' && !/^(usb\d+|enx[0-9a-f]{12})$/.test(i.interface)).map(i => html`
-            <${NetworkCard} iface=${i} showToast=${showToast} />
+            <${NetworkCard} iface=${i} showToast=${showToast} reload=${reload} />
         `)}
     `;
 }
 
 function SettingsMidi({ showToast }) {
-    const [defaultRouting, setDefaultRouting] = useState('all');
+    const [defaultRouting, setDefaultRouting] = useState('none');
     useEffect(() => {
-        api('/system').then(s => setDefaultRouting(s.default_routing || 'all')).catch(() => {});
+        api('/system').then(s => setDefaultRouting(s.default_routing || 'none')).catch(() => {});
     }, []);
     const changeDefaultRouting = async (val) => {
         setDefaultRouting(val);
@@ -974,8 +996,8 @@ function SettingsMidi({ showToast }) {
             <div class="form-group">
                 <label>New devices</label>
                 <select value=${defaultRouting} onChange=${e => changeDefaultRouting(e.target.value)}>
-                    <option value="all">Connect all (default)</option>
-                    <option value="none">Disconnected (manual)</option>
+                    <option value="none">Disconnected (default)</option>
+                    <option value="all">Connect all</option>
                 </select>
             </div>
             <p style="font-size:11px;color:var(--text-dim)">When a new device is plugged in, should it be connected to all other devices automatically?</p>
@@ -1409,13 +1431,13 @@ function SettingsNetworkMidi({ showToast }) {
             ? html`<span style="color:var(--warn-soft);font-size:11px">●</span>`
             : html`<span style="color:var(--text-dim);font-size:11px">○</span>`;
 
-    const sessionRow = (s, from) => html`
+    const sessionRow = (s) => html`
         <div key=${s.service} style="display:flex;align-items:center;gap:8px;padding:6px 0">
             ${stateDot(s)}
             <div style="flex:1;min-width:0">
                 <div style="font-size:13px">${s.name}</div>
                 <div style="font-size:11px;color:var(--text-dim)">
-                    ${s.mirrored ? s.state : 'not mirrored'}${s.latency_ms != null ? ` · ${s.latency_ms.toFixed(1)} ms` : ''}${from ? ` · ${from}` : ''}
+                    ${s.mirrored ? s.state : 'not mirrored'}${s.latency_ms != null ? ` · ${s.latency_ms.toFixed(1)} ms` : ''}${s.addr ? ` · ${s.addr}:${s.port}` : ''}
                 </div>
             </div>
             <button class="btn btn-secondary" style="font-size:12px;padding:4px 10px"
@@ -1481,7 +1503,7 @@ function SettingsNetworkMidi({ showToast }) {
                     <div style="font-size:12px;font-weight:600;margin-bottom:2px">
                         @${hub.host}
                     </div>
-                    ${hub.sessions.map(s => sessionRow(s, null))}
+                    ${hub.sessions.map(s => sessionRow(s))}
                 </div>
             `)}
             ${(nm.foreign || []).length > 0 && html`
@@ -1490,7 +1512,7 @@ function SettingsNetworkMidi({ showToast }) {
                     RTP-MIDI sessions from Macs, iPads or DAWs. These never
                     mirror automatically — add the ones you want.
                 </p>
-                ${(nm.foreign || []).map(s => sessionRow(s, s.addr))}
+                ${(nm.foreign || []).map(s => sessionRow(s))}
             `}
         </div>`}
         ${nm.enabled && html`<div class="card">

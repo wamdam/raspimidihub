@@ -10,9 +10,9 @@ The sub-pages:
 
 | Sub-page | What lives there |
 |---|---|
-| **Sys Info** | Live system stats (version, CPU, RAM, latency, IPs), **Reload App**, **Reboot Pi** |
+| **Sys Info** | Live system stats (version, CPU, RAM, latency, IPs), **Reload App**, **Reboot Pi**, **Factory Reset** |
 | **Network** | WiFi card with mode picker + home / AP credentials, USB-tether status, Ethernet config |
-| **MIDI** | Default routing for newly-plugged-in devices (all-to-all / disconnected) |
+| **MIDI** | Default routing for newly-plugged-in devices (all-to-all / disconnected — **disconnected by default**) |
 | **Display** | Per-device browser preferences — activity bar, knob/wheel tick sounds, scroll-assist FABs, layout density |
 | **Update** | Check GitHub, manage stored versions, install |
 | **Plugin Control Mappings** | Flat editable table of every CC binding across every plugin instance and every controller cell |
@@ -339,7 +339,10 @@ This page is the control surface:
 - **Remote hubs** -- everything discovered on the network, grouped
   per hub. Peer-hub sessions mirror into the matrix automatically;
   each row shows a state dot (green connected / amber connecting /
-  grey discovered), the measured link latency, and a
+  grey discovered), the measured link latency, and the peer's
+  **IP address and port** (`169.254.16.8:5004`) -- when mirrored
+  this is the address actually in use, which makes diagnosing a
+  reachability problem straightforward. Each row also has a
   Mirror / Unmirror button. Sessions from Macs, iPads or DAWs are
   listed under *Other sessions* and only mirror when you add them.
 - **Manual peers** -- an IP/hostname list for networks where mDNS
@@ -366,10 +369,13 @@ Screenshots needed:
 
 A single radio with two options:
 
-- **Connect all** -- new USB devices are auto-routed to and from
-  every existing device. The default. Plug-and-play.
 - **None** -- new USB devices appear in the matrix but with no
-  connections. The user wires them up by hand.
+  connections. The user wires them up by hand. **The default** --
+  a freshly-plugged device never injects unexpected MIDI until you
+  route it.
+- **Connect all** -- new USB devices are auto-routed to and from
+  every existing device. Plug-and-play; flip to this if you want
+  the old auto-connect-everything behaviour.
 
 This choice **does** participate in the dirty-state model -- it
 is part of the project state and survives **Save Config**.
@@ -487,9 +493,24 @@ Safari's bf-cache reliably -- a regular pull-to-refresh does not.
 
 ## System
 
-A single **Reboot** button. Triggers a clean shutdown and reboot
+A **Reboot** button. Triggers a clean shutdown and reboot
 of the Pi. The web UI shows a "Rebooting..." screen and reconnects
 automatically when the unit is back up.
+
+Below it, a **Factory Reset** button. After a double confirmation it
+erases all routing, plugins, filters and settings, then reboots the
+Pi factory-fresh. Two things are deliberately **kept**:
+
+- **Your WiFi / access-point settings** -- the AP password and any
+  saved home-WiFi credentials -- so the hub stays reachable on the
+  same network after the reboot.
+- **Your rolling backups** -- a reset is recoverable: if you reset
+  by mistake, restore the last checkpoint from **Settings → Backup**.
+
+The reset clears the resume snapshot too, so the unit will not come
+back resuming the pre-reset state. After the reboot, newly-plugged
+devices arrive disconnected (the factory default for *Default
+routing*; see the **MIDI** sub-page).
 
 ## The Safety Net
 

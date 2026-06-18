@@ -1471,7 +1471,11 @@ class NetworkMidiManager:
                 "service": svc.service,
                 "stable_id": svc.stable_id,
                 "name": svc.device_name,
-                "addr": svc.addresses[0] if svc.addresses else None,
+                # When mirrored, show the address we actually dialled (the
+                # peer advertises several; this is the one in use) — more
+                # useful for debugging than the first advertised address.
+                "addr": (mirror.remote_addr if mirror
+                         else (svc.addresses[0] if svc.addresses else None)),
                 "port": svc.port,
                 "mirrored": mirror is not None,
                 "state": mirror.state if mirror else "discovered",

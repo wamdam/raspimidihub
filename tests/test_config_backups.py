@@ -216,6 +216,48 @@ def test_load_manual_ignores_autosave(store):
     assert len(fresh._data["plugins"]) == 1   # the committed checkpoint, not autosave
 
 
+# ---- factory reset ------------------------------------------------------
+
+def test_default_routing_default_is_none():
+    """New device pairs arrive disconnected by default."""
+    assert cfg.DEFAULT_CONFIG["default_routing"] == "none"
+    assert cfg.Config().default_routing == "none"
+
+
+def test_factory_reset_clears_state_keeps_backups_and_wifi(store):
+    c = cfg.Config()
+    c._data = _cfg(plugins=3, connections=2)
+    c._data["wifi"] = {"mode": "ap", "ap_password": "secret-pw"}
+    c.save(make_backup=True)            # a backup the reset must keep
+    c.write_autosave()                  # a resume snapshot the reset must clear
+    assert len(c.list_backups()) == 1
+
+    assert c.factory_reset(keep_wifi=True) is True
+
+    # In-memory reset to defaults (no plugins, no connections), WiFi kept.
+    assert c._data.get("plugins", []) == []
+    assert c._data["connections"] == []
+    assert c._data["default_routing"] == "none"
+    assert c._data["wifi"]["ap_password"] == "secret-pw"
+    # Resume snapshot gone, backups kept.
+    assert all(not slot.exists() for slot in cfg.AUTOSAVE_SLOTS)
+    assert len(c.list_backups()) == 1
+    # A fresh boot load comes up factory-fresh (config.json, no autosave).
+    fresh = cfg.Config()
+    assert fresh.load() is True
+    assert fresh._loaded_from_autosave is False
+    assert fresh._data.get("plugins", []) == []
+    assert fresh._data["wifi"]["ap_password"] == "secret-pw"
+
+
+def test_factory_reset_can_clear_wifi(store):
+    c = cfg.Config()
+    c._data = _cfg(plugins=1)
+    c._data["wifi"] = {"mode": "ap", "ap_password": "secret-pw"}
+    assert c.factory_reset(keep_wifi=False) is True
+    assert c._data["wifi"] == cfg.DEFAULT_CONFIG["wifi"]
+
+
 # ---- autosave per-instance fragment cache -------------------------------
 
 def _seqs(plugins):

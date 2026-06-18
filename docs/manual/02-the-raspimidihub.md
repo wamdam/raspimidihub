@@ -50,9 +50,11 @@ state.
 
 The trade-offs that pushed the project into the shape it has:
 
-- **Zero-config default.** The matrix is all-to-all on a fresh
-  install. Nothing has to be configured for the first MIDI event
-  to flow. Everything past the default is an explicit edit.
+- **Explicit routing by default.** New devices arrive in the matrix
+  disconnected -- a freshly-plugged device never injects MIDI until
+  you route it. One tap on a cell connects a pair; flip *Default
+  routing* to **Connect all** (Settings → MIDI) for the old
+  all-to-all plug-and-play. Everything is an explicit, visible edit.
 - **Mobile-first UI.** The configuration interface is a touch-
   first web UI that runs from any phone. There is no desktop app.
   Wheels, faders, radios, and toggles replace dropdowns

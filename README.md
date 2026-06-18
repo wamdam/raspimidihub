@@ -2,7 +2,7 @@
 
 **Turn your Raspberry Pi into a plug-and-play USB MIDI hub with virtual instruments.**
 
-RaspiMIDIHub automatically connects all USB MIDI devices to each other. Plug in your keyboards, synths, drum machines, and controllers -- they all talk to each other instantly. No computer needed, no configuration required.
+Plug in your keyboards, synths, drum machines, and controllers -- they appear in a routing matrix instantly. Connect any two with a tap, or flip on all-to-all routing for classic plug-and-play. No computer needed; everything is configured from your phone.
 
 With the built-in plugin system, you can add virtual instruments and effects (arpeggiator, LFO, chord generator, and more) that appear as MIDI devices in the routing matrix. Configure everything from your phone -- the Pi creates its own WiFi network with a captive portal.
 
@@ -37,8 +37,7 @@ See all screenshots in [docs/screenshots/](docs/screenshots/). The full **[User 
 ## Features
 
 ### MIDI Routing Matrix
-- **Automatic all-to-all routing** between USB MIDI devices out of the box
-- **Tap-to-connect matrix** with device icons and live rate meters
+- **Tap-to-connect matrix** with device icons and live rate meters -- new devices start disconnected; one optional setting restores classic all-to-all auto-routing
 - **Single-tap context menu** on every cell, header, and mapping row -- Edit, Copy, Paste, Remove
 - **Connection / plugin / mapping clipboard** -- copy filter+mappings (or a whole plugin instance) and paste anywhere
 - **URL routing** -- back/forward and bookmarks work for /routing, /controller, /settings, and the open device panel

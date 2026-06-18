@@ -765,7 +765,7 @@ class MidiEngine:
         elif self._config and self._config.mode == "custom":
             self.apply_saved_config()
         else:
-            default_routing = "all"
+            default_routing = "none"
             if self._config:
                 default_routing = self._config.default_routing
             if default_routing == "all":

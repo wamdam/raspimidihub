@@ -115,7 +115,11 @@ def summarize_config_diff(old: dict, new: dict) -> str:
 DEFAULT_CONFIG = {
     "version": 1,
     "mode": "all-to-all",
-    "default_routing": "all",
+    # New device pairs arrive DISCONNECTED by default; the user wires up
+    # what they want. "all" restores the auto-connect-everything behaviour
+    # (toggle in Settings → System). Existing saved configs keep their
+    # stored value — only fresh installs / factory resets get this default.
+    "default_routing": "none",
     "connections": [],
     "disconnected": [],
     "wifi": {
@@ -215,7 +219,7 @@ class Config:
 
     @property
     def default_routing(self) -> str:
-        return self._data.get("default_routing", "all")
+        return self._data.get("default_routing", "none")
 
     @property
     def connections(self) -> list:
@@ -342,6 +346,56 @@ class Config:
         so the asyncio event loop keeps pumping MIDI/SSE during the write."""
         import asyncio
         return await asyncio.to_thread(self.save, make_backup)
+
+    def factory_reset(self, keep_wifi: bool = True) -> bool:
+        """Reset to factory defaults, reboot-clean. The rolling backups/
+        are deliberately KEPT (a reset stays recoverable via Settings →
+        Backup); when `keep_wifi` the current wifi/AP block is preserved
+        so the hub stays reachable on the same network. config.json + its
+        .bak are rewritten to the reset state and the resume snapshot
+        (autosave slots) is cleared, so a reboot comes up factory-fresh
+        instead of resuming the pre-reset live state. Returns True on
+        success. Caller must silence the autosaver first (see
+        _Autosaver.disable) or the shutdown flush will recreate a slot
+        from the still-live old engine state."""
+        try:
+            reset = json.loads(json.dumps(DEFAULT_CONFIG))
+            if keep_wifi:
+                reset["wifi"] = json.loads(json.dumps(
+                    self._data.get("wifi", DEFAULT_CONFIG["wifi"])))
+            self._data = reset
+            config_json = json.dumps(self._data, indent=2, ensure_ascii=False)
+            json.loads(config_json)  # validate
+
+            RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
+            tmp = RUNTIME_CONFIG.with_suffix(".tmp")
+            tmp.write_text(config_json)
+            tmp.replace(RUNTIME_CONFIG)
+
+            with _boot_rw():
+                PERSISTENT_DIR.mkdir(parents=True, exist_ok=True)
+                tmp_persistent = PERSISTENT_CONFIG.with_suffix(".tmp")
+                tmp_persistent.write_text(config_json)
+                tmp_persistent.replace(PERSISTENT_CONFIG)
+                # .bak = reset too, so a fallback load can't resurrect the
+                # pre-reset config.
+                shutil.copy2(PERSISTENT_CONFIG,
+                             PERSISTENT_CONFIG.with_suffix(".json.bak"))
+                # Clear the resume snapshot; KEEP backups/ + index.
+                for slot in AUTOSAVE_SLOTS:
+                    slot.unlink(missing_ok=True)
+
+            self._fallback_active = False
+            log.info("Factory reset complete (wifi %s, backups kept)",
+                     "kept" if keep_wifi else "reset")
+            return True
+        except Exception:
+            log.exception("Factory reset failed")
+            return False
+
+    async def afactory_reset(self, keep_wifi: bool = True) -> bool:
+        import asyncio
+        return await asyncio.to_thread(self.factory_reset, keep_wifi)
 
     # ---- Backups (rolling gzipped checkpoints, written on manual Save) ----
 

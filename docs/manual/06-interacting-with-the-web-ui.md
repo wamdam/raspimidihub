@@ -79,7 +79,11 @@ its MAC suffix (e.g. `735C`) and a custom SSID shows verbatim. It is
 the same identifier you pick the hub by in the WiFi list, so two
 hubs on one bench are told apart at a glance. Change it by setting a
 custom **AP SSID** under **Settings → WiFi** (the `735C` suffix
-itself is the wlan0 MAC and not separately editable).
+itself is the wlan0 MAC and not separately editable). The name is
+re-read on every (re)connection, so if you move a phone from one
+hub's access point to another's the header updates to the hub you
+are actually talking to -- it never keeps showing the previous
+hub's name.
 
 When the server has been redeployed and the SPA running in the
 browser is older than the backend, a small red dot appears next to

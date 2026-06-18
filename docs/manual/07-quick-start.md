@@ -39,12 +39,18 @@ is taken out of a trusted environment.
 Plug a MIDI keyboard (or any USB MIDI device that *sends* events) and
 a synth (or any USB MIDI device that *receives* events) into two of
 the Pi's USB-A ports. They appear as rows and columns in the
-**Routing** matrix within a second or two. The default routing is
-*all-to-all*, so the cell at the intersection of the keyboard row and
-the synth column is already lit -- the devices are already talking.
+**Routing** matrix within a second or two. By default new devices
+arrive **disconnected** -- nothing is routed until you say so, so a
+device you plug in mid-set never injects unexpected MIDI. Tap the
+cell at the intersection of the keyboard row and the synth column to
+connect them; it lights up.
 
 Play a key on the keyboard. The destination synth makes sound; the
 matrix cell briefly shows a live rate-meter tick.
+
+*(Prefer the old plug-and-play behaviour where every new device is
+auto-routed to every other? Flip **Default routing** to **Connect
+all** under **Settings → MIDI**.)*
 
 ![The Routing matrix with plugins as rows and columns. Devices appear here as soon as they're plugged in.](../screenshots/01-routing.png){width=42%}
 

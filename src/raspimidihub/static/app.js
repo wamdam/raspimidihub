@@ -238,15 +238,25 @@ function App({ onSpectatorWatched, onRouteChange }) {
         connectionsRef.current = c;
     }, []);
 
-    useEffect(() => {
-        refresh();
+    // Hub identity for the header badge (version · WiFi name). Re-run on
+    // every SSE (re)connect, not just at mount: a phone that roams from
+    // one hub's AP to another's keeps the tab open, so the stream
+    // reconnects to the *new* hub — without this the badge would keep
+    // showing the previous hub's name. /system is served by whichever
+    // hub answers, so this always reflects the hub we're actually on.
+    const loadSystemInfo = useCallback(() => {
         api('/system').then(s => {
             setConfigFallback(s.config_fallback);
             setVersion(s.version || '');
             setApSsid(s.ap_ssid || '');
             setServerBuild(s.build_token || '');
             setConfigDirty(!!s.config_dirty);
-        });
+        }).catch(() => {});
+    }, []);
+
+    useEffect(() => {
+        refresh();
+        loadSystemInfo();
         // Expire stale clock sources and midi events
         const expireTimer = setInterval(() => {
             const now = Date.now();
@@ -386,7 +396,7 @@ function App({ onSpectatorWatched, onRouteChange }) {
         }
     }, (connected) => {
         setSseConnected(connected);
-        if (connected) refresh();
+        if (connected) { refresh(); loadSystemInfo(); }
     }, (conn_id) => {
         // Server emits this exactly once after a successful SSE handshake;
         // hand it to the SubscriptionManager so per-view useSSESubscription
