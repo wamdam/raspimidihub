@@ -1948,7 +1948,15 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
                     added.append(svc.service)
             await config.asave()
             await autosaver.autosave_now()  # keep the resume snapshot in sync
-            await network_midi.set_mirrored(svc.service, True)
+            # The config entry above records the *intent* (the policy
+            # retries when the peer re-advertises); a failure here means
+            # it isn't live yet, so report the diagnostic code rather
+            # than claim success.
+            err = await network_midi.set_mirrored(svc.service, True)
+            if err:
+                return Response.error(
+                    f"Could not mirror this device ({err}). "
+                    f"See the hub log for details.")
             await server.send_sse("device-connected", {})
             return Response.json({"status": "mirrored"})
 

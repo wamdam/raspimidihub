@@ -147,6 +147,34 @@ warnings instead.
 - **Fix.** Nothing to do -- restore the link / the export and the
   device reconnects by itself, with all connections intact.
 
+### Mirror button shows an error code
+
+When **Mirror** (or **Add** from the matrix's Add menu) cannot bring
+the device up, it now reports a short diagnostic code in a toast --
+quote it in a bug report and it points straight at the cause:
+
+- **`NETMIDI-E01` -- session not found.** The peer's advert vanished
+  between the moment you saw it and the moment you tapped Mirror
+  (cable pulled, peer powered off, Network MIDI toggled). Refresh the
+  list and retry.
+- **`NETMIDI-E02` -- no reachable address.** The peer advertised only
+  an address that is also one of *this* hub's own addresses (classically
+  the shared `192.168.4.1` access-point address) and no routable path
+  was left. On a direct cable this means the hubs aren't sharing a
+  usable subnet -- see *Peer hub not discovered* above; both ends on
+  link-local, or both on the same static `/24`.
+- **`NETMIDI-E03` -- handshake timed out.** The invitation reached no
+  one that answered (`no OK`): a firewall, the wrong address advertised,
+  or the peer's session port is blocked. Check both hubs are on the
+  same subnet and that nothing filters UDP 5004+.
+- **`NETMIDI-E04` -- session start failed.** A local error while
+  bringing the mirror up. Over SSH: `journalctl -u raspimidihub -e`
+  and look for the `NETMIDI-E04` line for the underlying exception.
+
+All four are also written to the hub log with the same code, so
+`journalctl -u raspimidihub -e | grep NETMIDI-` shows the history
+even after the toast is gone.
+
 ### Network MIDI page says "unavailable"
 
 - **Cause.** The `python3-zeroconf` package is missing (image

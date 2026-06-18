@@ -74,6 +74,15 @@ MDNS_TTL = 120
 RECONNECT_DELAY = 2.0     # first retry; doubles up to the cap
 RECONNECT_DELAY_MAX = 30.0
 
+# Stable, user-facing diagnostic codes for the mirror path. They are
+# shown in the UI toast AND logged, so a bug report quoting e.g.
+# "NETMIDI-E02" points straight back to the line that raised it — grep
+# the code to find it. Keep the strings stable; only ever append.
+ERR_SESSION_NOT_FOUND = "NETMIDI-E01"   # peer vanished between discovery and click
+ERR_NO_REACHABLE_ADDR = "NETMIDI-E02"   # peer advertised only our own / unroutable addrs
+ERR_HANDSHAKE_TIMEOUT = "NETMIDI-E03"   # AppleMIDI invitation got no OK
+ERR_MIRROR_START = "NETMIDI-E04"        # session start failed (ALSA / other)
+
 _T0 = time.monotonic()
 
 
@@ -114,10 +123,14 @@ def _pick_reachable_address(addresses: list[str]) -> str:
         from .wifi import get_all_interfaces
         local_nets = []
         for info in get_all_interfaces():
-            if info.get("address") and info.get("netmask"):
+            # Use every CIDR the interface carries, not the single
+            # "primary" (which omits 169.254.x — see get_interface_info).
+            # On a direct hub-to-hub cable the link-local IS the only
+            # routable subnet, so it must be eligible here.
+            for cidr in info.get("addresses", []):
                 try:
-                    local_nets.append(ipaddress.IPv4Network(
-                        f"{info['address']}/{info['netmask']}", strict=False))
+                    local_nets.append(
+                        ipaddress.IPv4Network(cidr, strict=False))
                 except ValueError:
                     pass
         for addr in addresses:
@@ -995,11 +1008,28 @@ class NetworkMidiManager:
         sess._service_info = None
 
     async def _local_addresses(self) -> list[str]:
-        """All local IPv4 addresses worth advertising. Shells out via
-        wifi.get_all_interfaces (blocking) — off-loop."""
+        """Every local IPv4 address, link-local included. Shells out via
+        wifi.get_all_interfaces (blocking) — off-loop.
+
+        This MUST include 169.254.x: on a direct hub-to-hub cable (no
+        DHCP, no switch) the link-local is the only address eth0 carries
+        and the only routable path between the two hubs. We use it for
+        three things, all of which break without it:
+          - the mDNS advert (register_service) — so a peer can reach us;
+          - self-loop filtering in _apply_mirror_policy;
+          - subnet matching in _pick_reachable_address.
+        Note get_interface_info's "address" field deliberately drops
+        link-local (it prefills the static-IP form); we want the full
+        "addresses" list here instead."""
         from .wifi import get_all_interfaces
         infos = await asyncio.to_thread(get_all_interfaces)
-        return [i["address"] for i in infos if i.get("address")]
+        addrs: list[str] = []
+        for i in infos:
+            for cidr in i.get("addresses", []):
+                addr = cidr.split("/")[0]
+                if addr and addr not in addrs:
+                    addrs.append(addr)
+        return addrs
 
     # --- link watcher (re-bind mDNS when an interface comes up late) ---
 
@@ -1159,11 +1189,17 @@ class NetworkMidiManager:
             await mirror.stop(send_bye=False)
         self.notify_changed()
 
-    async def _apply_mirror_policy(self, svc: DiscoveredService) -> None:
+    async def _apply_mirror_policy(self, svc: DiscoveredService) -> str | None:
         """Hub sessions auto-mirror (the export list over there is the
         deliberate share); foreign sessions (Macs, DAWs) only when the
         user added them — a Mac's advert is not an invitation, and a
-        studio WLAN full of DAWs must not flood the matrix."""
+        studio WLAN full of DAWs must not flood the matrix.
+
+        Returns None on success (or when the service simply isn't
+        wanted), else a NETMIDI-E?? diagnostic code naming why the
+        mirror could not be established. Callers driven by the user (the
+        REST handler) surface it; the discovery-driven callers ignore
+        it — the code is already logged here either way."""
         # Never mirror via one of our own addresses. With a hostname
         # collision a peer's service can resolve to THIS hub's IP; the
         # resulting self-loop answers its own clock-sync and so never
@@ -1181,37 +1217,62 @@ class NetworkMidiManager:
             if existing.remote_addr in own:
                 await self.on_mirror_lost(existing)
             else:
-                return
+                return None
         if svc.is_hub:
             want = (bool(svc.sid)
                     and svc.service not in
                     self.settings.get("mirror_disabled", []))
         else:
             want = svc.service in self.settings.get("mirrored_foreign", [])
-        if not want or not reachable:
-            return
+        if not want:
+            return None
+        if not reachable:
+            # The peer advertised only addresses that are also ours — the
+            # classic case is a shared 192.168.4.1 hostapd address while
+            # the link-local (the one path that would actually work on a
+            # direct cable) never made it into the advert. Nothing to dial.
+            log.warning(
+                "network-midi: %s no reachable address for '%s' "
+                "(peer advertised %s, ours %s)",
+                ERR_NO_REACHABLE_ADDR, svc.instance,
+                svc.addresses, sorted(own))
+            return ERR_NO_REACHABLE_ADDR
         svc.addresses = reachable
         mirror = MirroredSession(self, svc)
         try:
             await mirror.start()
+        except TimeoutError as e:
+            log.warning("network-midi: %s mirroring '%s' failed: %s",
+                        ERR_HANDSHAKE_TIMEOUT, svc.instance, e)
+            return ERR_HANDSHAKE_TIMEOUT
         except Exception as e:
-            log.warning("network-midi: mirroring '%s' failed: %s",
-                        svc.instance, e)
-            return
+            log.warning("network-midi: %s mirroring '%s' failed: %s",
+                        ERR_MIRROR_START, svc.instance, e)
+            return ERR_MIRROR_START
         self._mirrors[svc.service] = mirror
+        return None
 
-    async def set_mirrored(self, service: str, mirrored: bool) -> None:
+    async def set_mirrored(self, service: str, mirrored: bool) -> str | None:
         """Apply a mirror/unmirror decision (config lists are mutated
-        by the API handler, same split as exports)."""
+        by the API handler, same split as exports). Returns a
+        NETMIDI-E?? code if a requested mirror could not be brought up,
+        else None."""
+        err = None
         if mirrored:
             svc = self._discovered.get(service)
             if svc:
-                await self._apply_mirror_policy(svc)
+                err = await self._apply_mirror_policy(svc)
+            else:
+                log.warning("network-midi: %s mirror requested for "
+                            "unknown service '%s'",
+                            ERR_SESSION_NOT_FOUND, service)
+                err = ERR_SESSION_NOT_FOUND
         else:
             mirror = self._mirrors.pop(service, None)
             if mirror:
                 await mirror.stop()
         self.notify_changed()
+        return err
 
     async def on_mirror_lost(self, mirror) -> None:
         """Peer sent BY, or went silent past the CK timeout: drop the

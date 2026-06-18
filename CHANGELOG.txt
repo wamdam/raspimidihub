@@ -4,6 +4,12 @@ User-visible changes. Short tagged one-liners, no code or commit
 hashes. Tags: Added, Improved, Fix, Changed, Removed.
 
 
+Unreleased
+
+- Fix: **Network MIDI mirroring over a direct cable.** Two hubs cabled together (both on `169.254.x.x` link-local, no switch) discovered each other but **Mirror did nothing — not even an error**. The hub advertised and dialled only its *routable* address and dropped the `eth0` link-local, which on a direct cable is the one path that actually works; with nothing else to reach, the mirror gave up silently. The link-local is now advertised, dialled, and recognised as the hub's own, so mirroring works on a bare cable.
+- Added: the **Mirror** button now reports a diagnostic code (`NETMIDI-E01`–`E04`) in a toast and the log when it can't connect, instead of failing silently — quote it in a bug report. Codes are listed in the troubleshooting chapter.
+
+
 2026-06-16 — Version 5.1.0
 
 - Added: **5 GHz access point.** Settings → Network → *AP radio* now lets you run the AP on 5 GHz instead of 2.4 GHz on a dual-band Pi (3B+, 4, 5), plus pick the regulatory **country**. Running the AP on 5 GHz frees the 2.4 GHz band the onboard Bluetooth shares — the fix when BLE-MIDI keeps failing to connect on the combo-chip boards. It comes up instantly on a non-DFS channel, and if a 5 GHz bring-up ever fails it falls back to 2.4 GHz automatically so the AP is never left down. The option is greyed out on 2.4-only radios (Pi 3B, Zero 2 W).

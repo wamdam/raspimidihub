@@ -229,30 +229,77 @@ class TestPickReachableAddress:
         assert _pick_reachable_address(["10.1.1.2"]) == "10.1.1.2"
 
     def test_prefers_same_subnet(self, monkeypatch):
-        from raspimidihub import network_midi
         # We live on 10.1.1.0/24; the peer advertises its AP address
         # (192.168.4.1, unreachable from here) first and its ethernet
         # address second — we must pick the reachable one.
-        monkeypatch.setattr(network_midi, "get_all_interfaces", lambda: [
-            {"address": "10.1.1.50", "netmask": "255.255.255.0"},
-        ], raising=False)
-        # get_all_interfaces is imported inside the function from .wifi;
-        # patch there too.
+        # get_all_interfaces is imported inside the function from .wifi.
         import raspimidihub.wifi as wifi
+        from raspimidihub import network_midi
         monkeypatch.setattr(wifi, "get_all_interfaces", lambda: [
-            {"address": "10.1.1.50", "netmask": "255.255.255.0"},
+            {"addresses": ["10.1.1.50/24"]},
         ])
         addr = network_midi._pick_reachable_address(["192.168.4.1", "10.1.1.2"])
         assert addr == "10.1.1.2"
+
+    def test_link_local_subnet_is_eligible(self, monkeypatch):
+        """Regression (NETMIDI-E02): on a direct hub-to-hub cable eth0
+        carries only a 169.254.x link-local — the only routable path.
+        The picker must treat 169.254/16 as a local subnet (it reads the
+        full "addresses" list now, not the form's "address" field which
+        drops link-local) and select the peer's link-local over an
+        unreachable foreign address."""
+        import raspimidihub.wifi as wifi
+        from raspimidihub import network_midi
+        monkeypatch.setattr(wifi, "get_all_interfaces", lambda: [
+            {"addresses": ["169.254.16.8/16"]},      # eth0, link-local only
+            {"addresses": ["192.168.4.1/24"]},       # wlan0 AP
+        ])
+        addr = network_midi._pick_reachable_address(
+            ["198.51.100.5", "169.254.244.137"])
+        assert addr == "169.254.244.137"
 
     def test_falls_back_to_first_when_no_match(self, monkeypatch):
         import raspimidihub.wifi as wifi
         from raspimidihub import network_midi
         monkeypatch.setattr(wifi, "get_all_interfaces", lambda: [
-            {"address": "172.16.0.5", "netmask": "255.255.255.0"},
+            {"addresses": ["172.16.0.5/24"]},
         ])
         addr = network_midi._pick_reachable_address(["192.168.4.1", "10.1.1.2"])
         assert addr == "192.168.4.1"
+
+
+class TestLocalAddresses:
+    def make_manager(self):
+        from raspimidihub.network_midi import NetworkMidiManager
+
+        class FakeConfig:
+            data = {"network_midi": {"enabled": True, "exported": []}}
+
+        return NetworkMidiManager(engine=None, config=FakeConfig(),
+                                  server=None)
+
+    def test_includes_link_local(self, monkeypatch):
+        """Regression (NETMIDI-E02): the eth0 link-local must appear in
+        the address set. It is what gets advertised over a direct cable
+        and what self-loop filtering compares against — get_interface_info
+        drops it from its single "address" field, so we read the full
+        "addresses" list here. A regression makes the link-local invisible
+        and silently un-mirrorable."""
+        import raspimidihub.wifi as wifi
+        # eth0 with a stale DHCP lease AND the link-local fallback; wlan0 AP.
+        monkeypatch.setattr(wifi, "get_all_interfaces", lambda: [
+            {"address": "10.1.1.8", "netmask": "255.255.255.0",
+             "addresses": ["169.254.16.8/16", "10.1.1.8/24"]},
+            {"address": "192.168.4.1", "netmask": "255.255.255.0",
+             "addresses": ["192.168.4.1/24"]},
+        ])
+        mgr = self.make_manager()
+        addrs = asyncio.run(mgr._local_addresses())
+        assert "169.254.16.8" in addrs
+        assert "10.1.1.8" in addrs
+        assert "192.168.4.1" in addrs
+        # CIDR prefixes are stripped.
+        assert all("/" not in a for a in addrs)
 
 
 class TestDiscoveredService:
@@ -450,10 +497,11 @@ class TestMirrorPolicy:
         answer its own clock-sync and never reap."""
         from raspimidihub import wifi
         monkeypatch.setattr(wifi, "get_all_interfaces", lambda: [
-            {"address": "192.0.2.20", "netmask": "255.255.255.0"}])
+            {"addresses": ["192.0.2.20/24"]}])
         mgr, started = self.make_manager({}, monkeypatch)
         svc = make_discovered()  # addresses == ["192.0.2.20"]
-        asyncio.run(mgr._apply_mirror_policy(svc))
+        assert asyncio.run(mgr._apply_mirror_policy(svc)) == \
+            network_midi.ERR_NO_REACHABLE_ADDR
         assert started == []
         assert svc.service not in mgr._mirrors
 
@@ -463,7 +511,7 @@ class TestMirrorPolicy:
         against the reachable one."""
         from raspimidihub import wifi
         monkeypatch.setattr(wifi, "get_all_interfaces", lambda: [
-            {"address": "192.168.4.1", "netmask": "255.255.255.0"}])
+            {"addresses": ["192.168.4.1/24"]}])
         mgr, started = self.make_manager({}, monkeypatch)
         svc = make_discovered()
         svc.addresses = ["192.168.4.1", "10.1.1.3"]
@@ -476,7 +524,7 @@ class TestMirrorPolicy:
         down and rebuilt against the real peer address on the next pass."""
         from raspimidihub import wifi
         monkeypatch.setattr(wifi, "get_all_interfaces", lambda: [
-            {"address": "192.168.4.1", "netmask": "255.255.255.0"}])
+            {"addresses": ["192.168.4.1/24"]}])
         mgr, started = self.make_manager({}, monkeypatch)
         svc = make_discovered()
         svc.addresses = ["192.168.4.1", "10.1.1.3"]
@@ -487,6 +535,47 @@ class TestMirrorPolicy:
         assert started == [svc.service]
         assert mgr._mirrors[svc.service] is not stale
         assert mgr._mirrors[svc.service].remote_addr == "10.1.1.3"
+
+    def test_link_local_peer_mirrors_on_direct_cable(self, monkeypatch):
+        """Regression (NETMIDI-E02): two hubs on a direct cable share the
+        192.168.4.1 AP address; the only reachable path is the eth0
+        link-local. The shared AP address must be filtered as ours and
+        the mirror must form against the peer's link-local — not silently
+        no-op."""
+        from raspimidihub import wifi
+        monkeypatch.setattr(wifi, "get_all_interfaces", lambda: [
+            {"addresses": ["169.254.16.8/16"]},   # our eth0, link-local
+            {"addresses": ["192.168.4.1/24"]},    # our wlan0 AP
+        ])
+        mgr, started = self.make_manager({}, monkeypatch)
+        svc = make_discovered()                    # hub session, auto-mirror
+        svc.addresses = ["192.168.4.1", "169.254.244.137"]
+        assert asyncio.run(mgr._apply_mirror_policy(svc)) is None
+        assert started == [svc.service]
+        assert svc.addresses == ["169.254.244.137"]
+
+    def test_handshake_timeout_returns_code(self, monkeypatch):
+        """A handshake that never gets an OK surfaces NETMIDI-E03 rather
+        than vanishing — so the UI toast and a bug report can name it."""
+        from raspimidihub import wifi
+        monkeypatch.setattr(wifi, "get_all_interfaces", lambda: [
+            {"addresses": ["10.9.9.9/24"]}])       # disjoint from the peer
+
+        class TimingOutMirror:
+            def __init__(self, manager, svc):
+                self.svc = svc
+                self.remote_addr = svc.addresses[0] if svc.addresses else ""
+
+            async def start(self):
+                raise TimeoutError("no OK from 169.254.244.137:5004")
+
+        mgr, started = self.make_manager({}, monkeypatch)
+        monkeypatch.setattr(network_midi, "MirroredSession", TimingOutMirror)
+        svc = make_discovered()
+        svc.addresses = ["169.254.244.137"]
+        assert asyncio.run(mgr._apply_mirror_policy(svc)) == \
+            network_midi.ERR_HANDSHAKE_TIMEOUT
+        assert svc.service not in mgr._mirrors
 
 
 class TestLifecycle:
