@@ -11,9 +11,9 @@
       "url": "https://github.com/wamdam/raspimidihub/releases/download/image-2026-04-21/raspimidihub-bootstrap-2026-04-21.img.xz",
       "release_date": "2026-04-21",
       "extract_size": 3229614080,
-      "extract_sha256": "4d5f52da9772bdda8cf3ff3922f91d47a3d222b485085b289cff7fdc72abbb46",
-      "image_download_size": 560768156,
-      "image_download_sha256": "73a8cc9679d19cbc7be0c1b5e1f2dacf229675bd7a350e5f8b22cfbd9c986148",
+      "extract_sha256": "23f789ce75562a624d38e251ae09be1766e7200674635bf9e72f2f03e51a5dbe",
+      "image_download_size": 560757712,
+      "image_download_sha256": "e19693034c6952cdb267357bd8df1efb3b1a0e3a11733c76cd62ff4a41f542c7",
       "init_format": "cloudinit-rpi",
       "devices": ["pi3-64bit","pi4-64bit","pi5-64bit","pizero2"]
     }
