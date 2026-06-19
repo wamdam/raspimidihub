@@ -3,7 +3,11 @@ Description=Apply WiFi regulatory country (Pi Imager + Trixie workaround)
 After=NetworkManager.service
 Before=network-online.target
 Wants=NetworkManager.service
-ConditionKernelCommandLine=cfg80211.ieee80211_regdom
+# Run on first boot whether or not Pi Imager wrote a WiFi-country regdom:
+# the script derives one from timezone/locale/keyboard when it's absent.
+# Skip once the appliance is installed (root FS is read-only then, and
+# RaspiMIDIHub manages the regulatory country itself).
+ConditionPathExists=!/var/lib/raspimidihub/bootstrap-done
 
 [Service]
 Type=oneshot

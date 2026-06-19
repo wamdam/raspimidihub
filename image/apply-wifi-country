@@ -1,19 +1,56 @@
 #!/bin/bash
-# Workaround for an RPi OS Trixie + Pi Imager interaction:
-# Pi Imager writes "cfg80211.ieee80211_regdom=XX" to cmdline.txt based on the
-# wizard's WiFi country, but on Trixie + NetworkManager that kernel parameter
-# alone doesn't push the regulatory domain through to the radio. The WiFi
-# stays rfkill-soft-blocked (phy0 soft=1) and any cloud-init-rendered NM
-# profile sits in state "unavailable" forever.
+# Apply the WiFi regulatory country on first boot so the radio is usable
+# headlessly — no manual step, and no Pi-Imager "WiFi country" field
+# required.
 #
-# raspi-config has the magic dance — set country + unblock radio + reload
-# NM — so we just call it.
+# Background: on RPi OS Trixie + NetworkManager the WiFi radio stays
+# rfkill-soft-blocked (phy0 soft=1, the NM profile sits "unavailable")
+# until a regulatory country is applied via raspi-config's dance (set
+# country + unblock radio + reload NM). Pi Imager writes
+# cfg80211.ieee80211_regdom=XX to cmdline.txt ONLY when its "WiFi country"
+# field is set — and even then that kernel param alone doesn't push the
+# domain through on Trixie+NM. Worse, users routinely skip that field
+# while still setting locale / timezone / keyboard, which left the headless
+# first-boot install dead in the water (no WiFi → no internet → bootstrap
+# times out).
+#
+# So: take the country from the cmdline regdom if present (the user's
+# explicit choice), else derive it from the settings they almost always
+# DID set — timezone first (the best geographic signal; locale and
+# keyboard are often left at an image default like en_GB/gb), then locale,
+# then keyboard layout. Best-effort: any reasonable country unblocks the
+# radio for the install; the user can refine it later in the app.
 
 set -e
 
-COUNTRY=$(grep -oE 'cfg80211\.ieee80211_regdom=[A-Za-z]+' /proc/cmdline | cut -d= -f2)
+resolve_country() {
+    local c
+    # 1. Explicit: Pi Imager's WiFi-country field -> kernel cmdline.
+    c=$(grep -oE 'cfg80211\.ieee80211_regdom=[A-Za-z]{2}' /proc/cmdline \
+        | head -1 | cut -d= -f2)
+    if [ -n "$c" ]; then echo "${c^^}"; return; fi
+    # 2. Timezone -> country via zone1970.tab (first code for shared zones,
+    #    e.g. Europe/Berlin -> "DE,DK,..." -> DE).
+    if [ -r /etc/timezone ] && [ -r /usr/share/zoneinfo/zone1970.tab ]; then
+        c=$(awk -v tz="$(cat /etc/timezone)" \
+            '$3==tz{split($1,a,","); print a[1]; exit}' \
+            /usr/share/zoneinfo/zone1970.tab)
+        if [ -n "$c" ]; then echo "$c"; return; fi
+    fi
+    # 3. Locale country: LANG=de_DE.UTF-8 -> DE.
+    c=$(grep -hoE 'LANG=[a-z]{2}_[A-Z]{2}' \
+        /etc/default/locale /etc/locale.conf 2>/dev/null \
+        | head -1 | cut -d_ -f2)
+    if [ -n "$c" ]; then echo "$c"; return; fi
+    # 4. Keyboard layout: XKBLAYOUT="de" -> DE (last resort).
+    c=$(grep -oE 'XKBLAYOUT="?[a-z]{2}' /etc/default/keyboard 2>/dev/null \
+        | head -1 | grep -oE '[a-z]{2}$')
+    if [ -n "$c" ]; then echo "${c^^}"; return; fi
+}
+
+COUNTRY=$(resolve_country)
 if [ -z "$COUNTRY" ]; then
-    echo "[wifi-country] no cfg80211.ieee80211_regdom in cmdline, skipping"
+    echo "[wifi-country] no country found (cmdline/timezone/locale/keyboard); skipping"
     exit 0
 fi
 

@@ -15,11 +15,37 @@ set -e
 echo "=== RaspiMIDIHub Installer ==="
 echo ""
 
+# Preflight: the installer pulls the package + its dependencies from
+# GitHub, so the Pi must reach the internet first. Without this check a
+# fresh, offline image just aborts mid-download (wget -q is silent, then
+# `set -e` exits) with no hint why — the single most common install
+# failure. Fail fast with an actionable message instead. The most
+# frequent cause on a freshly-flashed Pi is WiFi blocked because no WiFi
+# *country* was set at flash time (Raspberry Pi OS rfkill-blocks the
+# radio until a country exists), so we call that out explicitly.
+if ! curl -sSf --max-time 10 -o /dev/null https://github.com 2>/dev/null; then
+    echo "ERROR: No internet connection — can't reach github.com." >&2
+    echo "" >&2
+    echo "The installer downloads the RaspiMIDIHub package and its" >&2
+    echo "dependencies from GitHub, so this Pi needs internet during install." >&2
+    echo "" >&2
+    echo "Common causes:" >&2
+    echo "  - Ethernet on an isolated LAN with no gateway to the internet." >&2
+    echo "  - WiFi radio blocked because no WiFi country was set when" >&2
+    echo "    flashing (a fresh image keeps WiFi rfkill-blocked until then):" >&2
+    echo "        sudo raspi-config nonint do_wifi_country DE   # your ISO code" >&2
+    echo "        # or: sudo iw reg set DE && sudo nmcli radio wifi on" >&2
+    echo "    then connect to your network." >&2
+    echo "" >&2
+    echo "Re-run this installer once the Pi can reach the internet." >&2
+    exit 1
+fi
+
 # BUILD_TAG is the literal version this install.sh was packaged for.
-# The placeholder "@@VERSION@@" means it's running from source (no
-# release substitution); fall back to GitHub's /releases/latest in
-# that case so `bash scripts/install.sh` from a source checkout still
-# works for testing.
+# "unreleased" means it's running from a source checkout (the Makefile
+# rewrites this line to the real tag in each release's install.sh); fall
+# back to GitHub's /releases/latest in that case so `bash
+# scripts/install.sh` from source still works for testing.
 BUILD_TAG="unreleased"
 if [ -z "${TAG:-}" ]; then
     if [ "$BUILD_TAG" = "unreleased" ]; then

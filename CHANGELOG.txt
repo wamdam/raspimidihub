@@ -4,6 +4,12 @@ User-visible changes. Short tagged one-liners, no code or commit
 hashes. Tags: Added, Improved, Fix, Changed, Removed.
 
 
+Unreleased
+
+- Fix: **headless first-boot install no longer needs the Pi Imager "WiFi country" field.** The bootstrap's `apply-wifi-country` now also runs when that field was skipped, deriving the regulatory country from the timezone (then locale, then keyboard) the user did set, and applying it so WiFi unblocks on its own. Previously a skipped WiFi-country field left the radio rfkill-blocked on Trixie, so the first-boot installer timed out with no internet and nothing installed.
+- Improved: the manual `install.sh` now does a connectivity preflight and, if the Pi is offline, prints a clear, actionable error (including the WiFi-country gotcha) instead of aborting silently mid-download.
+
+
 2026-06-18 — Version 5.1.2
 
 - Fix: the `eth0` link-local address (`169.254.x.y`) is now kept on the interface **at all times, independent of the Network MIDI toggle**. Previously it was only asserted while Network MIDI was enabled, so a hub on a direct cable (or DHCP with no server) with Network MIDI off had no link-local at all — and two hubs couldn't find each other until the feature was on at both ends. Now a plugged cable always carries the address, so discovery just works the moment Network MIDI is enabled on both. (Also means the Network/Sys-Info pages show the link-local even with the feature off.)
