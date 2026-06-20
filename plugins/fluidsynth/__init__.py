@@ -17,7 +17,7 @@ import subprocess
 import threading
 import time
 
-from raspimidihub.plugin_api import ChannelSelect, Group, PluginBase, Radio, Wheel
+from raspimidihub.plugin_api import Button, ChannelSelect, Group, PluginBase, Radio, Wheel
 
 log = logging.getLogger(__name__)
 
@@ -174,6 +174,7 @@ Soundfont selects the GM instrument bank loaded by FluidSynth."""
         Group("Audio", [
             Radio("output", "Audio Output", options=_OUT_NAMES, default=_OUT_NAMES[0]),
             Wheel("gain", "Gain", min=0, max=100, default=50, unit="%", default_cc=7),
+            Button("reverb", "Reverb", default=False, color="blue"),
         ]),
         Group("Instrument", [
             ChannelSelect("channel", "Channel", default=0, allow_any=True),
@@ -231,6 +232,8 @@ Soundfont selects the GM instrument bank loaded by FluidSynth."""
             self._cmd(f"gain {fs_gain:.3f}")
         elif name in ("program", "channel"):
             self._apply_program()
+        elif name == "reverb":
+            self._cmd(f"reverb {'on' if value else 'off'}")
         elif name in ("output", "soundfont"):
             self._cmd("__restart__")
 
@@ -283,11 +286,13 @@ Soundfont selects the GM instrument bank loaded by FluidSynth."""
 
         device = self._current_device()
         gain = (self.get_param("gain") or 50) / 100.0 * 5.0
+        reverb = self.get_param("reverb") or False
         argv = [
             "fluidsynth",
             "-a", "alsa",
             "-o", f"audio.alsa.device={device}",
             "-g", f"{gain:.3f}",
+            "-R", "1" if reverb else "0",
             soundfont,
         ]
         output_name = self.get_param("output") or _OUT_NAMES[0]
@@ -376,6 +381,7 @@ Soundfont selects the GM instrument bank loaded by FluidSynth."""
 
                 if self._proc and self._proc.stdin:
                     try:
+                        log.debug("FluidSynth stdin: %s", item)
                         self._proc.stdin.write(f"{item}\n".encode())
                         self._proc.stdin.flush()
                     except Exception:
