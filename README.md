@@ -104,48 +104,14 @@ A long-press (touch) or right-click (mouse) on any bindable plugin control -- th
 
 ### Play Surfaces
 
-Plugins on the **Play** bottom-nav tab (alongside Controllers). They route in the matrix like any other plugin but additionally render a fullscreen play surface for live performance. Add them under **Add → Play**.
+Plugins on the **Play** bottom-nav tab that route in the matrix like any plugin but also render a fullscreen performance surface for live use (**Add → Play**). All four share an **8-slot pattern bank** (tap to switch, long-press to overwrite), **CC-bindable knobs** (long-press to assign, MIDI-Learn, or reset to the author's default), and **learnable trigger notes** for hardware pattern switching.
 
-**Arpeggiator**
-- **Pattern + Rate** as wide wheels at the top of the play surface for one-finger live tweaks; **Steps / Accent Vel. / Gate % / Octaves** as a row of shapers; **Step Pattern** grid below for per-step on/off + offset + accent
-- **Seven pattern modes** -- up / down / up-down / random / as-played / `programmed` (live step-sequencer: keypresses write the next-to-fire slot, chord-spread on simultaneous presses, slots persist while keys / pedal are held) / `chord` (every held note fires simultaneously each step)
-- **Sustain pedal (CC 64)** acts as temporary Hold -- released keys keep arping until pedal lift
-- **CC automation** -- every play-surface knob is bindable; long-press a control on touch (or right-click on desktop) to pick a Channel + CC, MIDI-Learn from hardware, or Reset to the plugin author's factory default
-- **Pattern bank** -- 8 P1..P8 slots, each storing a full snapshot of the play-surface params. Tap to switch immediately; held notes / sustain persist across the switch. Long-press for Overwrite / Reset
-- **Setup group** (config-only) -- Sync (free / tempo / transport) + BPM / Arp Ch / Ctrl Ch + 8 learnable trigger notes, in the slide-up device-detail panel
+- **Arpeggiator** -- seven modes (up / down / up-down / random / as-played / `programmed` live step-sequencer / `chord`), a per-step on/off + accent grid, sustain pedal as temporary Hold, and free / tempo / transport sync.
+- **Tracker** -- 8-voice step sequencer (16 hex rows × up to 16 chained pages) with per-track output channels, live recording that captures real note lengths, computer-keyboard note entry, and a built-in clock master with transport send/receive plus in-sync pattern launching.
+- **Euclidean** -- Bjorklund pulses / steps / rotate over a sine "window wave" gate with per-step overrides, 9-scale + root quantise, tune spread / snap, fade in/out, and jitter; run two on one Master Clock for polyrhythms.
+- **Cartesian** -- a René-style 2×2…4×4 grid swept by two clocks (cell **Path** + chord **Inv. Rate**), one-knob scale-aware **Fill Voicing**, chordal or diatonic harmony from **Root**, voice-leading **Inversion**, and latching **Autofill** so a held note plus two knobs is a full instrument.
 
-**Tracker**
-- **8-voice step sequencer**, **16 hex-numbered rows × up to 16 pages** chained linearly, loops back to page 0
-- **Per voice cell** -- Note (3-char pitch / Off / End / hold), Velocity (hex), CC# (hex or `.`), CC Val (hex). Note and CC events fire independently
-- **Per-track output channel** -- T1..T8 each route to their own MIDI channel (defaults all 1, remappable in the device-detail panel)
-- **8 pattern slots** -- tap to switch (queued to the next page-0 boundary while playing); Shift+Tap switches immediately. A per-Tracker **Trigger Mode** (Switch / One-shot / Hold / Toggle) fires patterns from a pad or key via **Pt. Ctrl Ch**, launching in sync from anywhere in the song without waiting for the bar
-- **Live recording** -- play notes / move CCs in time with playback and they land on the row under the playhead, with note-offs captured so recorded notes keep their real length. Cursor stays put while playing; step-record at cursor when stopped
-- **Keyboard entry** -- q..u for white keys + 2/3/5/6/7 for black keys (QWERTY and QWERTZ both work via physical-key code); Space toggles play; Shift held + cursor extends a sub-cell selection; Cut / Copy / Paste with half-compatibility check
-- **Clock master** -- Send Clock generates an internal 24-PPQ at the configured BPM; Send Trnsp. forwards START / STOP / CONTINUE (and emits its own from the Play / Stop buttons); Rcv Trnsp. (default on) gates whether external transport drives the playhead, so a Tracker can free-run on the shared clock
-
-**Euclidean**
-- **Bjorklund distribution** -- Pulses / Steps / Rotate generate evenly-spaced hits (E(4,16) is four-on-the-floor; E(3,8) is the tresillo; E(5,8) is the cinquillo)
-- **Window wave** -- a sine threshold (Phase / Cycles / Open) masks which steps are allowed to fire; Open=100 is transparent, Open=0 closes the gate
-- **Three-layer pattern model** -- algorithm + window wave + per-step manual overrides on top (default / FORCE_ON / FORCE_ON+accent / FORCE_OFF). Default cells render a subdued underlay tint to preview what the generator would do
-- **Six pattern modes** -- up / down / up-down / random / as-played / chord (every held note fires simultaneously each step)
-- **Internal Scale + Root** -- 9 scales (major / minor / dorian / mixolydian / pentatonic / blues / harmonic m / whole tone / chromatic) quantise the output; chromatic is the identity pass-through
-- **Tune Spread + Snap** -- random per-step transpose, with snap presets (free / octaves / 5ths+oct.) that bias toward consonant intervals before the scale quantiser
-- **Fade In / Fade Out** -- velocity ramps over N firing steps at the start of a phrase and after every key is released
-- **Jitter** -- per-step micro-timing humanisation, re-rolled every step
-- **Pattern bank** -- 8 P1..P8 slots, each a full snapshot of every play-surface param. Tap to switch immediately; held notes / sustain persist. Long-press for Overwrite / Reset
-- **Ctrl Ch + 8 trigger notes** -- reserve a MIDI channel and MIDI-Learn one note per slot for hardware pattern switching
-- **CC automation** -- every play-surface knob is bindable from the same long-press popup; factory defaults match the Arpeggiator where they overlap (so a single hardware controller drives both)
-- **Polyrhythm** -- two instances on the same Master Clock with co-prime pulse / step counts
-
-**Cartesian**
-- **2D grid sequencer** in the spirit of the Make Noise René -- a held note is the root and a square grid (2×2…4×4) of semitone offsets is swept by two clocks
-- **Two independent clocks** -- **Rate** steps through the cells along a **Path** (Rows / Cols / Diagonal / Knight / Spiral in / Spiral out / Random); **Inv. Rate** advances the chord inversion (it is not a second spatial axis — Rate drives the whole sweep), so a fast Rate + slow Inv. Rate climbs a chord through its inversions
-- **Fill Voicing** -- one knob stamps the grid (Unison → 5th → Triad → 7th → Scale), scale-aware so thirds and sevenths follow the **Scale** wheel; chord tones climb across the cells as a ladder of inversions
-- **Root** -- doubles as the harmony selector: **No root** = chordal (played note is the tonic, fixed quality, transposes with the note); a root **C..B** = diatonic (Root + Scale define a key; the played note picks a degree and is harmonised in-key, so the third gives a iii-chord, the fifth a V-chord)
-- **Inversion** -- bidirectional (-4…+4) re-voicing, not octave stacking -- lifts the lowest voice an octave for smooth voice-leading
-- **Autofill** -- a latching toggle: on, Voicing / Scale / Root / Grid / Inversion re-fill the offsets instantly (all CC-bindable) while preserving your on/off + accent mask, so a held note + two knobs is a full instrument; turn it off and the grid freezes as-is for hand-editing
-- **Two channels** -- **Play Ch** holds the root, **Fill Ch** records cell offsets by holding notes (programmed-Arp style)
-- **Pattern bank + CC automation** -- same 8-slot bank and bindable knobs as the other play surfaces
+The shipped **[User Manual](https://github.com/wamdam/raspimidihub/releases/latest/download/raspimidihub-manual.pdf)** has the full per-surface parameter reference.
 
 ### Bluetooth MIDI (BLE-MIDI)
 - **Pair, connect, disconnect, forget** any BLE-MIDI peripheral from the matrix UI -- Add Device → Bluetooth → Scan
@@ -159,6 +125,8 @@ Plugins on the **Play** bottom-nav tab (alongside Controllers). They route in th
 - **Export any device as a standard RTP-MIDI session** -- advertised over mDNS as "Name @hostname"; Macs (Audio MIDI Setup), iPads and rtpmidid connect with no extra software
 - **Link two hubs over Ethernet** -- a direct cable (no router needed, link-local fallback) or any shared network; the peer's exported devices mirror into the matrix automatically, grouped per hub (collapsible), with filters / mappings / renames / saved connections like any device
 - **Self-healing** -- cable pull or peer power-cut detected in ~30 s, devices drop to offline like unplugged hardware, reconnection is automatic; loop-safe by construction (mirrors can't be re-exported)
+- **Always-on link-local** -- a plugged `eth0` carries a `169.254.x.y` link-local address at all times, independent of the Network MIDI toggle, so two directly-cabled hubs find each other the moment the feature is enabled at both ends
+- **Mirror diagnostics** -- a failed Mirror reports a code (`NETMIDI-E01`–`E04`) in a toast and the log instead of failing silently, and remote peers show each session's address and port (e.g. `10.1.1.9:5004`)
 - **Manual peers** for networks that swallow multicast; sub-millisecond added latency on wired LAN
 
 ### MIDI Filtering and Mapping
