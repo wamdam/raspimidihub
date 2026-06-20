@@ -176,9 +176,9 @@ Soundfont selects the GM instrument bank loaded by FluidSynth."""
             Wheel("gain", "Gain", min=0, max=100, default=50, unit="%", default_cc=7),
         ]),
         Group("Instrument", [
-            ChannelSelect("channel", "Channel", default=1),
+            ChannelSelect("channel", "Channel", default=0, allow_any=True),
             Wheel("program", "GM Program", min=0, max=127, default=0,
-                  labels=_GM_PROGRAMS, wide=True, default_cc=0),
+                  labels=_GM_PROGRAMS, span=2),
         ]),
         Group("Soundfont", [
             Radio("soundfont", "Soundfont", options=_SF_NAMES, default=_SF_DEFAULT),
@@ -237,10 +237,19 @@ Soundfont selects the GM instrument bank loaded by FluidSynth."""
     # --- Internal ---
 
     def _apply_program(self) -> None:
-        """Send prog command to fluidsynth for the current channel+program."""
-        ch = (self.get_param("channel") or 1) - 1  # ChannelSelect is 1-based
+        """Send prog command to fluidsynth for the current channel+program.
+
+        Channel 0 (Any) broadcasts to all 16 channels except ch 9 (GM drums).
+        """
+        ch = self.get_param("channel") or 0
         prog = self.get_param("program") or 0
-        self._cmd(f"prog {ch} {prog}")
+        if ch == 0:
+            # Broadcast to every melodic channel (skip 9 = GM percussion)
+            for c in range(16):
+                if c != 9:
+                    self._cmd(f"prog {c} {prog}")
+        else:
+            self._cmd(f"prog {ch - 1} {prog}")  # ChannelSelect is 1-based
 
     def _cmd(self, s: str) -> None:
         try:
