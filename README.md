@@ -10,8 +10,9 @@ The Raspberry Pi runs on a **read-only filesystem**, so you can pull the power a
 
 [![License](https://img.shields.io/badge/license-LGPL-blue.svg)](LICENSE)
 [![Discord](https://img.shields.io/badge/Discord-Join%20the%20community-5865F2?logo=discord&logoColor=white)](https://discord.gg/DYQ7keGm)
+[![Mastodon](https://img.shields.io/badge/Mastodon-Join-6364FF?logo=mastodon&logoColor=white)](https://mastodon.social/invite/6mBTYoVr)
 
-> 💬 **Join the community on [Discord](https://discord.gg/DYQ7keGm)** -- questions, setups, feature ideas, and distributed-jam experiments. New here? Say hi!
+> 💬 **Join the community on [Discord](https://discord.gg/DYQ7keGm)** -- questions, setups, feature ideas, and distributed-jam experiments. New here? Say hi! You'll also find us on **[Mastodon](https://mastodon.social/invite/6mBTYoVr)**.
 
 ## Watch the Demo
 
