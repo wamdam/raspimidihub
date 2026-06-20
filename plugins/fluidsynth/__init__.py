@@ -168,7 +168,12 @@ Wire any MIDI source to this plugin's IN port in the routing matrix.
 Audio Output lists every playback card found at startup — pick the one
 that matches your speakers or headphones.
 Gain controls the master volume (0 = silent, 100 = maximum).
-Soundfont selects the GM instrument bank loaded by FluidSynth."""
+Soundfont selects the GM instrument bank loaded by FluidSynth.
+
+Note: piano and bass sounds need full-range speakers to sound natural.
+TV speakers cut low frequencies, making them sound thin or percussive.
+Use the 3.5 mm Headphone Jack output or external speakers for best
+results with low-frequency instruments."""
 
     params = [
         Group("Audio", [
