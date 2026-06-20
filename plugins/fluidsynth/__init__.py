@@ -21,32 +21,72 @@ from raspimidihub.plugin_api import Group, PluginBase, Radio, Wheel
 
 log = logging.getLogger(__name__)
 
-_SOUNDFONT_CANDIDATES = [
-    "/usr/share/sounds/sf2/FluidR3_GM.sf2",
-    "/usr/share/sounds/sf2/TimGM6mb.sf2",
-    "/usr/share/soundfonts/default.sf2",
-    "/usr/share/sounds/sf2/default.sf2",
+_SOUNDFONT_SEARCH_DIRS = [
+    "/usr/share/sounds/sf2",
+    "/usr/share/soundfonts",
 ]
 
 
-def _find_soundfont() -> str | None:
-    for p in _SOUNDFONT_CANDIDATES:
-        if os.path.isfile(p):
-            return p
-    return None
+# ---------------------------------------------------------------------------
+# Scanned once at plugin-discovery time (module import)
+# ---------------------------------------------------------------------------
+
+def _scan_soundfonts() -> dict[str, str]:
+    """Return {display_name: path} for every .sf2 found on the system."""
+    found: dict[str, str] = {}
+    for d in _SOUNDFONT_SEARCH_DIRS:
+        try:
+            for fname in sorted(os.listdir(d)):
+                if fname.lower().endswith(".sf2"):
+                    path = os.path.join(d, fname)
+                    if os.path.isfile(path):
+                        found.setdefault(fname[:-4], path)
+        except OSError:
+            pass
+    return found
 
 
-def _detect_alsa_card(keyword: str) -> str | None:
-    """Return 'plughw:N,0' for the first /proc/asound/cards line matching keyword."""
+def _scan_audio_outputs() -> dict[str, str]:
+    """Return OrderedDict {display_name: alsa_device} for each playback card.
+
+    Parses `aplay -l` for human-readable card names so the Radio shows
+    e.g. 'bcm2835 Headphones' and 'vc4-hdmi-1' instead of fixed labels.
+    Falls back to /proc/asound/cards if aplay is unavailable.
+    Always prepends 'Default' → 'default'.
+    """
+    result: dict[str, str] = {"Default": "default"}
+    seen_cards: set[str] = set()
     try:
-        with open("/proc/asound/cards") as f:
-            for line in f:
-                m = re.match(r"\s*(\d+)\s+\[", line)
-                if m and keyword.lower() in line.lower():
-                    return f"plughw:{m.group(1)},0"
-    except OSError:
-        pass
-    return None
+        out = subprocess.run(
+            ["aplay", "-l"], capture_output=True, text=True, timeout=5
+        )
+        for line in out.stdout.splitlines():
+            # "card N: short_id [Long Name], device D: ..."
+            m = re.match(r"card\s+(\d+):\s+\S+\s+\[([^\]]+)\]", line)
+            if m:
+                card_n, long_name = m.group(1), m.group(2).strip()
+                if card_n not in seen_cards:
+                    seen_cards.add(card_n)
+                    result[long_name] = f"plughw:{card_n},0"
+    except Exception:
+        # aplay unavailable — fall back to /proc/asound/cards
+        try:
+            with open("/proc/asound/cards") as f:
+                for line in f:
+                    m = re.match(r"\s*(\d+)\s+\[(\S+)\s*\]", line)
+                    if m:
+                        result.setdefault(m.group(2), f"plughw:{m.group(1)},0")
+        except OSError:
+            pass
+    return result
+
+
+_SOUNDFONTS: dict[str, str] = _scan_soundfonts()
+_SF_NAMES: list[str] = list(_SOUNDFONTS) or ["(none found)"]
+_SF_DEFAULT: str = _SF_NAMES[0]
+
+_AUDIO_OUTPUTS: dict[str, str] = _scan_audio_outputs()
+_OUT_NAMES: list[str] = list(_AUDIO_OUTPUTS)  # always starts with "Default"
 
 
 class FluidSynthGm(PluginBase):
@@ -55,7 +95,7 @@ class FluidSynthGm(PluginBase):
     NAME = "FluidSynth GM"
     DESCRIPTION = "Software GM synthesizer — render MIDI to HDMI or headphone audio"
     AUTHOR = "RaspiMIDIHub"
-    VERSION = "1.0"
+    VERSION = "1.1"
     HELP = """\
 Renders incoming MIDI as audio through the Raspberry Pi audio output.
 No external synthesizer hardware needed.
@@ -64,18 +104,18 @@ Requirements (install once):
   sudo apt install fluidsynth fluid-soundfont-gm
 
 Wire any MIDI source to this plugin's IN port in the routing matrix.
-Choose the Audio Output that matches your speakers or headphones.
+Audio Output lists every playback card found at startup — pick the one
+that matches your speakers or headphones.
 Gain controls the master volume (0 = silent, 100 = maximum).
-
-The FluidR3_GM General MIDI soundfont is loaded automatically from
-/usr/share/sounds/sf2/ when the packages above are installed."""
+Soundfont selects the GM instrument bank loaded by FluidSynth."""
 
     params = [
         Group("Audio", [
-            Radio("output", "Audio Output",
-                  options=["Default", "HDMI", "Headphone Jack"],
-                  default="Default"),
+            Radio("output", "Audio Output", options=_OUT_NAMES, default=_OUT_NAMES[0]),
             Wheel("gain", "Gain", min=0, max=100, default=50, unit="%", default_cc=7),
+        ]),
+        Group("Soundfont", [
+            Radio("soundfont", "Soundfont", options=_SF_NAMES, default=_SF_DEFAULT),
         ]),
     ]
 
@@ -121,14 +161,12 @@ The FluidR3_GM General MIDI soundfont is loaded automatically from
 
     def on_param_change(self, name, value):
         if name == "gain":
-            # FluidSynth gain range: 0.0–5.0
-            fs_gain = value / 100.0 * 5.0
+            fs_gain = value / 100.0 * 5.0  # FluidSynth range: 0.0–5.0
             self._cmd(f"gain {fs_gain:.3f}")
-        elif name == "output":
-            # Audio device change — restart the subprocess
+        elif name in ("output", "soundfont"):
             self._cmd("__restart__")
 
-    # --- Internal helpers ---
+    # --- Internal ---
 
     def _cmd(self, s: str) -> None:
         try:
@@ -136,26 +174,31 @@ The FluidR3_GM General MIDI soundfont is loaded automatically from
         except queue.Full:
             pass
 
-    def _alsa_device(self) -> str:
-        output = self.get_param("output") or "Default"
-        if output == "HDMI":
-            return _detect_alsa_card("hdmi") or _detect_alsa_card("vc4") or "plughw:0,0"
-        if output == "Headphone Jack":
-            return (_detect_alsa_card("Headphones")
-                    or _detect_alsa_card("bcm2835")
-                    or "plughw:1,0")
-        return "default"
+    def _current_soundfont(self) -> str | None:
+        name = self.get_param("soundfont") or _SF_DEFAULT
+        path = _SOUNDFONTS.get(name)
+        if path and os.path.isfile(path):
+            return path
+        for p in _SOUNDFONTS.values():
+            if os.path.isfile(p):
+                return p
+        return None
+
+    def _current_device(self) -> str:
+        output = self.get_param("output") or _OUT_NAMES[0]
+        # Gracefully handle stale saved values from an older config
+        return _AUDIO_OUTPUTS.get(output, "default")
 
     def _start_proc(self) -> bool:
-        soundfont = _find_soundfont()
+        soundfont = self._current_soundfont()
         if not soundfont:
             log.warning(
-                "FluidSynth: soundfont not found — "
+                "FluidSynth: no soundfont found — "
                 "run: sudo apt install fluid-soundfont-gm"
             )
             return False
 
-        device = self._alsa_device()
+        device = self._current_device()
         gain = (self.get_param("gain") or 50) / 100.0 * 5.0
         argv = [
             "fluidsynth",
@@ -164,7 +207,9 @@ The FluidR3_GM General MIDI soundfont is loaded automatically from
             "-g", f"{gain:.3f}",
             soundfont,
         ]
-        log.info("FluidSynth: starting (device=%s, soundfont=%s)", device, soundfont)
+        output_name = self.get_param("output") or _OUT_NAMES[0]
+        log.info("FluidSynth: starting (output=%r device=%s sf=%s)",
+                 output_name, device, os.path.basename(soundfont))
         try:
             self._proc = subprocess.Popen(
                 argv,
@@ -175,7 +220,7 @@ The FluidR3_GM General MIDI soundfont is loaded automatically from
             return True
         except FileNotFoundError:
             log.warning(
-                "FluidSynth: 'fluidsynth' not found — "
+                "FluidSynth: 'fluidsynth' binary not found — "
                 "run: sudo apt install fluidsynth"
             )
             return False
@@ -187,7 +232,7 @@ The FluidR3_GM General MIDI soundfont is loaded automatically from
         """Lifecycle: start fluidsynth, forward commands, restart on exit."""
         while self._running:
             if not self._start_proc():
-                # Binary or soundfont missing — wait before retrying
+                # Binary or soundfont missing — long wait before retry
                 end = time.monotonic() + 30
                 while self._running and time.monotonic() < end:
                     try:
@@ -196,9 +241,29 @@ The FluidR3_GM General MIDI soundfont is loaded automatically from
                         pass
                 continue
 
-            # FluidSynth needs a moment to initialise ALSA before it
-            # starts processing stdin commands.
-            time.sleep(0.5)
+            start_time = time.monotonic()
+            # Give fluidsynth time to open ALSA before we write commands
+            time.sleep(0.8)
+
+            # If the process died during startup the audio device is bad
+            if self._proc and self._proc.poll() is not None:
+                elapsed = time.monotonic() - start_time
+                log.warning(
+                    "FluidSynth: process exited within %.1f s — "
+                    "check Audio Output selection", elapsed
+                )
+                self._proc = None
+                # Back off to avoid a tight crash-loop; still drain the
+                # queue so a __restart__ from a new selection gets through
+                end = time.monotonic() + 10
+                while self._running and time.monotonic() < end:
+                    try:
+                        item = self._queue.get(timeout=1)
+                        if item in ("__restart__", None):
+                            break
+                    except queue.Empty:
+                        pass
+                continue
 
             restart = False
             while self._running and not restart:
@@ -214,7 +279,7 @@ The FluidR3_GM General MIDI soundfont is loaded automatically from
                     break
 
                 if item == "__restart__":
-                    # Drain stale MIDI before restarting with new device
+                    # Drain stale MIDI before restarting with new settings
                     while True:
                         try:
                             self._queue.get_nowait()
