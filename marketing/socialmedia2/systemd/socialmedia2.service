@@ -1,0 +1,18 @@
+[Unit]
+Description=RaspiMIDIHub social announcer (dispatch tick)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# Fill in for the host this runs on, then install (see README). Replace:
+#   <USER>        the (non-root) account that owns the checkout / .venv
+#   <INSTALL_DIR> absolute path to this marketing/socialmedia2 directory
+User=<USER>
+WorkingDirectory=<INSTALL_DIR>
+ExecStart=<INSTALL_DIR>/.venv/bin/python -m announce.dispatch
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

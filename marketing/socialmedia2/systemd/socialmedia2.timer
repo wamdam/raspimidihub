@@ -1,0 +1,11 @@
+[Unit]
+Description=Tick the RaspiMIDIHub social announcer every 10 minutes
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=10min
+# Catch up one missed tick after the machine was off/asleep.
+Persistent=true
+
+[Install]
+WantedBy=timers.target
