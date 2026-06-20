@@ -4,6 +4,11 @@ User-visible changes. Short tagged one-liners, no code or commit
 hashes. Tags: Added, Improved, Fix, Changed, Removed.
 
 
+2026-06-20 — Version 5.1.4
+
+- Fix: **the Bluetooth MIDI section no longer disappears when the radio comes up a moment after boot.** The hub used to check the Bluetooth radio only once at startup; on a Pi 3 B+ (whose Bluetooth firmware loads slightly later) that check could land before the radio finished powering on, hiding the Scan button for the whole session even though Bluetooth was actually fine. The radio is now re-checked each time you open the **Add** overlay, so the section reappears on its own once the radio is up — no reboot needed. (The check stays read-only while a device is connected; it never disturbs a live BLE link.)
+
+
 2026-06-19 — Version 5.1.3
 
 - Fix: **headless first-boot install no longer needs the Pi Imager "WiFi country" field.** The bootstrap's `apply-wifi-country` now also runs when that field was skipped, deriving the regulatory country from the timezone (then locale, then keyboard) the user did set, and applying it so WiFi unblocks on its own. Previously a skipped WiFi-country field left the radio rfkill-blocked on Trixie, so the first-boot installer timed out with no internet and nothing installed.

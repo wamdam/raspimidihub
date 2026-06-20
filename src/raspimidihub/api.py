@@ -1830,16 +1830,37 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
     # ================================================================
     # Bluetooth MIDI API
     # ================================================================
-    # All BT routes are gated on the manager being available — i.e.
-    # bluez + bluealsa installed and a BT radio present. Bare GET
-    # /api/bluetooth always returns a payload so the UI can render
-    # an "unsupported on this hardware" hint without polling 404s.
+    # The only static gate is whether a manager object exists at all
+    # (the import succeeded). Everything else — radio powered, bluealsa
+    # on PATH, dbus-next importable — is re-checked *live on each GET*
+    # via availability(), not frozen at startup. This matters because
+    # the radio can settle to `Powered: yes` slightly after we boot
+    # (notably the Pi 3 B+, whose BCM firmware-patch path is slower):
+    # a one-shot check at startup could catch it mid-power-on, cache
+    # `no-bt-radio`, and hide the BT UI for the whole process lifetime
+    # even though the radio came up fine moments later. Re-checking per
+    # request lets the UI self-heal — the next time the Add overlay
+    # re-fetches /api/bluetooth, it sees the now-powered radio. The
+    # check is read-only when the radio is already powered (it only
+    # issues `power on` from the *off* state, so it never disturbs a
+    # live BLE-MIDI link), but it shells out to bluetoothctl with up to
+    # ~5s of timeouts, so run it off-loop to keep routing/SSE smooth.
+    # Bare GET /api/bluetooth always returns a payload so the UI can
+    # render an "unsupported on this hardware" hint without polling 404s.
 
-    bt_avail = bluetooth.availability() if bluetooth else \
-        {"available": False, "reason": "no-bluetooth-manager"}
-    if bluetooth and bt_avail["available"]:
+    if bluetooth:
+        async def _bt_availability() -> dict:
+            return await asyncio.to_thread(bluetooth.availability)
+
         @server.route("GET", "/api/bluetooth")
         async def api_bluetooth_status(req: Request) -> Response:
+            avail = await _bt_availability()
+            if not avail["available"]:
+                return Response.json({
+                    "available": False,
+                    "reason": avail.get("reason"),
+                    "devices": [],
+                })
             devices = await bluetooth.get_paired_devices()
             return Response.json({"available": True, "devices": devices})
 
@@ -1906,7 +1927,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         async def api_bluetooth_unavailable(req: Request) -> Response:
             return Response.json({
                 "available": False,
-                "reason": bt_avail.get("reason"),
+                "reason": "no-bluetooth-manager",
                 "devices": [],
             })
 

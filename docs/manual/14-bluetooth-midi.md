@@ -142,10 +142,21 @@ which is what the bridge provides. If a peripheral asks for
 anything else, it is not currently supported.
 
 **Bluetooth section says "unavailable".**
-This happens on some upgrade paths. Click the **Reinstall to
-enable Bluetooth** button in the banner; the Pi briefly switches
-to client WiFi, installs the missing dependency, and switches
-back.
+This happens on some upgrade paths, where a dependency
+(`python3-dbus-next`) is missing. Click the **Reinstall to enable
+Bluetooth** button in the banner; the Pi briefly switches to
+client WiFi, installs the missing dependency, and switches back.
+
+**The Bluetooth MIDI section is missing entirely (no Scan
+button).**
+The hub re-checks the radio every time you open the **Add**
+overlay, so this is normally self-healing: if the radio simply
+wasn't powered up yet when you first looked (it can settle a
+moment after boot on a Pi 3 B+, whose Bluetooth firmware loads
+slightly later), just close and re-open the **Add** overlay --
+the section reappears once the radio is up. No reboot is needed.
+If it never appears, the board genuinely has no Bluetooth radio,
+or `bluealsa` isn't installed.
 
 **First Connect to a peripheral takes 5+ seconds.**
 First-time pairing of some peripherals is genuinely slow on the
