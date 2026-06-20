@@ -125,6 +125,13 @@ a:hover { text-decoration: underline; }
 }
 .btn-discord:hover { box-shadow: 0 8px 32px rgba(88,101,242,0.5); }
 
+.btn-mastodon {
+  background: #6364FF;
+  color: #fff;
+  box-shadow: 0 4px 24px rgba(99,100,255,0.35);
+}
+.btn-mastodon:hover { box-shadow: 0 8px 32px rgba(99,100,255,0.5); }
+
 .gh-icon { width: 20px; height: 20px; }
 
 /* === Phone Mockup === */
