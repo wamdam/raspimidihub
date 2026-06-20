@@ -1,0 +1,15 @@
+[Unit]
+Description=RaspiMIDIHub Social Media Post Generator
+After=network.target
+
+[Service]
+Type=oneshot
+User=dk
+WorkingDirectory=/home/dk/develop/raspimidihub
+EnvironmentFile=/home/dk/develop/raspimidihub/marketing/socialmedia/.env
+ExecStart=/home/dk/develop/raspimidihub/marketing/socialmedia/.venv/bin/python marketing/socialmedia/social-media-post.py --post
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

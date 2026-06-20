@@ -1,0 +1,11 @@
+[Unit]
+Description=RaspiMIDIHub Social Media Post Generator Timer
+OnBootSec=15min
+OnUnitActiveSec=6h
+
+[Timer]
+Unit=raspimidihub-social-media.service
+Persistent=true
+
+[Install]
+WantedBy=timers.target

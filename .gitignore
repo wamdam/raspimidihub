@@ -50,6 +50,8 @@ node_modules/
 # Environment
 .env
 .env.*
+# ...but keep the committed template for the social-media tool
+!marketing/socialmedia/.env.example
 
 # Playwright MCP
 .playwright-mcp/
