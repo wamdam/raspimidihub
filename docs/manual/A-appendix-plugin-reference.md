@@ -325,6 +325,56 @@ and Pitch Bend pass through unchanged.
 
 ![Euclidean device-detail panel.](../screenshots/30-plugin-euclidean-config.png){width=35%}
 
+## FluidSynth GM
+
+Software General MIDI synthesizer.  Spawns a `fluidsynth` process with
+ALSA audio output and forwards every incoming MIDI event to it — making
+the Raspberry Pi a self-contained instrument with no external hardware.
+
+**Requirements.**  Install once on the Pi (not part of the base image):
+
+```
+sudo apt install fluidsynth fluid-soundfont-gm
+```
+
+`fluidsynth` provides the synthesis engine; `fluid-soundfont-gm`
+installs the FluidR3\_GM soundfont at
+`/usr/share/sounds/sf2/FluidR3_GM.sf2`, which the plugin loads
+automatically.  If the binary or the soundfont is absent the plugin
+logs a warning and retries every 30 seconds — no action needed after
+installation.
+
+**Usage.** Add the plugin from **Add → Plugins**, then wire any MIDI
+source (keyboard, Tracker, Arpeggiator, …) to **FluidSynth GM IN** in
+the routing matrix.  Audio comes out of whichever output you selected
+in the panel.
+
+| Group | Parameter | Type | Range | Default |
+|-------|-----------|------|-------|---------|
+| Audio | **Audio Output** | Radio | Default / HDMI / Headphone Jack | Default |
+| Audio | **Gain** | Wheel | 0--100 % | 50 % |
+
+**Audio Output** choices:
+
+- **Default** — let ALSA pick the system default output.
+- **HDMI** — scans `/proc/asound/cards` for `vc4hdmi` / `hdmi` and
+  uses the first match (`plughw:N,0`); falls back to `plughw:0,0`.
+- **Headphone Jack** — scans for `Headphones` / `bcm2835` and uses
+  the first match; falls back to `plughw:1,0`.
+
+Changing **Audio Output** restarts the FluidSynth process.  A short
+gap in audio (< 1 s) is normal.
+
+**Gain** maps 0–100 % to FluidSynth's internal 0.0–5.0 amplifier
+range and takes effect in real time (no restart).  The default 50 %
+corresponds to FluidSynth gain 2.5 — a safe starting point that avoids
+clipping on Pi HDMI.  Bind CC 7 (volume) via the long-press popup to
+control gain from a physical controller.
+
+**Input.** Note On/Off, CC, Pitch Bend, Program Change, Aftertouch.
+**Output.** None — pure audio sink; no MIDI is emitted on the OUT port.
+**Clock.** None.
+
 ## Hold
 
 Latches incoming notes so they keep sounding after release.
