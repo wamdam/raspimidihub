@@ -351,25 +351,33 @@ in the panel.
 
 | Group | Parameter | Type | Range | Default |
 |-------|-----------|------|-------|---------|
-| Audio | **Audio Output** | Radio | Default / HDMI / Headphone Jack | Default |
+| Audio | **Audio Output** | Radio | detected playback cards | Default |
 | Audio | **Gain** | Wheel | 0--100 % | 50 % |
+| Instrument | **Channel** | ChannelSelect | 1--16 | 1 |
+| Instrument | **GM Program** | Wheel | 0--127 (named) | 0 (Acoustic Grand Piano) |
+| Soundfont | **Soundfont** | Radio | detected .sf2 files | first found |
 
-**Audio Output** choices:
+**Audio Output** is populated at startup by scanning the system's ALSA
+playback cards (`aplay -l`).  On a Pi 4 you will typically see
+**Default**, **bcm2835 Headphones** (3.5 mm jack), **vc4-hdmi-0**, and
+**vc4-hdmi-1** — pick the card connected to your speakers.  Changing
+this param restarts FluidSynth; a brief gap in audio (< 1 s) is normal.
 
-- **Default** — let ALSA pick the system default output.
-- **HDMI** — scans `/proc/asound/cards` for `vc4hdmi` / `hdmi` and
-  uses the first match (`plughw:N,0`); falls back to `plughw:0,0`.
-- **Headphone Jack** — scans for `Headphones` / `bcm2835` and uses
-  the first match; falls back to `plughw:1,0`.
+**Gain** maps 0–100 % to FluidSynth's internal 0.0–5.0 amplifier range
+and takes effect in real time.  The default 50 % corresponds to
+FluidSynth gain 2.5.  Long-press to bind CC 7 for live volume control.
 
-Changing **Audio Output** restarts the FluidSynth process.  A short
-gap in audio (< 1 s) is normal.
+**Channel** selects which MIDI channel the GM Program change is sent on.
+Set this to match the channel your keyboard or sequencer sends on.
 
-**Gain** maps 0–100 % to FluidSynth's internal 0.0–5.0 amplifier
-range and takes effect in real time (no restart).  The default 50 %
-corresponds to FluidSynth gain 2.5 — a safe starting point that avoids
-clipping on Pi HDMI.  Bind CC 7 (volume) via the long-press popup to
-control gain from a physical controller.
+**GM Program** scrolls through all 128 General MIDI instrument names.
+The selection is sent to FluidSynth immediately when changed, so you
+can audition instruments live.  Program 0 = Acoustic Grand Piano.
+Long-press to bind a CC for remote program switching.
+
+**Soundfont** lists every `.sf2` file found at startup under
+`/usr/share/sounds/sf2/` and `/usr/share/soundfonts/`.  Switching
+soundfonts restarts FluidSynth.
 
 **Input.** Note On/Off, CC, Pitch Bend, Program Change, Aftertouch.
 **Output.** None — pure audio sink; no MIDI is emitted on the OUT port.
