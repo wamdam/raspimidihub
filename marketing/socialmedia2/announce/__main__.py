@@ -35,13 +35,28 @@ def run_source(name, *, do_post, force, state, llm, publishers) -> int:
     allowed = config.SOURCE_TARGETS.get(name)
     pubs = publishers if allowed is None else [p for p in publishers if p.name in allowed]
 
-    items = src.latest() if force else src.find_new(state)
+    # One source's fetch/render blowing up (e.g. YouTube's RSS endpoint
+    # intermittently 404ing — a known YouTube-side issue) must never abort a
+    # multi-source run. Isolate the failure here, report it, and let the other
+    # sources proceed; this source retries on the next tick.
+    try:
+        items = src.latest() if force else src.find_new(state)
+    except Exception as e:  # noqa: BLE001 — deliberately broad: keep the tick alive
+        print(f"⚠️  [{name}] fetch failed: {e.__class__.__name__}: {e} "
+              f"— skipping this source, will retry next run.")
+        return 1
     if not items:
         print(f"[{name}] nothing to announce.")
         return 0
     rc = 0
     for item in items:
-        post = src.render(item, llm)
+        try:
+            post = src.render(item, llm)
+        except Exception as e:  # noqa: BLE001 — one bad item must not skip the rest
+            print(f"⚠️  [{name}] render failed for one item: "
+                  f"{e.__class__.__name__}: {e} — skipping it.")
+            rc = 1
+            continue
         print("=" * 64)
         print(f"[{name}] {post.dedupe_key}"
               + (f"  (+image {len(post.media_bytes)}B)" if post.media_bytes else ""))
