@@ -841,16 +841,11 @@ class NetworkMidiManager:
         if not self.availability()["available"]:
             log.info("network-midi: zeroconf not installed, feature off")
             return
-        # Direct-cable story: ensure eth0 self-assigns a 169.254.x.x when
-        # no DHCP answers, so two hubs on a back-to-back cable find each
-        # other over mDNS. Runs on every bring-up — boot-restore of an
-        # already-enabled state included, not just the set_enabled()
-        # toggle (blocking nmcli/file work, marshalled off the loop).
-        from .wifi import ensure_eth_link_local
-        if not await asyncio.to_thread(ensure_eth_link_local):
-            log.warning("network-midi: eth0 IPv4 link-local fallback not "
-                        "set; a direct hub-to-hub cable may not get an "
-                        "address")
+        # Direct-cable story: eth0's 169.254.x link-local is kept present
+        # at all times by NetworkManager (ipv4.link-local=3, set up at
+        # boot in __main__ via wifi.ensure_eth0_nm_link_local), so two
+        # hubs on a back-to-back cable can always find each other over
+        # mDNS. Nothing to assert here anymore.
         from zeroconf import IPVersion
         from zeroconf.asyncio import AsyncServiceBrowser, AsyncZeroconf
 
@@ -1045,15 +1040,11 @@ class NetworkMidiManager:
             prev = set(await self._local_addresses())
         except Exception:
             prev = set()
-        from .wifi import ensure_eth_link_local
         while self._started:
             await asyncio.sleep(LINK_WATCH_INTERVAL)
-            # Re-assert the eth0 link-local address: NetworkManager can
-            # flush it on a DHCP retry or carrier flap, and a direct
-            # hub-to-hub cable has nothing else to fall back on. Cheap and
-            # idempotent; if it had vanished, re-adding it makes the next
-            # _check_links see the change and re-bind mDNS.
-            await asyncio.to_thread(ensure_eth_link_local)
+            # NetworkManager keeps eth0's link-local pinned now (no need to
+            # re-assert it here); we still poll for the address set changing
+            # — an eth0 cabled in after start — and re-bind mDNS when it does.
             prev = await self._check_links(prev)
 
     async def _check_links(self, prev: set[str]) -> set[str]:

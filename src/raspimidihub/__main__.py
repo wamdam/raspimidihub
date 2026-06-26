@@ -17,7 +17,6 @@ from .led import LedController
 from .midi_engine import MidiEngine
 from .plugin_host import PluginHost
 from .runtime.loops import (
-    link_local_maintainer,
     loop_lag_meter,
     pending_param_flusher,
     rate_meter,
@@ -342,21 +341,32 @@ async def async_main() -> None:
         # Start web server
         await server.start()
 
-        # One-time migration: drop a leftover NM `link-local=enabled` on
-        # eth0 from pre-5.0.3 units (we now assign the link-local directly
-        # with `ip`). Idempotent; no-op on clean profiles.
+        # eth0 always-on IPv4 link-local, NetworkManager-managed
+        # (ipv4.link-local=3 + infinite dhcp-timeout). Replaces the old
+        # `ip addr` re-assert loop that fought NM's DHCP (eth0-unusable-on-
+        # DHCP bug). Idempotent: only writes the keyfile when the profile
+        # needs it, and also migrates the stale string `link-local=enabled`
+        # that older builds wrote (NM rejects it as non-integer).
         try:
-            from .wifi import cleanup_eth_link_local_nm_leftover
+            from .wifi import ensure_eth0_nm_link_local
             await asyncio.get_event_loop().run_in_executor(
-                None, cleanup_eth_link_local_nm_leftover)
+                None, ensure_eth0_nm_link_local)
         except Exception:
-            log.warning("eth0 link-local NM cleanup skipped", exc_info=True)
+            log.warning("eth0 link-local NM setup skipped", exc_info=True)
 
-        # Start WiFi AP if configured
+        # Start WiFi in the saved mode. The persisted preference is
+        # `wifi_mode_pref` (ap_only / wifi_for_updates / wifi_always) —
+        # the same key the apply-mode endpoint, update_flow and the
+        # Settings UI use. Only `wifi_always` boots into client mode;
+        # `wifi_for_updates` and `ap_only` come up as the AP (the
+        # for-updates mode joins home WiFi only transiently, on demand).
+        # (Until 5.1.x this read a legacy `wifi["mode"]` key that the UI
+        # never wrote, so "WiFi always" silently reverted to AP on every
+        # reboot — issue #6.)
         wifi_cfg = config.wifi
-        if wifi_cfg.get("mode") == "client" and wifi_cfg.get("client_ssid"):
-            log.info("WiFi: starting client mode")
-            asyncio.get_event_loop()
+        if wifi_cfg.get("wifi_mode_pref") == "wifi_always" \
+                and wifi_cfg.get("client_ssid"):
+            log.info("WiFi: starting client mode (wifi_mode_pref=wifi_always)")
             await wifi.start_client_with_fallback(
                 wifi_cfg["client_ssid"], wifi_cfg.get("client_password", ""),
                 wifi_cfg.get("ap_ssid", ""), wifi_cfg.get("ap_password", "midihub1"),
@@ -397,12 +407,6 @@ async def async_main() -> None:
 
         # WiFi client mode watchdog — fall back to AP if connection lost
         asyncio.ensure_future(wifi_watchdog(wifi, config, server))
-
-        # Keep eth0's link-local present regardless of the Network MIDI
-        # toggle, so a direct hub-to-hub cable always has its 169.254.x
-        # address and discovery works the moment Network MIDI is enabled
-        # on both ends (no longer gated on the feature being on).
-        asyncio.ensure_future(link_local_maintainer())
 
         # MIDI rate meter — snapshot and broadcast every second
         asyncio.ensure_future(rate_meter(engine, server))

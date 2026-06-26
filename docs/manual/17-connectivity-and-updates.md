@@ -178,19 +178,19 @@ millisecond.
 
 ### The direct cable, and life without mDNS
 
-A direct Ethernet cable between two hubs needs no router: the hub
-puts a fixed IPv4 link-local address (`169.254.x.y`, derived from
-the hub's own MAC so two hubs never collide) on `eth0`, and
-discovery rides on that. This happens **regardless of the Network
-MIDI toggle** -- the address is maintained from boot whether or
-not the feature is on, so a cabled hub always carries it and
-enabling Network MIDI on both ends just works (you no longer have
-to turn the feature on for the link-local to appear). The address
-is added directly and *additively* -- it sits alongside any DHCP
-or static address the interface already has, so it is present in
-every mode and does not depend on a DHCP server answering. It is
-re-applied on each boot and re-asserted every few seconds, so it
-returns within seconds if anything clears it.
+A direct Ethernet cable between two hubs needs no router: each hub
+carries an IPv4 link-local address (`169.254.x.y`) on `eth0`, and
+discovery rides on that. NetworkManager keeps the link-local
+present **at all times and in every mode** -- it sits alongside a
+DHCP lease or a static address, and on a bare cable with no DHCP
+server it is the only address `eth0` carries. This happens
+**regardless of the Network MIDI toggle**, so a cabled hub always
+has it and enabling Network MIDI on both ends just works. Because
+NetworkManager owns the link-local, it coexists with DHCP cleanly:
+a hub set to DHCP gets its normal lease *and* the link-local, and a
+hub on a server-less cable keeps the link-local indefinitely (the
+hub never stops looking for a DHCP server, so plugging into a real
+network later picks up a lease automatically).
 
 On networks that swallow multicast (routed LANs, some managed
 switches), add the other hub's IP or hostname under **Manual

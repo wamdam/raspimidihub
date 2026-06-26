@@ -877,108 +877,141 @@ class TestInterfaceAddresses:
         assert info["up"] is False
 
 
-class TestEnsureLinkLocal:
-    """The eth0 link-local address is derived deterministically from the
-    MAC (so two hubs differ) and asserted directly with `ip addr add`,
-    additively — no NetworkManager, no filesystem write."""
+class TestWithIpv4LinkLocal:
+    """`_with_ipv4_link_local` injects the NM-native always-on link-local
+    keys into an .nmconnection's [ipv4] section: link-local=3 always, plus
+    dhcp-timeout=infinity for method=auto."""
 
-    def test_derive_is_deterministic_from_mac(self, monkeypatch):
-        class FakePath:
-            def __init__(self, *a):
-                pass
+    def test_auto_gets_link_local_and_infinite_timeout(self):
+        out = wifi._with_ipv4_link_local(
+            "[connection]\nid=eth0\ninterface-name=eth0\n\n"
+            "[ipv4]\nmethod=auto\n\n[ipv6]\nmethod=disabled\n")
+        assert "link-local=3" in out
+        assert "dhcp-timeout=2147483647" in out
+        assert "method=auto" in out
 
-            def read_text(self):
-                return "b8:27:eb:1f:26:09\n"
-        monkeypatch.setattr(wifi, "Path", FakePath)
-        # 0x26 -> 38, 38 % 254 + 1 = 39 ; 0x09 -> 9
-        assert wifi._derive_link_local("eth0") == "169.254.39.9"
+    def test_manual_gets_link_local_no_timeout(self):
+        out = wifi._with_ipv4_link_local(
+            "[connection]\ninterface-name=eth0\n\n[ipv4]\nmethod=manual\n"
+            "address1=10.1.1.9/24\ngateway=10.1.1.1\n")
+        assert "link-local=3" in out
+        assert "dhcp-timeout" not in out  # only for DHCP
+        # static config preserved
+        assert "address1=10.1.1.9/24" in out
+        assert "gateway=10.1.1.1" in out
 
-    def test_derive_two_macs_differ(self, monkeypatch):
-        macs = iter(["b8:27:eb:1f:26:09\n", "dc:a6:32:aa:10:42\n"])
+    def test_strips_stale_string_form(self):
+        """Older builds wrote `link-local=enabled` (a string NM rejects)."""
+        out = wifi._with_ipv4_link_local(
+            "[connection]\ninterface-name=eth0\n\n[ipv4]\nmethod=auto\n"
+            "link-local=enabled\n")
+        assert "link-local=enabled" not in out
+        assert "link-local=3" in out
+        assert out.count("link-local=") == 1
 
-        class FakePath:
-            def __init__(self, *a):
-                pass
+    def test_idempotent(self):
+        src = ("[connection]\ninterface-name=eth0\n\n[ipv4]\nmethod=auto\n\n"
+               "[ipv6]\nmethod=disabled\n")
+        once = wifi._with_ipv4_link_local(src)
+        twice = wifi._with_ipv4_link_local(once)
+        assert once == twice
+        assert once.count("link-local=") == 1
+        assert once.count("dhcp-timeout=") == 1
 
-            def read_text(self):
-                return next(macs)
-        monkeypatch.setattr(wifi, "Path", FakePath)
-        a = wifi._derive_link_local("eth0")
-        b = wifi._derive_link_local("eth0")
-        assert a != b
+    def test_leaves_other_sections_untouched(self):
+        out = wifi._with_ipv4_link_local(
+            "[connection]\nid=eth0\ninterface-name=eth0\n\n"
+            "[ipv4]\nmethod=auto\n\n[ipv6]\nmethod=disabled\n")
+        assert "[ipv6]\nmethod=disabled" in out
+        assert "id=eth0" in out
 
-    def test_issues_ip_addr_add_scope_link(self, monkeypatch):
-        monkeypatch.setattr(wifi, "_derive_link_local", lambda i: "169.254.39.9")
+
+class TestEnsureEth0NmLinkLocal:
+    """`ensure_eth0_nm_link_local` makes NM keep an always-on link-local
+    on eth0 — creating/updating the keyfile only when needed."""
+
+    def _stub_run(self, monkeypatch):
         calls = []
+        monkeypatch.setattr(wifi, "_run", lambda cmd, *a, **k: calls.append(cmd)
+                            or SimpleNamespace(returncode=0, stdout="", stderr=""))
+        return calls
 
-        def run(cmd, *a, **k):
-            calls.append(cmd)
-            # `ip addr show` reports the address absent -> add proceeds.
-            return SimpleNamespace(returncode=0, stderr="", stdout="")
-        monkeypatch.setattr(subprocess, "run", run)
-        assert wifi.ensure_eth_link_local("eth0") is True
-        # Checks presence first, then issues the additive scope-link add.
-        assert calls == [
-            ["ip", "-4", "addr", "show", "dev", "eth0"],
-            ["ip", "addr", "add", "169.254.39.9/16",
-             "dev", "eth0", "scope", "link"],
-        ]
+    def test_updates_existing_profile(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(wifi, "NM_CONN_DIR", tmp_path)
+        calls = self._stub_run(monkeypatch)
+        f = tmp_path / "eth0.nmconnection"
+        f.write_text("[connection]\nid=eth0\ninterface-name=eth0\n\n"
+                     "[ipv4]\nmethod=auto\n")
+        assert wifi.ensure_eth0_nm_link_local("eth0") is True
+        body = f.read_text()
+        assert "link-local=3" in body
+        assert "dhcp-timeout=2147483647" in body
+        assert ["nmcli", "connection", "reload"] in calls
 
-    def test_skips_add_when_already_present(self, monkeypatch):
-        """If the address is already on the interface, never re-run
-        `ip addr add` — re-poking NM is what flushed the lease."""
-        monkeypatch.setattr(wifi, "_derive_link_local", lambda i: "169.254.39.9")
-        calls = []
+    def test_noop_when_already_correct(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(wifi, "NM_CONN_DIR", tmp_path)
+        calls = self._stub_run(monkeypatch)
+        f = tmp_path / "eth0.nmconnection"
+        # Pre-write the canonical form so nothing changes.
+        f.write_text(wifi._with_ipv4_link_local(
+            "[connection]\nid=eth0\ninterface-name=eth0\n\n[ipv4]\nmethod=auto\n"))
+        before = f.read_text()
+        assert wifi.ensure_eth0_nm_link_local("eth0") is True
+        assert f.read_text() == before          # no rewrite
+        assert calls == []                       # no NM prod, no remount
 
-        def run(cmd, *a, **k):
-            calls.append(cmd)
-            return SimpleNamespace(
-                returncode=0, stderr="",
-                stdout="    inet 169.254.39.9/16 scope link eth0\n")
-        monkeypatch.setattr(subprocess, "run", run)
-        assert wifi.ensure_eth_link_local("eth0") is True
-        assert calls == [["ip", "-4", "addr", "show", "dev", "eth0"]]
+    def test_strips_stale_string_form(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(wifi, "NM_CONN_DIR", tmp_path)
+        self._stub_run(monkeypatch)
+        f = tmp_path / "eth0.nmconnection"
+        f.write_text("[connection]\ninterface-name=eth0\n\n"
+                     "[ipv4]\nmethod=manual\naddress1=10.1.1.9/24\n"
+                     "link-local=enabled\n")
+        assert wifi.ensure_eth0_nm_link_local("eth0") is True
+        body = f.read_text()
+        assert "link-local=enabled" not in body
+        assert "link-local=3" in body
+        assert "address1=10.1.1.9/24" in body   # static preserved
 
-    def test_idempotent_old_iproute2_file_exists(self, monkeypatch):
-        monkeypatch.setattr(wifi, "_derive_link_local", lambda i: "169.254.39.9")
+    def test_creates_profile_when_missing(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(wifi, "NM_CONN_DIR", tmp_path)
+        self._stub_run(monkeypatch)
+        assert wifi.ensure_eth0_nm_link_local("eth0") is True
+        f = tmp_path / "eth0.nmconnection"
+        assert f.exists()
+        body = f.read_text()
+        assert "interface-name=eth0" in body
+        assert "method=auto" in body
+        assert "link-local=3" in body
+        assert "dhcp-timeout=2147483647" in body
 
-        def run(cmd, *a, **k):
-            if cmd[:2] == ["ip", "-4"]:
-                return SimpleNamespace(returncode=0, stderr="", stdout="")
-            return SimpleNamespace(
-                returncode=2, stderr="RTNETLINK answers: File exists", stdout="")
-        monkeypatch.setattr(subprocess, "run", run)
-        assert wifi.ensure_eth_link_local("eth0") is True
 
-    def test_idempotent_new_iproute2_already_assigned(self, monkeypatch):
-        """Bookworm/Trixie iproute2 reports the duplicate via extack as
-        'Address already assigned', not 'File exists'."""
-        monkeypatch.setattr(wifi, "_derive_link_local", lambda i: "169.254.39.9")
+class TestConfigureInterfaceLinkLocal:
+    """configure_interface writes the always-on link-local keys for both
+    DHCP and static eth0 configs."""
 
-        def run(cmd, *a, **k):
-            if cmd[:2] == ["ip", "-4"]:
-                return SimpleNamespace(returncode=0, stderr="", stdout="")
-            return SimpleNamespace(
-                returncode=2, stderr="Error: ipv4: Address already assigned.",
-                stdout="")
-        monkeypatch.setattr(subprocess, "run", run)
-        assert wifi.ensure_eth_link_local("eth0") is True
+    def _stub(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(wifi, "NM_CONN_DIR", tmp_path)
+        monkeypatch.setattr(wifi, "_run", lambda *a, **k: SimpleNamespace(
+            returncode=0, stdout="", stderr=""))
 
-    def test_reports_real_failure(self, monkeypatch):
-        monkeypatch.setattr(wifi, "_derive_link_local", lambda i: "169.254.39.9")
+    def test_auto_writes_link_local_and_timeout(self, monkeypatch, tmp_path):
+        self._stub(monkeypatch, tmp_path)
+        assert wifi.configure_interface("eth0", "auto") is True
+        body = (tmp_path / "eth0.nmconnection").read_text()
+        assert "method=auto" in body
+        assert "link-local=3" in body
+        assert "dhcp-timeout=2147483647" in body
 
-        def run(cmd, *a, **k):
-            if cmd[:2] == ["ip", "-4"]:
-                return SimpleNamespace(returncode=0, stderr="", stdout="")
-            return SimpleNamespace(
-                returncode=1, stderr="RTNETLINK answers: Operation not permitted",
-                stdout="")
-        monkeypatch.setattr(subprocess, "run", run)
-        assert wifi.ensure_eth_link_local("eth0") is False
-
-    def test_false_when_mac_unreadable(self, monkeypatch):
-        monkeypatch.setattr(wifi, "_derive_link_local", lambda i: None)
-        assert wifi.ensure_eth_link_local("eth0") is False
+    def test_manual_writes_link_local_no_timeout(self, monkeypatch, tmp_path):
+        self._stub(monkeypatch, tmp_path)
+        assert wifi.configure_interface(
+            "eth0", "manual", address="10.1.1.2", gateway="10.1.1.1") is True
+        body = (tmp_path / "eth0.nmconnection").read_text()
+        assert "method=manual" in body
+        assert "address1=10.1.1.2/24" in body
+        assert "link-local=3" in body
+        assert "dhcp-timeout" not in body
 
 
 class TestApBandCountry:
@@ -1051,26 +1084,3 @@ class TestApBandCountry:
         assert "hw_mode=a" not in conf
 
 
-class TestNmLeftoverCleanup:
-    def test_strips_link_local_enabled(self, monkeypatch, tmp_path):
-        monkeypatch.setattr(wifi, "NM_CONN_DIR", tmp_path)
-        monkeypatch.setattr(wifi, "_run", lambda *a, **k: SimpleNamespace(
-            returncode=0, stdout="", stderr=""))
-        f = tmp_path / "eth0.nmconnection"
-        f.write_text("[connection]\nid=eth0\ninterface-name=eth0\n"
-                     "[ipv4]\nmethod=manual\naddress1=10.1.1.9/24\n"
-                     "link-local=enabled\n")
-        assert wifi.cleanup_eth_link_local_nm_leftover("eth0") is True
-        assert "link-local=enabled" not in f.read_text()
-        assert "address1=10.1.1.9/24" in f.read_text()  # static preserved
-
-    def test_noop_when_clean(self, monkeypatch, tmp_path):
-        monkeypatch.setattr(wifi, "NM_CONN_DIR", tmp_path)
-        reloaded = []
-        monkeypatch.setattr(wifi, "_run",
-                            lambda cmd, *a, **k: reloaded.append(cmd) or SimpleNamespace(
-                                returncode=0, stdout="", stderr=""))
-        f = tmp_path / "eth0.nmconnection"
-        f.write_text("[connection]\ninterface-name=eth0\n[ipv4]\nmethod=manual\n")
-        assert wifi.cleanup_eth_link_local_nm_leftover("eth0") is True
-        assert reloaded == []  # no NM reload when nothing changed

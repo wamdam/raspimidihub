@@ -105,36 +105,6 @@ async def sse_heartbeat(server, interval: float = 30.0) -> None:
                 pass
 
 
-async def link_local_maintainer(interval: float = 10.0,
-                                iface: str = "eth0") -> None:
-    """Keep `iface`'s IPv4 link-local (169.254.x.y) present at all times,
-    independent of the Network MIDI toggle.
-
-    The link-local is what a direct hub-to-hub Ethernet cable relies on
-    (no DHCP server, no switch). Network MIDI also asserts it on start,
-    but only while enabled -- so a cabled hub with Network MIDI off had
-    no link-local, and the address vanished whenever the feature was
-    turned off. Asserting it here, always, means a plugged cable always
-    carries the address and Network MIDI works the moment both ends are
-    enabled.
-
-    ensure_eth_link_local is check-first and pure `ip`, so this is a
-    no-op when the address is already present -- it never prods
-    NetworkManager unless the address actually went missing. Skips
-    silently when the interface is absent (an eth0-less Pi) so it never
-    log-spams."""
-    from pathlib import Path
-
-    from ..wifi import ensure_eth_link_local
-    while True:
-        try:
-            if Path(f"/sys/class/net/{iface}").exists():
-                await asyncio.to_thread(ensure_eth_link_local, iface)
-        except Exception:
-            log.exception("link-local maintainer error")
-        await asyncio.sleep(interval)
-
-
 async def watchdog_ping(interval: float, notify_fn) -> None:
     """Periodically tell systemd we're alive. `notify_fn` is the
     sd_notify wrapper from __main__."""

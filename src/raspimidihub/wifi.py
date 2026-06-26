@@ -897,105 +897,133 @@ def get_all_interfaces() -> list[dict]:
     return interfaces
 
 
-def _derive_link_local(iface: str) -> str | None:
-    """A deterministic 169.254.x.y for this host's `iface`, derived from
-    its MAC so two hubs on a direct cable land on distinct addresses in
-    the same /16. Returns None if the MAC can't be read.
+# NetworkManager keyfile values for eth0's always-on IPv4 link-local.
+# `ipv4.link-local` is an INTEGER enum in the keyfile: 3 == "enabled"
+# (always assign a 169.254.x.y address in addition to DHCP/static). The
+# string form `link-local=enabled` is silently rejected by this NM as
+# non-integer — older builds wrote that, which is why an NM-managed
+# link-local never took and we fell back to an `ip addr` loop. With a DHCP
+# server present NM hands out the lease AND the link-local; with none it
+# keeps just the link-local. (Verified on hardware.)
+NM_LINK_LOCAL_ENABLED = "3"
+# `ipv4.dhcp-timeout` MAXINT32 == infinity. On a server-less direct cable
+# DHCP never succeeds; the default 45 s timeout would mark the connection
+# failed and tear the link-local down with it (measured: the address
+# vanished ~2.5 min in). Infinity keeps NM retrying without ever failing,
+# so the link-local stays pinned indefinitely — and a DHCP server appearing
+# later is still leased instantly.
+NM_DHCP_TIMEOUT_INFINITY = "2147483647"
 
-    RFC 3927 reserves 169.254.0.0/24 and 169.254.255.0/24, so the third
-    octet is kept in 1..254."""
+
+def _with_ipv4_link_local(content: str) -> str:
+    """Return `content` (an .nmconnection) with its [ipv4] section carrying
+    `link-local=3`, plus `dhcp-timeout=infinity` when method=auto.
+
+    Idempotent in effect: existing `link-local` / `dhcp-timeout` lines and
+    the stale string form `link-local=enabled` are dropped and re-emitted
+    canonically right under the [ipv4] header. The declared `method` is
+    preserved untouched."""
+    lines = content.splitlines()
+    method = "auto"
+    in_ipv4 = False
+    for ln in lines:
+        s = ln.strip()
+        if s == "[ipv4]":
+            in_ipv4 = True
+            continue
+        if in_ipv4 and s.startswith("["):
+            in_ipv4 = False
+        if in_ipv4 and s.startswith("method="):
+            method = s.split("=", 1)[1].strip()
+    inject = [f"link-local={NM_LINK_LOCAL_ENABLED}"]
+    if method == "auto":
+        inject.append(f"dhcp-timeout={NM_DHCP_TIMEOUT_INFINITY}")
+    drop = {"link-local", "dhcp-timeout"}
+    out: list[str] = []
+    in_ipv4 = False
+    for ln in lines:
+        s = ln.strip()
+        if s == "[ipv4]":
+            in_ipv4 = True
+            out.append(ln)
+            out.extend(inject)
+            continue
+        if in_ipv4 and s.startswith("["):
+            in_ipv4 = False
+        if in_ipv4 and s.split("=", 1)[0].strip() in drop:
+            continue
+        out.append(ln)
+    return "\n".join(out) + "\n"
+
+
+def ensure_eth0_nm_link_local(iface: str = "eth0") -> bool:
+    """Make NetworkManager keep an always-on IPv4 link-local on `iface`.
+
+    Replaces the old `ip addr`-injected link-local (a background loop that
+    re-added 169.254.x.y every few seconds). That loop fought NM's DHCP:
+    adding a foreign address mid-negotiation prodded NM into reconciling
+    eth0 and dropping its lease — the "eth0 unusable on DHCP" bug. NM owns
+    the link-local now via `ipv4.link-local=3` (+ infinite dhcp-timeout),
+    so it coexists with DHCP instead of fighting it, keeps DNS working
+    (NM stays the manager), and stays pinned on a server-less direct cable.
+
+    Ensures `iface`'s connection profile carries those keys, creating a
+    default DHCP profile if none exists (NM's in-memory "Wired connection"
+    has no keyfile, so an otherwise-unconfigured eth0 would carry no
+    link-local). Idempotent — only writes (under a remount-rw window) when
+    the profile actually needs changing, so it never churns the read-only
+    rootfs on a boot where nothing changed. Writes the keyfile directly +
+    `nmcli connection reload` (never `nmcli con mod`, which fails EROFS on
+    this appliance even after a remount)."""
+    import uuid
+
     try:
-        mac = Path(f"/sys/class/net/{iface}/address").read_text().strip()
-        octets = [int(x, 16) for x in mac.split(":")]
-        if len(octets) < 6:
-            return None
-        return f"169.254.{(octets[4] % 254) + 1}.{octets[5]}"
-    except Exception:
-        return None
-
-
-def ensure_eth_link_local(iface: str = "eth0") -> bool:
-    """Put a deterministic IPv4 link-local address (169.254.x.y/16) on
-    `iface`, additively and unconditionally.
-
-    A direct hub-to-hub Ethernet cable has no DHCP server, and asking
-    NetworkManager to self-assign a link-local (`ipv4.link-local`) does
-    not survive here: with IPv6 disabled and `method=auto`, a failed
-    DHCP leaves no successful address family, so NM tears the whole
-    connection — link-local included — down. Instead we add the address
-    directly with `ip`: it is non-routable and coexists with whatever
-    DHCP or static address the interface already has, so it is safe to
-    assert in any mode, and it does not depend on NM's connection state.
-    Idempotent, and pure `ip` — no NetworkManager, no filesystem write
-    (so it is immune to the read-only-rootfs window). Re-asserted by the
-    link watcher in case NM flushes it on a DHCP retry."""
-    addr = _derive_link_local(iface)
-    if not addr:
-        log.warning("link-local: could not derive an address for %s", iface)
-        return False
-    try:
-        # Check-first, then add. Re-running `ip addr add` every few
-        # seconds on an NM-managed interface prods NetworkManager into
-        # reconciling eth0, which can briefly flush its DHCP/static
-        # address — observed as the hub "losing its IP". If the address
-        # is already present we must NOT touch it again. (The duplicate-
-        # add error also varies by iproute2 version: older kernels say
-        # "File exists", newer extack says "Address already assigned" —
-        # parsing either is fragile, so we check presence instead.)
-        present = _run(["ip", "-4", "addr", "show", "dev", iface],
-                       check=False, timeout=5)
-        if present.returncode == 0 and f"{addr}/" in (present.stdout or ""):
-            return True
-        r = _run(["ip", "addr", "add", f"{addr}/16", "dev", iface,
-                  "scope", "link"], check=False, timeout=5)
-        stderr = (r.stderr or "")
-        if r.returncode != 0 and "File exists" not in stderr \
-                and "already assigned" not in stderr.lower():
-            log.warning("link-local: `ip addr add %s` on %s failed: %s",
-                        addr, iface, stderr.strip())
-            return False
-        return True
-    except Exception:
-        log.exception("link-local: assigning %s on %s failed", addr, iface)
-        return False
-
-
-def cleanup_eth_link_local_nm_leftover(iface: str = "eth0") -> bool:
-    """One-time migration: strip a leftover `link-local=enabled` from
-    `iface`'s NetworkManager profile.
-
-    Releases up to 5.0.2 asked NM to self-assign an IPv4 link-local by
-    writing `link-local=enabled` into the [ipv4] section of the eth0
-    profile. 5.0.3 switched to assigning the address directly with `ip`
-    and stopped writing the key, but never removed it from already-
-    migrated units. The leftover makes NM put its own second link-local
-    on top of ours — harmless but confusing (and one more thing prodding
-    NM on eth0). Remove it.
-
-    Edits the keyfile directly under a remount-rw window and reloads NM
-    (never via `nmcli con mod`, which fails EROFS on this appliance even
-    after a remount). No-op, and no reload, when the key isn't present."""
-    try:
+        target = None
         for nm_file in NM_CONN_DIR.glob("*.nmconnection"):
             try:
-                content = nm_file.read_text()
+                if f"interface-name={iface}" in nm_file.read_text():
+                    target = nm_file
+                    break
             except OSError:
                 continue
-            if f"interface-name={iface}" not in content:
-                continue
-            if "link-local=enabled" not in content:
-                return True  # already clean
-            new_lines = [ln for ln in content.splitlines()
-                         if ln.strip() != "link-local=enabled"]
+
+        conn_name = iface
+        if target is not None:
+            content = target.read_text()
+            desired = _with_ipv4_link_local(content)
+            for line in desired.splitlines():
+                if line.startswith("id="):
+                    conn_name = line[3:]
+                    break
+            if desired == content:
+                return True  # already correct — no write, no NM prod
             with _rw_rootfs():
-                nm_file.write_text("\n".join(new_lines) + "\n")
-            _run(["nmcli", "connection", "reload"], check=False, timeout=10)
-            log.info("link-local: removed leftover link-local=enabled from %s",
-                     nm_file.name)
-            return True
+                target.write_text(desired)
+            log.info("link-local: updated NM profile %s with link-local=%s",
+                     target.name, NM_LINK_LOCAL_ENABLED)
+        else:
+            with _rw_rootfs():
+                new_file = NM_CONN_DIR / f"{conn_name}.nmconnection"
+                new_file.write_text(
+                    f"[connection]\nid={conn_name}\nuuid={uuid.uuid4()}\n"
+                    f"type=ethernet\ninterface-name={iface}\n\n"
+                    f"[ipv4]\nlink-local={NM_LINK_LOCAL_ENABLED}\n"
+                    f"dhcp-timeout={NM_DHCP_TIMEOUT_INFINITY}\nmethod=auto\n\n"
+                    f"[ipv6]\nmethod=disabled\n"
+                )
+                new_file.chmod(0o600)
+            log.info("link-local: created NM profile for %s with link-local=%s",
+                     iface, NM_LINK_LOCAL_ENABLED)
+
+        # Reload picks up the file; reapply pulls it onto the live device
+        # without a blocking `up` (which can hang for the whole DHCP window
+        # on a server-less cable). A cold boot activates eth0 normally.
+        _run(["nmcli", "connection", "reload"], check=False, timeout=10)
+        _run(["nmcli", "device", "reapply", iface], check=False, timeout=15)
+        return True
     except Exception:
-        log.exception("link-local: NM leftover cleanup failed")
-    return False
+        log.exception("link-local: ensuring NM link-local on %s failed", iface)
+        return False
 
 
 def configure_interface(iface: str, method: str, address: str = "",
@@ -1048,13 +1076,24 @@ def configure_interface(iface: str, method: str, address: str = "",
                         if gateway:
                             new_lines.append(f"gateway={gateway}")
                         new_lines.append("dns=8.8.8.8;8.8.4.4;")
+                    if method == "auto":
+                        # Infinite DHCP timeout: a server-less cable must
+                        # never fail the connection (which would drop the
+                        # link-local with it).
+                        new_lines.append(
+                            f"dhcp-timeout={NM_DHCP_TIMEOUT_INFINITY}")
+                    # Always-on NM-managed IPv4 link-local — coexists with
+                    # the lease/static and is the only path on a direct
+                    # hub-to-hub cable.
+                    new_lines.append(f"link-local={NM_LINK_LOCAL_ENABLED}")
                     new_lines.append(f"method={method}")
                     continue
                 elif in_ipv4:
                     if line.startswith("["):
                         in_ipv4 = False
                         new_lines.append(line)
-                    elif line.startswith(("address", "method", "dns", "gateway")):
+                    elif line.startswith(("address", "method", "dns", "gateway",
+                                          "link-local", "dhcp-timeout")):
                         continue
                     else:
                         new_lines.append(line)
