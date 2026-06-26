@@ -4,11 +4,14 @@ User-visible changes. Short tagged one-liners, no code or commit
 hashes. Tags: Added, Improved, Fix, Changed, Removed.
 
 
-Unreleased
+2026-06-27 — Version 5.1.5
 
 - Fix: **`eth0` stays usable on DHCP.** Setting `eth0` to DHCP could leave the hub with only a `169.254` link-local and no working network — the hub's own background "always-on link-local" was being added behind NetworkManager's back, which made NM drop the DHCP lease. The link-local is now managed by NetworkManager itself (`ipv4.link-local`), so it coexists with DHCP instead of fighting it: a DHCP hub gets its normal lease *and* a link-local, and DNS/internet work as expected. (Reported on the 5.1.x series; 5.0.1 was unaffected.)
 - Fix: **a server-less direct cable keeps its link-local indefinitely.** Two hubs cabled back-to-back with no DHCP server now hold their `169.254` address permanently (NetworkManager keeps retrying DHCP without ever tearing the link-local down), so hub-to-hub Network MIDI over a bare cable stays reliable.
 - Fix: **"WiFi always" now survives a reboot.** Selecting *WiFi always* and rebooting used to come back up as the Access Point. The boot path read a stale config key that the Settings page never wrote; it now reads the same `wifi_mode_pref` everything else uses, so the saved mode is restored on boot. `reset-wifi` also resets that key.
+
+
+2026-06-20 — Version 5.1.4
 
 - Fix: **the Bluetooth MIDI section no longer disappears when the radio comes up a moment after boot.** The hub used to check the Bluetooth radio only once at startup; on a Pi 3 B+ (whose Bluetooth firmware loads slightly later) that check could land before the radio finished powering on, hiding the Scan button for the whole session even though Bluetooth was actually fine. The radio is now re-checked each time you open the **Add** overlay, so the section reappears on its own once the radio is up — no reboot needed. (The check stays read-only while a device is connected; it never disturbs a live BLE link.)
 
