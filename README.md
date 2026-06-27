@@ -1,10 +1,10 @@
 # RaspiMIDIHub
 
-**Turn your Raspberry Pi into a plug-and-play USB MIDI hub with virtual instruments.**
+**Turn your Raspberry Pi into a plug-and-play USB MIDI hub with virtual instruments and audio output.**
 
 Plug in your keyboards, synths, drum machines, and controllers -- they appear in a routing matrix instantly. Connect any two with a tap, or flip on all-to-all routing for classic plug-and-play. No computer needed; everything is configured from your phone.
 
-With the built-in plugin system, you can add virtual instruments and effects (arpeggiator, LFO, chord generator, and more) that appear as MIDI devices in the routing matrix. Configure everything from your phone -- the Pi creates its own WiFi network with a captive portal.
+With the built-in plugin system, you can add virtual instruments and effects (arpeggiator, LFO, chord generator, software GM synthesizer, and more) that appear as MIDI devices in the routing matrix. The **FluidSynth GM** plugin renders MIDI directly to audio through HDMI or the headphone jack -- making the Pi a fully self-contained instrument with no external hardware required. Configure everything from your phone -- the Pi creates its own WiFi network with a captive portal.
 
 The Raspberry Pi runs on a **read-only filesystem**, so you can pull the power at any time without risk of SD card corruption.
 
@@ -59,7 +59,7 @@ See all screenshots in [docs/screenshots/](docs/screenshots/). The full **[User 
 
 ### Built-in Plugins
 
-15 routing-graph plugins -- add them under **Add → Plugin**. The Arpeggiator, Tracker, Euclidean and Cartesian live under **Add → Play** instead and are documented in the **Play Surfaces** section below.
+16 routing-graph plugins -- add them under **Add → Plugin**. The Arpeggiator, Tracker, Euclidean and Cartesian live under **Add → Play** instead and are documented in the **Play Surfaces** section below.
 
 | Plugin | Description |
 |--------|-------------|
@@ -67,6 +67,7 @@ See all screenshots in [docs/screenshots/](docs/screenshots/). The full **[User 
 | CC Smoother | Removes jitter from noisy knobs with configurable smoothing; dual scopes (in / out) |
 | Chord Generator | Input note triggers a chord (major, minor, 7th, custom intervals) with inversions |
 | Clock Divider | Emit one MIDI Clock for every N received (2..32) |
+| **FluidSynth GM** | Software GM synthesizer -- renders MIDI to audio via HDMI or the headphone jack; 128 GM programs, selectable soundfont, reverb toggle. Requires `sudo apt install fluidsynth fluid-soundfont-gm` |
 | Hold | Latch notes without a sustain pedal; chord-latch or per-note toggle; MIDI-Learn the release note |
 | Master Clock | Internal BPM clock with start/stop/continue, beat meter, bar counter |
 | MIDI Delay | Pre-scheduled echoes with feedback repeats and velocity decay; sync rate or free ms |

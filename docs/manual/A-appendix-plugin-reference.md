@@ -325,6 +325,64 @@ and Pitch Bend pass through unchanged.
 
 ![Euclidean device-detail panel.](../screenshots/30-plugin-euclidean-config.png){width=35%}
 
+## FluidSynth GM
+
+Software General MIDI synthesizer.  Spawns a `fluidsynth` process with
+ALSA audio output and forwards every incoming MIDI event to it — making
+the Raspberry Pi a self-contained instrument with no external hardware.
+
+**Requirements.**  Install once on the Pi (not part of the base image):
+
+```
+sudo apt install fluidsynth fluid-soundfont-gm
+```
+
+`fluidsynth` provides the synthesis engine; `fluid-soundfont-gm`
+installs the FluidR3\_GM soundfont at
+`/usr/share/sounds/sf2/FluidR3_GM.sf2`, which the plugin loads
+automatically.  If the binary or the soundfont is absent the plugin
+logs a warning and retries every 30 seconds — no action needed after
+installation.
+
+**Usage.** Add the plugin from **Add → Plugins**, then wire any MIDI
+source (keyboard, Tracker, Arpeggiator, …) to **FluidSynth GM IN** in
+the routing matrix.  Audio comes out of whichever output you selected
+in the panel.
+
+| Group | Parameter | Type | Range | Default |
+|-------|-----------|------|-------|---------|
+| Audio | **Audio Output** | Radio | detected playback cards | Default |
+| Audio | **Gain** | Wheel | 0--100 % | 50 % |
+| Instrument | **Channel** | ChannelSelect | 1--16 | 1 |
+| Instrument | **GM Program** | Wheel | 0--127 (named) | 0 (Acoustic Grand Piano) |
+| Soundfont | **Soundfont** | Radio | detected .sf2 files | first found |
+
+**Audio Output** is populated at startup by scanning the system's ALSA
+playback cards (`aplay -l`).  On a Pi 4 you will typically see
+**Default**, **bcm2835 Headphones** (3.5 mm jack), **vc4-hdmi-0**, and
+**vc4-hdmi-1** — pick the card connected to your speakers.  Changing
+this param restarts FluidSynth; a brief gap in audio (< 1 s) is normal.
+
+**Gain** maps 0–100 % to FluidSynth's internal 0.0–5.0 amplifier range
+and takes effect in real time.  The default 50 % corresponds to
+FluidSynth gain 2.5.  Long-press to bind CC 7 for live volume control.
+
+**Channel** selects which MIDI channel the GM Program change is sent on.
+Set this to match the channel your keyboard or sequencer sends on.
+
+**GM Program** scrolls through all 128 General MIDI instrument names.
+The selection is sent to FluidSynth immediately when changed, so you
+can audition instruments live.  Program 0 = Acoustic Grand Piano.
+Long-press to bind a CC for remote program switching.
+
+**Soundfont** lists every `.sf2` file found at startup under
+`/usr/share/sounds/sf2/` and `/usr/share/soundfonts/`.  Switching
+soundfonts restarts FluidSynth.
+
+**Input.** Note On/Off, CC, Pitch Bend, Program Change, Aftertouch.
+**Output.** None — pure audio sink; no MIDI is emitted on the OUT port.
+**Clock.** None.
+
 ## Hold
 
 Latches incoming notes so they keep sounding after release.
