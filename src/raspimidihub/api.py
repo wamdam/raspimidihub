@@ -303,6 +303,9 @@ a.btn:active{transform:scale(0.97)}
 <a class="btn" href="http://192.168.4.1/">Open routing matrix</a>
 <p class="foot">If this opens inside a sign-in window,<br>
 copy <code>http://192.168.4.1/</code> into your browser.</p>
+<p class="foot">From another device on this network, this hub is at<br>
+<code>http://__MDNS__.local/</code> &mdash; note it for next time.<br>
+(The old <code>raspimidihub.local</code> address no longer works.)</p>
 </body>
 </html>
 """
@@ -445,9 +448,12 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
 
     # OS probes that should trigger the captive flow → serve the tiny
     # landing with a link to the SPA. No JS/SSE here.
+    # Substitute the hub's actual mDNS name (raspimidihub-<id>) into the
+    # landing so users learn the new address on first connect.
+    _captive_html = _CAPTIVE_LANDING_HTML.replace("__MDNS__", socket.gethostname())
     for p in _CAPTIVE_LANDING_PATHS:
         server.route("GET", p)(_captive_handler(
-            p, _CAPTIVE_LANDING_HTML, 200, "html"))
+            p, _captive_html, 200, "html"))
     # Windows NCSI: keep the legacy success bodies so it stays out of
     # the captive flow entirely (it has no captive UI to land on).
     for p, body in _CAPTIVE_PASSTHROUGH.items():

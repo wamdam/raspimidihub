@@ -102,10 +102,10 @@ state (which is "none").
 Each hub advertises a **unique** mDNS name, `raspimidihub-<id>.local`,
 over multicast DNS -- `<id>` is the four-character hardware code shown
 in the title bar and used in the WiFi name (e.g. `raspimidihub-735C.local`).
-This guarantees two hubs on the same network never collide. A single
-hub also answers to the bare `raspimidihub.local` as a convenience; once
-a second hub appears, address each by its unique `raspimidihub-<id>.local`.
-Resolution requirements:
+This guarantees two hubs on the same network never collide. The bare
+`raspimidihub.local` no longer resolves -- always address a hub by its
+unique `raspimidihub-<id>.local` (the id is on its captive-portal page,
+title bar, and WiFi name). Resolution requirements:
 
 - **macOS, iOS** -- native, no setup.
 - **Linux** -- avahi-daemon must be running (default on most

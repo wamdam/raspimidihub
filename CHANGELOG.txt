@@ -6,6 +6,7 @@ hashes. Tags: Added, Improved, Fix, Changed, Removed.
 
 Unreleased
 
+- ⚠️ **WARNING — the address you type to reach a hub has changed.** Open `http://raspimidihub-<id>.local` now, where `<id>` is the four-character code shown in the hub's title bar and WiFi name (e.g. `http://raspimidihub-735C.local`). The old `raspimidihub.local` no longer works — **update any saved bookmark.** This is what lets two hubs share one network without clashing; the hub's IP address still works as before if `.local` isn't available on your device.
 - Improved: **UI actions and saves no longer interrupt live MIDI.** Things you do mid-set used to briefly stall the MIDI/clock; now they're imperceptible:
   - Save Config: ~400 ms freeze → ~6 ms (−98%)
   - Autosave (e.g. when patching a cable): ~300 ms → ~18 ms (−94%)
@@ -15,7 +16,7 @@ Unreleased
   - Trackers/arpeggiators now run on a dedicated CPU core for steadier timing
 - Improved: **Save Config confirms honestly** — it waits for the write to finish before reporting success, and tells you if a save fails.
 - Added: **per-core CPU usage in Settings → Sys Info**, each core labelled by role (loop / plugins / system); turns red near saturation.
-- Fix: **each hub has a unique network name** — `raspimidihub-<id>.local` (the code shown in the title bar / WiFi name), so hubs on one network no longer collide. A single hub still answers to `raspimidihub.local`.
+- Fix: **each hub has a unique network name** — `raspimidihub-<id>.local`, so hubs on one network no longer collide (see the address-change warning above).
 
 
 2026-06-27 — Version 5.1.5

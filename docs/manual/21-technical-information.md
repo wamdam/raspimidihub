@@ -133,7 +133,7 @@ PSU, or a plugin doing more work than expected in a callback.
 | AP default password | `midihub1` (change immediately) |
 | AP IP range | DHCP from the captive-portal subnet (typically `172.24.1.0/24`) |
 | AP gateway | `172.24.1.1` (typical) |
-| mDNS hostname | `raspimidihub-<id>.local` (unique per hub; `<id>` = title-bar/WiFi code). Single hub also answers `raspimidihub.local` |
+| mDNS hostname | `raspimidihub-<id>.local` (unique per hub; `<id>` = title-bar/WiFi code). Bare `raspimidihub.local` does not resolve |
 | HTTP server port | 80 |
 | HTTPS | Not used (LAN-only; trust model is the AP password) |
 | SSE endpoint | `/api/events` (long-lived `text/event-stream`) |
