@@ -78,7 +78,7 @@ recovery journal of RFC 6295 targets lossy open-internet paths;
 on a wired LAN the engine's panic / note-release machinery covers
 the residual risk). Discovery and advertising use the
 `python3-zeroconf` library alongside the avahi daemon the hub
-already runs for `raspimidihub.local`.
+already runs for `raspimidihub-<id>.local`.
 
 Chapter 17's *Network MIDI* section covers the user-facing side.
 

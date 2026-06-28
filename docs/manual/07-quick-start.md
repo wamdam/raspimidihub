@@ -25,7 +25,7 @@ On a phone, tablet, or laptop, open the WiFi settings, find the
 `RaspiMIDIHub-XXXX` SSID, and connect with the default password
 `midihub1`. The captive portal opens the configuration UI
 automatically on most modern operating systems; if it does not, point
-a browser at `http://raspimidihub.local/` or at the gateway IP shown
+a browser at `http://raspimidihub-<id>.local/` or at the gateway IP shown
 in the phone's WiFi-info screen.
 
 ::: warning

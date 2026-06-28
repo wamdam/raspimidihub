@@ -26,12 +26,11 @@ The following typographic conventions are used throughout:
 - **Keyboard shortcuts** are written with `+` between modifiers:
   `Shift + Space`, `Cmd + R`.
 - When a feature requires the Pi to be reachable over the network, the
-  URL is written as `http://raspimidihub.local/` for brevity, but the
-  **actual address is `http://raspimidihub-<id>.local/`**, where `<id>`
-  is the four-character code shown in the hub's title bar and WiFi name
-  (e.g. `735C`). Each hub's name is unique so several can share a
-  network. The bare `raspimidihub.local` does **not** resolve. Substitute
-  the hub's actual IP if mDNS is unavailable on your network.
+  URL is written as `http://raspimidihub-<id>.local/`, where `<id>` is
+  the four-character code shown in the hub's title bar and WiFi name
+  (e.g. `raspimidihub-735C.local`). Each hub's name is unique so several
+  can share a network. Substitute the hub's actual IP if mDNS is
+  unavailable on your network.
 
 The following admonitions are used:
 

@@ -13,7 +13,7 @@ SSID triggers the captive portal on most operating systems and the
 configuration UI opens automatically. If the captive portal does not
 fire, two manual entry points work:
 
-- `http://raspimidihub.local/` -- mDNS hostname. Works out of the
+- `http://raspimidihub-<id>.local/` -- mDNS hostname. Works out of the
   box on macOS, iOS, modern Android, and Linux distributions running
   avahi-daemon. Windows needs Bonjour to be installed.
 - The AP gateway IP shown in the phone's WiFi-info screen (for
@@ -55,7 +55,7 @@ bottom of the matrix (chapter 9.8 and chapter 15).
 The SPA uses real URL routing. Every tab has a path, the open
 device-detail panel is a path, and the browser back/forward buttons
 work as expected. Bookmarks survive reboots -- pointing a bookmark
-at `http://raspimidihub.local/settings` opens the UI directly on the
+at `http://raspimidihub-<id>.local/settings` opens the UI directly on the
 Settings page.
 
 ## The Dirty-State Asterisk

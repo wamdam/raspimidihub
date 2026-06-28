@@ -47,7 +47,7 @@ configured home network. Use this for fixed-installation rigs
 where the Pi is on the venue or home network all the time.
 
 In this mode, the Pi has no captive portal; reach the UI via
-`http://raspimidihub.local/` or the static / DHCP IP shown on the
+`http://raspimidihub-<id>.local/` or the static / DHCP IP shown on the
 home router.
 
 ## The Captive Portal
@@ -63,7 +63,7 @@ If the captive portal does not fire (some phones cache "this
 network has no internet" too aggressively; some MDM / carrier
 WiFi policies suppress the probe), use the manual entry URLs:
 
-- `http://raspimidihub.local/` -- the mDNS hostname.
+- `http://raspimidihub-<id>.local/` -- the mDNS hostname.
 - The AP gateway IP (shown in the phone's WiFi-info screen).
 
 ## Ethernet
@@ -102,10 +102,9 @@ state (which is "none").
 Each hub advertises a **unique** mDNS name, `raspimidihub-<id>.local`,
 over multicast DNS -- `<id>` is the four-character hardware code shown
 in the title bar and used in the WiFi name (e.g. `raspimidihub-735C.local`).
-This guarantees two hubs on the same network never collide. The bare
-`raspimidihub.local` no longer resolves -- always address a hub by its
-unique `raspimidihub-<id>.local` (the id is on its captive-portal page,
-title bar, and WiFi name). Resolution requirements:
+This guarantees two hubs on the same network never collide. Address a
+hub by its unique `raspimidihub-<id>.local` (the id is on its
+captive-portal page, title bar, and WiFi name). Resolution requirements:
 
 - **macOS, iOS** -- native, no setup.
 - **Linux** -- avahi-daemon must be running (default on most
@@ -214,7 +213,7 @@ session's participant list after 60 seconds.
 
 The transport is plain UDP on ports 5004 and up (one even/odd
 port pair per exported device), discovery is the same mDNS the
-hub already uses for `raspimidihub.local`. It needs the
+hub already uses for `raspimidihub-<id>.local`. It needs the
 `python3-zeroconf` package (a standard dependency of the deb);
 when missing, the Settings page says so instead of offering the
 toggle.
@@ -269,7 +268,7 @@ trigger the fallback.
 ## Console Recovery
 
 A console (USB keyboard + HDMI display, or SSH from another
-network with `ssh user@raspimidihub.local`) gives access to the
+network with `ssh user@raspimidihub-<id>.local`) gives access to the
 underlying Pi OS. The bootstrap image ships with **sshd enabled**
 so SSH works out of the box with the user and key/password set in
 the Pi Imager wizard -- this is also what makes a failed first

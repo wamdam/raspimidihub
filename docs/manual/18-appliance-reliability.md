@@ -34,7 +34,7 @@ For maintenance windows that need filesystem writes (manual
 package installs, custom tweaks):
 
 ```bash
-ssh user@raspimidihub.local
+ssh user@raspimidihub-<id>.local
 rw                # remount root read-write
 # … do the thing …
 ro                # remount root read-only
@@ -204,7 +204,7 @@ newer versions**, then **Install**.
 ### Uninstalling
 
 ```bash
-ssh user@raspimidihub.local
+ssh user@raspimidihub-<id>.local
 rw
 sudo apt purge raspimidihub raspimidihub-rosetup
 sudo reboot

@@ -25,20 +25,18 @@ warnings instead.
 - **What you see.** Connecting to the AP works, but the phone
   does not pop the UI.
 - **Try.** Open a browser and navigate manually:
-  - `http://raspimidihub.local/` (requires mDNS support; chapter
+  - `http://raspimidihub-<id>.local/` (requires mDNS support; chapter
     17.5).
   - The AP gateway IP shown in the phone's WiFi-info screen.
 - **Common cause.** Some phones aggressively cache "this network
   has no internet" and suppress the captive-portal probe.
   Toggling WiFi off-and-on on the phone usually clears it.
 
-### `raspimidihub.local` fails
+### `raspimidihub-<id>.local` doesn't resolve
 
-- **Most common cause now: wrong address.** The bare `raspimidihub.local`
-  no longer works. Use the hub's unique `raspimidihub-<id>.local`, where
-  `<id>` is the four-character code shown on its captive-portal page,
-  title bar, and WiFi name (e.g. `raspimidihub-735C.local`). Update old
-  bookmarks.
+- **Check the address.** Use the hub's unique `raspimidihub-<id>.local`,
+  where `<id>` is the four-character code shown on its captive-portal
+  page, title bar, and WiFi name (e.g. `raspimidihub-735C.local`).
 - **Common cause.** mDNS support on the client OS is missing or
   disabled. Windows needs Apple Bonjour installed; some Linux
   systems do not run avahi-daemon by default.

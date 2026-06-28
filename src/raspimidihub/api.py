@@ -289,23 +289,32 @@ body{margin:0;padding:24px;min-height:100vh;
      display:flex;flex-direction:column;align-items:center;justify-content:center;
      text-align:center}
 h1{font-size:1.6rem;font-weight:600;margin:0 0 8px}
-.tag{color:#9aa0aa;font-size:0.9rem;margin:0 0 28px}
-a.btn{display:inline-block;padding:14px 28px;border-radius:10px;
-      background:#e94560;color:#fff;text-decoration:none;font-weight:600;
-      font-size:1.05rem;box-shadow:0 6px 18px rgba(233,69,96,.35)}
-a.btn:active{transform:scale(0.97)}
-.foot{color:#6a6f78;font-size:0.78rem;margin-top:32px;line-height:1.4}
+.tag{color:#9aa0aa;font-size:0.9rem;margin:0 0 24px}
+.lead{font-size:1rem;margin:0 0 14px}
+.addr{display:flex;align-items:center;gap:8px;margin:8px 0;
+      background:#16213e;border-radius:10px;padding:10px 12px;max-width:100%}
+.addr code{font-size:1rem;color:#eaeaea;word-break:break-all}
+.copy{flex:none;border:0;border-radius:8px;background:#e94560;color:#fff;
+      font-size:1rem;padding:8px 12px;cursor:pointer}
+.copy:active{transform:scale(0.95)}
+.foot{color:#6a6f78;font-size:0.78rem;margin-top:24px;line-height:1.4}
 </style>
 </head>
 <body>
 <h1>RaspiMIDIHub</h1>
 <p class="tag">Connected to the access point.</p>
-<a class="btn" href="http://192.168.4.1/">Open routing matrix</a>
-<p class="foot">If this opens inside a sign-in window,<br>
-copy <code>http://192.168.4.1/</code> into your browser.</p>
-<p class="foot">From another device on this network, this hub is at<br>
-<code>http://__MDNS__.local/</code> &mdash; note it for next time.<br>
-(The old <code>raspimidihub.local</code> address no longer works.)</p>
+<p class="lead">Open one of these in your browser:</p>
+<div class="addr"><code id="a1">http://192.168.4.1/</code><button class="copy" onclick="cp('a1',this)">Copy</button></div>
+<div class="addr"><code id="a2">http://__MDNS__.local/</code><button class="copy" onclick="cp('a2',this)">Copy</button></div>
+<p class="foot">Paste an address into your browser's address bar.<br>
+The name works from any device on this network; the IP works if .local isn't supported.</p>
+<script>
+function cp(id,b){var el=document.getElementById(id),t=el.textContent.trim(),ok=false;
+try{var r=document.createRange();r.selectNodeContents(el);var s=getSelection();
+s.removeAllRanges();s.addRange(r);ok=document.execCommand('copy');s.removeAllRanges();}catch(e){}
+if(!ok&&navigator.clipboard){navigator.clipboard.writeText(t);ok=true;}
+b.textContent=ok?'Copied':'Copy';setTimeout(function(){b.textContent='Copy';},1200);}
+</script>
 </body>
 </html>
 """
