@@ -908,10 +908,14 @@ function SettingsSysInfo({ showToast, isUpgrading }) {
                     <div class="stat"><div class="label">CPU Temp</div><div class="value">${sys.cpu_temp_c != null ? sys.cpu_temp_c + '°C' : '?'}</div></div>
                     <div class="stat"><div class="label">Uptime</div><div class="value">${uptimeStr}</div></div>
                     ${sys.load1 != null && html`<div class="stat"><div class="label">Load (1m)</div><div class="value">${sys.load1}</div></div>`}
-                    ${sys.cpu_percent != null && html`<div class="stat" title="Process CPU as percent-of-one-core. 100% = the asyncio loop has saturated one core (the failure mode that causes lag); >100% means plugin worker threads are summing in. Updated every second.">
-                        <div class="label">CPU</div>
+                    ${sys.cpu_percent != null && html`<div class="stat" title="raspimidihub process CPU as percent-of-one-core, summed across its threads. Updated every second.">
+                        <div class="label">Process CPU</div>
                         <div class="value">${sys.cpu_percent}%</div>
                     </div>`}
+                    ${sys.cpu_cores && sys.cpu_cores.map(c => html`<div class="stat" title="Per-core system busy%. ${c.role === 'loop' ? 'Reserved for the MIDI loop — watch for saturation (causes loop lag).' : c.role === 'plugins' ? 'Reserved for the plugin engines — watch for saturation (causes note jitter).' : 'Housekeeping core (kernel, WiFi, mDNS, config-save).'} Updated every second.">
+                        <div class="label">CPU${c.core}${c.role !== 'system' ? ' · ' + c.role : ''}</div>
+                        <div class="value" style=${c.pct >= 85 ? 'color:var(--danger,#e94560)' : ''}>${c.pct}%</div>
+                    </div>`)}
                     <div class="stat"><div class="label">RAM</div><div class="value">${sys.ram.available_mb || '?'} / ${sys.ram.total_mb || '?'} MB</div></div>
                     ${sys.alsa_ports && html`<div class="stat" title="ALSA sequencer ports held by the hub's client. Every filtered or mapped connection uses two; the kernel caps a client at ${sys.alsa_ports.max}. At the ceiling, new filters can no longer be created.">
                         <div class="label">ALSA ports</div>

@@ -539,12 +539,25 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         # probed path. Missing keys mean no events of that kind happened
         # in the window (frontend renders "—" for those). Round to 1 dp.
         latency_max = {k: round(v, 1) for k, v in server._latency_max.items()}
+        # Per-core busy% tagged with each core's role (loop / plugins /
+        # system) so the UI can flag saturation of the isolated cores.
+        from . import cpu_affinity
+        _loop_core = cpu_affinity.loop_core()
+        _plugin_cores = cpu_affinity.plugin_cpus() if _loop_core is not None else set()
+        cpu_cores = [
+            {"core": c["core"], "pct": c["pct"],
+             "role": ("loop" if c["core"] == _loop_core
+                      else "plugins" if c["core"] in _plugin_cores
+                      else "system")}
+            for c in server._cpu_cores
+        ]
         return Response.json({
             "hostname": hostname, "ap_ssid": ap_ssid, "version": __version__,
             "build_token": server._build_token,
             "ip_addresses": ips, "cpu_temp_c": temp, "ram": ram,
             "uptime_seconds": uptime, "load1": load1,
             "cpu_percent": server._cpu_percent,
+            "cpu_cores": cpu_cores,
             "sse_per_sec": server._sse_per_sec,
             "alsa_ports": alsa_ports,
             "sse_clients": len(server._sse_queues),

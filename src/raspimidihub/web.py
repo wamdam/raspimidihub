@@ -180,6 +180,10 @@ class WebServer:
         # multi-thread is summing).
         self._cpu_percent = 0.0
         self._cpu_last_snapshot: tuple[float, int] | None = None
+        # Per-core SYSTEM busy% (from /proc/stat), so the isolated loop /
+        # plugin cores can be watched for saturation, not just a global %.
+        self._cpu_cores: list[dict] = []
+        self._cpu_cores_snapshot: dict[int, tuple[int, int]] | None = None
         # Per-restart cache-bust token. Substituted into index.html's
         # entry script + stylesheet hrefs (?v=...) so two deploys of
         # the same package version still bust browser caches — without
@@ -334,6 +338,44 @@ class WebServer:
                 hz = os.sysconf("SC_CLK_TCK") or 100
                 self._cpu_percent = round(100.0 * (jiffies - j0) / hz / dt, 1)
         self._cpu_last_snapshot = (now, jiffies)
+
+    def sample_cpu_cores(self) -> None:
+        """Sample per-core SYSTEM busy% from the per-CPU lines of
+        /proc/stat. busy% = delta(total - idle) / delta(total) × 100 per
+        core, over the interval since the last sample. Lets Settings show
+        the isolated loop / plugin cores separately from a global figure."""
+        try:
+            with open("/proc/stat") as f:
+                lines = f.read().splitlines()
+        except OSError:
+            return
+        cur: dict[int, tuple[int, int]] = {}
+        for line in lines:
+            # Per-core lines are "cpu0 ...", "cpu1 ..."; skip the "cpu "
+            # aggregate and any non-cpu line.
+            if not line.startswith("cpu") or line[3:4] == " ":
+                continue
+            parts = line.split()
+            try:
+                core = int(parts[0][3:])
+                vals = [int(x) for x in parts[1:]]
+            except (ValueError, IndexError):
+                continue
+            idle = vals[3] + (vals[4] if len(vals) > 4 else 0)  # idle + iowait
+            cur[core] = (sum(vals), idle)
+        prev = self._cpu_cores_snapshot
+        out = []
+        for core in sorted(cur):
+            total, idle = cur[core]
+            pct = 0.0
+            if prev and core in prev:
+                d_total = total - prev[core][0]
+                d_idle = idle - prev[core][1]
+                if d_total > 0:
+                    pct = round(100.0 * (d_total - d_idle) / d_total, 1)
+            out.append({"core": core, "pct": pct})
+        self._cpu_cores = out
+        self._cpu_cores_snapshot = cur
 
     def _check_rate_limit(self, client: str) -> bool:
         """Returns True if request should be rate-limited."""

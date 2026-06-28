@@ -33,6 +33,7 @@ async def rate_meter(engine, server) -> None:
         server.sample_sse_rate()
         server.sample_latencies()
         server.sample_cpu()
+        server.sample_cpu_cores()
         rates = engine.snapshot_rates()
         if rates:
             await server.send_sse("midi-rates", rates)
