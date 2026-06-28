@@ -285,17 +285,25 @@ def run_cross(hubB, peer_url, peer_ip, settle, out, bpm):
         time.sleep(1)
         hubA.export_device(hubA.device_stable_id(trk["id"]), True)
         hubB.enable_netmidi(True)
-        hubB.add_peer(peer_ip)
-        print("  waiting for mirror to connect…")
-        for _ in range(20):
+        # Auto-discovery works over link-local (the hub re-binds mDNS when
+        # a link comes up). Wait for it; only fall back to a manual peer
+        # if it hasn't connected, so the harness stays robust either way.
+        print("  waiting for auto-discovery…")
+        peered = False
+        for i in range(25):
             time.sleep(1)
             sess = _first_session(hubB.netmidi())
             if sess and sess.get("state") == "connected":
                 break
+            if i == 12 and not peered:
+                print("  (no auto-discovery yet — adding manual peer fallback)")
+                hubB.add_peer(peer_ip)
+                peered = True
         sess = _first_session(hubB.netmidi())
         if not sess or sess.get("state") != "connected":
-            print("  MIRROR DID NOT CONNECT (link-local discovery — see task 6). aborting.")
+            print("  MIRROR DID NOT CONNECT. aborting.")
             return
+        print(f"  connected {'(manual peer)' if peered else '(auto-discovered)'}")
         # Confirm B is actually receiving the master clock before disturbing it.
         hubB.reset_stats()
         time.sleep(4)
