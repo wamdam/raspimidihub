@@ -15,6 +15,7 @@ interleave can miscount by one — irrelevant). Percentiles are computed
 only at read time (``snapshot``), off the hot path.
 """
 
+import contextlib
 import math
 import time
 
@@ -140,3 +141,19 @@ def bucket_edges_ms() -> list[float]:
 def monotonic_ms() -> float:
     """Shared millisecond timebase for all instrumentation sites."""
     return time.monotonic() * 1000.0
+
+
+@contextlib.contextmanager
+def time_op(name: str):
+    """Record the wall time spent in the block as metric ``name`` (ms).
+
+    Used to time the *synchronous* part of an operation handler (add
+    cable, change filter, …) — i.e. how long it blocks the asyncio loop.
+    Because real operations self-measure this way, a hardware cable-add
+    in normal use records its true cost, which a synthetic plugin-only
+    connection in the harness cannot reproduce."""
+    t0 = time.monotonic()
+    try:
+        yield
+    finally:
+        record(name, (time.monotonic() - t0) * 1000.0)

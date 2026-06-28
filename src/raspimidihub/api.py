@@ -339,6 +339,11 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
     # Save, the autosaver, and the shutdown flush so all three persist an
     # identical snapshot.
     def _snapshot_into_config() -> None:
+        from . import perf_stats
+        with perf_stats.time_op("op_autosave_snapshot"):
+            _snapshot_into_config_impl()
+
+    def _snapshot_into_config_impl() -> None:
         fe = engine.filter_engine
         registry = engine.device_registry
         config.set_connections(
@@ -1057,8 +1062,13 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         saved = engine._disconnected.pop(
             f"{conn.src_client}:{conn.src_port}-{conn.dst_client}:{conn.dst_port}", {})
 
+        # Time the synchronous connect work (how long it blocks the loop)
+        # so a REAL hardware cable-add self-measures in /api/stats — the
+        # perf harness can only synthesise cheap plugin↔plugin connects.
+        from . import perf_stats
         try:
-            _restore_userspace(engine, engine.filter_engine, conn, saved)
+            with perf_stats.time_op("op_add_connection"):
+                _restore_userspace(engine, engine.filter_engine, conn, saved)
         except OSError as e:
             return Response.error(str(e))
 
@@ -1272,16 +1282,20 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         if err:
             return Response.error(err)
 
-        # Ensure connection is in userspace mode
-        if not fe.has_filter(conn_id):
-            # Remove direct ALSA subscription, create filtered connection
-            try:
-                engine._seq.unsubscribe(src_client, src_port, dst_client, dst_port)
-            except OSError:
-                pass
-            fe.add_filter(src_client, src_port, dst_client, dst_port, MidiFilter())
-
-        idx = fe.add_mapping(conn_id, mapping)
+        # Ensure connection is in userspace mode. Converting a direct
+        # ALSA link to a userspace-filtered one (new ports + routing
+        # thread) is the heavy part — time it so a real filter change
+        # self-measures its loop-blocking cost in /api/stats.
+        from . import perf_stats
+        with perf_stats.time_op("op_change_filter"):
+            if not fe.has_filter(conn_id):
+                # Remove direct ALSA subscription, create filtered connection
+                try:
+                    engine._seq.unsubscribe(src_client, src_port, dst_client, dst_port)
+                except OSError:
+                    pass
+                fe.add_filter(src_client, src_port, dst_client, dst_port, MidiFilter())
+            idx = fe.add_mapping(conn_id, mapping)
         config.set_mode("custom")
         engine.mark_dirty()
         await server.send_sse("connection-changed", {

@@ -216,13 +216,18 @@ def run_ops(hub, settle, out):
         wall = (time.monotonic() - t0) * 1000
         time.sleep(settle)                    # let the spike land + settle
         s = hub.stats().get("metrics", {})
-        row = {"op": op, "wall_ms": round(wall, 1),
+        # The op_* metric is the operation's OWN synchronous loop-blocking
+        # time (self-measured on the hub) — accurate for real hardware
+        # ops, unlike inferring from loop_lag with synthetic plugins.
+        op_self = next((s[k] for k in s if k.startswith("op_") and s[k].get("count")), None)
+        row = {"op": op, "wall_ms": round(wall, 1), "self": op_self,
                "loop_lag": s.get("loop_lag"), "clock_tick_jitter": s.get("clock_tick_jitter")}
         results.append(row)
         ll = s.get("loop_lag") or {}
         cj = s.get("clock_tick_jitter") or {}
-        print(f"  {op:14s} wall={wall:6.0f}ms  loop_lag max={ll.get('max','-')} "
-              f"p99={ll.get('p99','-')}   clock_jitter max={cj.get('max','-')}")
+        self_max = (op_self or {}).get("max", "-")
+        print(f"  {op:14s} wall={wall:6.0f}ms  self-block={self_max}  "
+              f"loop_lag max={ll.get('max','-')}  clock_jitter max={cj.get('max','-')}")
     teardown_scene(hub, [p["id"] for p in created])
     print("\n-- per-operation impact (loop-lag max ms) --")
     for r in results:
