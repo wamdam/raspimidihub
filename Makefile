@@ -3,7 +3,7 @@ PACKAGE = raspimidihub
 # 5.0.0rc1) — NOT a hyphen. The running 4.8.0+ OTA updater parses deb
 # filenames with a regex that only accepts this suffix form; a hyphen
 # (5.0.0-alpha1) makes the downloaded deb invisible to it.
-VERSION = 5.2.0a5
+VERSION = 5.2.0a6
 # Debian Version field: a pre-release suffix MUST be tilde-separated so
 # dpkg/apt sort it BELOW the final release (5.0.0~a1 << 5.0.0). A bare
 # suffix (5.0.0a1) or hyphen sorts the pre-release *above* the final
@@ -24,7 +24,7 @@ ROSETUP_DEB_FILE = dist/$(ROSETUP_DEB_NAME).deb
 
 PI_HOST = user@10.1.1.2
 
-.PHONY: all clean deb deb-rosetup deploy deploy-rosetup install uninstall test test-pi run lint fmt fmt-check screenshots manual manual-deps manual-clean image image-release
+.PHONY: all clean deb deb-rosetup deploy deploy-rosetup install uninstall test test-pi run lint fmt fmt-check screenshots perf manual manual-deps manual-clean image image-release
 
 all: deb deb-rosetup
 
@@ -308,6 +308,16 @@ screenshots:
 		.venv/bin/playwright install chromium; \
 	fi
 	.venv/bin/python scripts/screenshots/run.py --target=$(TARGET)
+
+# --- Latency / jitter perf harness (stdlib only) ---
+# Operations-disturbance sweep (default) or passive soak. NEVER run the
+# `ops` sweep against a live performance rig — it creates/deletes plugins
+# and Saves/Loads config on the target. Override the box with TARGET= and
+# pass extra flags via PERF_ARGS=, e.g.:
+#   make perf TARGET=http://10.1.1.2
+#   make perf TARGET=http://10.1.1.2 PERF_ARGS="--mode passive --duration 3600"
+perf:
+	.venv/bin/python scripts/perf/perf.py --target=$(TARGET) $(PERF_ARGS)
 
 # --- Manual (PDF build via pandoc + xelatex) ---
 # `make manual`       -- build docs/manual/raspimidihub-manual.pdf

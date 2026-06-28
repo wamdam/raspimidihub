@@ -161,6 +161,13 @@ class ClockBus:
                 if self._tick_period_ema is None:
                     self._tick_period_ema = dt
                 else:
+                    # Jitter = how far this interval strayed from the
+                    # running tempo estimate. Tempo-agnostic and measured
+                    # on the stable monotonic clock (perf suite metric).
+                    from .. import perf_stats
+                    perf_stats.record(
+                        "clock_tick_jitter",
+                        abs(dt - self._tick_period_ema) * 1000.0)
                     self._tick_period_ema = 0.2 * dt + 0.8 * self._tick_period_ema
         self._last_tick_monotonic = now
         # Fire the quarter listener (broadcasts clock-position SSE) so

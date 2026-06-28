@@ -1,0 +1,280 @@
+#!/usr/bin/env python3
+"""RaspiMIDIHub timing/jitter perf harness.
+
+Reads the hub's /api/stats timing distributions (clock-tick jitter, loop
+lag, …) and runs two kinds of measurement:
+
+  passive  — start a MIDI scene, let it run, sample distributions over
+             time; report percentiles/histograms. Good for multi-hour
+             stability soaks.
+  ops      — an OPERATIONS-DISTURBANCE sweep: with MIDI playing, perform
+             each disruptive operation (add plugin, remove plugin, add
+             cable, change filter, save, load) one at a time and attribute
+             the jitter/loop-lag it injects to that operation. This is the
+             latency-regression detector — run it after a change and watch
+             for any operation's impact growing.
+
+Hub-stats-only: jitter/drift are measured on the Pi's stable monotonic
+clock, which is honest for *relative* timing. Absolute input→wire latency
+needs external capture and is intentionally out of scope.
+
+Examples:
+  perf.py --target http://10.1.1.2 --mode ops
+  perf.py --target http://10.1.1.2 --mode passive --duration 3600
+  perf.py --target http://10.1.1.2 --mode both --out runs/
+
+NEVER point --mode ops at a live performance rig: it creates/deletes
+plugins and Saves/Loads config on the target.
+"""
+
+import argparse
+import json
+import sys
+import time
+import urllib.error
+import urllib.request
+
+WATCHED = ("loop_lag", "clock_tick_jitter", "plugin_note_jitter", "net_midi_rx")
+
+
+# --- HTTP ---------------------------------------------------------------
+
+def _req(method, url, body=None, timeout=10):
+    data = json.dumps(body).encode() if body is not None else None
+    r = urllib.request.Request(url, data=data, method=method,
+                               headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(r, timeout=timeout) as resp:
+        raw = resp.read()
+    return json.loads(raw) if raw else {}
+
+
+class Hub:
+    def __init__(self, base):
+        self.base = base.rstrip("/")
+
+    def get(self, path):
+        return _req("GET", self.base + path)
+
+    def post(self, path, body=None):
+        return _req("POST", self.base + path, body if body is not None else {})
+
+    def delete(self, path):
+        return _req("DELETE", self.base + path)
+
+    # --- perf stats ---
+    def reset_stats(self):
+        self.post("/api/stats/reset")
+
+    def stats(self):
+        return self.get("/api/stats")
+
+    # --- scene control ---
+    def create_plugin(self, ptype, name):
+        return self.post("/api/plugins/instances", {"type": ptype, "name": name})
+
+    def delete_plugin(self, pid):
+        return self.delete("/api/plugins/instances/" + pid)
+
+    def instances(self):
+        return self.get("/api/plugins/instances")
+
+    def patch_params(self, pid, params):
+        return _req("PATCH", self.base + "/api/plugins/instances/" + pid,
+                    {"params": params})
+
+    def connect(self, sc, sp, dc, dp):
+        return self.post("/api/connections",
+                         {"src_client": sc, "src_port": sp,
+                          "dst_client": dc, "dst_port": dp})
+
+    def disconnect(self, conn_id):
+        return self.delete("/api/connections/" + conn_id)
+
+    def add_mapping(self, conn_id):
+        return self.post("/api/mappings/" + conn_id,
+                         {"type": "channel_map", "src_channel": 1, "dst_channel": 2})
+
+    def save(self):
+        return self.post("/api/config/save")
+
+    def load(self):
+        return self.post("/api/config/load")
+
+
+# --- reporting helpers --------------------------------------------------
+
+def _fmt_metric(snap):
+    if not snap or snap.get("count", 0) == 0:
+        return "no samples"
+    return (f"n={snap['count']:<5} p50={snap['p50']:.3f} p95={snap['p95']:.3f} "
+            f"p99={snap['p99']:.3f} max={snap['max']:.3f} ms")
+
+
+def _watched(metrics):
+    return {k: metrics.get(k) for k in WATCHED if metrics.get(k)}
+
+
+# --- scene orchestration ------------------------------------------------
+
+def build_scene(hub, bpm):
+    """Create a small MIDI-producing scene: a running Tracker as clock
+    master + an Arpeggiator wired to it (clock + notes flowing). Returns
+    the created instance ids for teardown. Best-effort."""
+    created = []
+    try:
+        trk = hub.create_plugin("tracker", "perf-clock")
+        created.append(trk["id"])
+        hub.patch_params(trk["id"], {"bpm": bpm, "send_clock": True, "running": True})
+        arp = hub.create_plugin("arpeggiator", "perf-arp")
+        created.append(arp["id"])
+        # Wire tracker out -> arp in so clock reaches the bus.
+        hub.connect(trk["client_id"], trk["out_port"], arp["client_id"], arp["in_port"])
+        time.sleep(1.0)
+    except Exception as e:
+        print(f"  (scene setup partial: {e})")
+    return created
+
+
+def teardown_scene(hub, ids):
+    for pid in ids:
+        try:
+            hub.delete_plugin(pid)
+        except Exception:
+            pass
+
+
+# --- modes --------------------------------------------------------------
+
+def run_passive(hub, duration, poll, out):
+    print(f"== passive: {duration}s, poll {poll}s ==")
+    hub.reset_stats()
+    timeline = []
+    t_end = time.monotonic() + duration
+    while time.monotonic() < t_end:
+        time.sleep(poll)
+        s = hub.stats()
+        row = {"t": round(time.monotonic(), 2), "metrics": _watched(s.get("metrics", {})),
+               "ctx": s.get("context", {})}
+        timeline.append(row)
+        m = row["metrics"]
+        cpu = s.get("context", {}).get("cpu_cores", [])
+        cpu_s = " ".join(f"c{c['core']}={c['pct']:.0f}" for c in cpu)
+        print(f"  t+{row['t']:.0f}s  " +
+              "  ".join(f"{k}:{_fmt_metric(v)}" for k, v in m.items()) +
+              (f"   [{cpu_s}]" if cpu_s else ""))
+    final = hub.stats().get("metrics", {})
+    print("\n-- final distributions --")
+    for k in WATCHED:
+        if final.get(k):
+            print(f"  {k:20s} {_fmt_metric(final[k])}")
+    if out:
+        _write(out + "-passive.json", {"final": final, "timeline": timeline})
+    return final
+
+
+OPS = ["add_plugin", "add_cable", "change_filter", "save", "load",
+       "remove_plugin"]
+
+
+def run_ops(hub, settle, out):
+    print(f"== operations-disturbance sweep (settle {settle}s each) ==")
+    results = []
+    # Keep the full create-response dicts (they carry client_id + ports;
+    # the GET list does not), so we can cable between known plugins.
+    created = [hub.create_plugin("scale_remapper", "perf-anchor")]
+    last_conn = [None]
+
+    def do(op):
+        if op == "add_plugin":
+            created.append(hub.create_plugin("note_splitter", "perf-tmp"))
+        elif op == "remove_plugin":
+            if len(created) > 1:
+                hub.delete_plugin(created.pop()["id"])
+        elif op == "add_cable":
+            if len(created) >= 2:
+                a, b = created[0], created[1]
+                hub.connect(a["client_id"], a["out_port"], b["client_id"], b["in_port"])
+                last_conn[0] = (f"{a['client_id']}:{a['out_port']}-"
+                                f"{b['client_id']}:{b['in_port']}")
+        elif op == "change_filter":
+            if last_conn[0]:
+                hub.add_mapping(last_conn[0])
+        elif op == "save":
+            hub.save()
+        elif op == "load":
+            hub.load()
+
+    for op in OPS:
+        hub.reset_stats()
+        time.sleep(0.3)                       # baseline gap
+        t0 = time.monotonic()
+        try:
+            do(op)
+        except Exception as e:
+            print(f"  {op:14s} ERROR {e}")
+            continue
+        wall = (time.monotonic() - t0) * 1000
+        time.sleep(settle)                    # let the spike land + settle
+        s = hub.stats().get("metrics", {})
+        row = {"op": op, "wall_ms": round(wall, 1),
+               "loop_lag": s.get("loop_lag"), "clock_tick_jitter": s.get("clock_tick_jitter")}
+        results.append(row)
+        ll = s.get("loop_lag") or {}
+        cj = s.get("clock_tick_jitter") or {}
+        print(f"  {op:14s} wall={wall:6.0f}ms  loop_lag max={ll.get('max','-')} "
+              f"p99={ll.get('p99','-')}   clock_jitter max={cj.get('max','-')}")
+    teardown_scene(hub, [p["id"] for p in created])
+    print("\n-- per-operation impact (loop-lag max ms) --")
+    for r in results:
+        ll = r.get("loop_lag") or {}
+        flag = " <== SPIKE" if (ll.get("max") or 0) > 10 else ""
+        print(f"  {r['op']:14s} {ll.get('max','-')}{flag}")
+    if out:
+        _write(out + "-ops.json", results)
+    return results
+
+
+def _write(path, obj):
+    with open(path, "w") as f:
+        json.dump(obj, f, indent=2)
+    print(f"  wrote {path}")
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--target", required=True, help="hub base URL, e.g. http://10.1.1.2")
+    ap.add_argument("--mode", choices=("passive", "ops", "both"), default="ops")
+    ap.add_argument("--duration", type=int, default=120, help="passive seconds")
+    ap.add_argument("--poll", type=float, default=5.0, help="passive poll seconds")
+    ap.add_argument("--settle", type=float, default=1.5, help="ops settle seconds")
+    ap.add_argument("--bpm", type=int, default=140)
+    ap.add_argument("--no-scene", action="store_true", help="don't create a MIDI scene")
+    ap.add_argument("--out", default="", help="write JSON reports with this prefix")
+    args = ap.parse_args()
+
+    hub = Hub(args.target)
+    try:
+        info = hub.get("/api/system")
+        print(f"target {args.target}  version={info.get('version')}  "
+              f"host={info.get('hostname')}")
+    except urllib.error.URLError as e:
+        print(f"cannot reach {args.target}: {e}", file=sys.stderr)
+        return 2
+
+    scene = []
+    if not args.no_scene:
+        print("building MIDI scene…")
+        scene = build_scene(hub, args.bpm)
+    try:
+        if args.mode in ("ops", "both"):
+            run_ops(hub, args.settle, args.out)
+        if args.mode in ("passive", "both"):
+            run_passive(hub, args.duration, args.poll, args.out)
+    finally:
+        teardown_scene(hub, scene)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

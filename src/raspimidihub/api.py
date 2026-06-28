@@ -585,6 +585,50 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         return Response.json({"status": "updated"})
 
     # ================================================================
+    # Perf stats — timing distributions for the latency/jitter suite
+    # ================================================================
+
+    @server.route("GET", "/api/stats")
+    async def api_stats(req: Request) -> Response:
+        """Timing distributions (percentiles/histograms) for the perf
+        harness: clock-tick jitter, loop lag, plugin note-send jitter,
+        net-MIDI RX jitter, cross-Pi clock offset. Plus a context snapshot
+        (per-core CPU, temp, server monotonic clock) so the harness can
+        correlate spikes with load and attribute them to operations."""
+        from . import cpu_affinity, perf_stats
+        _loop_core = cpu_affinity.loop_core()
+        _plugin_cores = cpu_affinity.plugin_cpus() if _loop_core is not None else set()
+        cpu_cores = [
+            {"core": c["core"], "pct": c["pct"],
+             "role": ("loop" if c["core"] == _loop_core
+                      else "plugins" if c["core"] in _plugin_cores else "system")}
+            for c in server._cpu_cores
+        ]
+        try:
+            temp = round(int(Path("/sys/class/thermal/thermal_zone0/temp")
+                             .read_text().strip()) / 1000, 1)
+        except (OSError, ValueError):
+            temp = None
+        return Response.json({
+            "metrics": perf_stats.snapshot_all(),
+            "bucket_edges_ms": perf_stats.bucket_edges_ms(),
+            "server_monotonic_ms": round(perf_stats.monotonic_ms(), 3),
+            "context": {
+                "cpu_cores": cpu_cores,
+                "cpu_percent": server._cpu_percent,
+                "cpu_temp_c": temp,
+            },
+        })
+
+    @server.route("POST", "/api/stats/reset")
+    async def api_stats_reset(req: Request) -> Response:
+        """Zero all perf metrics — the harness calls this before each
+        measurement window so a reading attributes only to that window."""
+        from . import perf_stats
+        perf_stats.reset_all()
+        return Response.json({"status": "reset"})
+
+    # ================================================================
     # GET /api/observatory — current CC values per destination + held notes
     # ================================================================
 

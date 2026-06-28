@@ -72,6 +72,8 @@ async def loop_lag_meter(server) -> None:
         lag_ms = (now - expected) * 1000.0
         if lag_ms > 0:
             server.record_latency("loop_lag", lag_ms)
+            from .. import perf_stats
+            perf_stats.record("loop_lag", lag_ms)
         expected = now + interval
 
 
