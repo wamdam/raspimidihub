@@ -32,6 +32,7 @@ import json
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
 WATCHED = ("loop_lag", "clock_tick_jitter", "plugin_note_jitter", "net_midi_rx")
@@ -99,6 +100,26 @@ class Hub:
 
     def load(self):
         return self.post("/api/config/load")
+
+    # --- network MIDI (two-Pi) ---
+    def enable_netmidi(self, on=True):
+        return self.post("/api/network-midi/enable", {"enabled": on})
+
+    def export_device(self, stable_id, on=True):
+        return self.post("/api/network-midi/export",
+                         {"stable_id": stable_id, "exported": on})
+
+    def add_peer(self, host):
+        return self.post("/api/network-midi/peers", {"host": host})
+
+    def netmidi(self):
+        return self.get("/api/network-midi")
+
+    def device_stable_id(self, instance_id):
+        devs = self.get("/api/devices")
+        devs = devs if isinstance(devs, list) else devs.get("devices", [])
+        return next((d.get("stable_id") for d in devs
+                     if d.get("plugin_instance_id") == instance_id), None)
 
 
 # --- reporting helpers --------------------------------------------------
@@ -239,6 +260,67 @@ def run_ops(hub, settle, out):
     return results
 
 
+def run_cross(hubB, peer_url, peer_ip, duration, poll, bpm, out):
+    """Two-Pi clock-divergence run. Pi A (peer) exports a running clock
+    tracker over Network MIDI; Pi B (target) mirrors it and measures the
+    cross-Pi clock offset/drift (AppleMIDI CK) + received-clock RX jitter.
+    Restores both via Load at the end."""
+    hubA = Hub(peer_url)
+    print(f"== cross-Pi: master={peer_url} (ip {peer_ip})  mirror={hubB.base} ==")
+    created = []
+    try:
+        hubA.enable_netmidi(True)
+        trk = hubA.create_plugin("tracker", "perf-netclock")
+        created.append(trk["id"])
+        hubA.patch_params(trk["id"], {"bpm": bpm, "send_clock": True, "running": True})
+        time.sleep(1)
+        sid = hubA.device_stable_id(trk["id"])
+        hubA.export_device(sid, True)
+        hubB.enable_netmidi(True)
+        hubB.add_peer(peer_ip)
+        print("  waiting for mirror to connect…")
+        for _ in range(20):
+            time.sleep(1)
+            sess = _first_session(hubB.netmidi())
+            if sess and sess.get("state") == "connected":
+                break
+        sess = _first_session(hubB.netmidi())
+        if not sess or sess.get("state") != "connected":
+            print("  MIRROR DID NOT CONNECT (link-local discovery — see task 6). aborting.")
+            return
+        print(f"  mirrored '{sess.get('name')}' from {sess.get('addr')}")
+        hubB.reset_stats()
+        timeline = []
+        t_end = time.monotonic() + duration
+        while time.monotonic() < t_end:
+            time.sleep(poll)
+            sess = _first_session(hubB.netmidi())
+            s = hubB.stats().get("metrics", {})
+            rtt = s.get("net_clock_rtt") or {}
+            rx = s.get("net_midi_rx") or {}
+            row = {"t": round(time.monotonic(), 1),
+                   "offset_ms": sess.get("clock_offset_ms"),
+                   "drift_ppm": sess.get("clock_drift_ppm"),
+                   "rtt": rtt, "rx": rx}
+            timeline.append(row)
+            print(f"  t+{row['t']:.0f}s  offset={row['offset_ms']} ms  "
+                  f"drift={row['drift_ppm']} ppm  rtt p99={rtt.get('p99','-')} ms  "
+                  f"rx p99={rx.get('p99','-')} ms (n={rx.get('count','-')})")
+        if out:
+            _write(out + "-cross.json", timeline)
+    finally:
+        print("  teardown: load both to restore")
+        hubB.load()
+        hubA.load()
+
+
+def _first_session(nm):
+    for hub in (nm or {}).get("hubs", []):
+        for s in hub.get("sessions", []):
+            return s
+    return None
+
+
 def _write(path, obj):
     with open(path, "w") as f:
         json.dump(obj, f, indent=2)
@@ -249,7 +331,9 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--target", required=True, help="hub base URL, e.g. http://10.1.1.2")
-    ap.add_argument("--mode", choices=("passive", "ops", "both"), default="ops")
+    ap.add_argument("--mode", choices=("passive", "ops", "both", "cross"), default="ops")
+    ap.add_argument("--peer", default="", help="cross mode: master hub base URL (exports the clock)")
+    ap.add_argument("--peer-ip", default="", help="cross mode: master IP the mirror dials (default: host from --peer)")
     ap.add_argument("--duration", type=int, default=120, help="passive seconds")
     ap.add_argument("--poll", type=float, default=5.0, help="passive poll seconds")
     ap.add_argument("--settle", type=float, default=1.5, help="ops settle seconds")
@@ -266,6 +350,14 @@ def main():
     except urllib.error.URLError as e:
         print(f"cannot reach {args.target}: {e}", file=sys.stderr)
         return 2
+
+    if args.mode == "cross":
+        if not args.peer:
+            print("--peer <master hub URL> is required for cross mode", file=sys.stderr)
+            return 2
+        peer_ip = args.peer_ip or urllib.parse.urlparse(args.peer).hostname
+        run_cross(hub, args.peer, peer_ip, args.duration, args.poll, args.bpm, args.out)
+        return 0
 
     scene = []
     if not args.no_scene:

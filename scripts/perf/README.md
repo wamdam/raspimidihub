@@ -37,6 +37,20 @@ Plus a context snapshot (per-core CPU, temp) so spikes correlate with load.
 - **`passive`** — start a scene, sample distributions over `--duration`
   seconds (multi-hour soak supported), report percentiles/histograms.
 - **`both`** — ops sweep then passive.
+- **`cross`** — two-Pi clock-divergence. The `--peer` hub exports a
+  running clock tracker over Network MIDI; the `--target` hub mirrors it
+  and measures the cross-Pi clock **offset** + **drift (ppm)** (AppleMIDI
+  CK sync), the CK **round-trip**, and the **received-clock RX jitter**.
+  Restores both via Load. Example:
+
+  ```
+  make perf TARGET=http://B PERF_ARGS="--mode cross --peer http://A --duration 300"
+  ```
+
+  The offset's absolute value is meaningless (two unsynced monotonic
+  clocks); the **drift** is the divergence signal (a few ppm between
+  separate Pis is normal). Needs the two hubs to find each other — uses a
+  manual peer (the master's IP) to bypass link-local mDNS.
 
 `--out PREFIX` writes JSON reports (`PREFIX-ops.json`, `PREFIX-passive.json`).
 

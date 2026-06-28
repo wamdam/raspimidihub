@@ -1513,6 +1513,12 @@ class NetworkMidiManager:
                 "mirrored": mirror is not None,
                 "state": mirror.state if mirror else "discovered",
                 "latency_ms": mirror.latency_ms if mirror else None,
+                "clock_offset_ms": (round(mirror.clock_offset_ms, 3)
+                                    if mirror and mirror.clock_offset_ms is not None
+                                    else None),
+                "clock_drift_ppm": (round(mirror.clock_drift_ppm, 1)
+                                    if mirror and mirror.clock_drift_ppm is not None
+                                    else None),
             }
             if svc.is_hub:
                 hub = hubs.setdefault(svc.hub, {
