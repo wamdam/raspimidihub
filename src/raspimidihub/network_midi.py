@@ -526,6 +526,15 @@ class MirroredSession:
         self.remote_hub = svc.remote_hub
         self.state = "idle"            # idle/connecting/connected/closed
         self.latency_ms: float | None = None
+        # Cross-Pi clock divergence (from the CK0/1/2 sync to the peer).
+        # The raw offset between two unsynced monotonic clocks is
+        # meaningless in absolute terms; its DRIFT over time is the real
+        # divergence. clock_offset_ms is the latest sample, clock_drift_ppm
+        # the rate since the first sample (first vs latest / elapsed).
+        self.clock_offset_ms: float | None = None
+        self.clock_drift_ppm: float | None = None
+        self._clk_first_t: float | None = None
+        self._clk_first_off: float = 0.0
         self.ssrc = int.from_bytes(os.urandom(4), "big")
         self._token = int.from_bytes(os.urandom(4), "big")
         self._alsa = None              # own visible client while connected
@@ -690,8 +699,23 @@ class MirroredSession:
                 transport.sendto(apple_midi.build_clock_sync(
                     self.ssrc, 2, pkt.ts1, pkt.ts2, ts3), addr)
                 if pkt.ts1 == self._ck_ts1:
-                    self.latency_ms = (ts3 - pkt.ts1) / 2 / 10
+                    rtt_ms = (ts3 - pkt.ts1) / 10.0
+                    self.latency_ms = rtt_ms / 2
                     self._ck_answered = True
+                    # Clock offset = peer - local at the exchange midpoint;
+                    # its drift over time is the cross-Pi clock divergence.
+                    offset_ms = (pkt.ts2 - (pkt.ts1 + ts3) / 2.0) / 10.0
+                    self.clock_offset_ms = offset_ms
+                    now_mono = time.monotonic()
+                    if self._clk_first_t is None:
+                        self._clk_first_t, self._clk_first_off = now_mono, offset_ms
+                    else:
+                        dt = now_mono - self._clk_first_t
+                        if dt > 1.0:
+                            self.clock_drift_ppm = (
+                                (offset_ms - self._clk_first_off) / 1000.0 / dt * 1e6)
+                    from . import perf_stats
+                    perf_stats.record("net_clock_rtt", rtt_ms)
 
     async def _ck_loop(self) -> None:
         """Initiator clock sync every CK_INTERVAL — keeps macOS happy
@@ -753,6 +777,10 @@ class MirroredSession:
             "remote_hub": self.remote_hub,
             "state": self.state,
             "latency_ms": self.latency_ms,
+            "clock_offset_ms": (round(self.clock_offset_ms, 3)
+                                if self.clock_offset_ms is not None else None),
+            "clock_drift_ppm": (round(self.clock_drift_ppm, 1)
+                                if self.clock_drift_ppm is not None else None),
         }
 
 
@@ -1449,6 +1477,10 @@ class NetworkMidiManager:
         the main loop — measure first (module docstring)."""
         if self._server is not None:
             self._server.record_latency(name, ms)
+        # Also feed the perf suite's full distribution (percentiles), not
+        # just the windowed max, for net_midi_rx jitter analysis.
+        from . import perf_stats
+        perf_stats.record(name, ms)
 
     def notify_changed(self) -> None:
         """Debounced `network-midi-changed` SSE — the Settings page
