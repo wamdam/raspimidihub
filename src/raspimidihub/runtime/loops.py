@@ -105,6 +105,24 @@ async def sse_heartbeat(server, interval: float = 30.0) -> None:
                 pass
 
 
+async def cpu_isolation_guard(interval: float = 15.0) -> None:
+    """Keep the isolated loop core for the loop alone: periodically sweep
+    any thread that drifted onto it (e.g. a python-zeroconf thread we
+    can't pin at the source) back onto the housekeeping cores. Threads we
+    own pin themselves at start, so this is a safety net for the rest.
+    No-op off the isolated appliance."""
+    import threading
+
+    from .. import cpu_affinity
+    loop_tid = threading.get_native_id()
+    while True:
+        try:
+            cpu_affinity.enforce_isolation(loop_tid)
+        except Exception:
+            log.exception("cpu_isolation_guard sweep failed")
+        await asyncio.sleep(interval)
+
+
 async def watchdog_ping(interval: float, notify_fn) -> None:
     """Periodically tell systemd we're alive. `notify_fn` is the
     sd_notify wrapper from __main__."""

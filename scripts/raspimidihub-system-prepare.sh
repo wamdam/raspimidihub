@@ -25,7 +25,14 @@ BACKUP_DIR="/var/lib/raspimidihub-prepare/backup"
 DROPIN_DIR="/etc/systemd/system/raspimidihub.service.d"
 DROPIN_FILE="$DROPIN_DIR/cpu-affinity.conf"
 CMDLINE="/boot/firmware/cmdline.txt"
-ISOL_PARAMS="isolcpus=3 nohz_full=3 rcu_nocbs=3"
+# Isolate TWO cores: 3 = the asyncio/MIDI loop, 2 = the plugin pool.
+# Both get a quiet, contention-free core (plugins emit notes immediately
+# on their own thread, so they need low wake latency too); cores 0-1 run
+# the kernel, WiFi AP, zeroconf and the forked save/encode child.
+ISOL_CORES="2,3"
+DESIRED_ISOL="isolcpus=$ISOL_CORES"
+DESIRED_NOHZ="nohz_full=$ISOL_CORES"
+DESIRED_RCU="rcu_nocbs=$ISOL_CORES"
 DRY_RUN=false
 
 for arg in "$@"; do
@@ -141,32 +148,32 @@ disable_services() {
     log "$disabled disabled, $skipped already inactive / not installed"
 }
 
-# --- Kernel cmdline: isolate core 3 ------------------------------------
-# isolcpus=3        remove from general scheduler
-# nohz_full=3       suppress periodic timer interrupt on this core
-# rcu_nocbs=3       offload RCU callbacks to a non-isolated core
+# --- Kernel cmdline: isolate cores 2,3 ---------------------------------
+# isolcpus=2,3      remove from the general scheduler
+# nohz_full=2,3     suppress the periodic timer interrupt on these cores
+# rcu_nocbs=2,3     offload RCU callbacks to a non-isolated core
+# Normalises the three tokens to the desired values: adds them if absent
+# AND upgrades an older single-core isolation (isolcpus=3) to 2,3.
 ensure_cmdline() {
-    log "Pass 2a/2: reserving CPU 3 via kernel cmdline ($CMDLINE)"
+    log "Pass 2a/2: reserving cores $ISOL_CORES via kernel cmdline ($CMDLINE)"
     if [ ! -f "$CMDLINE" ]; then
         warn "$CMDLINE not found — skipping kernel cmdline edit. Manual setup required."
         return 0
     fi
-    local current
-    current="$(cat "$CMDLINE")"
-    local need_isol=false need_nohz=false need_rcu=false
-    grep -q 'isolcpus=' <<<"$current" || need_isol=true
-    grep -q 'nohz_full=' <<<"$current" || need_nohz=true
-    grep -q 'rcu_nocbs=' <<<"$current" || need_rcu=true
-    if ! $need_isol && ! $need_nohz && ! $need_rcu; then
-        log "kernel cmdline already isolates a core — leaving alone"
+    local current desired
+    current="$(tr -d '\n' < "$CMDLINE")"
+    # Strip any existing isolation tokens, then append the desired ones,
+    # squeezing the whitespace back to single spaces.
+    desired="$(printf '%s' "$current" \
+        | sed -E 's/(^| )(isolcpus|nohz_full|rcu_nocbs)=[^ ]*//g')"
+    desired="$desired $DESIRED_ISOL $DESIRED_NOHZ $DESIRED_RCU"
+    desired="$(printf '%s' "$desired" | sed -E 's/  +/ /g; s/^ +//; s/ +$//')"
+    if [ "$desired" = "$current" ]; then
+        log "kernel cmdline already isolates cores $ISOL_CORES — leaving alone"
         return 0
     fi
-    local additions=""
-    $need_isol && additions="$additions isolcpus=3"
-    $need_nohz && additions="$additions nohz_full=3"
-    $need_rcu && additions="$additions rcu_nocbs=3"
     if $DRY_RUN; then
-        log "Would append:$additions to $CMDLINE"
+        log "Would set $CMDLINE to: $desired"
         return 0
     fi
     backup_once "$CMDLINE"
@@ -180,12 +187,12 @@ ensure_cmdline() {
         log "remounting $mountpoint rw for cmdline edit"
         mount -o remount,rw "$mountpoint" || {
             warn "failed to remount $mountpoint rw — skipping kernel cmdline edit"
-            warn "  apply manually: append$additions to /boot/firmware/cmdline.txt"
+            warn "  apply manually: set isolation to $DESIRED_ISOL $DESIRED_NOHZ $DESIRED_RCU in /boot/firmware/cmdline.txt"
             return 0
         }
     fi
     # cmdline.txt MUST be one line — multi-line breaks the bootloader.
-    if ! printf '%s%s\n' "$(tr -d '\n' < "$CMDLINE")" "$additions" > "$CMDLINE"; then
+    if ! printf '%s\n' "$desired" > "$CMDLINE"; then
         warn "failed to write $CMDLINE"
         $was_ro && mount -o remount,ro "$mountpoint" || true
         return 0
@@ -194,11 +201,11 @@ ensure_cmdline() {
         sync
         mount -o remount,ro "$mountpoint" || warn "could not restore $mountpoint to ro"
     fi
-    log "appended$additions — reboot required to take effect"
+    log "updated kernel cmdline (cores $ISOL_CORES isolated) — reboot required to take effect"
 }
 
 ensure_dropin() {
-    log "Pass 2b/2: pinning raspimidihub.service to CPU 3 via systemd drop-in"
+    log "Pass 2b/2: granting raspimidihub.service all cores via systemd drop-in"
     if $DRY_RUN; then
         log "Would write $DROPIN_FILE"
         return
@@ -211,15 +218,15 @@ ensure_dropin() {
 # Slight nice bump — the asyncio loop is the most latency-sensitive
 # thing on the Pi.
 Nice=-5
-# Allow all 4 CPUs (including the kernel-isolated core 3). With
-# isolcpus=3 in the kernel cmdline, system.slice defaults to
-# AllowedCPUs=0-2 — services inherit that and CAN'T pin themselves
-# to CPU 3 even with sched_setaffinity. Setting 0-3 here re-grants
-# access. Python then pins itself to {3} in __main__.pin_to_isolated_cpu;
-# subprocesses (hostapd / dnsmasq) inherit {3} from the parent but
-# wifi.py wraps their spawns in `taskset -c 0-2` so they end up on
-# the non-isolated cores. The asyncio loop has CPU 3 to itself and
-# WiFi daemons stay on cores with normal timer ticks.
+# Allow all 4 CPUs (including the kernel-isolated cores 2,3). With
+# isolcpus=2,3 in the kernel cmdline, system.slice defaults to
+# AllowedCPUs=0-1 — services inherit that and CAN'T pin themselves to
+# the isolated cores even with sched_setaffinity. Setting 0-3 here
+# re-grants access. The app then pins the asyncio/MIDI loop to core 3
+# and the plugin threads to core 2 (see cpu_affinity); the WiFi-daemon
+# spawns are wrapped in `taskset` onto the housekeeping cores so they
+# stay on cores with normal timer ticks. Net: the loop owns core 3,
+# the plugins own core 2, and everything else lives on cores 0-1.
 AllowedCPUs=0-3
 EOF
     systemctl daemon-reload
@@ -253,8 +260,8 @@ fi
 log ""
 log "Done."
 log "  - Service / timer trim is live immediately."
-log "  - CPU pin (AllowedCPUs=3) takes effect on next service restart."
-log "  - Kernel core isolation (isolcpus=3) takes effect on next REBOOT."
+log "  - Core grant (AllowedCPUs=0-3) takes effect on next service restart."
+log "  - Kernel core isolation (isolcpus=$ISOL_CORES) takes effect on next REBOOT."
 log ""
 log "To restart the service: systemctl restart raspimidihub.service"
 log "To reboot:              sudo reboot"

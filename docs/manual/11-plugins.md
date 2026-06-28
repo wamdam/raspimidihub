@@ -127,9 +127,9 @@ source produces rock-solid output, and a jittery clock source
 produces output that tracks the same jitter.
 
 Plugins with no timing requirements (the **Scale Remapper**,
-**Note Splitter**, anything purely event-driven) run straight
-through the asyncio loop on the reserved CPU 3, with typical
-latency under one millisecond.
+**Note Splitter**, anything purely event-driven) run on the
+reserved plugin core (CPU 2), isolated from system activity, with
+typical latency under one millisecond.
 
 ## CC Automation
 

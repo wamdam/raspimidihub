@@ -625,10 +625,12 @@ no-hosts
 
             _run(["systemctl", "stop", "dnsmasq"], check=False)
             self._kill_and_wait("dnsmasq", str(DNSMASQ_AP_CONF))
-            # Same reasoning as hostapd above — keep dnsmasq off the
-            # isolated core so it can answer DHCP / DNS without
-            # waiting for the asyncio loop's CPU.
-            _run(["taskset", "-c", "0-2",
+            # Same reasoning as hostapd above — keep dnsmasq on the
+            # housekeeping cores (off the isolated loop / plugin cores)
+            # so it can answer DHCP / DNS without waiting for the loop's
+            # or a plugin's CPU.
+            from . import cpu_affinity
+            _run(["taskset", "-c", cpu_affinity.housekeeping_taskset_arg(),
                   "dnsmasq", "--conf-file=" + str(DNSMASQ_AP_CONF),
                   "--pid-file=/run/raspimidihub/dnsmasq.pid"], check=False)
 

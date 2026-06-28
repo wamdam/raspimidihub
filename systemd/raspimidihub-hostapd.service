@@ -14,11 +14,12 @@ Type=simple
 ExecStart=/usr/sbin/hostapd /run/raspimidihub/hostapd.conf
 Restart=on-failure
 RestartSec=2
-# Keep hostapd off CPU 3 — that core is reserved for the asyncio
-# main loop in raspimidihub.service. The remaining three cores
-# have plenty of headroom for the WiFi driver IRQs, hostapd,
-# dnsmasq, and the rest of userspace.
-CPUAffinity=0-2
+# Keep hostapd on the housekeeping cores (0-1): core 3 is reserved
+# for the asyncio main loop and core 2 for the plugin pool. hostapd
+# needs a core with normal timer ticks anyway (it can't beacon on a
+# nohz_full isolated core), and 0-1 have headroom for the WiFi driver
+# IRQs, hostapd, dnsmasq, and the rest of userspace.
+CPUAffinity=0-1
 
 # No [Install] section: only raspimidihub.service starts us via
 # `systemctl start raspimidihub-hostapd`. We never run at boot

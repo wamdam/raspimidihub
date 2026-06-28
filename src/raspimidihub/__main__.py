@@ -17,6 +17,7 @@ from .led import LedController
 from .midi_engine import MidiEngine
 from .plugin_host import PluginHost
 from .runtime.loops import (
+    cpu_isolation_guard,
     loop_lag_meter,
     pending_param_flusher,
     rate_meter,
@@ -40,31 +41,24 @@ def setup_logging() -> None:
 
 
 def pin_to_isolated_cpu() -> None:
-    """Pin THIS process to the kernel-isolated CPU 3 (raspimidihub-system-prepare
-    adds isolcpus=3 nohz_full=3 rcu_nocbs=3 to the kernel cmdline).
+    """Pin the asyncio/MIDI loop (this thread) to the kernel-isolated loop
+    core (raspimidihub-system-prepare adds isolcpus=2,3 nohz_full=2,3
+    rcu_nocbs=2,3 to the kernel cmdline; the loop core is the highest
+    isolated one, plugins get the rest — see cpu_affinity).
 
-    Done at the Python-process level rather than as a systemd cgroup
+    Done at the Python-thread level rather than as a systemd cgroup
     AllowedCPUs= because the latter propagates to every child process —
     including the daemonized hostapd / dnsmasq — and a hostapd pinned
-    to a nohz_full core can't beacon at the right cadence, breaking
-    the AP. Subprocesses raspimidihub spawns inherit affinity {3}, so
-    the wifi.py spawn paths explicitly prefix `taskset -c 0-2 …` to
-    place those daemons on the non-isolated cores.
+    to a nohz_full core can't beacon at the right cadence, breaking the
+    AP. Other threads/children are placed on the plugin / housekeeping
+    cores by cpu_affinity (executor initializer, plugin thread self-pin,
+    the periodic enforcement sweep, and the wifi.py `taskset` spawns).
 
-    Safe no-op when the kernel didn't isolate CPU 3 (e.g. dev machine
-    or pre-prepare deployment) — we just verify the target CPU is in
-    the current allowed set; if not, we leave affinity alone."""
-    target = {3}
-    try:
-        allowed = os.sched_getaffinity(0)
-        if not target.issubset(allowed):
-            log.info("CPU %s not in allowed set %s — skipping affinity pin",
-                     sorted(target), sorted(allowed))
-            return
-        os.sched_setaffinity(0, target)
-        log.info("Pinned to CPU %s (isolated core)", sorted(target))
-    except (AttributeError, OSError) as e:
-        log.info("Affinity pin not available: %s", e)
+    Safe no-op when the kernel didn't isolate a core (dev machine or
+    pre-prepare deployment)."""
+    from . import cpu_affinity
+    if cpu_affinity.pin_loop():
+        log.info("Pinned MIDI loop to isolated core %s", cpu_affinity.loop_core())
 
 
 def notify_systemd(status: str) -> None:
@@ -86,6 +80,18 @@ def notify_systemd(status: str) -> None:
 
 async def async_main() -> None:
     log.info("RaspiMIDIHub v%s starting", __version__)
+
+    # Keep the isolated loop core for the loop alone: worker-pool threads
+    # (asyncio.to_thread / run_in_executor) are spawned from the loop
+    # thread and would inherit its pin, so give the default executor an
+    # initializer that moves each worker onto the housekeeping cores.
+    import concurrent.futures
+
+    from . import cpu_affinity
+    loop = asyncio.get_running_loop()
+    loop.set_default_executor(concurrent.futures.ThreadPoolExecutor(
+        thread_name_prefix="rmh-worker",
+        initializer=cpu_affinity.move_to_housekeeping))
 
     led = LedController()
     engine = MidiEngine()
@@ -414,6 +420,9 @@ async def async_main() -> None:
         # asyncio loop-lag probe — single best signal for "server
         # keeping up with itself", visible as Loop lag in Settings.
         asyncio.ensure_future(loop_lag_meter(server))
+
+        # Keep the isolated loop core free of stray (library) threads.
+        asyncio.ensure_future(cpu_isolation_guard())
 
         # Drain the plugin host's trailing-edge param coalescer at 20 Hz
         # so SSE plugin-param traffic stays UI-paced even under a

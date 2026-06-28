@@ -87,6 +87,10 @@ class ScheduledClockGenerator:
         self._next_tick = None
 
     def _refill_loop(self) -> None:
+        # Keep the clock refill off the isolated MIDI core (this thread is
+        # spawned from the loop thread and would otherwise inherit its pin).
+        from . import cpu_affinity
+        cpu_affinity.move_to_housekeeping()
         while self._running:
             bpm = self._bpm_getter()
             try:

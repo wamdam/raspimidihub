@@ -99,21 +99,31 @@ Pulling the power loses at most the few seconds of editing since
 the last autosave settled. The boot config, the rolling backups,
 and the BlueZ bonds are all intact.
 
-## CPU 3 Reservation
+## Reserved Cores
 
-The asyncio main loop runs pinned to CPU 3, an isolated core. The
-isolation is done at boot via the Linux kernel `isolcpus=3`
-parameter (set by the rosetup package). Effects:
+Two cores are isolated so the two latency-critical workloads each get a
+quiet, contention-free core:
 
-- No kernel timer ticks scheduled on CPU 3.
-- No other userland processes scheduled on CPU 3.
-- The routing service has CPU 3 to itself, which makes loop-lag
-  spikes from other system activity essentially impossible.
+- **Core 3** runs only the asyncio routing/MIDI loop.
+- **Core 2** runs only the plugin threads. Plugins emit their notes
+  immediately on their own thread, so they need the same low, consistent
+  scheduling latency as the loop.
+- **Cores 0-1** run everything else — kernel, IRQs, the WiFi AP, mDNS,
+  Bluetooth and the background config-save process.
 
-The trade-off is one less general-purpose core for the rest of
-the system, which is not a problem on Pi 4 / 5 (the remaining
-three cores are sufficient) and is a tighter constraint on Pi
-Zero 2 W (only four cores total).
+The isolation is done at boot via the Linux kernel `isolcpus=2,3`
+(plus `nohz_full=2,3 rcu_nocbs=2,3`), set by the rosetup package.
+Effects:
+
+- No kernel timer ticks scheduled on cores 2 and 3.
+- No other userland processes scheduled on cores 2 and 3.
+- The routing loop has core 3 to itself and the plugins have core 2 to
+  themselves, which makes loop-lag and note-timing spikes from other
+  system activity essentially impossible.
+
+The trade-off is two general-purpose cores for the rest of the system,
+which is comfortable on a quad-core Pi for this single-purpose
+appliance.
 
 ## Auto-Start
 

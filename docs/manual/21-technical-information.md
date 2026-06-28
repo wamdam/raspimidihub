@@ -21,8 +21,8 @@ deciding whether RaspiMIDIHub fits a particular setup.
 +-------------+------------------+-------+----------------------------------------------+
 
 Pi 1, Pi 2, and the original Pi Zero are **not** supported -- the
-read-only filesystem and the CPU 3 reservation assume a multi-core
-ARMv8 system.
+read-only filesystem and the isolated-core reservation assume a
+multi-core ARMv8 system.
 
 ### SD card
 
@@ -78,7 +78,7 @@ ARMv8 system.
 | Component | Role |
 |-----------|------|
 | **Raspberry Pi OS Lite** (Bookworm or Trixie or later) | Base OS |
-| **Linux kernel 6.x** | Kernel; `isolcpus=3` set by `raspimidihub-rosetup` |
+| **Linux kernel 6.x** | Kernel; `isolcpus=2,3` set by `raspimidihub-rosetup` (core 3 = loop, core 2 = plugins) |
 | **Python 3.11+** (stdlib only) | Routing service runtime |
 | **ALSA seq** (via `libasound2` + `ctypes`) | MIDI routing core |
 | **BlueZ** | Bluetooth stack; `midi` plugin disabled in favour of the in-tree bridge |
@@ -101,7 +101,7 @@ step. No npm.
 |------|-----------------|------|
 | **Direct ALSA connection** | Sub-microsecond | Kernel-only; effectively zero |
 | **Filtered / mapped connection** | 1--3 ms | Userspace filter + mapper round-trip |
-| **Plugin (event-driven)** | Sub-millisecond | Asyncio loop on isolated CPU 3 |
+| **Plugin (event-driven)** | Sub-millisecond | Plugin threads on isolated CPU 2 |
 | **Plugin (clocked)** | Sub-millisecond jitter | Sample-accurate ALSA queue scheduling |
 | **BLE-MIDI** | 7.5--15 ms | Bound by BLE connection interval, not the bridge |
 | **Web UI → MIDI out** | 2--6 ms (Stats card readout) | HTTP POST + routing |

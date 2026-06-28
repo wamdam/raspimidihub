@@ -409,6 +409,12 @@ class PluginHost:
 
     def _plugin_thread(self, instance: PluginInstance) -> None:
         """Event loop for a single plugin instance."""
+        # Run on the isolated plugin core(s), not the asyncio loop's core
+        # (this thread is spawned from the loop thread and would otherwise
+        # inherit its pin). Plugins emit notes immediately on this thread,
+        # so a quiet, contention-free core keeps their timing tight.
+        from .. import cpu_affinity
+        cpu_affinity.move_to_plugin_cores()
         plugin = instance.plugin
         alsa_client = instance.alsa_client
         MidiEventType = sys.modules["raspimidihub.alsa_seq"].MidiEventType

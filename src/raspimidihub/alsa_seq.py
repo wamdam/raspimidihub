@@ -652,6 +652,12 @@ class AlsaSeq:
             return
         import threading
         def flush():
+            # The Timer fires on its own thread (spawned from whatever
+            # scheduled the flush — often the loop thread on the isolated
+            # core); migrate it onto the housekeeping cores so the CC
+            # sends don't run on the loop's core.
+            from . import cpu_affinity
+            cpu_affinity.move_to_housekeeping()
             self._cc_flush_timer = None
             pending = dict(self._cc_pending)
             self._cc_pending.clear()

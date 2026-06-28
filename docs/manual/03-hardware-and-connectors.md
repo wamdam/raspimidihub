@@ -28,8 +28,8 @@ or BLE-MIDI is in the critical path. The Pi 3B+ and Pi Zero 2 W
 work but constrain the device count.
 
 The Pi 1, Pi 2, and original Pi Zero are **not** supported: the
-read-only filesystem and the CPU 3 reservation assume a multi-core
-ARMv8 system.
+read-only filesystem and the isolated-core reservation assume a
+multi-core ARMv8 system.
 
 ## Storage
 

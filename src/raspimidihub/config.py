@@ -71,19 +71,13 @@ def _boot_rw():
 
 
 def _move_off_isolated_core() -> None:
-    """Called inside the forked autosave child: drop the asyncio loop's
-    isolated-core affinity (inherited across fork) so the ~750 ms encode
-    runs on the housekeeping cores instead of stealing cycles from the
-    MIDI loop pinned to the isolated core (see __main__.pin_to_isolated_cpu).
-    Generic — no hardcoded core number: the loop is pinned to a subset,
-    so the child takes the complement. No-op on an unpinned dev box
-    (own affinity == all cores → complement empty → keep all)."""
-    try:
-        own = os.sched_getaffinity(0)
-        allcpu = set(range(os.cpu_count() or 1))
-        os.sched_setaffinity(0, (allcpu - own) or allcpu)
-    except (AttributeError, OSError):
-        pass
+    """Called inside the forked save/autosave child: drop the asyncio
+    loop's isolated-core affinity (inherited across fork) so the ~750 ms
+    encode runs on the housekeeping cores instead of stealing cycles from
+    the MIDI loop. Delegates to the shared cpu_affinity helper (no-op off
+    the isolated appliance)."""
+    from . import cpu_affinity
+    cpu_affinity.move_to_housekeeping()
 
 
 def uptime_seconds() -> float:
