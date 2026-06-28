@@ -683,7 +683,12 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
 
     @server.route("GET", "/api/devices")
     async def api_devices(req: Request) -> Response:
-        devices = engine.scan_devices()
+        # Use the CACHED device list, not a fresh scan_devices() — a full
+        # ALSA re-enumeration here is ~150 ms on a busy rig and the UI
+        # fetches /api/devices on every connection-changed SSE, so a
+        # scan-per-fetch stalled the loop (and jittered MIDI) on every
+        # cable add. The cache is kept current by hotplug-driven rescans.
+        devices = engine.devices
         registry = engine.device_registry
         result = []
         port_names = config.data.get("port_names", {})
