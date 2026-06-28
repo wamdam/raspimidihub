@@ -37,20 +37,25 @@ Plus a context snapshot (per-core CPU, temp) so spikes correlate with load.
 - **`passive`** — start a scene, sample distributions over `--duration`
   seconds (multi-hour soak supported), report percentiles/histograms.
 - **`both`** — ops sweep then passive.
-- **`cross`** — two-Pi clock-divergence. The `--peer` hub exports a
-  running clock tracker over Network MIDI; the `--target` hub mirrors it
-  and measures the cross-Pi clock **offset** + **drift (ppm)** (AppleMIDI
-  CK sync), the CK **round-trip**, and the **received-clock RX jitter**.
-  Restores both via Load. Example:
+- **`cross`** — two-Pi RECEIVED-CLOCK punctuality test. The `--peer` hub
+  is the master: it exports a running clock tracker over Network MIDI.
+  The `--target` hub mirrors it, so its clock comes entirely from the
+  master. The harness then performs UI actions on the target (add/remove
+  plugin, add cable, change filter) and measures **how much each delays
+  the received ticks** (`clock_tick_jitter` on the receiver) — i.e. does
+  fiddling on the receiving Pi make it stutter the master clock. It
+  prints a baseline first, then the per-action tick delay. Restores both
+  via Load. Example:
 
   ```
-  make perf TARGET=http://B PERF_ARGS="--mode cross --peer http://A --duration 300"
+  make perf TARGET=http://B PERF_ARGS="--mode cross --peer http://A"
   ```
 
-  The offset's absolute value is meaningless (two unsynced monotonic
-  clocks); the **drift** is the divergence signal (a few ppm between
-  separate Pis is normal). Needs the two hubs to find each other — uses a
-  manual peer (the master's IP) to bypass link-local mDNS.
+  (Drift between the two crystals is *not* the point — in practice there
+  is one master and the receiver must track it; a delayed tick is what
+  hurts. `clock_offset_ms`/`clock_drift_ppm` are still exposed in
+  /api/network-midi for reference.) Needs the two hubs to find each
+  other — uses a manual peer (the master's IP) to bypass link-local mDNS.
 
 `--out PREFIX` writes JSON reports (`PREFIX-ops.json`, `PREFIX-passive.json`).
 

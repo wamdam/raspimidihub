@@ -197,7 +197,8 @@ OPS = ["add_plugin", "add_cable", "change_filter", "save", "load",
        "remove_plugin"]
 
 
-def run_ops(hub, settle, out):
+def run_ops(hub, settle, out, ops=None):
+    ops = ops or OPS
     print(f"== operations-disturbance sweep (settle {settle}s each) ==")
     results = []
     # Keep the full create-response dicts (they carry client_id + ports;
@@ -225,7 +226,7 @@ def run_ops(hub, settle, out):
         elif op == "load":
             hub.load()
 
-    for op in OPS:
+    for op in ops:
         hub.reset_stats()
         time.sleep(0.3)                       # baseline gap
         t0 = time.monotonic()
@@ -250,32 +251,39 @@ def run_ops(hub, settle, out):
         print(f"  {op:14s} wall={wall:6.0f}ms  self-block={self_max}  "
               f"loop_lag max={ll.get('max','-')}  clock_jitter max={cj.get('max','-')}")
     teardown_scene(hub, [p["id"] for p in created])
-    print("\n-- per-operation impact (loop-lag max ms) --")
+    print("\n-- per-operation impact: loop-lag / clock-tick delay (max ms) --")
     for r in results:
-        ll = r.get("loop_lag") or {}
-        flag = " <== SPIKE" if (ll.get("max") or 0) > 10 else ""
-        print(f"  {r['op']:14s} {ll.get('max','-')}{flag}")
+        ll = (r.get("loop_lag") or {}).get("max")
+        cj = (r.get("clock_tick_jitter") or {}).get("max")
+        worst = max(ll or 0, cj or 0)
+        flag = " <== DELAYS TICKS" if worst > 10 else ""
+        print(f"  {r['op']:14s} loop_lag={ll}  clock_tick_delay={cj}{flag}")
     if out:
         _write(out + "-ops.json", results)
     return results
 
 
-def run_cross(hubB, peer_url, peer_ip, duration, poll, bpm, out):
-    """Two-Pi clock-divergence run. Pi A (peer) exports a running clock
-    tracker over Network MIDI; Pi B (target) mirrors it and measures the
-    cross-Pi clock offset/drift (AppleMIDI CK) + received-clock RX jitter.
-    Restores both via Load at the end."""
+# Live-performance UI actions (don't tear down the mirror — Load/Save are
+# excluded here; Load would drop the mirror mid-test).
+CROSS_OPS = ["add_plugin", "add_cable", "change_filter", "remove_plugin"]
+
+
+def run_cross(hubB, peer_url, peer_ip, settle, out, bpm):
+    """Two-Pi RECEIVED-CLOCK punctuality test. Pi A (peer) is the master:
+    it exports a running clock tracker over Network MIDI. Pi B (target)
+    mirrors it, so B's clock comes entirely from A. We then perform UI
+    actions on B and measure how much each DELAYS THE RECEIVED TICKS
+    (clock_tick_jitter on B) — i.e. does adding a cable / changing a
+    filter / a plugin churn make B stutter the master clock. Restores
+    both via Load."""
     hubA = Hub(peer_url)
-    print(f"== cross-Pi: master={peer_url} (ip {peer_ip})  mirror={hubB.base} ==")
-    created = []
+    print(f"== cross-Pi received-clock test: master={peer_url}  mirror={hubB.base} ==")
     try:
         hubA.enable_netmidi(True)
         trk = hubA.create_plugin("tracker", "perf-netclock")
-        created.append(trk["id"])
         hubA.patch_params(trk["id"], {"bpm": bpm, "send_clock": True, "running": True})
         time.sleep(1)
-        sid = hubA.device_stable_id(trk["id"])
-        hubA.export_device(sid, True)
+        hubA.export_device(hubA.device_stable_id(trk["id"]), True)
         hubB.enable_netmidi(True)
         hubB.add_peer(peer_ip)
         print("  waiting for mirror to connect…")
@@ -288,26 +296,20 @@ def run_cross(hubB, peer_url, peer_ip, duration, poll, bpm, out):
         if not sess or sess.get("state") != "connected":
             print("  MIRROR DID NOT CONNECT (link-local discovery — see task 6). aborting.")
             return
-        print(f"  mirrored '{sess.get('name')}' from {sess.get('addr')}")
+        # Confirm B is actually receiving the master clock before disturbing it.
         hubB.reset_stats()
-        timeline = []
-        t_end = time.monotonic() + duration
-        while time.monotonic() < t_end:
-            time.sleep(poll)
-            sess = _first_session(hubB.netmidi())
-            s = hubB.stats().get("metrics", {})
-            rtt = s.get("net_clock_rtt") or {}
-            rx = s.get("net_midi_rx") or {}
-            row = {"t": round(time.monotonic(), 1),
-                   "offset_ms": sess.get("clock_offset_ms"),
-                   "drift_ppm": sess.get("clock_drift_ppm"),
-                   "rtt": rtt, "rx": rx}
-            timeline.append(row)
-            print(f"  t+{row['t']:.0f}s  offset={row['offset_ms']} ms  "
-                  f"drift={row['drift_ppm']} ppm  rtt p99={rtt.get('p99','-')} ms  "
-                  f"rx p99={rx.get('p99','-')} ms (n={rx.get('count','-')})")
-        if out:
-            _write(out + "-cross.json", timeline)
+        time.sleep(4)
+        base = hubB.stats().get("metrics", {})
+        cj = base.get("clock_tick_jitter") or {}
+        rx = base.get("net_midi_rx") or {}
+        print(f"  mirrored '{sess.get('name')}' from {sess.get('addr')}")
+        print(f"  BASELINE received clock: tick_jitter p99={cj.get('p99','-')} "
+              f"max={cj.get('max','-')} ms (n={cj.get('count','-')}); "
+              f"rx p99={rx.get('p99','-')} ms")
+        if not cj.get("count"):
+            print("  (no clock ticks reaching the bus — check the master is running)")
+        # Now disturb B with UI actions and watch the received-tick delay.
+        run_ops(hubB, settle, out, ops=CROSS_OPS)
     finally:
         print("  teardown: load both to restore")
         hubB.load()
@@ -356,7 +358,7 @@ def main():
             print("--peer <master hub URL> is required for cross mode", file=sys.stderr)
             return 2
         peer_ip = args.peer_ip or urllib.parse.urlparse(args.peer).hostname
-        run_cross(hub, args.peer, peer_ip, args.duration, args.poll, args.bpm, args.out)
+        run_cross(hub, args.peer, peer_ip, args.settle, args.out, args.bpm)
         return 0
 
     scene = []
