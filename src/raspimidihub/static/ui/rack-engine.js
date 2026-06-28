@@ -174,6 +174,12 @@ export function createRackEngine() {
         spreadItems = null; peekKey = null;
         svg.classList.remove('peek');
         svg.innerHTML = '';
+        // A structural redraw means Preact rebuilt the jack/unit DOM, so
+        // the applied-state caches refer to gone elements — clear them so
+        // the updateActivity() at the end re-applies classes to the fresh
+        // ones instead of skipping them as "unchanged".
+        jackAct = {};
+        unitAct = {};
 
         const w = root.scrollWidth || root.clientWidth, h = root.scrollHeight || root.clientHeight;
         svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
@@ -219,6 +225,14 @@ export function createRackEngine() {
     // ---- activity (LEDs + clock) ------------------------------------
     const beatSeen = {};
     const beatSeenUnit = {};
+    // Last-applied steady-state activity flags per element, so
+    // updateActivity (which runs on every clock-quarter + midi-rates
+    // tick) only writes to the DOM when a value actually changes. Without
+    // this it re-toggled live/clock classes on every jack each tick —
+    // ~225 mutation records/sec vs the matrix's ~1, which heats phones in
+    // the rack view. Cleared on a structural redraw (fresh DOM elements).
+    let jackAct = {};   // jackKey -> applied "live?/clock?" signature
+    let unitAct = {};   // client  -> applied "sending?/warn?" signature
     function updateActivity() {
         if (!root || !engine.ctx) return;
         const rates = engine.ctx.midiRates || {};
@@ -242,9 +256,16 @@ export function createRackEngine() {
             const cid = c === '' ? null : Number(c);
             // Effective sender only — blocked sources are hidden entirely.
             const sends = cid != null && clockIds.includes(cid) && !blockedById[cid];
-            icon.classList.toggle('sending', sends);
-            if (!sends) { icon.classList.remove('clock-warn', 'beat'); continue; }
-            icon.classList.toggle('clock-warn', multiEffective);
+            const warn = sends && multiEffective;
+            // Only touch the DOM when the steady state changed (see jackAct).
+            const sig = sends ? (warn ? 'sw' : 's') : '';
+            if (unitAct[c] !== sig) {
+                unitAct[c] = sig;
+                icon.classList.toggle('sending', sends);
+                icon.classList.toggle('clock-warn', warn);
+                if (!sends) icon.classList.remove('beat');
+            }
+            if (!sends) continue;
             const q = quarters[cid];
             if (q && beatSeenUnit[cid] !== q) {
                 beatSeenUnit[cid] = q;
@@ -257,18 +278,22 @@ export function createRackEngine() {
             const dkey = parts.join(':');
             const cid = dkey[0] === 'c' ? Number(dkey.slice(1)) : null;
             const rate = cid != null ? rates[cid + ':' + port] : 0;
-            jack.classList.toggle('live', !!rate);
+            const live = !!rate;
             // Clock: source (out) jacks of a clock-sending device get a
             // steady ring; a quarter-note tick replays a one-shot pulse.
-            if (role === 'out' && cid != null && clockIds.includes(cid)) {
-                jack.classList.add('clock');
-                const q = quarters[cid];
-                if (q && beatSeen[key] !== q) {
-                    beatSeen[key] = q;
-                    jack.classList.remove('clock-beat'); void jack.offsetWidth; jack.classList.add('clock-beat');
-                }
-            } else {
-                jack.classList.remove('clock');
+            const isClock = role === 'out' && cid != null && clockIds.includes(cid);
+            const sig = (live ? 'l' : '') + (isClock ? 'c' : '');
+            if (jackAct[key] !== sig) {
+                jackAct[key] = sig;
+                jack.classList.toggle('live', live);
+                jack.classList.toggle('clock', isClock);
+                if (!isClock) jack.classList.remove('clock-beat');
+            }
+            if (!isClock) continue;
+            const q = quarters[cid];
+            if (q && beatSeen[key] !== q) {
+                beatSeen[key] = q;
+                jack.classList.remove('clock-beat'); void jack.offsetWidth; jack.classList.add('clock-beat');
             }
         }
     }
