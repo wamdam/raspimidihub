@@ -269,6 +269,7 @@ snd_seq_client_info_get_client = _func("snd_seq_client_info_get_client", c_int, 
 snd_seq_client_info_get_name = _func("snd_seq_client_info_get_name", c_char_p, SndSeqClientInfoPtr)
 snd_seq_client_info_get_type = _func("snd_seq_client_info_get_type", c_int, SndSeqClientInfoPtr)
 snd_seq_query_next_client = _func("snd_seq_query_next_client", c_int, SndSeqPtr, SndSeqClientInfoPtr)
+snd_seq_get_any_client_info = _func("snd_seq_get_any_client_info", c_int, SndSeqPtr, c_int, SndSeqClientInfoPtr)
 
 # Client types
 SND_SEQ_USER_CLIENT = 1
@@ -536,6 +537,43 @@ class AlsaSeq:
             snd_seq_port_info_free(pinfo)
 
         return devices
+
+    def scan_one_client(self, client_id: int) -> "MidiDevice | None":
+        """Query ONE client's ports → MidiDevice (or None if it has no
+        subscribable ports / doesn't exist). The cheap incremental
+        alternative to scan_devices() for a just-created plugin client:
+        no full enumeration, no bluetoothctl, no per-device sysfs."""
+        cinfo = SndSeqClientInfoPtr()
+        check(snd_seq_client_info_malloc(byref(cinfo)), "malloc client_info")
+        pinfo = SndSeqPortInfoPtr()
+        check(snd_seq_port_info_malloc(byref(pinfo)), "malloc port_info")
+        try:
+            if snd_seq_get_any_client_info(self._handle, client_id, cinfo) < 0:
+                return None
+            name_raw = snd_seq_client_info_get_name(cinfo)
+            client_name = (name_raw.decode("utf-8", errors="replace")
+                           if name_raw else f"Client {client_id}")
+            ports = []
+            snd_seq_port_info_set_client(pinfo, client_id)
+            snd_seq_port_info_set_port(pinfo, -1)
+            while snd_seq_query_next_port(self._handle, pinfo) >= 0:
+                cap = snd_seq_port_info_get_capability(pinfo)
+                if cap & SND_SEQ_PORT_CAP_NO_EXPORT:
+                    continue
+                is_input = bool(cap & SND_SEQ_PORT_CAP_READ and cap & SND_SEQ_PORT_CAP_SUBS_READ)
+                is_output = bool(cap & SND_SEQ_PORT_CAP_WRITE and cap & SND_SEQ_PORT_CAP_SUBS_WRITE)
+                if not is_input and not is_output:
+                    continue
+                port_id = snd_seq_port_info_get_port(pinfo)
+                pn_raw = snd_seq_port_info_get_name(pinfo)
+                port_name = (pn_raw.decode("utf-8", errors="replace")
+                             if pn_raw else f"Port {port_id}")
+                ports.append(MidiPort(port_id=port_id, name=port_name,
+                                      is_input=is_input, is_output=is_output))
+            return MidiDevice(client_id=client_id, name=client_name, ports=ports) if ports else None
+        finally:
+            snd_seq_client_info_free(cinfo)
+            snd_seq_port_info_free(pinfo)
 
     def list_user_client_names(self) -> dict[int, str]:
         """Return {client_id: name} for every USER-type ALSA seq client.

@@ -2634,8 +2634,11 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
 
         # Register the new ALSA client without tearing down existing
         # subscriptions — keeps clock and MIDI flowing through the
-        # other plugins.
-        engine.handle_plugin_added()
+        # other plugins. Incremental: add just this client (no full ALSA
+        # re-enumeration / bluetoothctl / sysfs), so it doesn't stall the
+        # loop or delay a received master clock (~34ms before).
+        engine.handle_plugin_added(new_client_id=instance.alsa_client.client_id
+                                   if instance.alsa_client else None)
 
         _invalidate_instances_cache()
         engine.mark_dirty()

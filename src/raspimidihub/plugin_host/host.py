@@ -670,6 +670,14 @@ class PluginHost:
     def get_instance(self, instance_id: str) -> PluginInstance | None:
         return self._instances.get(instance_id)
 
+    def instance_for_client(self, client_id: int) -> PluginInstance | None:
+        """The instance owning a given ALSA client id (for the engine's
+        incremental plugin-add registration)."""
+        for inst in self._instances.values():
+            if inst.alsa_client and inst.alsa_client.client_id == client_id:
+                return inst
+        return None
+
     def _dispatch_param(self, key, value) -> None:
         """Coalescer emit callback — fan out to the registered
         plugin-param SSE handler. Key is (instance_id, name)."""

@@ -456,8 +456,11 @@ class MidiEngine:
             self._debounce_task.cancel()
             self._debounce_task = None
 
-    def handle_plugin_added(self) -> None:
+    def handle_plugin_added(self, new_client_id: int | None = None) -> None:
         """Fast path for "a new plugin instance just appeared".
+
+        With `new_client_id`, registers just that client incrementally
+        (cheap); without it, falls back to a full rescan (hotplug).
 
         No teardown. No disconnect_all. Just registers the new ALSA
         client, updates monitor subscriptions, and notifies listeners.
@@ -472,9 +475,34 @@ class MidiEngine:
         if not self._seq:
             return
         self._cancel_pending_rescan()
+        # Incremental fast path: register just the new plugin client
+        # (one ALSA client query). Avoids scan_devices()'s full
+        # enumeration + bluetoothctl + per-device sysfs, which on the loop
+        # delayed a received master clock ~34ms (×worse on a busy rig).
+        if new_client_id is not None and self._register_one_plugin(new_client_id):
+            self._update_monitor_subscriptions()
+            self._notify_change()
+            return
+        # Fallback (hotplug / unknown client): full rescan.
         self.scan_devices()
         self._update_monitor_subscriptions()
         self._notify_change()
+
+    def _register_one_plugin(self, client_id: int) -> bool:
+        """Add a single just-created plugin client to the device list +
+        registry without a full scan. Returns False (caller falls back to
+        a full scan) if the client/instance can't be resolved."""
+        host = self._plugin_host
+        if host is None:
+            return False
+        inst = host.instance_for_client(client_id)
+        dev = self._seq.scan_one_client(client_id)
+        if inst is None or dev is None:
+            return False
+        self._devices = ([d for d in self._devices if d.client_id != client_id]
+                         + [dev])
+        self._device_registry.register_plugin(client_id, inst.id, inst.name)
+        return True
 
     def handle_plugin_removed(self, gone_client_id: int) -> None:
         """Fast path for "a plugin instance is being removed".
