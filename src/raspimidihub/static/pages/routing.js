@@ -241,10 +241,22 @@ export function RoutingPage({ devices, connections, refresh, showToast, clockSou
     // should see the source flashing "Saving…" or arming a panic.
     const [saving, setSaving] = useSharedUiState('saving', false);
     const saveConfig = async () => {
+        // The save now encodes in a forked child off the audio core, but
+        // we still WAIT for the response: it returns only once the write
+        // is durable, so the toast reflects the real outcome (never
+        // fire-and-forget). Report failure honestly instead of always
+        // claiming success.
         setSaving(true);
-        await api('/config/save', { method: 'POST' });
-        setSaving(false);
-        showToast('Configuration saved');
+        try {
+            const res = await api('/config/save', { method: 'POST' });
+            showToast(res && res.status === 'saved'
+                ? 'Configuration saved'
+                : (res && res.error) || 'Save failed — try again');
+        } catch {
+            showToast('Save failed — try again');
+        } finally {
+            setSaving(false);
+        }
     };
     const [loading, setLoading] = useSharedUiState('loading', false);
     const loadConfig = async () => {

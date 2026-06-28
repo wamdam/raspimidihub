@@ -258,93 +258,76 @@ def test_factory_reset_can_clear_wifi(store):
     assert c._data["wifi"] == cfg.DEFAULT_CONFIG["wifi"]
 
 
-# ---- autosave per-instance fragment cache -------------------------------
+# ---- autosave full-document encode --------------------------------------
 
-def _seqs(plugins):
-    """Map each plugin's id → a starting encode_seq of 0."""
-    return {p["id"]: 0 for p in plugins}
-
-
-def test_autosave_fragment_payload_roundtrips(store):
+def test_autosave_payload_roundtrips(store):
     c = cfg.Config()
     c._data = _cfg(plugins=3, connections=2, mappings=4)
-    assert c.write_autosave(_seqs(c._data["plugins"])) is True
+    assert c.write_autosave() is True
     seq, data = c._read_autosave()
-    # The hand-spliced payload must decode to exactly the same document.
     assert seq == 1
     assert data == c._data
 
 
-def test_autosave_reencodes_only_changed_instance(store):
+def test_fork_write_autosave_roundtrips(store):
+    """The forked child encodes+writes in its own process; the parent
+    reaps it and the slot decodes to exactly the live document. (The
+    encode runs off the loop's GIL — see fork_write_autosave.)"""
+    import os
     c = cfg.Config()
-    c._data = _cfg(plugins=4)
-    calls = []
-    orig = c._encode_instance
-    c._encode_instance = lambda inst: calls.append(inst["id"]) or orig(inst)
-
-    seqs = _seqs(c._data["plugins"])
-    c.write_autosave(seqs)
-    assert sorted(calls) == ["p0", "p1", "p2", "p3"]  # cold cache → all encoded
-
-    # Edit one instance: bump its encode_seq + change its content.
-    calls.clear()
-    seqs["p2"] += 1
-    c._data["plugins"][2]["edited"] = True
-    c.write_autosave(seqs)
-    assert calls == ["p2"]  # only the changed instance re-encoded
-
-    # The reused fragments + the fresh one still roundtrip correctly.
-    _, data = c._read_autosave()
-    assert data["plugins"][2]["edited"] is True
-    assert len(data["plugins"]) == 4
+    c._data = _cfg(plugins=3, connections=2, mappings=4)
+    pid = c.fork_write_autosave()
+    assert pid is not None
+    _, status = os.waitpid(pid, 0)
+    assert os.waitstatus_to_exitcode(status) == 0
+    # Parent advanced the bookkeeping immediately at fork time.
+    assert c._autosave_seq == 1
+    seq, data = c._read_autosave()
+    assert seq == 1
+    assert data == c._data
 
 
-def test_autosave_pure_launch_reencodes_nothing(store):
-    """A pure stem launch bumps no encode_seq → the next autosave reuses
-    every cached fragment (zero re-encode), the scaling guarantee."""
+def test_fork_write_autosave_pingpongs_slots(store):
+    """Two forked writes alternate slots; the newest wins on read-back."""
+    import os
     c = cfg.Config()
-    c._data = _cfg(plugins=8)
-    seqs = _seqs(c._data["plugins"])
-    c.write_autosave(seqs)  # warm the cache
-    calls = []
-    orig = c._encode_instance
-    c._encode_instance = lambda inst: calls.append(inst["id"]) or orig(inst)
-    c.write_autosave(seqs)  # same seqs → nothing changed
-    assert calls == []
-
-
-def test_autosave_cache_evicts_deleted_instance(store):
-    c = cfg.Config()
-    c._data = _cfg(plugins=3)
-    c.write_autosave(_seqs(c._data["plugins"]))
-    assert set(c._autosave_frag_cache) == {"p0", "p1", "p2"}
-    # Delete one instance; its stale fragment must be evicted.
-    c._data["plugins"] = c._data["plugins"][:2]
-    c.write_autosave(_seqs(c._data["plugins"]))
-    assert set(c._autosave_frag_cache) == {"p0", "p1"}
-
-
-def test_clear_autosave_cache_forces_reencode(store):
-    c = cfg.Config()
+    c._data = _cfg(plugins=1)
+    os.waitpid(c.fork_write_autosave(), 0)   # seq 1 → slot 1
     c._data = _cfg(plugins=2)
-    seqs = _seqs(c._data["plugins"])
-    c.write_autosave(seqs)
-    c.clear_autosave_cache()
-    calls = []
-    orig = c._encode_instance
-    c._encode_instance = lambda inst: calls.append(inst["id"]) or orig(inst)
-    c.write_autosave(seqs)  # cleared cache → re-encode despite unchanged seqs
-    assert sorted(calls) == ["p0", "p1"]
+    os.waitpid(c.fork_write_autosave(), 0)   # seq 2 → slot 0
+    assert all(slot.exists() for slot in cfg.AUTOSAVE_SLOTS)
+    seq, data = c._read_autosave()
+    assert seq == 2 and len(data["plugins"]) == 2
 
 
-def test_autosave_without_seqs_still_roundtrips(store):
-    """Back-compat / no-plugin-host path: plugin_seqs=None falls back to
-    a plain full-document encode."""
+# ---- deliberate Save via forked child -----------------------------------
+
+def test_fork_save_writes_config_and_backup(store):
+    """The forked Save child writes config.json + .bak + a rolling
+    backup; the parent reaps it and load_manual reads the result back."""
+    import os
     c = cfg.Config()
     c._data = _cfg(plugins=2, connections=1)
-    assert c.write_autosave(None) is True
-    seq, data = c._read_autosave()
-    assert data == c._data
+    pid = c.fork_save(make_backup=True)
+    assert pid is not None
+    _, status = os.waitpid(pid, 0)
+    assert os.waitstatus_to_exitcode(status) == 0
+    assert cfg.PERSISTENT_CONFIG.is_file()
+    assert len(c.list_backups()) == 1
+    fresh = cfg.Config()
+    assert fresh.load_manual() is True
+    assert len(fresh._data["plugins"]) == 2
+
+
+def test_fork_save_and_wait_roundtrips(store):
+    """_fork_save_and_wait (what asave runs on a worker thread) returns
+    True and commits the config durably."""
+    c = cfg.Config()
+    c._data = _cfg(plugins=3)
+    assert c._fork_save_and_wait(make_backup=False) is True
+    fresh = cfg.Config()
+    assert fresh.load_manual() is True
+    assert len(fresh._data["plugins"]) == 3
 
 
 # ---- autosave "last written n ago" status -------------------------------
@@ -359,7 +342,7 @@ def test_autosave_status_same_session(store, monkeypatch):
     monkeypatch.setattr(cfg, "uptime_seconds", lambda: 100.0)
     c = cfg.Config()
     c._data = _cfg(plugins=1)
-    assert c.write_autosave(None) is True
+    assert c.write_autosave() is True
     # 30s later, same boot → "30s ago".
     monkeypatch.setattr(cfg, "uptime_seconds", lambda: 130.0)
     st = c.autosave_status()
@@ -371,7 +354,7 @@ def test_autosave_status_other_session_after_reboot(store, monkeypatch):
     monkeypatch.setattr(cfg, "uptime_seconds", lambda: 500.0)
     c = cfg.Config()
     c._data = _cfg(plugins=2)
-    c.write_autosave(None)                 # stamped boot-AAA @ uptime 500
+    c.write_autosave()                     # stamped boot-AAA @ uptime 500
     # Reboot: a fresh process loads the slot under a new boot id + low
     # uptime. No honest relative time → age_seconds None, but the status
     # still surfaces (so the UI shows "before last reboot", not "none").
@@ -385,14 +368,15 @@ def test_autosave_status_other_session_after_reboot(store, monkeypatch):
     assert st["age_seconds"] is None
 
 
-def test_autosave_status_survives_fragment_cache_path(store, monkeypatch):
-    """The spliced (fragment-cache) payload must also carry up/boot so a
-    boot-time load can report the autosave age."""
+def test_autosave_status_survives_fork_path(store, monkeypatch):
+    """A forked-child write must also carry up/boot so a boot-time load
+    can report the autosave age."""
+    import os
     monkeypatch.setattr(cfg, "boot_id", lambda: "boot-CCC")
     monkeypatch.setattr(cfg, "uptime_seconds", lambda: 200.0)
     c = cfg.Config()
     c._data = _cfg(plugins=3)
-    c.write_autosave(_seqs(c._data["plugins"]))   # fragment-splice path
+    os.waitpid(c.fork_write_autosave(), 0)        # forked write path
     monkeypatch.setattr(cfg, "uptime_seconds", lambda: 245.0)
     fresh = cfg.Config()
     assert fresh.load() is True

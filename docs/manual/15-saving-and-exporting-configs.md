@@ -31,6 +31,11 @@ atomic-replace + remount-rw / remount-ro cycle (chapter 4.7). The
 dirty-state asterisk clears. The next reboot will start in this
 state.
 
+The button shows **Saving…** until the write has actually completed
+and then confirms with **Configuration saved**; if the write fails
+it tells you so rather than claiming success. The save runs without
+disturbing live MIDI, so it is safe to commit a change mid-set.
+
 Save Config writes the *entire* project state. Anything in chapter
 15.7 is captured.
 

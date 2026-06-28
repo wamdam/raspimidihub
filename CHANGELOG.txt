@@ -4,6 +4,12 @@ User-visible changes. Short tagged one-liners, no code or commit
 hashes. Tags: Added, Improved, Fix, Changed, Removed.
 
 
+Unreleased
+
+- Fix: **autosave no longer interrupts a live performance.** Saving the resume snapshot (e.g. when you connect a cable) used to encode the whole config on the main loop, which could briefly jitter filtered/mapped MIDI on a busy set. The encode now runs in a separate process on a spare CPU core, so the audio/MIDI path is never stalled by a save. Power-cut resume safety is unchanged.
+- Improved: **a manual Save Config no longer jitters live MIDI either.** The deliberate Save now encodes off the audio core the same way, while still waiting for the write to finish — the button reports "Configuration saved" only once the config is really on disk (and now says so honestly if a save fails, instead of always claiming success).
+
+
 2026-06-27 — Version 5.1.5
 
 - Fix: **`eth0` stays usable on DHCP.** Setting `eth0` to DHCP could leave the hub with only a `169.254` link-local and no working network — the hub's own background "always-on link-local" was being added behind NetworkManager's back, which made NM drop the DHCP lease. The link-local is now managed by NetworkManager itself (`ipv4.link-local`), so it coexists with DHCP instead of fighting it: a DHCP hub gets its normal lease *and* a link-local, and DNS/internet work as expected. (Reported on the 5.1.x series; 5.0.1 was unaffected.)

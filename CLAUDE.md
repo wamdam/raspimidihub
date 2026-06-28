@@ -152,10 +152,15 @@ honour them unless the user revisits.
   monotonic `#seq` for ordering.
 - **The asyncio loop carries filtered/mapped MIDI + SSE + REST.**
   `json.dumps` (and pickle/orjson) **hold the GIL**, so a big encode
-  blocks the loop *even on a worker thread*. Disk I/O (`mount`,
-  `sync`) and `gzip` **release** the GIL, so they don't. Measured:
-  ~60 ms to JSON-encode the ~235 KB config on the Pi (≈ ×8 with 8
-  trackers). So the cost to minimise is **the encode**, not the I/O.
+  blocks the loop *even on a worker thread* (a worker thread releases
+  the GIL only *between* `json.dumps` calls, never inside one big C
+  encode). Disk I/O (`mount`, `sync`) and `gzip` **release** the GIL,
+  so they don't. Measured: a full config encode reached **~750 ms**
+  on the Pi with a few trackers — enough to audibly jitter a
+  filtered/mapped live part. So the cost to remove from the loop is
+  **the encode**, not the I/O. The fix is to run it in a **forked
+  child** with its own GIL on a non-isolated core (see *fork-on-save*
+  below), so the loop never executes the encode at all.
 
 **The three persistence tiers**
 1. **`config.json`** -- the deliberate manual Save (single full
@@ -177,23 +182,53 @@ honour them unless the user revisits.
   state. gzip's CRC is the validity check (a torn write fails to
   decompress → use the other slot). This is the power-cut
   guarantee; keep it.
-- **Single autosave file + in-memory per-instrument encode cache**,
-  **not** per-instrument files + a tar.gz/zip container. Per-file
-  would need an on-FAT transactional store (manifest commit, orphan
-  GC when instruments are deleted/restored-away, per-file A/B) -- a
-  real bug surface. The cache (skip re-encoding **unchanged**
-  instruments, splice cached JSON fragments) gets the same
-  scaling win (cost ≈ one changed instrument, regardless of count)
-  with a single file and **zero cleanup story**.
-- **JSON, not pickle/orjson.** JSON fragments concatenate into the
-  `plugins` array (pickle blobs don't); the cache -- not the format
-  -- is the real win, so no dependency is needed. orjson/pickle were
+- **Single autosave file**, **not** per-instrument files + a
+  tar.gz/zip container. Per-file would need an on-FAT transactional
+  store (manifest commit, orphan GC when instruments are
+  deleted/restored-away, per-file A/B) -- a real bug surface. One
+  ping-pong file has **zero cleanup story**.
+- **fork-on-save, not an on-loop encode cache.** The background
+  autosave `os.fork()`s; the **child** (its own interpreter → its own
+  GIL) does the `json.dumps` + gzip + slot write, then `os._exit`.
+  The child inherits the parent's memory **copy-on-write**, so
+  `config._data` is visible with **no IPC and no serialisation on the
+  loop** — the parent's only cost is the `fork()` syscall. The child
+  first drops the loop's isolated-core affinity (inherited across
+  fork) onto the housekeeping cores, so even a 750 ms encode steals
+  nothing from MIDI. The parent advances the ping-pong seq at fork
+  time, so a child that dies mid-write just leaves a torn slot that
+  gzip-CRC rejects on boot — the prior good slot still wins.
+  **This replaced an earlier per-instance JSON-fragment encode
+  cache** (reuse the cached bytes of instruments whose `encode_seq`
+  hadn't moved). The cache existed only to shrink the encode *while it
+  ran on the loop's GIL*; once the encode moved off-process there was
+  nothing left to shrink, so the whole cache + `encode_seq` plumbing
+  was deleted. Fork-safety rules for the child: no asyncio, no logging
+  (its lock may be held at fork time), no ALSA; exit via `os._exit`.
+  The clean-shutdown flush stays **in-process synchronous** (the loop
+  is going away; an in-process write can't be orphaned by the process
+  exiting before a child finishes).
+  **The deliberate Save and Load/Restore/Import fork too, but fork
+  *and wait*** (`asave` → `_fork_save_and_wait`, `autosave_now`): the
+  encode runs in the child off-core, the parent blocks on `waitpid`
+  **on a worker thread** (a GIL-releasing syscall, so the loop keeps
+  pumping MIDI), and the request returns only once the write is
+  durable — the Save button reports the real outcome, never
+  fire-and-forget. The Save child does the full `save()` work
+  (config.json + `.bak` + a rolling backup), all GIL-heavy, all
+  off-core.
+- **One cross-process flock guards `_boot_rw`.** The autosave child
+  and the Save child can now each open their own rw/ro remount window
+  in parallel; two overlapping windows would let one remount the FS
+  read-only while the other is mid-write. `_boot_rw` takes an `flock`
+  on a tmpfs lockfile so the second writer waits for the first. It
+  blocks only the child/worker doing the write, never the loop, and
+  **must not be nested** within one process (the second flock would
+  wait on the first's own fd forever).
+- **JSON, not pickle/orjson.** Human-readable, dependency-free, and
+  the encode is no longer on the hot path anyway. orjson/pickle were
   considered and rejected (orjson = a compiled arch+pyver-locked dep
-  on an `_all` deb; pickle breaks fragment concatenation).
-- **No sidecar/IPC process.** It would push the encode fully off the
-  main process, but at the cost of a delta protocol + state mirror +
-  fork-safety + funnelling all writes through it. Reserve only if the
-  cache proves insufficient.
+  on an `_all` deb).
 - **Pattern selection must not dirty (Lever 1).** A Trigger-Mode stem
   launch (and a Switch-mode tap) moves the pattern *pointer*
   (`selected_pattern`) + live *mirror* (`pages`) but does **not**
@@ -201,13 +236,13 @@ honour them unless the user revisits.
   user, simplest): pattern **selection simply does not mark the tracker
   dirty** -- a **per-call quiet write** (`set_param(..., persist=False)`)
   that still SSE-broadcasts the value (display follows the launch) but
-  skips the dirty hook *and* the encode-cache invalidation.
+  skips the dirty hook.
   `selected_pattern`/`pages` stay **non-transient (serialised)**, so the
   active pattern is still saved on a deliberate Save (no `default_pattern`
   field). It must be per-call, **not** a per-param `transient` flag,
   because `pages` is changed by both launches (quiet) and recording
   (must dirty). Recording/clone/clear use normal `set_param` → they
-  dirty + invalidate the cache as usual; no `persist_changed` mechanism.
+  dirty as usual; no `persist_changed` mechanism.
   Net: pure stem-launching during a set triggers **no** autosave and
   **no** asterisk; only real edits do. (This is *not* the rejected idea
   of launches not switching the display -- the display still follows.)
@@ -218,8 +253,11 @@ honour them unless the user revisits.
 
 **Threading**: MIDI routing is kernel ALSA port subscriptions;
 plugins run on their own threads; clock/scheduled sends are
-pre-queued to the ALSA queue (kernel-timed). So an autosave encode
-only ever blips **filtered/mapped connections + the UI**, never
-clock/plugin/kernel-routed timing. The snapshot is built on the
-loop (race-free vs hotplug, which is also on the loop); the
-encode+gzip+write run via `asyncio.to_thread`.
+pre-queued to the ALSA queue (kernel-timed). So even before
+fork-on-save an autosave encode only ever blipped **filtered/mapped
+connections + the UI**, never clock/plugin/kernel-routed timing —
+and fork-on-save removes that last blip too. The snapshot is still
+built on the loop (cheap, shallow, race-free vs hotplug, which is
+also on the loop); only `os.fork()` runs on the loop, after which
+the encode+gzip+write happen in the forked child off the isolated
+core.

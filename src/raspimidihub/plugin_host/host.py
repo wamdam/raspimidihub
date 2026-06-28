@@ -371,7 +371,6 @@ class PluginHost:
             saveable = (persist
                         and name not in instance_p.plugin.transient_params)
             if saveable:
-                instance_p._encode_seq += 1
                 if host_self_p._on_dirty_cb and not host_self_p._loading:
                     try:
                         host_self_p._on_dirty_cb()
@@ -781,12 +780,6 @@ class PluginHost:
         return True
 
     # --- Serialization for config persistence ---
-
-    def instance_encode_seqs(self) -> dict[str, int]:
-        """{instance_id: encode_seq} for the autosave fragment cache.
-        Read on the asyncio loop right after the snapshot so it's
-        race-free against hotplug (which also runs on the loop)."""
-        return {inst.id: inst._encode_seq for inst in self._instances.values()}
 
     def serialize_instances(self) -> list[dict]:
         """Serialize all instances for config save. Transient params

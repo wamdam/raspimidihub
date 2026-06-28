@@ -63,13 +63,24 @@ class _Autosaver:
         self._last_write = 0.0
         self._running = True
         self._suspended = False
+        # pid of an in-flight background autosave child (fork_write_autosave),
+        # or None. Reaped non-blocking on the next poll; we never stack two.
+        self._child_pid: int | None = None
 
-    def _plugin_seqs(self):
-        """Per-instance encode-seq map, read on the loop right after the
-        snapshot so it's race-free vs hotplug. Feeds the autosave
-        fragment cache. None when there's no plugin host."""
-        host = getattr(self._engine, "_plugin_host", None)
-        return host.instance_encode_seqs() if host is not None else None
+    def _reap_child(self, block: bool) -> None:
+        """Reap the background autosave child if present. block=False is
+        the periodic non-blocking reap (clears _child_pid once the child
+        exits); block=True waits for it (shutdown / before a durable
+        write, so its rw/ro remount window can't overlap ours)."""
+        if self._child_pid is None:
+            return
+        try:
+            flags = 0 if block else os.WNOHANG
+            reaped, _status = os.waitpid(self._child_pid, flags)
+        except ChildProcessError:
+            reaped = self._child_pid  # already gone
+        if block or reaped == self._child_pid:
+            self._child_pid = None
 
     async def run(self) -> None:
         import time as _t
@@ -79,6 +90,9 @@ class _Autosaver:
         while self._running:
             await asyncio.sleep(self.POLL)
             try:
+                self._reap_child(block=False)  # clear a finished prior child
+                if self._child_pid is not None:
+                    continue  # previous encode still running — don't stack forks
                 seq = self._engine._change_seq
                 if seq == self._last_seq:
                     continue  # nothing changed since the last autosave
@@ -89,12 +103,14 @@ class _Autosaver:
                 idle = now - self._engine._last_change_t
                 if idle < self.DEBOUNCE and since_write < self.MAX_WAIT:
                     continue  # still actively editing and not yet overdue
+                # Build the plain snapshot on the loop (cheap, shallow,
+                # race-free vs hotplug), then fork: the GIL-heavy encode
+                # runs in the child off the isolated core, so the loop
+                # is free the instant fork() returns.
                 self._snapshot()
-                seqs = self._plugin_seqs()
-                ok = await asyncio.to_thread(self._config.write_autosave, seqs)
+                self._child_pid = self._config.fork_write_autosave()
                 self._last_write = now
-                if ok:
-                    self._last_seq = seq
+                self._last_seq = seq
             except Exception:
                 log.exception("autosave loop error")
 
@@ -112,10 +128,17 @@ class _Autosaver:
         try:
             if self._suspended:
                 return  # factory reset cleared the snapshot; don't recreate it
+            # Wait for any in-flight background child first so its rw/ro
+            # remount window can't overlap this synchronous write.
+            self._reap_child(block=True)
             if not force and self._engine._change_seq == self._last_seq:
                 return
             self._snapshot()
-            self._config.write_autosave(self._plugin_seqs())
+            # Shutdown path: encode in-process. The loop is going away,
+            # so the GIL hold doesn't matter, and an in-process write
+            # can't be orphaned by the process exiting before a child
+            # finishes.
+            self._config.write_autosave()
             self._last_seq = self._engine._change_seq
             import time as _t
             self._last_write = _t.monotonic()
@@ -124,17 +147,34 @@ class _Autosaver:
 
     async def autosave_now(self) -> None:
         """Async force-autosave for the request handlers (Load / Restore
-        / Import). Builds the snapshot on the loop (race-free vs
-        hotplug) and runs the encode+gzip+write on a worker thread."""
+        / Import). The new state must be durable as the resume point
+        before we return, so we fork the encode child and WAIT for it —
+        but on a worker thread, where the waitpid blocks without holding
+        the GIL, leaving the loop free while the child encodes off-core.
+        Falls back to an in-process write if fork fails."""
         try:
+            # Don't overlap a background child's remount window.
+            self._reap_child(block=True)
             self._snapshot()
-            seqs = self._plugin_seqs()
-            await asyncio.to_thread(self._config.write_autosave, seqs)
+            await asyncio.to_thread(self._fork_and_wait)
             self._last_seq = self._engine._change_seq
             import time as _t
             self._last_write = _t.monotonic()
         except Exception:
             log.exception("autosave_now error")
+
+    def _fork_and_wait(self) -> None:
+        """Fork the encode child and block (on a worker thread) until it
+        has durably written the slot. The waitpid is a GIL-releasing
+        syscall, so the loop keeps running while the child encodes."""
+        pid = self._config.fork_write_autosave()
+        if pid is None:
+            self._config.write_autosave()  # fork failed: in-process fallback
+            return
+        try:
+            os.waitpid(pid, 0)
+        except ChildProcessError:
+            pass
 
     def stop(self) -> None:
         self._running = False
@@ -1575,11 +1615,6 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         """Apply whatever is in config.data to the live engine — restore
         plugin instances, then diff routing onto the matrix. Shared by
         Load (manual save) and backup Restore."""
-        # The live instance set is being wholesale replaced — the
-        # recreated instances start their encode_seq counters fresh, so
-        # drop the autosave fragment cache to avoid a stale (id, seq)
-        # falsely matching and splicing an outdated fragment.
-        config.clear_autosave_cache()
         # Boot-like identity semantics for a deliberately loaded config:
         # every online device becomes eligible for re-recognition again,
         # so e.g. an old backup whose port-bound IDs no longer match
@@ -1738,9 +1773,6 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
             return Response.error("Invalid config format")
 
         config._data = data
-        # Fresh instance set incoming — drop the autosave fragment cache
-        # (see _apply_current_config) so no stale fragment survives.
-        config.clear_autosave_cache()
         # Boot-like identity semantics for the imported config (see
         # _apply_current_config): all devices re-recognizable.
         engine.device_registry.reset_presence()

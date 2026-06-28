@@ -2237,20 +2237,18 @@ def test_panic_clears_active_launch():
 # invalidate the autosave encode cache. Recording goes through the normal
 # (persisting) path and DOES both. The fake _notify_param_change below
 # mirrors the host's PluginHost._on_param_change gating so we test the
-# end-to-end consequence (dirty + encode_seq), not just the persist flag.
+# end-to-end consequence (dirty), not just the persist flag.
 # ---------------------------------------------------------------------------
 
 def _wire_dirty_tracker(t):
     """Attach a _notify_param_change mirroring the host gating: a
-    persisted, non-transient change bumps encode_seq + marks dirty;
-    transient or quiet (persist=False) writes do neither. Returns a
-    state dict {dirty, encode_seq, calls}."""
-    state = {"dirty": False, "encode_seq": 0, "calls": []}
+    persisted, non-transient change marks dirty; transient or quiet
+    (persist=False) writes do not. Returns a state dict {dirty, calls}."""
+    state = {"dirty": False, "calls": []}
 
     def notify(name, value, persist=True):
         state["calls"].append((name, value, persist))
         if persist and name not in t.transient_params:
-            state["encode_seq"] += 1
             state["dirty"] = True
 
     t._notify_param_change = notify
@@ -2262,7 +2260,7 @@ def _persist_calls(state, name):
 
 
 @pytest.mark.parametrize("mode", [1, 2, 3])  # One-shot / Hold / Toggle
-def test_launch_is_quiet_no_dirty_no_encode_bump(mode):
+def test_launch_is_quiet_no_dirty(mode):
     t = _started_launch(mode=mode)
     t._param_values["patterns"][1] = [_filled_page(track_count=t.TRACK_COUNT)]
     t._refresh_pattern_status_slot(1)
@@ -2270,10 +2268,9 @@ def test_launch_is_quiet_no_dirty_no_encode_bump(mode):
     t.on_note_on(channel=9, note=37, velocity=100)  # launch slot 1
     assert t._launch_active is True
     assert t._param_values["selected_pattern"] == 1
-    # The launch selected a pattern but dirtied nothing and forced no
-    # re-encode — a live set stays asterisk-free and autosave-quiet.
+    # The launch selected a pattern but dirtied nothing — a live set
+    # stays asterisk-free and autosave-quiet.
     assert state["dirty"] is False
-    assert state["encode_seq"] == 0
     # Both pointer + mirror were written quietly.
     assert _persist_calls(state, "selected_pattern") == [False]
     assert _persist_calls(state, "pages") == [False]
@@ -2288,18 +2285,16 @@ def test_switch_mode_tap_is_quiet():
     t.on_param_change("cmd_pattern_select", {"pattern": 1, "mode": "tap"})
     assert t._param_values["selected_pattern"] == 1
     assert state["dirty"] is False
-    assert state["encode_seq"] == 0
     assert _persist_calls(state, "selected_pattern") == [False]
     assert _persist_calls(state, "pages") == [False]
 
 
-def test_recording_dirties_and_bumps_encode_seq():
+def test_recording_dirties():
     t = _started()
     state = _wire_dirty_tracker(t)
     t._record_voice_field_at(0, 0, 0, {"note": "G-4", "vel": 100})
-    # Recording wrote real, saveable content → dirty + cache invalidated.
+    # Recording wrote real, saveable content → dirty.
     assert state["dirty"] is True
-    assert state["encode_seq"] >= 1
     assert _persist_calls(state, "pages") == [True]
 
 

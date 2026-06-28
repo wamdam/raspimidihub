@@ -576,12 +576,11 @@ class TestPreScheduledSnapshot:
 # PluginHost._on_param_change gating so we test the end-to-end consequence.
 
 def _wire_dirty(p):
-    state = {"dirty": False, "encode_seq": 0, "calls": []}
+    state = {"dirty": False, "calls": []}
 
     def notify(name, value, persist=True):
         state["calls"].append((name, persist))
         if persist and name not in p.transient_params:
-            state["encode_seq"] += 1
             state["dirty"] = True
 
     p._notify_param_change = notify
@@ -606,7 +605,6 @@ def test_firing_a_drop_does_not_dirty():
     p.set_param("drops", {"action": "fire", "button_id": 1})
     p.on_param_change("drops", {"action": "fire", "button_id": 1})
     assert state["dirty"] is False
-    assert state["encode_seq"] == 0
 
 
 def test_capturing_a_drop_dirties():
@@ -617,5 +615,4 @@ def test_capturing_a_drop_dirties():
     p.on_param_change("drops", {"action": "capture", "button_id": 1})
     # Capture wrote drop_snapshots (non-transient) → real edit → dirty.
     assert state["dirty"] is True
-    assert state["encode_seq"] >= 1
     assert p._param_values["drop_snapshots"].get("1") == {"f1": 100}

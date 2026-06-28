@@ -5,9 +5,11 @@ Save flow: write tmpfs temp -> validate -> remount rw -> copy -> sync -> remount
 """
 
 import contextlib
+import fcntl
 import gzip
 import json
 import logging
+import os
 import shutil
 import subprocess
 import time
@@ -41,15 +43,47 @@ def _boot_rw():
     """Remount the boot partition read-write for the duration of the
     block, sync, then put it back read-only. Mirrors the rw/ro cycle
     save() has always used — minimising the window in which a power
-    cut could touch FAT metadata."""
-    subprocess.run(["mount", "-o", "remount,rw", _BOOT_MOUNT],
-                   check=True, capture_output=True, timeout=5)
+    cut could touch FAT metadata.
+
+    Serialised across processes via an flock on a tmpfs lockfile: the
+    autosave and Save encodes both run in forked children that each
+    open their own rw/ro window, and two overlapping windows would let
+    one child remount the FS read-only while the other is mid-write.
+    The flock makes the second writer wait for the first to finish.
+    (It blocks only the child/worker doing the write, never the loop.)
+    MUST NOT be nested within one process — the second flock would wait
+    on the first's open file description forever."""
+    RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
+    lock_fd = os.open(RUNTIME_DIR / "boot-rw.lock",
+                      os.O_CREAT | os.O_WRONLY, 0o600)
     try:
-        yield
-        subprocess.run(["sync"], timeout=5)
+        fcntl.flock(lock_fd, fcntl.LOCK_EX)
+        subprocess.run(["mount", "-o", "remount,rw", _BOOT_MOUNT],
+                       check=True, capture_output=True, timeout=5)
+        try:
+            yield
+            subprocess.run(["sync"], timeout=5)
+        finally:
+            subprocess.run(["mount", "-o", "remount,ro", _BOOT_MOUNT],
+                           capture_output=True, timeout=5)
     finally:
-        subprocess.run(["mount", "-o", "remount,ro", _BOOT_MOUNT],
-                       capture_output=True, timeout=5)
+        os.close(lock_fd)  # releases the flock
+
+
+def _move_off_isolated_core() -> None:
+    """Called inside the forked autosave child: drop the asyncio loop's
+    isolated-core affinity (inherited across fork) so the ~750 ms encode
+    runs on the housekeeping cores instead of stealing cycles from the
+    MIDI loop pinned to the isolated core (see __main__.pin_to_isolated_cpu).
+    Generic — no hardcoded core number: the loop is pinned to a subset,
+    so the child takes the complement. No-op on an unpinned dev box
+    (own affinity == all cores → complement empty → keep all)."""
+    try:
+        own = os.sched_getaffinity(0)
+        allcpu = set(range(os.cpu_count() or 1))
+        os.sched_setaffinity(0, (allcpu - own) or allcpu)
+    except (AttributeError, OSError):
+        pass
 
 
 def uptime_seconds() -> float:
@@ -195,15 +229,6 @@ class Config:
         # True once load() resolved to an autosave slot — surfaced so
         # the UI can hint "resumed unsaved work" if it wants.
         self._loaded_from_autosave = False
-        # Per-instance JSON-fragment cache for the autosave encode:
-        # {instance_id: (encode_seq, fragment_bytes)}. json.dumps holds
-        # the GIL, so re-encoding every plugin on each autosave would
-        # stall the loop ever harder as trackers multiply. Instead we
-        # reuse the cached fragment of any instance whose encode_seq
-        # hasn't moved (see write_autosave). Empty until the first
-        # autosave; cleared whenever instances are wholesale replaced
-        # (Load / Restore / Import) via clear_autosave_cache().
-        self._autosave_frag_cache: dict[str, tuple[int, bytes]] = {}
 
     @property
     def data(self) -> dict:
@@ -296,56 +321,108 @@ class Config:
         import asyncio
         return await asyncio.to_thread(self.load_manual)
 
+    def _save_core(self, make_backup: bool) -> None:
+        """Encode + validate + write config.json (+ .bak, + an optional
+        rolling backup) inside one rw window. Raises on failure. The
+        GIL-heavy `json.dumps(indent=2)` (and the gzip backup) live here.
+
+        NO logging: this is the body of the forked Save child (fork_save),
+        where the logging lock could have been held by another thread at
+        fork time and would deadlock the child."""
+        config_json = json.dumps(self._data, indent=2, ensure_ascii=False)
+        json.loads(config_json)  # validate by re-parsing
+
+        # Write the runtime (tmpfs) copy first.
+        RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
+        tmp = RUNTIME_CONFIG.with_suffix(".tmp")
+        tmp.write_text(config_json)
+        tmp.replace(RUNTIME_CONFIG)
+
+        # Remount boot partition rw, copy, remount ro (one window).
+        with _boot_rw():
+            PERSISTENT_DIR.mkdir(parents=True, exist_ok=True)
+            if PERSISTENT_CONFIG.is_file():
+                shutil.copy2(PERSISTENT_CONFIG,
+                             PERSISTENT_CONFIG.with_suffix(".json.bak"))
+            tmp_persistent = PERSISTENT_CONFIG.with_suffix(".tmp")
+            tmp_persistent.write_text(config_json)
+            tmp_persistent.replace(PERSISTENT_CONFIG)
+            if make_backup:
+                # A backup failure must not fail the save — the config is
+                # already committed above. Swallow it silently here (no
+                # logging in the child); the in-process save() logs it.
+                with contextlib.suppress(Exception):
+                    self._write_backup_locked()
+
     def save(self, make_backup: bool = False) -> bool:
-        """Save config to persistent storage with rw/ro remount cycle.
-        When `make_backup` is set, a rolling gzipped checkpoint is also
-        written inside the same rw window (so a manual Save costs one
-        remount, not two). Returns True on success.
-        """
+        """Synchronous, in-process save (holds the GIL for the encode).
+        Used by tests and as the fork-failure fallback; the deliberate
+        Save endpoint goes through asave() → a forked child. Returns
+        True on success."""
         try:
-            config_json = json.dumps(self._data, indent=2, ensure_ascii=False)
-
-            # Validate by re-parsing
-            json.loads(config_json)
-
-            # Write to runtime copy first
-            RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
-            tmp = RUNTIME_CONFIG.with_suffix(".tmp")
-            tmp.write_text(config_json)
-            tmp.replace(RUNTIME_CONFIG)
-
-            # Remount boot partition rw, copy, remount ro
-            with _boot_rw():
-                PERSISTENT_DIR.mkdir(parents=True, exist_ok=True)
-
-                # Backup existing config
-                if PERSISTENT_CONFIG.is_file():
-                    shutil.copy2(PERSISTENT_CONFIG, PERSISTENT_CONFIG.with_suffix(".json.bak"))
-
-                # Write new config
-                tmp_persistent = PERSISTENT_CONFIG.with_suffix(".tmp")
-                tmp_persistent.write_text(config_json)
-                tmp_persistent.replace(PERSISTENT_CONFIG)
-
-                if make_backup:
-                    try:
-                        self._write_backup_locked()
-                    except Exception:
-                        log.exception("Backup write failed (config still saved)")
-
-            self._fallback_active = False
-            log.info("Config saved to %s", PERSISTENT_CONFIG)
-            return True
-
+            self._save_core(make_backup)
         except Exception:
             log.exception("Failed to save config")
             return False
+        self._fallback_active = False
+        log.info("Config saved to %s", PERSISTENT_CONFIG)
+        return True
+
+    def fork_save(self, make_backup: bool = False) -> int | None:
+        """Fork a child that runs the full deliberate Save (encode +
+        write + optional backup) in its own interpreter (own GIL) on the
+        housekeeping cores, so the ~750 ms config encode never stalls the
+        MIDI loop. Mirrors fork_write_autosave: the child shares memory
+        copy-on-write (no IPC), drops the loop's isolated-core affinity,
+        and exits 0/1. Returns the child pid (caller MUST reap it and
+        treat a non-zero exit as failure) or None on fork failure.
+
+        Unlike autosave this is NOT fire-and-forget — the caller waits
+        (see _fork_save_and_wait / asave) so the UI only reports success
+        once the write is durable."""
+        try:
+            pid = os.fork()
+        except OSError:
+            log.exception("Save fork failed")
+            return None
+        if pid != 0:
+            return pid
+        # ---- child ----  fork-safe: no asyncio, no logging, no ALSA.
+        try:
+            _move_off_isolated_core()
+            self._save_core(make_backup)
+            os._exit(0)
+        except BaseException:
+            os._exit(1)
+
+    def _fork_save_and_wait(self, make_backup: bool) -> bool:
+        """Fork the Save child and block until it has durably written
+        (runs on a worker thread via asave → the waitpid releases the
+        GIL, so the loop keeps pumping MIDI while the child encodes).
+        Falls back to an in-process save if fork fails. Returns success;
+        on success the parent owns the post-write bookkeeping/log since
+        the child's copy-on-write changes vanish on _exit."""
+        pid = self.fork_save(make_backup)
+        if pid is None:
+            return self.save(make_backup)  # fork failed: in-process fallback
+        try:
+            _, status = os.waitpid(pid, 0)
+        except ChildProcessError:
+            return False
+        if os.waitstatus_to_exitcode(status) != 0:
+            log.error("Config save child failed")
+            return False
+        self._fallback_active = False
+        log.info("Config saved to %s", PERSISTENT_CONFIG)
+        return True
 
     async def asave(self, make_backup: bool = False) -> bool:
-        """Async wrapper — runs the blocking remount/sync on a worker thread
-        so the asyncio event loop keeps pumping MIDI/SSE during the write."""
+        """Async deliberate save. Forks the encode+write to a child off
+        the isolated core and WAITS for durability (on a worker thread,
+        so the loop keeps pumping MIDI/SSE during the write). Returns
+        True on success."""
         import asyncio
-        return await asyncio.to_thread(self.save, make_backup)
+        return await asyncio.to_thread(self._fork_save_and_wait, make_backup)
 
     def factory_reset(self, keep_wifi: bool = True) -> bool:
         """Reset to factory defaults, reboot-clean. The rolling backups/
@@ -468,101 +545,87 @@ class Config:
 
     # ---- Autosave (debounced rolling resume-snapshot, ping-pong) ----
 
-    def clear_autosave_cache(self) -> None:
-        """Drop the per-instance fragment cache. Called when the live
-        instance set is wholesale replaced (Load / Restore / Import) —
-        the recreated instances start their encode_seq counters fresh,
-        so a stale (id, seq) pair could otherwise falsely match and
-        splice an outdated fragment into the next autosave."""
-        self._autosave_frag_cache.clear()
-
-    def _encode_instance(self, inst: dict) -> bytes:
-        """JSON-encode one serialized plugin instance to a fragment.
-        Isolated so the cache hit/miss path (and tests) can count how
-        many instances actually get re-encoded per autosave."""
-        return json.dumps(inst, ensure_ascii=False).encode("utf-8")
-
-    def _encode_autosave_payload(self, seq: int, up: int, boot: str,
-                                 plugin_seqs) -> bytes:
+    def _encode_autosave_payload(self, seq: int, up: int, boot: str) -> bytes:
         """Build the autosave payload bytes
         ({"seq", "up", "boot", "data": {...}}). `up`/`boot` stamp WHEN
         the slot was written (uptime + boot id, the no-RTC scheme) so
         the Backup panel can show a "last autosave n ago".
 
-        With `plugin_seqs` ({instance_id: encode_seq}) we splice the
-        `plugins` array from per-instance JSON fragments, reusing the
-        cached fragment of any instance whose encode_seq is unchanged
-        and re-encoding only the ones that moved — so the GIL-holding
-        json.dumps cost scales with *edited* trackers, not their total
-        count. Without it (no plugin host) we fall back to a plain
-        full-document encode."""
-        if plugin_seqs is None:
-            return json.dumps(
-                {"seq": seq, "up": up, "boot": boot, "data": self._data},
-                ensure_ascii=False).encode("utf-8")
+        This is a plain full-document json.dumps. It holds the GIL for
+        the whole encode (~750 ms on a Pi with a few trackers), which is
+        why the background autosave runs it in a forked child off the
+        loop's isolated core (see fork_write_autosave) — the parent's
+        loop never executes this. The old per-instance fragment cache
+        existed only to shrink this encode while it ran on the loop's
+        GIL; once the encode moved to a separate process with its own
+        GIL there was nothing left to shrink, so it was removed."""
+        return json.dumps(
+            {"seq": seq, "up": up, "boot": boot, "data": self._data},
+            ensure_ascii=False).encode("utf-8")
 
-        cache = self._autosave_frag_cache
-        plugins = self._data.get("plugins") or []
-        frags = []
-        live_ids = set()
-        for inst in plugins:
-            iid = inst.get("id") if isinstance(inst, dict) else None
-            eseq = plugin_seqs.get(iid) if iid is not None else None
-            cached = cache.get(iid) if iid is not None else None
-            if eseq is not None and cached is not None and cached[0] == eseq:
-                frag = cached[1]
-            else:
-                frag = self._encode_instance(inst)
-                if iid is not None and eseq is not None:
-                    cache[iid] = (eseq, frag)
-            frags.append(frag)
-            if iid is not None:
-                live_ids.add(iid)
-        # Evict cache entries for instances that no longer exist.
-        for stale in set(cache) - live_ids:
-            del cache[stale]
+    def _write_slot(self, seq: int, up: int, boot: str) -> None:
+        """Encode + gzip + write one ping-pong slot. Raises on failure.
+        Deliberately does NO logging: it is the body of the forked
+        autosave child, where the logging lock could have been held by
+        another thread at fork time and would deadlock the child."""
+        payload = self._encode_autosave_payload(seq, up, boot)
+        blob = gzip.compress(payload)
+        with _boot_rw():
+            PERSISTENT_DIR.mkdir(parents=True, exist_ok=True)
+            AUTOSAVE_SLOTS[seq % 2].write_bytes(blob)
 
-        plugins_bytes = b"[" + b",".join(frags) + b"]"
-        # Encode every top-level field EXCEPT plugins fresh (they're
-        # small and cheap), then splice the assembled plugins array in
-        # by hand so we never json.dumps the big plugin payload whole.
-        top = {k: v for k, v in self._data.items() if k != "plugins"}
-        data_top = json.dumps(top, ensure_ascii=False).encode("utf-8")
-        if data_top == b"{}":
-            data_bytes = b'{"plugins":' + plugins_bytes + b"}"
-        else:
-            data_bytes = data_top[:-1] + b',"plugins":' + plugins_bytes + b"}"
-        return (b'{"seq":' + str(seq).encode("ascii")
-                + b',"up":' + str(int(up)).encode("ascii")
-                + b',"boot":' + json.dumps(boot).encode("utf-8")
-                + b',"data":' + data_bytes + b"}")
-
-    def write_autosave(self, plugin_seqs=None) -> bool:
-        """Persist the current in-memory config to the next ping-pong
-        slot so a hard power cut resumes the last edited state on boot.
-        Writes the slot NOT holding the current sequence, so the prior
-        good snapshot always survives. `plugin_seqs` ({instance_id:
-        encode_seq}, captured on the loop) enables the per-instance
-        fragment cache. Returns True on success."""
+    def write_autosave(self) -> bool:
+        """Synchronous, in-process autosave of the next ping-pong slot.
+        Holds the GIL for the encode, so this is only for paths where
+        that is acceptable: the clean-shutdown flush (the loop is going
+        away anyway) and a fork-failure fallback. The live debounced
+        autosaver uses fork_write_autosave instead. Returns True on
+        success and advances the ping-pong bookkeeping."""
+        seq = self._autosave_seq + 1
+        up, boot = int(uptime_seconds()), boot_id()
         try:
-            seq = self._autosave_seq + 1
-            slot = AUTOSAVE_SLOTS[seq % 2]
-            up, boot = int(uptime_seconds()), boot_id()
-            # json.dumps holds the GIL (stalls the loop); gzip + io
-            # release it, so only the encode is on the critical path —
-            # which is exactly what the fragment cache shrinks.
-            payload = self._encode_autosave_payload(seq, up, boot, plugin_seqs)
-            blob = gzip.compress(payload)
-            with _boot_rw():
-                PERSISTENT_DIR.mkdir(parents=True, exist_ok=True)
-                slot.write_bytes(blob)
-            self._autosave_seq = seq
-            self._autosave_up = up
-            self._autosave_boot = boot
-            return True
+            self._write_slot(seq, up, boot)
         except Exception:
             log.exception("Autosave failed")
             return False
+        self._autosave_seq, self._autosave_up, self._autosave_boot = seq, up, boot
+        return True
+
+    def fork_write_autosave(self) -> int | None:
+        """Fork a child that encodes + gzips + writes the next ping-pong
+        slot in its own interpreter (its own GIL) on the housekeeping
+        cores, so the ~750 ms encode never stalls the MIDI loop. The
+        child shares this process's memory copy-on-write, so self._data
+        is visible with no IPC and no serialization on the loop — the
+        parent's only cost is the fork() syscall itself.
+
+        Returns the child pid (the caller MUST reap it) or None if fork
+        failed. The parent advances the ping-pong bookkeeping
+        immediately, so the next write targets the OTHER slot regardless
+        of this child's fate: a child that dies mid-write leaves a torn
+        slot that gzip's CRC rejects on boot, so the prior good slot
+        still wins — the power-cut guarantee is unchanged."""
+        seq = self._autosave_seq + 1
+        up, boot = int(uptime_seconds()), boot_id()
+        try:
+            pid = os.fork()
+        except OSError:
+            log.exception("Autosave fork failed")
+            return None
+        if pid != 0:
+            # Parent: the child's writes to self.* are copy-on-write and
+            # vanish on _exit, so the parent owns the bookkeeping.
+            self._autosave_seq, self._autosave_up, self._autosave_boot = seq, up, boot
+            return pid
+        # ---- child ----  Keep it short and fork-safe: no asyncio, no
+        # logging, no ALSA; exit via os._exit so no atexit / destructors
+        # touch state shared (copy-on-write) with the live parent.
+        try:
+            _move_off_isolated_core()
+            self._write_slot(seq, up, boot)
+            os._exit(0)
+        except BaseException:
+            os._exit(1)
 
     def _read_autosave(self):
         """Return (seq, data) of the newest valid autosave slot, or None.
