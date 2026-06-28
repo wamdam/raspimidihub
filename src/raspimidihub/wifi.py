@@ -48,6 +48,16 @@ def default_ap_ssid() -> str:
     return f"RaspiMIDIHub-{_get_mac_suffix()}"
 
 
+def default_hostname() -> str:
+    """The system hostname for a hub: raspimidihub-<MAC suffix> (e.g.
+    raspimidihub-735C). This is the SAME hardware-derived token as the
+    AP SSID (default_ap_ssid) and the UI title-bar badge, so a hub has
+    one identity everywhere. Unique per device, so two hubs on the same
+    network never collide on `raspimidihub.local` (which avahi would
+    otherwise rename to raspimidihub-2.local, making names unstable)."""
+    return f"raspimidihub-{_get_mac_suffix()}"
+
+
 def _run(cmd: list[str], check: bool = True, timeout: int = 10) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, capture_output=True, text=True, check=check, timeout=timeout)
 

@@ -16,14 +16,26 @@ case "$1" in
         systemctl stop dnsmasq 2>/dev/null || true
         systemctl --no-reload disable dnsmasq 2>/dev/null || true
 
-        # Set hostname for mDNS discovery (raspimidihub.local)
-        if [ "$(hostname)" != "raspimidihub" ]; then
-            hostnamectl set-hostname raspimidihub 2>/dev/null || true
+        # Set a UNIQUE hostname for mDNS discovery: raspimidihub-<wlan0
+        # MAC suffix> (e.g. raspimidihub-735C) — the same token as the AP
+        # SSID and the UI title bar, so a hub has one identity everywhere.
+        # A bare "raspimidihub" collides between hubs on one network
+        # (avahi renames the loser to raspimidihub-2.local). Keep this in
+        # sync with wifi.default_hostname() / _get_mac_suffix().
+        WLAN_MAC=$(cat /sys/class/net/wlan0/address 2>/dev/null | tr -d ':')
+        if [ -n "$WLAN_MAC" ]; then
+            SUFFIX=$(printf '%s' "$WLAN_MAC" | tail -c 4 | tr 'a-f' 'A-F')
+            DESIRED="raspimidihub-$SUFFIX"
+        else
+            DESIRED="raspimidihub"
+        fi
+        if [ "$(hostname)" != "$DESIRED" ]; then
+            hostnamectl set-hostname "$DESIRED" 2>/dev/null || true
             # Update /etc/hosts to match
             if grep -q "127.0.1.1" /etc/hosts; then
-                sed -i 's/127\.0\.1\.1.*/127.0.1.1\t\traspimidihub/' /etc/hosts
+                sed -i "s/127\.0\.1\.1.*/127.0.1.1\t\t$DESIRED/" /etc/hosts
             else
-                echo "127.0.1.1		raspimidihub" >> /etc/hosts
+                echo "127.0.1.1		$DESIRED" >> /etc/hosts
             fi
         fi
 

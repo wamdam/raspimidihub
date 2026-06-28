@@ -84,7 +84,7 @@ ARMv8 system.
 | **BlueZ** | Bluetooth stack; `midi` plugin disabled in favour of the in-tree bridge |
 | **hostapd + dnsmasq** | WiFi access point |
 | **wpa_supplicant** | WiFi client mode |
-| **avahi-daemon** | mDNS (`raspimidihub.local`) |
+| **avahi-daemon** | mDNS (`raspimidihub-<id>.local`) |
 | **systemd** | Service supervision |
 
 No external Python packages are required at runtime; the routing
@@ -133,7 +133,7 @@ PSU, or a plugin doing more work than expected in a callback.
 | AP default password | `midihub1` (change immediately) |
 | AP IP range | DHCP from the captive-portal subnet (typically `172.24.1.0/24`) |
 | AP gateway | `172.24.1.1` (typical) |
-| mDNS hostname | `raspimidihub.local` |
+| mDNS hostname | `raspimidihub-<id>.local` (unique per hub; `<id>` = title-bar/WiFi code). Single hub also answers `raspimidihub.local` |
 | HTTP server port | 80 |
 | HTTPS | Not used (LAN-only; trust model is the AP password) |
 | SSE endpoint | `/api/events` (long-lived `text/event-stream`) |

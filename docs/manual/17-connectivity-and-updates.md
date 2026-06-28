@@ -99,8 +99,13 @@ state (which is "none").
 
 ## mDNS
 
-The Pi advertises itself as `raspimidihub.local` over multicast
-DNS. Resolution requirements:
+Each hub advertises a **unique** mDNS name, `raspimidihub-<id>.local`,
+over multicast DNS -- `<id>` is the four-character hardware code shown
+in the title bar and used in the WiFi name (e.g. `raspimidihub-735C.local`).
+This guarantees two hubs on the same network never collide. A single
+hub also answers to the bare `raspimidihub.local` as a convenience; once
+a second hub appears, address each by its unique `raspimidihub-<id>.local`.
+Resolution requirements:
 
 - **macOS, iOS** -- native, no setup.
 - **Linux** -- avahi-daemon must be running (default on most
@@ -118,12 +123,12 @@ router's DHCP table (WiFi-always mode).
 
 **Settings → Network MIDI** can *export* any local MIDI device as
 a standard **RTP-MIDI (AppleMIDI)** session. Each exported device
-is advertised over mDNS under its own name -- `"TX-7 @<hostname>-<id>"`,
-where `<id>` is the hardware suffix from the WiFi name (e.g.
-`@raspimidihub-735C`). The suffix keeps two hubs with the default
-hostname distinct on the wire -- without it both would advertise
-`raspimidihub.local`, and a peer could resolve a device to the wrong
-hub. Anything that speaks RTP-MIDI can connect to it:
+is advertised over mDNS under its own name -- `"TX-7 @raspimidihub-<id>"`,
+where `<id>` is the hub's four-character hardware code (the same one in
+its hostname and WiFi name, e.g. `@raspimidihub-735C`). Because every
+hub's name carries this unique suffix, two hubs never collide on the
+wire and a peer always resolves a device to the right hub. Anything
+that speaks RTP-MIDI can connect to it:
 
 - **a second RaspiMIDIHub** -- the long-cable scenario: two hubs
   joined by an Ethernet cable (up to 100 m) or any shared network,

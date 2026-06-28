@@ -1084,3 +1084,13 @@ class TestApBandCountry:
         assert "hw_mode=a" not in conf
 
 
+
+
+class TestDefaultHostname:
+    def test_hostname_and_ssid_share_one_mac_suffix(self, monkeypatch):
+        """The hostname, the AP SSID and (in the UI) the title-bar badge
+        must all carry the SAME hardware token, so a hub has one
+        identity everywhere."""
+        monkeypatch.setattr(wifi, "_get_mac_suffix", lambda: "735C")
+        assert wifi.default_hostname() == "raspimidihub-735C"
+        assert wifi.default_ap_ssid() == "RaspiMIDIHub-735C"

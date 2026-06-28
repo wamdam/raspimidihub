@@ -38,6 +38,10 @@ warnings instead.
 - **Common cause.** mDNS support on the client OS is missing or
   disabled. Windows needs Apple Bonjour installed; some Linux
   systems do not run avahi-daemon by default.
+- **Common cause (multiple hubs).** The bare `raspimidihub.local`
+  only points at a *single* hub. With more than one hub on the
+  network, use each hub's unique `raspimidihub-<id>.local` instead --
+  `<id>` is the four-character code in its title bar / WiFi name.
 - **Try.** The AP gateway IP or the static / DHCP IP shown in the
   home router's DHCP table (in WiFi-always mode).
 

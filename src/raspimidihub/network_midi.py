@@ -797,19 +797,29 @@ class NetworkMidiManager:
 
     @property
     def node_name(self) -> str:
-        """The hub's network identity for mDNS / AppleMIDI: the system
-        hostname plus the hardware MAC suffix (e.g. raspimidihub-735C),
-        the same token as the WiFi AP name.
+        """The hub's network identity for mDNS / AppleMIDI: a unique
+        name carrying the hardware MAC suffix (e.g. raspimidihub-735C),
+        the same token as the WiFi AP name and the UI title bar.
 
-        Two hubs with the default hostname would both advertise
+        Two hubs with a bare hostname would both advertise
         `raspimidihub.local`; the colliding A-records let a peer's
         service resolve to THIS hub's *own* address, so the hub mirrors
         its own export — a self-loop that answers its own clock-sync and
         therefore never reaps. The suffix keeps each hub's mDNS records
         distinct and makes the matrix '@'-group header tell two hubs
-        apart at a glance."""
+        apart at a glance.
+
+        The system hostname is now provisioned as raspimidihub-<suffix>
+        (wifi.default_hostname / debian postinst), so it usually already
+        carries the suffix — don't append it twice. A legacy bare
+        hostname still gets the suffix appended, so both converge on the
+        same unique name."""
         from .wifi import _get_mac_suffix
-        return f"{self.hostname}-{_get_mac_suffix()}"
+        host = self.hostname
+        suffix = _get_mac_suffix()
+        if host.upper().endswith(suffix.upper()):
+            return host
+        return f"{host}-{suffix}"
 
     @property
     def alsa(self):

@@ -804,3 +804,25 @@ def test_link_watcher_rebinds_only_when_addresses_change():
 # (Removed TestLinkLocalOnStart: network_midi no longer asserts the eth0
 # link-local on start — NetworkManager keeps it pinned at all times via
 # ipv4.link-local=3, set up at boot by wifi.ensure_eth0_nm_link_local.)
+
+
+def test_node_name_carries_mac_suffix_without_doubling(monkeypatch):
+    """node_name must be unique (suffixed) but must NOT double the suffix
+    now that the system hostname is itself raspimidihub-<suffix>."""
+    import socket
+
+    from raspimidihub import network_midi, wifi
+    monkeypatch.setattr(wifi, "_get_mac_suffix", lambda: "735C")
+    mgr = object.__new__(network_midi.NetworkMidiManager)
+
+    # Legacy bare hostname → suffix appended.
+    monkeypatch.setattr(socket, "gethostname", lambda: "raspimidihub")
+    assert mgr.node_name == "raspimidihub-735C"
+
+    # New suffixed hostname → returned as-is (no raspimidihub-735C-735C).
+    monkeypatch.setattr(socket, "gethostname", lambda: "raspimidihub-735C")
+    assert mgr.node_name == "raspimidihub-735C"
+
+    # Suffix match is case-insensitive.
+    monkeypatch.setattr(socket, "gethostname", lambda: "raspimidihub-735c")
+    assert mgr.node_name == "raspimidihub-735c"

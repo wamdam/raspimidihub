@@ -145,7 +145,7 @@ The shipped **[User Manual](https://github.com/wamdam/raspimidihub/releases/late
 - **Progressive Web App (PWA)** -- install to home screen for app-like experience
 - **Mobile-first touch UI** designed for live performance
 - **Real-time sync** across multiple browsers via SSE; per-view subscriptions keep traffic minimal
-- **mDNS** -- reachable at `http://raspimidihub.local`
+- **mDNS** -- reachable at `http://raspimidihub-<id>.local` (unique per hub; `<id>` is the code shown in the title bar / WiFi name). A single hub also answers `http://raspimidihub.local`
 
 ### Appliance Reliability
 - **Read-only filesystem** -- SD card never written during normal operation
