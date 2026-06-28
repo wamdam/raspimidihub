@@ -434,7 +434,14 @@ A pocket-sized health dashboard. Live readouts:
 - **Control in → MIDI out latency** -- the round-trip from a UI
   control change to the resulting MIDI event leaving on a routed
   port. Useful for understanding controller responsiveness.
-- **Process CPU %** -- the routing service's own CPU usage.
+- **Process CPU %** -- the routing service's own CPU usage,
+  summed across its threads.
+- **Per-core CPU** -- the system busy% of each CPU core, labelled by
+  role: **CPU3 · loop** (the routing/MIDI loop's reserved core),
+  **CPU2 · plugins** (the plugin engines' reserved core) and **CPU0 /
+  CPU1** (housekeeping). A value turning red (≥ 85%) on the loop or
+  plugin core warns that core is near saturation -- the cause of loop
+  lag or note jitter respectively.
 - **ALSA ports** -- sequencer ports held by the hub's own ALSA
   client, against the kernel's per-client cap of 254. Every
   filtered or mapped connection holds two. The value turns red at
