@@ -225,6 +225,7 @@ One-line summaries. The detailed reference for each lives in
 | **Chord Generator** | Input note triggers a chord (major / minor / 7th / custom intervals) with inversions |
 | **Clock Divider** | Emit one MIDI Clock for every N received (2..32) |
 | **Euclidean** | Held notes voiced through a Bjorklund-distributed step pattern; per-step manual overrides on top; chord mode; internal Scale + Root; Jitter, Tune Spread, Fade In / Out. *Play-surface plugin* — added from **Add → Play** |
+| **FluidSynth GM** | Software GM synthesizer — renders MIDI to audio via HDMI or the 3.5 mm headphone jack; no external hardware needed. Requires `fluidsynth` + `fluid-soundfont-gm` (see Appendix A) |
 | **Hold** | Latch notes without a sustain pedal; chord-latch or per-note toggle; MIDI-Learn the release note |
 | **Latency** | Adds a fixed ms delay (1--100 ms) to every event before forwarding; clock + transport pass through untouched. Compensates synths whose own MIDI-in lands the sound late |
 | **Master Clock** | Internal BPM clock with start/stop/continue, beat meter, bar counter |
