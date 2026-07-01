@@ -45,6 +45,7 @@ A-appendix-plugin-reference.md
 B-appendix-controller-reference.md
 C-appendix-midi-mapping-reference.md
 D-appendix-keyboard-shortcuts.md
+E-appendix-rest-and-sse-api.md
 ```
 
 Each chapter file starts with a `# N. Title` heading and is currently

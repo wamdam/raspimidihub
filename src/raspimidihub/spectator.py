@@ -149,15 +149,15 @@ class SpectatorService:
         WebServer instance. Call once at startup."""
         server = self._server
 
-        @server.route("GET", "/api/spectator/clients")
+        @server.route("GET", "/api/spectator/clients", summary="List connected spectator clients and their watch targets.")
         async def _clients(req):  # noqa: ARG001
             return self._clients()
 
-        @server.route("POST", "/api/spectator/state")
+        @server.route("POST", "/api/spectator/state", summary="Update this spectator's state (watch target, label).")
         async def _state(req):
             return await self._state_post(req)
 
-        @server.route("GET", "/api/spectator/snapshot/", exact=False)
+        @server.route("GET", "/api/spectator/snapshot/", exact=False, summary="Get the current UI snapshot for a spectate target.")
         async def _snapshot(req):
             return self._snapshot(req)
 

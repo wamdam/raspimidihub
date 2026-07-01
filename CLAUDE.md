@@ -106,9 +106,21 @@ in line with the manual or trim the duplication.
 - **Plugin parameter ranges drift from code.** Appendix A tables
   are written from the plugin's `__init__.py` declarations.
   Bump the table when ranges or defaults change.
-- **API endpoint table drift.** Appendix E mirrors the route
-  list in `src/raspimidihub/api.py`. Adding `@server.route(...)`
-  means adding a row.
+- **API reference is self-generating -- don't hand-copy routes.**
+  The canonical endpoint list is served live at `/docs` +
+  `/api/routes.json`, built by `WebServer.api_manifest()` from the
+  registered routes. Each route carries `summary`, and (auto-derived
+  live from the handler source) `params` (best-effort body fields +
+  path actions, via `_extract_params`) and `source` (`file:line`, via
+  `_source_ref`). Appendix E documents *that mechanism*, not a
+  hand-maintained table. **`params` and `source` need no upkeep** --
+  they are read from the live code every time. Only two things a code
+  change must touch, in the same commit:
+    - a new `@server.route(...)` needs a `summary="..."` argument
+      (method + path alone still list, but write the summary);
+    - a new `send_sse("...")` event needs a line in the `SSE_EVENTS`
+      registry in `web.py` (a missing one is warn-logged at emit time).
+  Never re-hand-write the route table into an appendix row.
 
 ### Why this matters
 

@@ -4,11 +4,15 @@ Provides routing, static file serving, JSON API, SSE, security headers,
 and rate limiting — without any external dependencies.
 """
 
+import ast
 import asyncio
+import html
+import inspect
 import json
 import logging
 import mimetypes
 import os
+import textwrap
 import time
 import urllib.parse
 import uuid
@@ -37,6 +41,166 @@ MAX_SSE_CONNECTIONS = 30
 # client's per-instance subscription set; everything else is filtered
 # by the event-type set.
 _PER_INSTANCE_EVENTS = frozenset({"plugin-param", "plugin-display"})
+
+# The complete SSE event vocabulary, name -> one-line meaning. SSE events
+# are emitted by scattered send_sse() calls and are NOT introspectable
+# the way HTTP routes are (see api_manifest), so this dict is their
+# source of truth: it feeds /docs + /api/routes.json, and send_sse()
+# asserts against it in debug so an undeclared event name is caught at
+# emit time rather than silently shipped. Keep it in sync when adding a
+# new send_sse("...") call.
+SSE_EVENTS = {
+    "connection": "Handshake sent once on connect; carries the conn_id "
+                  "used for /api/sse/subscribe.",
+    "midi-activity": "A MIDI message passed through a monitored port.",
+    "cc": "A Control Change value, broadcast for CC monitoring / MIDI-learn.",
+    "clock-quarter": "Quarter-note tick from the active clock.",
+    "transport-start": "Transport / clock started.",
+    "connection-changed": "A routing-matrix connection was added, removed, "
+                          "or edited.",
+    "device-connected": "A MIDI device / port appeared (hotplug or startup).",
+    "device-disconnected": "A MIDI device / port went away.",
+    "plugin-changed": "A plugin instance was created, deleted, or "
+                      "reconfigured.",
+    "plugin-display": "Per-instance display update; filtered by instance_id.",
+    "plugin-param": "Per-instance parameter change; filtered by instance_id.",
+    "network-midi-changed": "RTP-MIDI export / mirror / peer state changed.",
+    "panic": "All-notes-off / panic was triggered.",
+    "spectator-state": "Spectator service state broadcast.",
+    "spectator-watch-start": "Targeted: a spectator started watching this "
+                             "connection.",
+    "spectator-watch-stop": "Targeted: a spectator stopped watching this "
+                            "connection.",
+    "spectator-source-gone": "Targeted: the watched source connection went "
+                             "away.",
+}
+
+# Tracks event names already warned about (see send_sse) so an undeclared
+# event logs once, not once per broadcast.
+_undeclared_sse_events: set[str] = set()
+
+
+def _extract_params(handler) -> dict | None:
+    """Best-effort request-param discovery for a route handler, read LIVE
+    from the handler's own source (inspect.getsource -> AST). No build
+    step, no stored artifact — it reflects whatever code is running.
+
+    It reports what the handler *reads* from the request:
+      - body:    JSON body fields it looks up (req.json / an alias .get()
+                 or [..]), with a type appended when trivially inferable
+                 (a bool()/int()/str() wrapper or a literal default).
+      - actions: path sub-actions gated by `path.endswith("/x")`.
+      - path_param: whether it consumes a path segment.
+
+    Heuristic by nature (Python can't reflect dict-key access): it unions
+    alternative body shapes, can't tell required from optional, and comes
+    up empty for handlers that delegate the parsing elsewhere. Surfaced as
+    a hint on /docs, never as a contract. Returns None (omitted) on any
+    parse failure or when nothing is found."""
+    try:
+        src = textwrap.dedent(inspect.getsource(handler))
+        tree = ast.parse(src)
+    except (OSError, TypeError, SyntaxError):
+        return None
+    fn = next((n for n in tree.body
+               if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))), None)
+    if fn is None:
+        return None
+    req_name = fn.args.args[0].arg if fn.args.args else "req"
+
+    def is_req_json(n):
+        return (isinstance(n, ast.Attribute) and n.attr == "json"
+                and isinstance(n.value, ast.Name) and n.value.id == req_name)
+
+    # Locals bound to req.json (incl. `x = req.json or {}`) count as body.
+    json_aliases = set()
+    for n in ast.walk(fn):
+        if (isinstance(n, ast.Assign) and len(n.targets) == 1
+                and isinstance(n.targets[0], ast.Name)):
+            v = n.value.values[0] if isinstance(n.value, ast.BoolOp) else n.value
+            if is_req_json(v):
+                json_aliases.add(n.targets[0].id)
+
+    def is_body(n):
+        return is_req_json(n) or (isinstance(n, ast.Name) and n.id in json_aliases)
+
+    # bool()/int()/str()/float() wrapping a body .get() -> a type hint.
+    typed = {}
+    for n in ast.walk(fn):
+        if (isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+                and n.func.id in ("bool", "int", "float", "str") and n.args):
+            a = n.args[0]
+            if (isinstance(a, ast.Call) and isinstance(a.func, ast.Attribute)
+                    and a.func.attr == "get" and is_body(a.func.value)
+                    and a.args and isinstance(a.args[0], ast.Constant)):
+                typed[a.args[0].value] = n.func.id
+
+    fields: dict = {}
+    actions = set()
+    path_param = False
+    for n in ast.walk(fn):
+        if (isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+                and n.func.attr == "get" and is_body(n.func.value) and n.args
+                and isinstance(n.args[0], ast.Constant)
+                and isinstance(n.args[0].value, str)):
+            name = n.args[0].value
+            t = typed.get(name)
+            if t is None and len(n.args) > 1:  # literal default -> type
+                d = n.args[1]
+                if isinstance(d, ast.Constant) and d.value is not None:
+                    t = type(d.value).__name__
+                elif isinstance(d, ast.List):
+                    t = "list"
+                elif isinstance(d, ast.Dict):
+                    t = "dict"
+            if name not in fields or (t and not fields[name]):
+                fields[name] = t
+        elif (isinstance(n, ast.Subscript) and is_body(n.value)
+                and isinstance(n.slice, ast.Constant)
+                and isinstance(n.slice.value, str)):
+            fields.setdefault(n.slice.value, None)
+        if (isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+                and n.func.attr == "path_param"):
+            path_param = True
+        if (isinstance(n, ast.Attribute) and n.attr == "path"
+                and isinstance(n.value, ast.Name) and n.value.id == req_name):
+            path_param = True
+        if (isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+                and n.func.attr == "endswith" and n.args
+                and isinstance(n.args[0], ast.Constant)
+                and isinstance(n.args[0].value, str)
+                and n.args[0].value.startswith("/")):
+            actions.add(n.args[0].value.lstrip("/"))
+
+    out = {}
+    body = [f"{k}:{v}" if v else k for k, v in fields.items()]
+    if body:
+        out["body"] = sorted(body)
+    if actions:
+        out["actions"] = sorted(actions)
+    if path_param:
+        out["path_param"] = True
+    return out or None
+
+
+def _source_ref(handler) -> str | None:
+    """`pkg/file.py:line` for a route handler, derived live from the code
+    object. Normalized to the last two path components so it reads the
+    same in the repo (`src/raspimidihub/api.py`) and on the installed
+    appliance (`dist-packages/raspimidihub/api.py`). This is the escape
+    hatch when the best-effort params aren't enough or the response shape
+    is needed: open this exact line instead of grepping. Returns None if
+    the source can't be located."""
+    try:
+        path = inspect.getsourcefile(handler) or ""
+        _, lineno = inspect.getsourcelines(handler)
+    except (OSError, TypeError):
+        return None
+    if not path:
+        return None
+    parts = path.replace("\\", "/").rstrip("/").split("/")
+    rel = "/".join(parts[-2:]) if len(parts) >= 2 else parts[-1]
+    return f"{rel}:{lineno}"
 
 
 @dataclass
@@ -192,12 +356,168 @@ class WebServer:
         self._build_token = format(int(time.time()), "x")
         self._rate_counts: dict[str, list[float]] = defaultdict(list)
         self._server: asyncio.AbstractServer | None = None
-    def route(self, method: str, path: str, exact: bool = True):
-        """Decorator to register a route handler."""
+        # Per-handler param-extraction + source-ref caches (keyed by
+        # id(handler)). Routes are fixed after startup, so each handler's
+        # source is parsed / located once.
+        self._param_cache: dict[int, dict | None] = {}
+        self._source_cache: dict[int, str | None] = {}
+        # Self-describing API: live-generated route manifest (JSON) plus a
+        # human-readable page. Registered here so they exist regardless of
+        # how api.py wires up the feature routes, and they introspect
+        # self.routes at request time so the listing is always current.
+        self.routes.append(("GET", "/api/routes.json", True,
+                            self._handle_api_manifest))
+        self.routes.append(("GET", "/docs", True, self._handle_docs))
+    def route(self, method: str, path: str, exact: bool = True,
+              summary: str = ""):
+        """Decorator to register a route handler.
+
+        `summary` is an optional one-line description surfaced by
+        /docs + /api/routes.json. It is stashed on the handler so the
+        manifest reads it directly — colocated with the route so it
+        can't drift the way a separate doc would. Backfilled
+        incrementally; empty is fine (the path/method still list)."""
         def decorator(func):
+            func._api_summary = summary
             self.routes.append((method.upper(), path, exact, func))
             return func
         return decorator
+
+    def api_manifest(self) -> dict:
+        """Introspect the registered routes into a simple, machine-
+        readable manifest. Generated live from self.routes, so it can
+        never drift from the actual handlers. Backs both /docs and
+        /api/routes.json. SSE events aren't routes, so their vocabulary
+        comes from the SSE_EVENTS registry."""
+        routes = []
+        for method, path, exact, handler in self.routes:
+            summary = getattr(handler, "_api_summary", "")
+            if not summary and handler.__doc__:
+                summary = handler.__doc__.strip().splitlines()[0].strip()
+            key = id(handler)
+            if key not in self._param_cache:
+                self._param_cache[key] = _extract_params(handler)
+            if key not in self._source_cache:
+                self._source_cache[key] = _source_ref(handler)
+            entry = {
+                "method": method,
+                "path": path,
+                "match": "exact" if exact else "prefix",
+                "summary": summary,
+            }
+            params = self._param_cache[key]
+            if params:
+                entry["params"] = params
+            source = self._source_cache[key]
+            if source:
+                entry["source"] = source
+            routes.append(entry)
+        routes.sort(key=lambda r: (r["path"], r["method"]))
+        from . import __version__
+        return {
+            "version": __version__,
+            "routes": routes,
+            "sse_events": [
+                {"event": name, "summary": SSE_EVENTS[name]}
+                for name in sorted(SSE_EVENTS)
+            ],
+        }
+
+    async def _handle_api_manifest(self, request: "Request") -> "Response":
+        """Machine-readable API manifest: every route and SSE event."""
+        return Response.json(self.api_manifest())
+
+    async def _handle_docs(self, request: "Request") -> "Response":
+        """Human-readable API reference page (this endpoint list)."""
+        return Response.html(self._render_docs(self.api_manifest()))
+
+    @staticmethod
+    def _render_docs(manifest: dict) -> str:
+        """Render the manifest as a self-contained HTML page. No JS, no
+        external assets — CSP-safe with only inline styles."""
+        def esc(s: str) -> str:
+            return html.escape(s or "")
+
+        def group_of(path: str) -> str:
+            parts = [p for p in path.split("/") if p]
+            if parts and parts[0] == "api" and len(parts) >= 2:
+                return parts[1].split(".")[0]  # /api/routes.json -> "routes"
+            return parts[0] if parts else "root"
+
+        groups: dict[str, list] = {}
+        for r in manifest["routes"]:
+            groups.setdefault(group_of(r["path"]), []).append(r)
+
+        rows = []
+        for group in sorted(groups):
+            rows.append(f'<h2>{esc(group)}</h2>')
+            rows.append("<table>")
+            for r in sorted(groups[group], key=lambda r: (r["path"],
+                                                          r["method"])):
+                badge = "" if r["match"] == "exact" else \
+                    ' <span class="prefix">prefix</span>'
+                pd = ""
+                p = r.get("params")
+                if p:
+                    if p.get("body"):
+                        pd += (f'<div class="pd">body: '
+                               f'{esc(", ".join(p["body"]))}</div>')
+                    if p.get("actions"):
+                        pd += (f'<div class="pd">actions: '
+                               f'{esc(", ".join(p["actions"]))}</div>')
+                if r.get("source"):
+                    pd += f'<div class="pd src">src: {esc(r["source"])}</div>'
+                rows.append(
+                    f'<tr><td class="m m-{esc(r["method"].lower())}">'
+                    f'{esc(r["method"])}</td>'
+                    f'<td class="p"><code>{esc(r["path"])}</code>{badge}</td>'
+                    f'<td class="s">{esc(r["summary"])}{pd}</td></tr>')
+            rows.append("</table>")
+
+        sse_rows = "".join(
+            f'<tr><td class="p"><code>{esc(e["event"])}</code></td>'
+            f'<td class="s">{esc(e["summary"])}</td></tr>'
+            for e in manifest["sse_events"])
+
+        style = (
+            "body{font:14px/1.5 system-ui,sans-serif;max-width:960px;"
+            "margin:2rem auto;padding:0 1rem;color:#1a1a1a}"
+            "h1{margin-bottom:.2rem}"
+            ".sub{color:#666;margin-top:0}"
+            "h2{margin-top:2rem;border-bottom:1px solid #ddd;"
+            "padding-bottom:.2rem;font-family:monospace}"
+            "table{border-collapse:collapse;width:100%}"
+            "td{padding:.3rem .5rem;vertical-align:top;border-top:1px solid "
+            "#eee}"
+            ".m{font-weight:600;white-space:nowrap;width:1%}"
+            ".m-get{color:#0a7d2c}.m-post{color:#0b5cad}.m-put{color:#0b5cad}"
+            ".m-patch{color:#8a5a00}.m-delete{color:#b00}.m-\\*{color:#666}"
+            ".p{white-space:nowrap;width:1%}code{background:#f4f4f4;"
+            "padding:.1rem .3rem;border-radius:3px}"
+            ".s{color:#333}.prefix{font-size:.75em;color:#8a5a00;"
+            "background:#fff3d6;padding:.05rem .3rem;border-radius:3px}"
+            ".pd{color:#666;font-size:.85em;font-family:monospace;"
+            "margin-top:.2rem}.pd.src{color:#999}")
+
+        return (
+            "<meta charset='utf-8'>"
+            "<meta name='viewport' content='width=device-width,"
+            "initial-scale=1'>"
+            "<title>RaspiMIDIHub API</title>"
+            f"<style>{style}</style>"
+            "<h1>RaspiMIDIHub API</h1>"
+            f"<p class='sub'>Version {esc(manifest['version'])} &middot; "
+            f"{len(manifest['routes'])} routes &middot; generated live from "
+            "the running build. Machine-readable: "
+            "<a href='/api/routes.json'><code>/api/routes.json</code></a>. "
+            "<em>body/actions params are best-effort, read from handler "
+            "source — a hint, not a contract; open the <code>src:</code> "
+            "line for the full truth.</em></p>"
+            + "".join(rows)
+            + "<h2>SSE events</h2><p class='sub'>Stream via "
+            "<code>GET /api/events</code>, then <code>POST "
+            "/api/sse/subscribe</code> to select event types.</p>"
+            f"<table>{sse_rows}</table>")
 
     def add_sse_filter(self, fn) -> None:
         """Register a pluggable per-recipient delivery filter. fn is
@@ -226,6 +546,11 @@ class WebServer:
         its oldest queued event and try again — the client stays
         subscribed; the freshest event wins.
         """
+        if __debug__ and event not in SSE_EVENTS \
+                and event not in _undeclared_sse_events:
+            _undeclared_sse_events.add(event)
+            log.warning("send_sse: event %r is not declared in SSE_EVENTS "
+                        "(add it so /docs stays complete)", event)
         msg = f"event: {event}\ndata: {json.dumps(data)}\n\n"
         self._sse_count_window += 1
         per_instance = event in _PER_INSTANCE_EVENTS

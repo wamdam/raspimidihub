@@ -461,18 +461,21 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
     # landing so users learn the new address on first connect.
     _captive_html = _CAPTIVE_LANDING_HTML.replace("__MDNS__", socket.gethostname())
     for p in _CAPTIVE_LANDING_PATHS:
-        server.route("GET", p)(_captive_handler(
-            p, _captive_html, 200, "html"))
+        server.route("GET", p, summary="OS captive-portal probe: serves the "
+                     "tiny landing page linking to the app.")(_captive_handler(
+                         p, _captive_html, 200, "html"))
     # Windows NCSI: keep the legacy success bodies so it stays out of
     # the captive flow entirely (it has no captive UI to land on).
     for p, body in _CAPTIVE_PASSTHROUGH.items():
-        server.route("GET", p)(_captive_handler(p, body, 200, "text"))
+        server.route("GET", p, summary="Windows NCSI probe: returns the legacy "
+                     "success body (stays out of the captive flow).")(
+                         _captive_handler(p, body, 200, "text"))
 
     # ================================================================
     # GET /api/system — system info
     # ================================================================
 
-    @server.route("GET", "/api/system")
+    @server.route("GET", "/api/system", summary="Hub status: hostname, IPs, version, CPU/RAM/temp, per-core load, SSE + latency stats, ALSA port budget.")
     async def api_system(req: Request) -> Response:
         import subprocess
 
@@ -593,7 +596,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
     # PATCH /api/system — update system settings
     # ================================================================
 
-    @server.route("PATCH", "/api/system")
+    @server.route("PATCH", "/api/system", summary="Update system settings (currently default_routing: all or none).")
     async def api_patch_system(req: Request) -> Response:
         data = req.json
         if "default_routing" in data:
@@ -608,7 +611,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
     # Perf stats — timing distributions for the latency/jitter suite
     # ================================================================
 
-    @server.route("GET", "/api/stats")
+    @server.route("GET", "/api/stats", summary="Perf timing distributions (jitter/lag percentiles) plus a CPU/temp context snapshot, for the latency suite.")
     async def api_stats(req: Request) -> Response:
         """Timing distributions (percentiles/histograms) for the perf
         harness: clock-tick jitter, loop lag, plugin note-send jitter,
@@ -640,7 +643,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
             },
         })
 
-    @server.route("POST", "/api/stats/reset")
+    @server.route("POST", "/api/stats/reset", summary="Zero all perf metrics before a measurement window.")
     async def api_stats_reset(req: Request) -> Response:
         """Zero all perf metrics — the harness calls this before each
         measurement window so a reading attributes only to that window."""
@@ -652,7 +655,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
     # GET /api/observatory — current CC values per destination + held notes
     # ================================================================
 
-    @server.route("GET", "/api/observatory")
+    @server.route("GET", "/api/observatory", summary="Live snapshot of current CC values per destination and currently-held notes.")
     async def api_observatory(req: Request) -> Response:
         return Response.json({
             "cc": engine.cc_dest_snapshot(),
@@ -672,7 +675,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
     # Feature modules can add keys to the body (e.g. spectator.py
     # consumes `label` and `spectate_target`); those are handed off
     # via subscribe_extensions registered on the WebServer instance.
-    @server.route("POST", "/api/sse/subscribe")
+    @server.route("POST", "/api/sse/subscribe", summary="Set this SSE connection's subscription (event types + plugin instance ids); identified by conn_id.")
     async def api_sse_subscribe(req: Request) -> Response:
         body = req.json
         conn_id = body.get("conn_id", "")
@@ -696,7 +699,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
     # GET /api/devices — list MIDI devices
     # ================================================================
 
-    @server.route("GET", "/api/devices")
+    @server.route("GET", "/api/devices", summary="List MIDI devices and ports (online plus saved-offline), with names, flags, and plugin/export info.")
     async def api_devices(req: Request) -> Response:
         # Use the CACHED device list, not a fresh scan_devices() — a full
         # ALSA re-enumeration here is ~150 ms on a busy rig and the UI
@@ -800,7 +803,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
     # DELETE /api/devices/{stable_id} — remove an offline device from saved config
     # ================================================================
 
-    @server.route("DELETE", "/api/devices/", exact=False)
+    @server.route("DELETE", "/api/devices/", exact=False, summary="Remove a saved offline device and its connections/name from the config.")
     async def api_delete_device(req: Request) -> Response:
         stable_id = req.path_param("/api/devices/")
         if not stable_id:
@@ -837,7 +840,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
     # POST /api/devices/{client_id}/rename — rename a device
     # ================================================================
 
-    @server.route("POST", "/api/devices/", exact=False)
+    @server.route("POST", "/api/devices/", exact=False, summary="Per-device actions: rename, rename-port, clock-source toggle, or send a test MIDI message.")
     async def api_device_action(req: Request) -> Response:
         path = req.path_param("/api/devices/")
 
@@ -981,7 +984,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
     # GET /api/connections — list active + offline connections
     # ================================================================
 
-    @server.route("GET", "/api/connections")
+    @server.route("GET", "/api/connections", summary="List active and saved-offline routing connections, including filter/mapping state.")
     async def api_connections(req: Request) -> Response:
         conns = []
         fe = engine.filter_engine
@@ -1037,7 +1040,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
     # POST /api/connections — create a connection
     # ================================================================
 
-    @server.route("POST", "/api/connections", exact=True)
+    @server.route("POST", "/api/connections", exact=True, summary="Create a routing connection (live client:port, or a saved offline stable-id edge).")
     async def api_create_connection(req: Request) -> Response:
         data = req.json
 
@@ -1108,7 +1111,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
     # DELETE /api/connections/{id} — remove a connection
     # ================================================================
 
-    @server.route("DELETE", "/api/connections/", exact=False)
+    @server.route("DELETE", "/api/connections/", exact=False, summary="Remove a connection (or all if no id); preserves its filter/mapping for later reconnect.")
     async def api_delete_connection(req: Request) -> Response:
         conn_id = req.path_param("/api/connections/")
         if not conn_id:
@@ -1191,7 +1194,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
     # PATCH /api/connections/{id} — update filter on a connection
     # ================================================================
 
-    @server.route("PATCH", "/api/connections/", exact=False)
+    @server.route("PATCH", "/api/connections/", exact=False, summary="Update a connection's channel / message-type filter (switches to userspace routing as needed).")
     async def api_patch_connection(req: Request) -> Response:
         conn_id = req.path_param("/api/connections/")
         if not conn_id:
@@ -1260,7 +1263,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
     # GET/POST/DELETE /api/connections/{id}/mappings — mapping CRUD
     # ================================================================
 
-    @server.route("GET", "/api/mappings/", exact=False)
+    @server.route("GET", "/api/mappings/", exact=False, summary="List the MIDI mappings on a connection.")
     async def api_get_mappings(req: Request) -> Response:
         conn_id = req.path_param("/api/mappings/")
         if not conn_id:
@@ -1273,7 +1276,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         mappings = fe.get_mappings(conn_id)
         return Response.json([m.to_dict() for m in mappings])
 
-    @server.route("POST", "/api/mappings/", exact=False)
+    @server.route("POST", "/api/mappings/", exact=False, summary="Add a MIDI mapping to a connection (converts it to userspace-filtered if needed).")
     async def api_add_mapping(req: Request) -> Response:
         conn_id = req.path_param("/api/mappings/")
         if not conn_id:
@@ -1323,7 +1326,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         })
         return Response.json({"status": "added", "index": idx}, 201)
 
-    @server.route("DELETE", "/api/mappings/", exact=False)
+    @server.route("DELETE", "/api/mappings/", exact=False, summary="Remove a mapping (path conn_id/index) from a connection.")
     async def api_delete_mapping(req: Request) -> Response:
         path = req.path_param("/api/mappings/")
         if not path:
@@ -1368,7 +1371,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
     # POST /api/connections/connect-all — restore all-to-all
     # ================================================================
 
-    @server.route("POST", "/api/connections/connect-all")
+    @server.route("POST", "/api/connections/connect-all", summary="Reset routing to all-to-all: reconnect every source to every destination.")
     async def api_connect_all(req: Request) -> Response:
         engine.disconnect_all()
         engine._disconnected.clear()  # dict.clear()
@@ -1383,7 +1386,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
     # POST /api/config/save — explicitly save current config
     # ================================================================
 
-    @server.route("POST", "/api/config/save")
+    @server.route("POST", "/api/config/save", summary="Commit the current state to config.json plus a rolling backup (the deliberate Save).")
     async def api_save_config(req: Request) -> Response:
         # A deliberate Save commits session aliases: re-recognized
         # devices migrate from their saved (old) IDs to their canonical
@@ -1404,7 +1407,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
     # POST /api/panic — silence all notes across every destination
     # ================================================================
 
-    @server.route("POST", "/api/panic")
+    @server.route("POST", "/api/panic", summary="Silence all notes on every destination (all-notes-off; hard=true resets more aggressively).")
     async def api_panic(req: Request) -> Response:
         data = req.json or {}
         hard = bool(data.get("hard", False))
@@ -1416,7 +1419,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
     # POST /api/system/reboot — reboot the Pi
     # ================================================================
 
-    @server.route("POST", "/api/system/reboot")
+    @server.route("POST", "/api/system/reboot", summary="Reboot the Pi.")
     async def api_reboot(req: Request) -> Response:
         import subprocess
         asyncio.get_event_loop().call_later(1, lambda: subprocess.Popen(["sudo", "reboot"]))
@@ -1427,7 +1430,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
     # WiFi, then reboot clean. Recoverable via Settings → Backup.
     # ================================================================
 
-    @server.route("POST", "/api/system/factory-reset")
+    @server.route("POST", "/api/system/factory-reset", summary="Wipe config to defaults (keeps backups and WiFi), then reboot clean.")
     async def api_factory_reset(req: Request) -> Response:
         import subprocess
         # Silence autosave first: the shutdown flush would otherwise
@@ -1468,7 +1471,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
     # 409 so the UI can ignore it without erroring out.
     in_flight_check: list = [None]
 
-    @server.route("POST", "/api/system/check-update")
+    @server.route("POST", "/api/system/check-update", summary="Check GitHub for a newer release and download it (runs in the background).")
     async def api_check_update(req: Request) -> Response:
         if wifi is None:
             return Response.error("WiFi manager unavailable", 503)
@@ -1498,7 +1501,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         in_flight_check[0] = asyncio.get_event_loop().create_task(run_orchestrator())
         return Response.json({"status": "started"})
 
-    @server.route("GET", "/api/system/versions")
+    @server.route("GET", "/api/system/versions", summary="List downloaded release debs (newest first) plus the running version.")
     async def api_system_versions(req: Request) -> Response:
         """List stored debs (newest first) plus the running version so
         the UI can mark which one's currently installed. Also returns
@@ -1511,7 +1514,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
                 config.data.get("updates", {}).get("include_prereleases", False)),
         })
 
-    @server.route("POST", "/api/system/include-prereleases")
+    @server.route("POST", "/api/system/include-prereleases", summary="Toggle whether update checks consider GitHub pre-releases.")
     async def api_set_include_prereleases(req: Request) -> Response:
         """Toggle whether `download_newer_releases` considers GitHub
         releases marked as prerelease (alpha / beta tags). Persists in
@@ -1564,7 +1567,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
                 unmet.append(clause.strip())
         return unmet
 
-    @server.route("POST", "/api/system/install")
+    @server.route("POST", "/api/system/install", summary="Install a previously-downloaded release deb. Body: {version}.")
     async def api_system_install(req: Request) -> Response:
         """Install a previously-downloaded deb. Body: {version: "X.Y.Z"}.
 
@@ -1643,7 +1646,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
             "unmet_deps": unmet,
         })
 
-    @server.route("POST", "/api/system/reinstall")
+    @server.route("POST", "/api/system/reinstall", summary="Reinstall the currently-running version (apt reinstall).")
     async def api_system_reinstall(req: Request) -> Response:
         """Reinstall the currently-running version with apt's
         Recommends pulled in. Used to recover from upgrades that came
@@ -1690,7 +1693,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
             run_orchestrator())
         return Response.json({"status": "started", "version": __version__})
 
-    @server.route("GET", "/api/system/update-status")
+    @server.route("GET", "/api/system/update-status", summary="Live state of the current update flow (the UI polls this for progress).")
     async def api_update_status(req: Request) -> Response:
         """Live state of the most recent update flow. UI polls this for
         progress + post-mortem error messages. Always returns running
@@ -1762,7 +1765,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
                 engine._disconnected[conn_id] = saved_data
             engine._update_monitor_subscriptions()
 
-    @server.route("POST", "/api/config/load")
+    @server.route("POST", "/api/config/load", summary="Load the last deliberate Save (the committed checkpoint), discarding uncommitted edits.")
     async def api_load_config(req: Request) -> Response:
         # Load the last DELIBERATE save (not the autosave) — reverting to
         # the user's committed checkpoint is the whole point of "Load".
@@ -1780,12 +1783,12 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
     # Backups — list / restore / download rolling save checkpoints
     # ================================================================
 
-    @server.route("GET", "/api/backups")
+    @server.route("GET", "/api/backups", summary="List rolling backup checkpoints and current autosave status.")
     async def api_backups_list(req: Request) -> Response:
         return Response.json({"backups": config.list_backups(),
                               "autosave": config.autosave_status()})
 
-    @server.route("POST", "/api/backups/", exact=False)
+    @server.route("POST", "/api/backups/", exact=False, summary="Restore a rolling backup by seq (path .../restore); leaves the config dirty to Save.")
     async def api_backups_action(req: Request) -> Response:
         # Path: /api/backups/<seq>/restore
         tail = req.path.split("/api/backups/")[1].strip("/")
@@ -1813,7 +1816,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         await server.send_sse("connection-changed", {"action": "config-loaded"})
         return Response.json({"status": "restored", "seq": seq})
 
-    @server.route("GET", "/api/backups/", exact=False)
+    @server.route("GET", "/api/backups/", exact=False, summary="Download a rolling backup as JSON (path .../download).")
     async def api_backup_download(req: Request) -> Response:
         # Path: /api/backups/<seq>/download
         tail = req.path.split("/api/backups/")[1].strip("/")
@@ -1841,7 +1844,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
     # GET /api/config/export — download full config as JSON
     # ================================================================
 
-    @server.route("GET", "/api/config/export")
+    @server.route("GET", "/api/config/export", summary="Download the full config as a JSON file.")
     async def api_export_config(req: Request) -> Response:
         import json as _json
         return Response(
@@ -1857,7 +1860,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
     # POST /api/config/import — upload and apply a full config JSON
     # ================================================================
 
-    @server.route("POST", "/api/config/import")
+    @server.route("POST", "/api/config/import", summary="Upload and apply a full config JSON, replacing the current state.")
     async def api_import_config(req: Request) -> Response:
         data = req.json
         if not isinstance(data, dict) or "version" not in data:
@@ -1905,20 +1908,20 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
 
     from .wifi import configure_interface, get_all_interfaces
 
-    @server.route("GET", "/api/network")
+    @server.route("GET", "/api/network", summary="List network interfaces and their IPv4 configuration.")
     async def api_network(req: Request) -> Response:
         loop = asyncio.get_event_loop()
         interfaces = await loop.run_in_executor(None, get_all_interfaces)
         return Response.json(interfaces)
 
-    @server.route("GET", "/api/network/usb-tether")
+    @server.route("GET", "/api/network/usb-tether", summary="Report USB-tether (phone internet-sharing) status.")
     async def api_usb_tether(req: Request) -> Response:
         from .usb_tether import detect_tether
         loop = asyncio.get_event_loop()
         state = await loop.run_in_executor(None, detect_tether)
         return Response.json(state)
 
-    @server.route("POST", "/api/network/", exact=False)
+    @server.route("POST", "/api/network/", exact=False, summary="Configure an interface's IPv4 (auto/DHCP or manual static).")
     async def api_configure_network(req: Request) -> Response:
         iface = req.path_param("/api/network/")
         if not iface:
@@ -1975,7 +1978,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         async def _bt_availability() -> dict:
             return await asyncio.to_thread(bluetooth.availability)
 
-        @server.route("GET", "/api/bluetooth")
+        @server.route("GET", "/api/bluetooth", summary="List paired Bluetooth-MIDI devices and radio availability.")
         async def api_bluetooth_status(req: Request) -> Response:
             avail = await _bt_availability()
             if not avail["available"]:
@@ -1987,14 +1990,14 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
             devices = await bluetooth.get_paired_devices()
             return Response.json({"available": True, "devices": devices})
 
-        @server.route("POST", "/api/bluetooth/scan")
+        @server.route("POST", "/api/bluetooth/scan", summary="Scan for nearby Bluetooth-MIDI devices (~10s).")
         async def api_bluetooth_scan(req: Request) -> Response:
             devices = await bluetooth.scan(timeout=10)
             return Response.json(devices)
 
         from .device_id import invalidate_bluealsa_macs_cache
 
-        @server.route("POST", "/api/bluetooth/pair")
+        @server.route("POST", "/api/bluetooth/pair", summary="Pair a Bluetooth-MIDI device by address.")
         async def api_bluetooth_pair(req: Request) -> Response:
             address = req.json.get("address", "")
             if not address:
@@ -2010,7 +2013,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
                 return Response.json({"status": "paired"})
             return Response.error("Pairing failed", 502)
 
-        @server.route("POST", "/api/bluetooth/connect")
+        @server.route("POST", "/api/bluetooth/connect", summary="Connect a paired Bluetooth-MIDI device by address.")
         async def api_bluetooth_connect(req: Request) -> Response:
             address = req.json.get("address", "")
             if not address:
@@ -2026,7 +2029,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
                 return Response.json({"status": "connected"})
             return Response.error("Connection failed", 502)
 
-        @server.route("POST", "/api/bluetooth/disconnect")
+        @server.route("POST", "/api/bluetooth/disconnect", summary="Disconnect a Bluetooth-MIDI device by address.")
         async def api_bluetooth_disconnect(req: Request) -> Response:
             address = req.json.get("address", "")
             if not address:
@@ -2036,7 +2039,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
             await server.send_sse("device-disconnected", {})
             return Response.json({"status": "disconnected"})
 
-        @server.route("DELETE", "/api/bluetooth/", exact=False)
+        @server.route("DELETE", "/api/bluetooth/", exact=False, summary="Forget (unpair) a Bluetooth-MIDI device by address.")
         async def api_bluetooth_forget(req: Request) -> Response:
             address = req.path_param("/api/bluetooth/")
             if not address:
@@ -2046,7 +2049,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
             await server.send_sse("device-disconnected", {})
             return Response.json({"status": "removed"})
     else:
-        @server.route("GET", "/api/bluetooth")
+        @server.route("GET", "/api/bluetooth", summary="List paired Bluetooth-MIDI devices and radio availability.")
         async def api_bluetooth_unavailable(req: Request) -> Response:
             return Response.json({
                 "available": False,
@@ -2066,11 +2069,11 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
     nm_avail = network_midi.availability() if network_midi else \
         {"available": False, "reason": "no-network-midi-manager"}
     if network_midi and nm_avail["available"]:
-        @server.route("GET", "/api/network-midi")
+        @server.route("GET", "/api/network-midi", summary="Network-MIDI (RTP) status: exports, discovered sessions, mirrors, and peers.")
         async def api_network_midi(req: Request) -> Response:
             return Response.json(network_midi.status())
 
-        @server.route("POST", "/api/network-midi/enable")
+        @server.route("POST", "/api/network-midi/enable", summary="Enable or disable network-MIDI (RTP) on the hub.")
         async def api_network_midi_enable(req: Request) -> Response:
             enabled = bool(req.json.get("enabled"))
             config.data.setdefault("network_midi", {})["enabled"] = enabled
@@ -2084,7 +2087,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
             await network_midi.set_enabled(enabled)
             return Response.json({"status": "saved", "enabled": enabled})
 
-        @server.route("POST", "/api/network-midi/export")
+        @server.route("POST", "/api/network-midi/export", summary="Export (or stop exporting) a device over network-MIDI by stable_id.")
         async def api_network_midi_export(req: Request) -> Response:
             stable_id = req.json.get("stable_id", "")
             exported = bool(req.json.get("exported"))
@@ -2105,7 +2108,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
             await network_midi.set_export(stable_id, exported)
             return Response.json({"status": "saved"})
 
-        @server.route("POST", "/api/network-midi/mirror")
+        @server.route("POST", "/api/network-midi/mirror", summary="Mirror a discovered network-MIDI session as a local device.")
         async def api_network_midi_mirror(req: Request) -> Response:
             key = req.json.get("service") or req.json.get("stable_id", "")
             svc = network_midi.service_for(key)
@@ -2136,7 +2139,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
             await server.send_sse("device-connected", {})
             return Response.json({"status": "mirrored"})
 
-        @server.route("POST", "/api/network-midi/unmirror")
+        @server.route("POST", "/api/network-midi/unmirror", summary="Stop mirroring a network-MIDI session.")
         async def api_network_midi_unmirror(req: Request) -> Response:
             key = req.json.get("service") or req.json.get("stable_id", "")
             svc = network_midi.service_for(key)
@@ -2158,7 +2161,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
             await server.send_sse("device-disconnected", {})
             return Response.json({"status": "unmirrored"})
 
-        @server.route("POST", "/api/network-midi/peers")
+        @server.route("POST", "/api/network-midi/peers", summary="Add a manual network-MIDI peer host (discovery fallback).")
         async def api_network_midi_peer_add(req: Request) -> Response:
             host = (req.json.get("host") or "").strip()
             if not host:
@@ -2171,7 +2174,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
                 await autosaver.autosave_now()  # keep resume snapshot in sync
             return Response.json({"status": "added"})
 
-        @server.route("DELETE", "/api/network-midi/peers/", exact=False)
+        @server.route("DELETE", "/api/network-midi/peers/", exact=False, summary="Remove a manual network-MIDI peer host.")
         async def api_network_midi_peer_remove(req: Request) -> Response:
             host = req.path_param("/api/network-midi/peers/")
             if not host:
@@ -2184,7 +2187,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
                 await autosaver.autosave_now()  # keep resume snapshot in sync
             return Response.json({"status": "removed"})
     else:
-        @server.route("GET", "/api/network-midi")
+        @server.route("GET", "/api/network-midi", summary="Network-MIDI (RTP) status: exports, discovered sessions, mirrors, and peers.")
         async def api_network_midi_unavailable(req: Request) -> Response:
             return Response.json({
                 "available": False,
@@ -2199,7 +2202,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
     if wifi is None:
         return
 
-    @server.route("GET", "/api/wifi")
+    @server.route("GET", "/api/wifi", summary="WiFi status: mode, SSID, IP, saved home-WiFi SSID, AP band/country, 5 GHz support.")
     async def api_wifi_status(req: Request) -> Response:
         # Expose the saved update-WiFi SSID (NOT the password) so the
         # Settings UI can show "Update WiFi: HomeWiFi - change?" without
@@ -2231,7 +2234,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
     # decided by `wifi_mode_pref` and the apply-mode endpoint, NOT by
     # saving credentials. So this endpoint is data-only — no live
     # network changes.
-    @server.route("POST", "/api/wifi/credentials")
+    @server.route("POST", "/api/wifi/credentials", summary="Save or forget home-WiFi credentials (data only; no live mode change).")
     async def api_wifi_credentials(req: Request) -> Response:
         data = req.json
         cfg_wifi = config.wifi
@@ -2259,7 +2262,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         await autosaver.autosave_now()  # keep the resume snapshot in sync
         return Response.json({"status": "saved", "ssid": ssid})
 
-    @server.route("POST", "/api/wifi/ap-password")
+    @server.route("POST", "/api/wifi/ap-password", summary="Change the access-point password (existing connections survive).")
     async def api_wifi_ap_password(req: Request) -> Response:
         """Change the AP password without flipping modes. Existing
         connections survive (PSK is checked at association, not per
@@ -2276,7 +2279,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         await autosaver.autosave_now()  # keep the resume snapshot in sync
         return Response.json({"status": "saved"})
 
-    @server.route("POST", "/api/wifi/ap-radio")
+    @server.route("POST", "/api/wifi/ap-radio", summary="Set the AP radio band (2.4/5 GHz) and country, restarting the AP to apply.")
     async def api_wifi_ap_radio(req: Request) -> Response:
         """Set the AP radio band (2.4 / 5 GHz) and regulatory country,
         then restart the AP to apply. Restarting drops wlan0, which would
@@ -2326,7 +2329,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
     # any) as a backgrounded asyncio task — same reason as
     # /api/system/check-update: switching to client mode tears down the
     # AP and would kill any held-open HTTP request from a phone.
-    @server.route("POST", "/api/wifi/apply-mode")
+    @server.route("POST", "/api/wifi/apply-mode", summary="Set the WiFi mode (ap_only / wifi_for_updates / wifi_always) and flip wlan0 if needed.")
     async def api_wifi_apply_mode(req: Request) -> Response:
         pref = req.json.get("pref", "")
         if pref not in ("ap_only", "wifi_for_updates", "wifi_always"):
@@ -2375,7 +2378,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         return Response.json({"status": "saved", "switched": True,
                               "target_mode": target_live})
 
-    @server.route("GET", "/api/wifi/scan")
+    @server.route("GET", "/api/wifi/scan", summary="Scan for nearby WiFi networks.")
     async def api_wifi_scan(req: Request) -> Response:
         loop = asyncio.get_event_loop()
         networks = await loop.run_in_executor(None, wifi.scan_networks)
@@ -2385,14 +2388,14 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
     # PLUGINS — Virtual Instruments
     # ================================================================
 
-    @server.route("GET", "/api/plugins")
+    @server.route("GET", "/api/plugins", summary="List available plugin types.")
     async def api_plugins_list(req: Request) -> Response:
         """List available plugin types."""
         if not engine._plugin_host:
             return Response.json({})
         return Response.json(engine._plugin_host.list_types())
 
-    @server.route("POST", "/api/cc-learn/start")
+    @server.route("POST", "/api/cc-learn/start", summary="Arm MIDI Learn for one plugin (instance, param).")
     async def api_cc_learn_start(req: Request) -> Response:
         """Arm MIDI Learn for one (instance, param). Body:
         {instance_id, param}. Returns {learn_id}. The next inbound
@@ -2424,7 +2427,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         cc_learn_armed[learn_id] = entry
         return Response.json({"learn_id": learn_id})
 
-    @server.route("POST", "/api/cc-learn/cancel")
+    @server.route("POST", "/api/cc-learn/cancel", summary="Cancel an armed MIDI Learn.")
     async def api_cc_learn_cancel(req: Request) -> Response:
         """Cancel an armed Learn. Body: {learn_id}."""
         body = req.json or {}
@@ -2436,7 +2439,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
             entry["timeout_task"].cancel()
         return Response.json({"status": "cancelled"})
 
-    @server.route("GET", "/api/plugins/cc-mappings")
+    @server.route("GET", "/api/plugins/cc-mappings", summary="Flat list of every per-instance CC binding across all plugins.")
     async def api_plugins_cc_mappings(req: Request) -> Response:
         """Flat list of every per-instance CC binding across all plugins.
 
@@ -2550,7 +2553,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
                         })
         return Response.json({"mappings": rows})
 
-    @server.route("GET", "/api/plugins/icon/", exact=False)
+    @server.route("GET", "/api/plugins/icon/", exact=False, summary="Serve a plugin type's icon.svg.")
     async def api_plugin_icon(req: Request) -> Response:
         """Serve a plugin's icon.svg."""
         plugin_type = req.path.split("/api/plugins/icon/")[1].rstrip("/")
@@ -2583,7 +2586,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         _instances_cache["body"] = None
         _instances_cache["ts"] = 0.0
 
-    @server.route("GET", "/api/plugins/instances")
+    @server.route("GET", "/api/plugins/instances", summary="List running plugin instances (light rows).")
     async def api_plugins_instances(req: Request) -> Response:
         """List running plugin instances. Returns a *light* row per
         instance (id, type, name, status) — full data including
@@ -2630,7 +2633,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         _instances_cache["ts"] = now
         return Response(status=200, body=body, content_type="application/json")
 
-    @server.route("POST", "/api/plugins/instances")
+    @server.route("POST", "/api/plugins/instances", summary="Create a plugin instance. Body: {type, name?}.")
     async def api_plugins_create(req: Request) -> Response:
         """Create a new plugin instance. Body: {type, name?}"""
         if not engine._plugin_host:
@@ -2661,7 +2664,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         data = engine._plugin_host.get_instance_data(instance.id)
         return Response.json(data, status=201)
 
-    @server.route("POST", "/api/plugins/instances/", exact=False)
+    @server.route("POST", "/api/plugins/instances/", exact=False, summary="POST a sub-resource on an instance (.../sysex streams a raw .syx out the OUT port).")
     async def api_plugins_instance_post(req: Request) -> Response:
         """POST sub-resources on a plugin instance. Currently just
         `.../sysex` — body is the raw .syx payload, gets streamed out
@@ -2692,7 +2695,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         elapsed_ms = (_t.monotonic() - t0) * 1000.0
         return Response.json({"sent": sent, "ms": round(elapsed_ms, 1)})
 
-    @server.route("GET", "/api/plugins/instances/", exact=False)
+    @server.route("GET", "/api/plugins/instances/", exact=False, summary="Get one plugin instance's config and params.")
     async def api_plugins_instance_get(req: Request) -> Response:
         """Get a single plugin instance config + params."""
         if not engine._plugin_host:
@@ -2703,7 +2706,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
             return Response.error("Instance not found", 404)
         return Response.json(data)
 
-    @server.route("PUT", "/api/plugins/instances/", exact=False)
+    @server.route("PUT", "/api/plugins/instances/", exact=False, summary="Set a user CC binding on a plugin param.")
     async def api_plugins_cc_map_put(req: Request) -> Response:
         """Set a user CC binding on a plugin param.
 
@@ -2739,7 +2742,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         })
         return Response.json({"status": "updated"})
 
-    @server.route("PATCH", "/api/plugins/instances/", exact=False)
+    @server.route("PATCH", "/api/plugins/instances/", exact=False, summary="Update a plugin instance's params or name.")
     async def api_plugins_instance_patch(req: Request) -> Response:
         """Update plugin params or name. Body: {params?, name?}"""
         if not engine._plugin_host:
@@ -2776,7 +2779,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         # SSE plugin-param events deliver the canonical post-write state.
         return Response.json({"status": "updated", "id": instance_id})
 
-    @server.route("DELETE", "/api/plugins/instances/", exact=False)
+    @server.route("DELETE", "/api/plugins/instances/", exact=False, summary="Remove a plugin instance, or reset one param's CC binding to its default.")
     async def api_plugins_instance_delete(req: Request) -> Response:
         """Stop and remove a plugin instance — or, when the path is the
         cc-map sub-resource (/api/plugins/instances/<id>/cc-map/<param>),
