@@ -175,7 +175,7 @@ the rationale and the `rw` / `ro` helpers.
 
 ## Compliance and Licences
 
-- **Application licence** -- LGPL.
+- **Application licence** -- GPL.
 - **Bundled third-party** -- Preact (MIT), HTM (Apache 2.0).
 - **OS underneath** -- Raspberry Pi OS Lite, which has its own
   licence terms. Out of scope here; consult the OS documentation.

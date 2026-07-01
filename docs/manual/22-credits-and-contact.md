@@ -15,8 +15,8 @@ attached as GitHub releases with the matching `.deb` files.
 
 ## Licence
 
-The application is licensed under the **GNU Lesser General Public
-License (LGPL)**. See the `LICENSE` file in the project repository
+The application is licensed under the **GNU General Public
+License (GPL)**. See the `LICENSE` file in the project repository
 for the full text.
 
 ## Bundled Third-Party Software

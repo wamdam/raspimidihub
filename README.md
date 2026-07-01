@@ -8,7 +8,7 @@ With the built-in plugin system, you can add virtual instruments and effects (ar
 
 The Raspberry Pi runs on a **read-only filesystem**, so you can pull the power at any time without risk of SD card corruption.
 
-[![License](https://img.shields.io/badge/license-LGPL-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-GPL-blue.svg)](LICENSE)
 [![Discord](https://img.shields.io/badge/Discord-Join%20the%20community-5865F2?logo=discord&logoColor=white)](https://discord.gg/DYQ7keGm)
 [![Mastodon](https://img.shields.io/badge/Mastodon-Join-6364FF?logo=mastodon&logoColor=white)](https://mastodon.social/invite/6mBTYoVr)
 
@@ -362,4 +362,4 @@ Tests run without ALSA hardware (`RASPIMIDIHUB_TEST_MODE=1`). No Raspberry Pi re
 
 ## License
 
-LGPL -- see [LICENSE](LICENSE) for details. Includes bundled Preact (MIT) and HTM (Apache-2.0).
+GPL -- see [LICENSE](LICENSE) for details. Includes bundled Preact (MIT) and HTM (Apache-2.0).

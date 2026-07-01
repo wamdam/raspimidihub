@@ -96,7 +96,7 @@ controller platform over a series of releases. The roadmap
 
 ## Licence
 
-LGPL. Bundled third-party software retains its own licences:
+GPL. Bundled third-party software retains its own licences:
 Preact (MIT), HTM (Apache 2.0). See chapter 22 for the full
 credits and chapter 21.8 for the compliance notes.
 
