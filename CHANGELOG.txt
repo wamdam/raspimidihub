@@ -4,7 +4,7 @@ User-visible changes. Short tagged one-liners, no code or commit
 hashes. Tags: Added, Improved, Fix, Changed, Removed.
 
 
-2026-06-28 — Version 5.2.0b1 (beta)
+2026-07-01 — Version 5.2.0
 
 - ⚠️ **WARNING — the address you type to reach a hub has changed.** Open `http://raspimidihub-<id>.local` now, where `<id>` is the four-character code shown in the hub's title bar and WiFi name (e.g. `http://raspimidihub-735C.local`). The old `raspimidihub.local` no longer works — **update any saved bookmark.** This is what lets two hubs share one network without clashing; the hub's IP address still works as before if `.local` isn't available on your device.
 - Improved: **UI actions and saves no longer interrupt live MIDI.** Things you do mid-set used to briefly stall the MIDI/clock; now they're imperceptible:
