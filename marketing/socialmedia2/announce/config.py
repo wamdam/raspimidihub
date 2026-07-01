@@ -69,9 +69,13 @@ STATE_FILE = STATE_DIR / 'state.json'
 # Which publishers each source posts to. A source NOT listed here goes to every
 # configured publisher. 'features' (the public feature/improvement ads) is
 # Mastodon-only — those would be noise in the Discord community channel.
+# 'jokes' and 'midi_facts' are also Mastodon-only for the same reason.
 SOURCE_TARGETS = {
     'features': ['mastodon'],
-    # 'youtube' / 'github' omitted -> all configured publishers (Mastodon + Discord)
+    'jokes': ['mastodon'],
+    'midi_facts': ['mastodon'],
+    'creative_uses': ['mastodon'],  # Educational content, Mastodon only
+    # 'youtube' / 'github' omitted -> all configured publishers
 }
 
 # --- Schedule (seconds) for the dispatch tick -----------------------------
@@ -79,6 +83,9 @@ SCHEDULE = {
     'youtube': int(_env('SOCIAL_INTERVAL_YOUTUBE', 3600)),     # 1h
     'github': int(_env('SOCIAL_INTERVAL_GITHUB', 3600)),       # 1h
     'features': int(_env('SOCIAL_INTERVAL_FEATURES', 14400)),  # 4h
+    'jokes': int(_env('SOCIAL_INTERVAL_JOKES', 32400)),        # 9h
+    'midi_facts': int(_env('SOCIAL_INTERVAL_MIDI_FACTS', 43200)),  # 12h
+    'creative_uses': int(_env('SOCIAL_INTERVAL_CREATIVE_USES', 86400)),  # 24h
 }
 
 SITE_URL = _env('SOCIAL_SITE_URL', 'https://raspimidihub.com')

@@ -16,12 +16,15 @@ from . import config, content
 from .discord_client import DiscordPoster
 from .llm import LLMClient
 from .mastodon_client import MastodonPoster
+from .sources.creative_uses import CreativeUsesSource
 from .sources.features import FeaturesSource
 from .sources.github import GithubSource
+from .sources.jokes import JokesSource
+from .sources.midi_facts import MidiFactsSource
 from .sources.youtube import YouTubeSource
 from .state import State
 
-SOURCES = {s.name: s for s in (YouTubeSource(), GithubSource(), FeaturesSource())}
+SOURCES = {s.name: s for s in (YouTubeSource(), GithubSource(), FeaturesSource(), JokesSource(), MidiFactsSource(), CreativeUsesSource())}
 
 
 def build_publishers() -> list:
