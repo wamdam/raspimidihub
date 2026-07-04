@@ -83,7 +83,9 @@ make -j4 modules_prepare
 
 echo "== building sound/core + sound/usb"
 make -j3 M=sound/core modules
-make -j3 M=sound/usb modules
+# snd-usb-audio links against the just-built snd-ump exports; separate
+# M= builds don't see each other's symbols without this.
+make -j3 M=sound/usb KBUILD_EXTRA_SYMBOLS="$PWD/sound/core/Module.symvers" modules
 
 echo "== built modules:"
 find sound -name '*.ko' | sort
