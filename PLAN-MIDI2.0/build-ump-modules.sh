@@ -25,7 +25,7 @@ Types: deb-src
 URIs: http://archive.raspberrypi.com/debian/
 Suites: trixie
 Components: main
-Signed-By: /usr/share/keyrings/raspberrypi-archive-keyring.gpg
+Signed-By: /usr/share/keyrings/raspberrypi-archive-keyring.pgp
 EOF
 fi
 

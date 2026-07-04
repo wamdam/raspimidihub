@@ -1,7 +1,8 @@
-# Draft — upstream kernel config request (FSD-01 work item 1)
+# Upstream kernel config request (FSD-01 work item 1)
 
-**Status: DRAFT — not filed yet, needs user approval before posting.**
-Target: https://github.com/raspberrypi/linux/issues (new feature request).
+**Status: FILED 2026-07-04 — https://github.com/raspberrypi/linux/issues/7474**
+Check back per release cycle; on accept, note the first RPi OS kernel
+version that ships the configs in FSD-01's decision memo.
 
 ---
 
