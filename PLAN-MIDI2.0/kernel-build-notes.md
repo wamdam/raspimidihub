@@ -11,9 +11,19 @@ to `/lib/modules/$KVER/updates/` (wins over `kernel/` in depmod order).
 
 Runbook: `build-ump-modules.sh` (in this directory) — copied to the Pi
 and run there. Takes ~20–40 min on the 3B+. Requires internet on the
-Pi (NAT via `nat.sh` on the dev machine + default route via
-169.254.1.1 + DNS override, because the hub's captive-portal dnsmasq
-otherwise resolves everything to itself).
+Pi. **Lesson learned:** the NAT route (`nat.sh` + default route via
+169.254.1.1) proved fragile twice — the hub's connectivity stack
+rewrites `/var/run/resolv.conf` (fixed by pinning repo IPs in
+`/etc/hosts`), and the dev machine's firewall silently re-flushed the
+forward rules mid-download. The robust setup is a **reverse SOCKS
+tunnel** over the existing ssh session instead:
+
+    dev$ ssh -f -N -o ExitOnForwardFailure=yes -R 1080 user@<pi>
+    pi$  echo 'Acquire::http::Proxy "socks5h://localhost:1080";' \
+           | sudo tee /etc/apt/apt.conf.d/99midi2proxy
+
+Remove `/etc/apt/apt.conf.d/99midi2proxy` after the build (apt fails
+closed while it exists without the tunnel).
 
 Persistent changes to the test Pi (acceptable, documented):
 - `/etc/apt/sources.list.d/rpt-src.sources` (deb-src for the kernel)
