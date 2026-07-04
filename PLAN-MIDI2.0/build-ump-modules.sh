@@ -74,16 +74,18 @@ scripts/config --enable SND_USB_AUDIO_MIDI_V2
 # Debian build, not from /boot/config's CONFIG_LOCALVERSION — set it
 # explicitly or vermagic mismatches and modprobe refuses the modules.
 scripts/config --set-str LOCALVERSION "${KVER#"$UPSTREAM"}"
-scripts/config --undefine LOCALVERSION_AUTO
+scripts/config --disable LOCALVERSION_AUTO
 make olddefconfig
 # Sanity: SND_UMP must have been selected as module by the above
 grep -q "^CONFIG_SND_UMP=m" .config || { echo "SND_UMP not enabled?"; grep SND_UMP .config; exit 1; }
-REL=$(make -s kernelrelease)
-[ "$REL" = "$KVER" ] || { echo "kernelrelease mismatch: $REL != $KVER"; exit 1; }
 
 echo "== modules_prepare"
 cp "$HDRS/Module.symvers" .
 make -j4 modules_prepare
+# Assert only AFTER modules_prepare: kernelrelease reads the generated
+# include/config/auto.conf, which olddefconfig alone leaves stale.
+REL=$(make -s kernelrelease)
+[ "$REL" = "$KVER" ] || { echo "kernelrelease mismatch: $REL != $KVER"; exit 1; }
 
 echo "== building sound/core + sound/usb"
 make -j3 M=sound/core modules
