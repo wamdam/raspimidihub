@@ -475,11 +475,13 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
     # GET /api/system — system info
     # ================================================================
 
-    @server.route("GET", "/api/system", summary="Hub status: hostname, IPs, version, CPU/RAM/temp, per-core load, SSE + latency stats, ALSA port budget.")
+    @server.route("GET", "/api/system", summary="Hub status: hostname, IPs, version, CPU/RAM/temp, per-core load, SSE + latency stats, ALSA port budget, MIDI 2.0 (UMP) capability.")
     async def api_system(req: Request) -> Response:
         import subprocess
 
+        from .alsa_seq import probe_ump_support
         from .wifi import default_ap_ssid
+        _ump = probe_ump_support()
         hostname = socket.gethostname()
         # The AP SSID is what the user sees in the WiFi list and the
         # header badge mirrors it. Configured name wins; else the
@@ -590,6 +592,8 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
             "config_fallback": config.fallback_active,
             "default_routing": config.default_routing,
             "config_dirty": engine.config_dirty,
+            "midi2": {"alsa_lib": _ump.alsa_lib, "kernel": _ump.kernel,
+                      "capable": _ump.capable},
         })
 
     # ================================================================

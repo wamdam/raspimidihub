@@ -9,7 +9,7 @@ import logging
 import time
 from dataclasses import dataclass
 
-from .alsa_seq import AlsaSeq, MidiDevice, MidiEventType, SeqEventType
+from .alsa_seq import AlsaSeq, MidiDevice, MidiEventType, SeqEventType, probe_ump_support
 from .device_id import DeviceRegistry
 from .midi_filter import FilterEngine, MidiFilter, MidiMapping
 
@@ -218,6 +218,9 @@ class MidiEngine:
         self._monitor_port = self._seq.create_port("monitor", writable=True)
         log.info("ALSA sequencer opened, client ID %d, monitor port %d",
                  self._seq.client_id, self._monitor_port)
+        ump = probe_ump_support()
+        log.info("UMP (MIDI 2.0) support: kernel=%s alsa-lib=%s",
+                 "yes" if ump.kernel else "no", "yes" if ump.alsa_lib else "no")
 
     def stop(self) -> None:
         """Disconnect all and close ALSA sequencer."""

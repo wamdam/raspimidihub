@@ -275,6 +275,87 @@ snd_seq_get_any_client_info = _func("snd_seq_get_any_client_info", c_int, SndSeq
 SND_SEQ_USER_CLIENT = 1
 SND_SEQ_KERNEL_CLIENT = 2
 
+# --- UMP / MIDI 2.0 capability (kernel >= 6.5 + alsa-lib >= 1.2.10) ---
+
+# Client MIDI protocol versions (snd_seq_client_info midi_version field)
+SND_SEQ_CLIENT_LEGACY_MIDI = 0
+SND_SEQ_CLIENT_UMP_MIDI_1_0 = 1
+SND_SEQ_CLIENT_UMP_MIDI_2_0 = 2
+
+
+def _optional_func(name, restype, *argtypes):
+    """Bind a symbol that older alsa-lib builds don't export (None if absent)."""
+    try:
+        fn = getattr(_lib, name)
+    except AttributeError:
+        return None
+    fn.restype = restype
+    fn.argtypes = argtypes
+    return fn
+
+
+# get/set_client_info are ancient and always present; the midi_version
+# accessors appeared in alsa-lib 1.2.10 and gate the whole UMP API.
+snd_seq_get_client_info = _func("snd_seq_get_client_info", c_int, SndSeqPtr, SndSeqClientInfoPtr)
+snd_seq_set_client_info = _func("snd_seq_set_client_info", c_int, SndSeqPtr, SndSeqClientInfoPtr)
+snd_seq_client_info_get_midi_version = _optional_func(
+    "snd_seq_client_info_get_midi_version", c_int, SndSeqClientInfoPtr)
+snd_seq_client_info_set_midi_version = _optional_func(
+    "snd_seq_client_info_set_midi_version", None, SndSeqClientInfoPtr, c_int)
+
+
+@dataclass(frozen=True)
+class UmpSupport:
+    """Result of the one-shot UMP capability probe."""
+    alsa_lib: bool  # alsa-lib exports the midi_version accessors (>= 1.2.10)
+    kernel: bool    # kernel sequencer accepts a UMP client (CONFIG_SND_SEQ_UMP)
+
+    @property
+    def capable(self) -> bool:
+        return self.alsa_lib and self.kernel
+
+
+_ump_support: UmpSupport | None = None
+
+
+def probe_ump_support(force: bool = False) -> UmpSupport:
+    """Detect UMP (MIDI 2.0) support once per process.
+
+    Kernel side: a kernel without CONFIG_SND_SEQ_UMP ignores or rejects
+    a client's midi_version, so set UMP-MIDI-1.0 on a throwaway client
+    and read it back — anything but the requested value means no kernel
+    support. The throwaway client never creates ports, so it is
+    invisible to device scans and other seq clients.
+    """
+    global _ump_support
+    if _ump_support is not None and not force:
+        return _ump_support
+
+    alsa_lib = (snd_seq_client_info_get_midi_version is not None
+                and snd_seq_client_info_set_midi_version is not None)
+    kernel = False
+    if alsa_lib:
+        handle = SndSeqPtr()
+        if snd_seq_open(byref(handle), b"default", SND_SEQ_OPEN_DUPLEX, SND_SEQ_NONBLOCK) >= 0:
+            try:
+                info = SndSeqClientInfoPtr()
+                if snd_seq_client_info_malloc(byref(info)) >= 0:
+                    try:
+                        if snd_seq_get_client_info(handle, info) >= 0:
+                            snd_seq_client_info_set_midi_version(
+                                info, SND_SEQ_CLIENT_UMP_MIDI_1_0)
+                            if (snd_seq_set_client_info(handle, info) >= 0
+                                    and snd_seq_get_client_info(handle, info) >= 0):
+                                kernel = (snd_seq_client_info_get_midi_version(info)
+                                          == SND_SEQ_CLIENT_UMP_MIDI_1_0)
+                    finally:
+                        snd_seq_client_info_free(info)
+            finally:
+                snd_seq_close(handle)
+
+    _ump_support = UmpSupport(alsa_lib=alsa_lib, kernel=kernel)
+    return _ump_support
+
 # Port info
 snd_seq_port_info_malloc = _func("snd_seq_port_info_malloc", c_int, POINTER(SndSeqPortInfoPtr))
 snd_seq_port_info_free = _func("snd_seq_port_info_free", None, SndSeqPortInfoPtr)
