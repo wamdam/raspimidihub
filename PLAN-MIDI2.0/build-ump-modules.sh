@@ -70,12 +70,16 @@ scripts/config --enable SND_SEQ_UMP
 scripts/config --module SND_SEQ_UMP_CLIENT
 scripts/config --enable SND_UMP_LEGACY_RAWMIDI
 scripts/config --enable SND_USB_AUDIO_MIDI_V2
+# The packaged kernel's release suffix (+rpt-rpi-v8) comes from the
+# Debian build, not from /boot/config's CONFIG_LOCALVERSION — set it
+# explicitly or vermagic mismatches and modprobe refuses the modules.
+scripts/config --set-str LOCALVERSION "${KVER#"$UPSTREAM"}"
+scripts/config --undefine LOCALVERSION_AUTO
 make olddefconfig
 # Sanity: SND_UMP must have been selected as module by the above
 grep -q "^CONFIG_SND_UMP=m" .config || { echo "SND_UMP not enabled?"; grep SND_UMP .config; exit 1; }
-# Vermagic must match the running kernel exactly
-grep -q "^CONFIG_LOCALVERSION=\"+rpt-rpi-v8\"" .config || \
-  echo "WARNING: check CONFIG_LOCALVERSION vs $KVER before installing"
+REL=$(make -s kernelrelease)
+[ "$REL" = "$KVER" ] || { echo "kernelrelease mismatch: $REL != $KVER"; exit 1; }
 
 echo "== modules_prepare"
 cp "$HDRS/Module.symvers" .
@@ -107,8 +111,9 @@ done
 sudo depmod -a
 
 echo "== vermagic check:"
-modinfo "/lib/modules/$KVER/updates/snd-usb-audio.ko" | grep -E "^vermagic"
-echo "vermagic must match: $KVER"
+VMAGIC=$(/usr/sbin/modinfo "/lib/modules/$KVER/updates/snd-usb-audio.ko" | awk '/^vermagic/{print $2}')
+echo "built: $VMAGIC / running: $KVER"
+[ "$VMAGIC" = "$KVER" ] || { echo "VERMAGIC MISMATCH — do not reboot on this"; exit 1; }
 
 sudo mount -o remount,ro / || true
 echo "== done — reboot to load the new modules (sudo reboot)"
