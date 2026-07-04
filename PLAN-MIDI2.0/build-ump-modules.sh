@@ -84,8 +84,14 @@ make -j4 modules_prepare
 echo "== building sound/core + sound/usb"
 make -j3 M=sound/core modules
 # snd-usb-audio links against the just-built snd-ump exports; separate
-# M= builds don't see each other's symbols without this.
-make -j3 M=sound/usb KBUILD_EXTRA_SYMBOLS="$PWD/sound/core/Module.symvers" modules
+# M= builds don't see each other's symbols without this. Feed modpost
+# only the symbols the stock kernel does NOT already export — passing
+# all of sound/core's exports collides with the root Module.symvers
+# ("exported twice").
+awk 'NR==FNR {seen[$2]=1; next} !($2 in seen)' \
+    Module.symvers sound/core/Module.symvers > new-exports.symvers
+echo "== new exports fed to sound/usb modpost:"; awk '{print "  " $2}' new-exports.symvers
+make -j3 M=sound/usb KBUILD_EXTRA_SYMBOLS="$PWD/new-exports.symvers" modules
 
 echo "== built modules:"
 find sound -name '*.ko' | sort
