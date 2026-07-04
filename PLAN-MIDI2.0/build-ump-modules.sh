@@ -34,12 +34,35 @@ sudo apt-get install -y -qq dpkg-dev bison flex bc libssl-dev kmod
 
 mkdir -p "$BUILD"
 cd "$BUILD"
-if ! ls -d linux-*/ >/dev/null 2>&1; then
-  echo "== fetching kernel source (apt source)"
-  apt-get source "linux-image-$KVER"
+
+# apt-get source would fetch the archive's NEWEST kernel source (the
+# trixie Sources index lists only the current version), which won't
+# modpost against the running kernel. Fetch the version-exact source
+# from the pool instead — old versions linger there. curl goes through
+# the reverse SOCKS tunnel (see kernel-build-notes.md).
+SRCVER=$(dpkg-query -W -f='${source:Version}' "linux-image-$KVER")
+SRCVER=${SRCVER#*:}                # strip epoch: 6.12.75-1+rpt1
+UPSTREAM=${SRCVER%%-*}             # 6.12.75
+SRCDIR=linux-$UPSTREAM
+POOL=http://archive.raspberrypi.com/debian/pool/main/l/linux
+CURL="curl -fsS --socks5-hostname localhost:1080"
+
+# drop trees/tarballs from other versions (an earlier apt-get source
+# run may have left the newest one here)
+for d in linux-*/; do [ "$d" = "$SRCDIR/" ] || rm -rf "$d"; done 2>/dev/null || true
+find . -maxdepth 1 -name 'linux_*' ! -name "linux_${SRCVER}*" ! -name "linux_${UPSTREAM}*" -delete 2>/dev/null || true
+
+if [ ! -d "$SRCDIR" ]; then
+  echo "== fetching kernel source $SRCVER from pool"
+  $CURL -O "$POOL/linux_$SRCVER.dsc"
+  for f in $(awk '/^Files:/{f=1;next} /^[^ ]/{f=0} f{print $3}' "linux_$SRCVER.dsc"); do
+    [ -f "$f" ] || { echo "  fetching $f"; $CURL -O "$POOL/$f"; }
+  done
+  dpkg-source --no-check -x "linux_$SRCVER.dsc"
 fi
-SRC=$(ls -d linux-*/ | head -1)
-cd "$SRC"
+cd "$SRCDIR"
+V=$(make -s kernelversion)
+[ "$V" = "$UPSTREAM" ] || { echo "source/kernel mismatch: $V vs $UPSTREAM"; exit 1; }
 
 echo "== configuring"
 cp "/boot/config-$KVER" .config
