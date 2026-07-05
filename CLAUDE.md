@@ -342,6 +342,11 @@ needed again). Honour these unless revisited:
   (vermagic, version-exact apt source, cross-M= symvers — all
   already solved there, don't re-derive). Re-run on the test Pi
   after every kernel upgrade, or MIDI 2.0 silently goes dormant.
-  Upstream config request: raspberrypi/linux#7474.
+  Upstream config request: raspberrypi/linux#7474 — answered
+  2026-07-05 by PR raspberrypi/linux#7476 (adds
+  `CONFIG_SND_USB_AUDIO_MIDI_V2=y` to all Pi defconfigs; `SND_UMP`
+  and `SND_SEQ_UMP` follow via Kconfig select/defaults; trial build
+  `sudo rpi-update pulls/7476`, test Pi only). Once merged and in
+  the apt kernels, the module rebuild becomes unnecessary.
 - `pkill -f` over ssh matches the ssh command line itself — use a
   `[b]racket` pattern.
