@@ -49,6 +49,9 @@ does not need to move. If the perf optimisation *is* user-visible
 | Keyboard shortcut added / removed (Tracker note entry, ESC, ...) | `D-appendix-keyboard-shortcuts.md` |
 | New tab in the bottom nav, or a tab made conditional | `06-interacting-with-the-web-ui.md` §6.2 |
 | New UI control type (a new wheel-variant, a new editor) | `08-ui-controls.md` |
+| **MIDI 2.0 / UMP** (badge, FB ports, Use-MIDI-2.0 toggle, MIDI-CI card) | `09-routing-matrix.md` (grid + device detail), `04-system-architecture.md` (UMP note), `21-technical-information.md` ("MIDI 2.0 Kernel Requirements") |
+| MIDI 2.0 resolution behaviour (filters, mappings, fine params) | `10-filters-and-mappings.md` + appendix C, `08-ui-controls.md` (fine faders), `11-plugins.md` §"CC Automation" |
+| `midi2` config keys (`force_midi1`, `ci_enabled`, `ci_disabled`) | `05-configuration-and-data-structure.md` |
 
 The README under `docs/manual/README.md` is the editor-facing
 overview of the layout. Keep its file list current if you add or
@@ -273,3 +276,69 @@ built on the loop (cheap, shallow, race-free vs hotplug, which is
 also on the loop); only `os.fork()` runs on the loop, after which
 the encode+gzip+write happen in the forked child off the isolated
 core.
+
+## MIDI 2.0 / UMP (design decisions)
+
+Implemented 2026-07 across the `midi2-step0` branch (Steps 0–6 of
+`PLAN-MIDI2.0/` — read that directory's README + FSD status sections
+before touching anything MIDI 2.0; research annexes there hold the
+spec details and kernel findings). Honour these unless revisited:
+
+**Hard invariants**
+- **MIDI 1.0 behaviour is byte-identical, always.** Every hi-res path
+  is golden-tested against the legacy path over the full 7-bit domain
+  (`test_ump_filter_path.py`, `test_ump_cc_binding.py`,
+  `test_hires_send.py`). Two projection rules keep this true, and
+  they are NOT interchangeable: paths whose legacy code *rounded*
+  use `from_midi_units` (mappings), paths whose legacy code
+  *truncated* with `int()` use `midi_scale.lattice_interp`
+  (generators). cc_smoother stayed 7-bit precisely because its
+  legacy projection is round() and no floor-compatible flip exists
+  yet — don't "fix" that without adding a round-compatible interp.
+- **Graceful degradation is structural, not a flag.** Everything
+  gates on `alsa_seq.probe_ump_support()` at runtime; on stock
+  Raspberry Pi kernels (which ship ALL MIDI 2.0 configs off —
+  upstream request: raspberrypi/linux#7474) the hub runs the
+  untouched legacy code paths. Verified empirically on the 5A5D
+  reference Pi. Never add a code path that assumes UMP exists.
+
+**Architecture (D1/D2/D3 from the plan, approved)**
+- Internal format is MIDI 2.0 width: the main seq client, the hi-res
+  monitor client, and every plugin client run `midi_version=2` on
+  capable kernels; the KERNEL does all 1.0↔2.0 conversion per
+  receiving client (`seq_ump_convert.c` — spec-compliant, verified:
+  velocity 100 → 0xC924). UMP events shim back to legacy-shaped
+  events via `ump.to_monitor_shim` so downstream code is agnostic.
+- User-facing scale is fractional 0–127 "MIDI units" (`63.5`), never
+  raw 32-bit. Whole numbers serialise as ints → no config migration.
+- The plugin API stays 0–127 ints (26 plugins + third parties);
+  hi-res is opt-in per param (`fine=True, decimals=N`) and via float
+  values to `send_cc`/`send_note_on`.
+
+**Testing without MIDI 2.0 hardware**
+- `scripts/fake_midi2_synth.py` is a full virtual MIDI 2.0 device
+  (UMP endpoint + function blocks + hi-res CC sweep + MIDI-CI
+  responder incl. Property Exchange). The device scan deliberately
+  opts in user seq clients that declare a UMP endpoint with function
+  blocks; the registry keys them `ump-<name>`. Use it for every
+  MIDI 2.0 UX verification; two 3B+ test Pis cannot form a UMP link
+  (host-only USB) and RTP-MIDI is 7-bit on the wire.
+- MIDI-CI is point-to-point by design: `midi_ci.CiSession` uses a
+  dedicated seq client subscribed to ONE device at a time. Never
+  route CI SysEx through the routed graph (fan-out corrupts CI
+  conversations) and never persist MUIDs (random per power-cycle;
+  identity keys on `device_id.py` stable ids).
+
+**Traps learned the hard way**
+- ALSA constants: verify numeric values against the kernel uapi
+  headers on the Pi, not against plausible-looking names —
+  `SND_SEQ_EVENT_LENGTH_VARIABLE` was 0x01 (the TIME_STAMP_REAL bit)
+  for the project's whole life and silently broke all SysEx TX until
+  MIDI-CI hit it (fixed to 1<<2, 2026-07).
+- `make kernelrelease` lies until `modules_prepare` regenerates
+  `include/config/auto.conf`; kernel-module builds for the Pi live
+  in `PLAN-MIDI2.0/build-ump-modules.sh` + `kernel-build-notes.md`
+  (vermagic, version-exact apt source, cross-M= symvers — all
+  already solved there, don't re-derive).
+- `pkill -f` over ssh matches the ssh command line itself — use a
+  `[b]racket` pattern.

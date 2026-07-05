@@ -1,7 +1,32 @@
 # FSD-10 — MIDI-CI subsystem (discovery, identity, Property Exchange)
 
 **Step:** 6 · **Depends on:** FSD-03 (device-registry fields to hang
-results on); otherwise independent — **can be developed in parallel from
+results on); otherwise independent
+
+## Status (2026-07-05): implemented (commit 72f0fd6)
+
+- midi_ci.py: CI v1.2 codec (Discovery, PE caps, PE Get w/ chunk
+  assembly; parser never raises) + CiSession (dedicated seq client,
+  point-to-point subscriptions, select-based, worker-threaded, single
+  retry, per-boot dedup). PE data is plain-ASCII JSON (default
+  encoding); Mcoded7 not implemented yet — revisit if a device
+  negotiates it.
+- Engine probes new bidirectional devices on connect (plugins /
+  network mirrors / opted-out skipped); results in GET /api/devices
+  midi_ci + device-detail card + Identify action; config
+  midi2.ci_enabled / ci_disabled.
+- Live-verified on A6DC against the fake synth's new CI responder:
+  Discovery + PE caps + PE DeviceInfo end to end, through the
+  kernel's classic<->SysEx7 conversion (hub CI client legacy, synth
+  midi_version=2).
+- Registry addition: card-less UMP-declared user clients get
+  ump-<name> stable ids (virtual devices are first-class).
+- Found + fixed a pre-existing bug: SND_SEQ_EVENT_LENGTH_VARIABLE
+  was 0x01 (TIME_STAMP_REAL) instead of 1<<2 — all SysEx TX
+  (sysex_sender plugin included) failed with EINVAL since ever.
+- Open: real-hardware CI check (Korg Keystage class) over USB + DIN;
+  ProgramList fetch (manual button) deliberately not implemented;
+  suggested-rename from DeviceInfo.model parked. — **can be developed in parallel from
 day one** (MIDI-CI is plain SysEx over MIDI 1.0, works on today's
 kernel/hardware, testable against any CI-capable synth over USB or DIN)
 

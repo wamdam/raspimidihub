@@ -59,6 +59,12 @@ Each step is a shippable increment; UX is verified before the next starts.
 "Verify" lists the acceptance walk-through for that step (details in each
 FSD's checklist).
 
+Status 2026-07-05: **Steps 0-6 implemented and live-verified** (see
+each FSD's Status section; virtual MIDI 2.0 device replaces hardware
+for testing). Step 7 parked. Open across gates: latency-suite jitter
+measurement (Step 3), real-2.0-hardware spot checks, deferred FSD-09
+adoptions (cc_smoother / velocity plugins / templates).
+
 | Step | FSDs | What the user gets | UX verification |
 |---|---|---|---|
 | **0. Enablement** | FSD-01 | Nothing visible; test Pi gains a UMP-capable kernel; hub detects capability at runtime | `aseqdump -u 2` sees a UMP device on the test Pi; hub boots and behaves exactly as today on both UMP and non-UMP kernels |
