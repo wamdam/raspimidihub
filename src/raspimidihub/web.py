@@ -59,6 +59,11 @@ SSE_EVENTS = {
                      "CC/Bend/Mgmt with kind/bank/index); the integer "
                      "fields stay 7-bit for compatibility.",
     "cc": "A Control Change value, broadcast for CC monitoring / MIDI-learn.",
+    "cc_map_changed": "A plugin CC binding was added, edited, or removed.",
+    "cc_learn_result": "A CC Learn armed via the binding popup matched an "
+                       "inbound event; carries the learned ch/cc.",
+    "cc_learn_timeout": "A CC Learn armed via the binding popup expired "
+                        "(30 s) without a matching event.",
     "clock-quarter": "Quarter-note tick from the active clock.",
     "transport-start": "Transport / clock started.",
     "connection-changed": "A routing-matrix connection was added, removed, "
