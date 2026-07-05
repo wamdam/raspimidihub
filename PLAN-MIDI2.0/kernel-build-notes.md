@@ -25,6 +25,11 @@ tunnel** over the existing ssh session instead:
 Remove `/etc/apt/apt.conf.d/99midi2proxy` after the build (apt fails
 closed while it exists without the tunnel).
 
+**Set the Pi's clock before running** (`sudo date -u -s "$(date -u
+'+%Y-%m-%d %H:%M:%S')"` from the dev machine): the appliance has no
+RTC and boots months in the past, which makes apt's sequoia verifier
+reject every repository signature as "not live until …".
+
 Persistent changes to the test Pi (acceptable, documented):
 - `/etc/apt/sources.list.d/rpt-src.sources` (deb-src for the kernel)
 - build packages (dpkg-dev, bison, flex, bc, libssl-dev)

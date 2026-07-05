@@ -3,6 +3,27 @@
 **Step:** 0 · **Depends on:** nothing · **Blocks:** all on-hardware
 verification (software FSDs can proceed against mocks/laptop)
 
+## Status (2026-07-05): DONE except final USB regression check
+
+- Work item 1 — upstream request **filed**:
+  https://github.com/raspberrypi/linux/issues/7474 (watch per release).
+- Work item 2 — UMP modules built + installed on the A6DC test Pi
+  (Pi 3B+, 6.12.75+rpt-rpi-v8) via `build-ump-modules.sh`; vermagic
+  verified, survives in `/lib/modules/…/updates/`. See
+  `kernel-build-notes.md` for the four traps hit on the way
+  (version-exact source, cross-M= symvers, LOCALVERSION/vermagic,
+  no-RTC clock vs apt signatures).
+- Work item 3 — runtime probe shipped
+  (`alsa_seq.probe_ump_support()`, logged at engine start, `midi2`
+  field in GET /api/system) + 5 unit tests. Verified both ways on the
+  same hardware: `kernel=no` pre-modules, `kernel=yes` post-reboot;
+  `aseqdump -u 2` runs as a UMP client.
+- Work items 4/5 — log line ships with the probe; decision memo waits
+  on the upstream issue's outcome.
+- **Open:** plug a USB MIDI 1.0 device into A6DC to regression-check
+  the rebuilt snd-usb-audio (enumeration, routing, hotplug); optional
+  cross-check of the deb on the stock-kernel 5A5D reference Pi.
+
 ## Goal
 
 Get a UMP-capable kernel onto the A6DC test Pi, start the upstream
