@@ -7,6 +7,8 @@ hashes. Tags: Added, Improved, Fix, Changed, Removed.
 Unreleased
 
 - Added: MIDI 2.0 groundwork — the hub now detects at startup whether the kernel and ALSA support UMP/MIDI 2.0 and reports it in /api/system (all current Raspberry Pi OS kernels: not yet)
+- Added: MIDI 2.0 devices are modelled from their UMP endpoint description — named function blocks become the device's ports in the matrix; /api/devices carries the capability info
+- Added: per-device "force MIDI 1.0" escape hatch (config midi2.force_midi1 + device action API) for devices that misbehave under MIDI 2.0
 
 
 2026-07-01 — Version 5.2.0

@@ -733,6 +733,19 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
                 "default_name": dev.name,
                 "ports": ports,
             }
+            if dev.is_ump:
+                # force_midi1 masks the hub's *use* of the capability
+                # (badge, hi-res paths, MIDI-CI); topology stays visible.
+                forced = bool(info and info.stable_id
+                              in config.midi2.get("force_midi1", []))
+                entry["midi2"] = {
+                    "protocol": dev.midi2_protocol and not forced,
+                    "capable": dev.midi2_protocol,
+                    "forced_midi1": forced,
+                    "endpoint_name": dev.endpoint_name,
+                    "product_id": dev.product_id,
+                    "function_blocks": dev.function_blocks,
+                }
             if info:
                 entry["stable_id"] = info.stable_id
                 entry["vid"] = info.vid
@@ -844,7 +857,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
     # POST /api/devices/{client_id}/rename — rename a device
     # ================================================================
 
-    @server.route("POST", "/api/devices/", exact=False, summary="Per-device actions: rename, rename-port, clock-source toggle, or send a test MIDI message.")
+    @server.route("POST", "/api/devices/", exact=False, summary="Per-device actions: rename, rename-port, clock-source toggle, force-midi1 toggle, or send a test MIDI message.")
     async def api_device_action(req: Request) -> Response:
         path = req.path_param("/api/devices/")
 
@@ -882,6 +895,30 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
                     "plugin-changed",
                     {"instance_id": info.stable_id, "client_id": client_id})
             return Response.json({"status": "renamed", "name": name})
+
+        # POST /api/devices/{client_id}/force-midi1 — treat a MIDI 2.0
+        # capable device as MIDI 1.0 (escape hatch for devices that
+        # misbehave under UMP). Body: {enabled: bool}. Persisted in
+        # config.midi2.force_midi1 by stable_id.
+        if path.endswith("/force-midi1"):
+            try:
+                client_id = int(path[:-len("/force-midi1")])
+            except ValueError:
+                return Response.error("Invalid client ID")
+            data = req.json
+            enabled = bool(data.get("enabled", True))
+            info = engine.device_registry.get_by_client(client_id)
+            if info is None:
+                return Response.not_found()
+            forced = set(config.midi2.get("force_midi1", []))
+            if enabled:
+                forced.add(info.stable_id)
+            else:
+                forced.discard(info.stable_id)
+            config.data.setdefault("midi2", {})["force_midi1"] = sorted(forced)
+            await config.asave()
+            await server.send_sse("device-connected", {"client_id": client_id})
+            return Response.json({"status": "ok", "forced_midi1": enabled})
 
         # POST /api/devices/{client_id}/clock-source — toggle whether
         # this device's MIDI Clock / Start / Stop feeds the global

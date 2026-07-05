@@ -60,6 +60,17 @@ teal for plugins, blue for Bluetooth, violet for devices mirrored
 from a peer hub over Network MIDI (which also carry a two-node
 link icon).
 
+**MIDI 2.0 devices.** On a hub whose kernel supports MIDI 2.0 (see
+chapter 21), a connected MIDI 2.0 device presents its *function
+blocks* — the sections the device itself declares, e.g. "Keys" and
+"Pads" — as its port rows, using the device's own names for them.
+A device with a single function block appears as one port, exactly
+like a MIDI 1.0 device. Routing, filters, and mappings work on
+these ports as on any other; saved connections resolve across
+replug by the same stable-identity rules. On kernels without MIDI
+2.0 support the same device simply appears as a regular MIDI 1.0
+device — everything still works at classic resolution.
+
 ## Remote Hub Groups
 
 Devices mirrored from a peer hub (chapter 17's *Network MIDI*

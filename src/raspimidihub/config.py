@@ -150,6 +150,15 @@ DEFAULT_CONFIG = {
     "default_routing": "none",
     "connections": [],
     "disconnected": [],
+    "midi2": {
+        # stable_ids of devices the hub must treat as MIDI 1.0 even
+        # when they advertise MIDI 2.0 capability — the escape hatch
+        # for devices that misbehave under UMP. Set from the device
+        # detail panel. Masks the hub's own use of the capability
+        # (badge, hi-res paths, MIDI-CI); the kernel-level driver
+        # binding is a boot-time module option, not this switch.
+        "force_midi1": [],
+    },
     "wifi": {
         "mode": "ap",
         "ap_ssid": "",
@@ -255,6 +264,10 @@ class Config:
     @property
     def network_midi(self) -> dict:
         return self._data.get("network_midi", DEFAULT_CONFIG["network_midi"])
+
+    @property
+    def midi2(self) -> dict:
+        return self._data.get("midi2", DEFAULT_CONFIG["midi2"])
 
     def _apply_loaded(self, data: dict, source: str) -> None:
         self._data = _deep_merge(DEFAULT_CONFIG, data)

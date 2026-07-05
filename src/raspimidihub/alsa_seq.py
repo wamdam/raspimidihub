@@ -57,6 +57,8 @@ SND_SEQ_PORT_CAP_SUBS_WRITE = 1 << 6
 SND_SEQ_PORT_TYPE_MIDI_GENERIC = 1 << 1
 SND_SEQ_PORT_TYPE_APPLICATION = 1 << 20
 SND_SEQ_PORT_CAP_NO_EXPORT = 1 << 7
+SND_SEQ_PORT_CAP_INACTIVE = 1 << 8       # UMP group without an active FB
+SND_SEQ_PORT_CAP_UMP_ENDPOINT = 1 << 9   # group-spanning UMP endpoint port
 
 SND_SEQ_CLIENT_SYSTEM = 0
 SND_SEQ_PORT_SYSTEM_ANNOUNCE = 1
@@ -575,6 +577,8 @@ class MidiPort:
     name: str
     is_input: bool   # can be read from (produces MIDI data)
     is_output: bool  # can be written to (consumes MIDI data)
+    ump_group: int = 0          # 1-16 for UMP group ports, 0 otherwise
+    is_ump_endpoint: bool = False  # the group-spanning catch-all port
 
 
 @dataclass
@@ -582,6 +586,14 @@ class MidiDevice:
     client_id: int
     name: str
     ports: list[MidiPort] = field(default_factory=list)
+    # UMP endpoint capability (kernel-discovered; empty on non-UMP
+    # devices and on systems without UMP support)
+    is_ump: bool = False
+    midi2_protocol: bool = False      # endpoint is MIDI 2.0 capable
+    endpoint_name: str = ""
+    product_id: str = ""              # unique product instance id
+    static_blocks: bool = False
+    function_blocks: list[dict] = field(default_factory=list)
 
     @property
     def input_ports(self) -> list[MidiPort]:
@@ -590,6 +602,22 @@ class MidiDevice:
     @property
     def output_ports(self) -> list[MidiPort]:
         return [p for p in self.ports if p.is_output]
+
+
+def apply_ump_port_policy(ports: list[MidiPort], num_blocks: int) -> list[MidiPort]:
+    """Choose which of a UMP endpoint's seq ports the hub presents.
+
+    The kernel exposes port 0 (group-spanning endpoint) plus one port
+    per group — up to 17 rows for one device. Policy (FSD-03): with
+    two or more function blocks show the named per-group ports and
+    hide the catch-all; with zero/one block collapse to the single
+    endpoint port. Inactive group ports are filtered upstream via
+    SND_SEQ_PORT_CAP_INACTIVE."""
+    if num_blocks >= 2:
+        kept = [p for p in ports if not p.is_ump_endpoint]
+        return kept or ports
+    kept = [p for p in ports if p.is_ump_endpoint]
+    return kept or ports
 
 
 def check(ret: int, msg: str = "ALSA error"):
@@ -723,8 +751,8 @@ class AlsaSeq:
                     cap = snd_seq_port_info_get_capability(pinfo)
                     snd_seq_port_info_get_type(pinfo)
 
-                    # Skip ports that don't allow subscription or are no-export
-                    if cap & SND_SEQ_PORT_CAP_NO_EXPORT:
+                    # Skip no-export ports and UMP groups with no active FB
+                    if cap & (SND_SEQ_PORT_CAP_NO_EXPORT | SND_SEQ_PORT_CAP_INACTIVE):
                         continue
 
                     is_input = bool(cap & SND_SEQ_PORT_CAP_READ and cap & SND_SEQ_PORT_CAP_SUBS_READ)
@@ -742,10 +770,15 @@ class AlsaSeq:
                         name=port_name,
                         is_input=is_input,
                         is_output=is_output,
+                        ump_group=(snd_seq_port_info_get_ump_group(pinfo)
+                                   if snd_seq_port_info_get_ump_group is not None else 0),
+                        is_ump_endpoint=bool(cap & SND_SEQ_PORT_CAP_UMP_ENDPOINT),
                     ))
 
                 if ports:
-                    devices.append(MidiDevice(client_id=client_id, name=client_name, ports=ports))
+                    dev = MidiDevice(client_id=client_id, name=client_name, ports=ports)
+                    self._fill_ump_info(dev)
+                    devices.append(dev)
         finally:
             snd_seq_client_info_free(cinfo)
             snd_seq_port_info_free(pinfo)
@@ -772,7 +805,7 @@ class AlsaSeq:
             snd_seq_port_info_set_port(pinfo, -1)
             while snd_seq_query_next_port(self._handle, pinfo) >= 0:
                 cap = snd_seq_port_info_get_capability(pinfo)
-                if cap & SND_SEQ_PORT_CAP_NO_EXPORT:
+                if cap & (SND_SEQ_PORT_CAP_NO_EXPORT | SND_SEQ_PORT_CAP_INACTIVE):
                     continue
                 is_input = bool(cap & SND_SEQ_PORT_CAP_READ and cap & SND_SEQ_PORT_CAP_SUBS_READ)
                 is_output = bool(cap & SND_SEQ_PORT_CAP_WRITE and cap & SND_SEQ_PORT_CAP_SUBS_WRITE)
@@ -782,9 +815,17 @@ class AlsaSeq:
                 pn_raw = snd_seq_port_info_get_name(pinfo)
                 port_name = (pn_raw.decode("utf-8", errors="replace")
                              if pn_raw else f"Port {port_id}")
-                ports.append(MidiPort(port_id=port_id, name=port_name,
-                                      is_input=is_input, is_output=is_output))
-            return MidiDevice(client_id=client_id, name=client_name, ports=ports) if ports else None
+                ports.append(MidiPort(
+                    port_id=port_id, name=port_name,
+                    is_input=is_input, is_output=is_output,
+                    ump_group=(snd_seq_port_info_get_ump_group(pinfo)
+                               if snd_seq_port_info_get_ump_group is not None else 0),
+                    is_ump_endpoint=bool(cap & SND_SEQ_PORT_CAP_UMP_ENDPOINT)))
+            if not ports:
+                return None
+            dev = MidiDevice(client_id=client_id, name=client_name, ports=ports)
+            self._fill_ump_info(dev)
+            return dev
         finally:
             snd_seq_client_info_free(cinfo)
             snd_seq_port_info_free(pinfo)
@@ -1003,6 +1044,51 @@ class AlsaSeq:
             logging.getLogger(__name__).warning(
                 "send_ump to %d:%d failed: %s", dest_client, dest_port,
                 err.decode() if err else f"error {ret}")
+
+    def _fill_ump_info(self, dev: MidiDevice) -> None:
+        """Populate a scanned device's UMP capability fields and apply
+        the port presentation policy. No-op for non-UMP devices and on
+        systems without UMP support."""
+        info = self.read_ump_device_info(dev.client_id)
+        if info is None:
+            return
+        dev.is_ump = True
+        dev.midi2_protocol = info["midi2_protocol"]
+        dev.endpoint_name = info["endpoint_name"]
+        dev.product_id = info["product_id"]
+        dev.static_blocks = info["static_blocks"]
+        dev.function_blocks = info["function_blocks"]
+        dev.ports = apply_ump_port_policy(dev.ports, len(info["function_blocks"]))
+
+    def read_ump_device_info(self, client_id: int) -> dict | None:
+        """UMP capability summary of a client, or None (not a UMP
+        endpoint / no UMP support on this system)."""
+        if not probe_ump_support().capable:
+            return None
+        ep = self.get_ump_endpoint_info(client_id)
+        if ep is None:
+            return None
+        blocks = []
+        for b in range(min(ep.num_blocks, 32)):
+            bi = self.get_ump_block_info(client_id, b)
+            if bi is None:
+                continue
+            blocks.append({
+                "name": bi.name.decode("utf-8", errors="replace"),
+                "direction": bi.direction,
+                "first_group": bi.first_group,
+                "num_groups": bi.num_groups,
+                "active": bool(bi.active),
+                "ui_hint": bi.ui_hint,
+                "is_midi1": bool(bi.flags & SNDRV_UMP_BLOCK_IS_MIDI1),
+            })
+        return {
+            "endpoint_name": ep.name.decode("utf-8", errors="replace"),
+            "product_id": ep.product_id.decode("utf-8", errors="replace"),
+            "midi2_protocol": bool(ep.protocol_caps & SNDRV_UMP_EP_INFO_PROTO_MIDI2),
+            "static_blocks": bool(ep.flags & SNDRV_UMP_EP_INFO_STATIC_BLOCKS),
+            "function_blocks": blocks,
+        }
 
     def get_ump_endpoint_info(self, client_id: int) -> SndUmpEndpointInfo | None:
         """UMP endpoint info of a client, or None (not a UMP endpoint /
