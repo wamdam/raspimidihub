@@ -183,6 +183,16 @@ Tapping a row or column header opens a menu of device-level actions:
   the device as MIDI 1.0 (the escape hatch for devices that
   misbehave under the new protocol; persists across replug and
   reboot).
+  A **MIDI-CI card** appears when the device answered the hub's
+  Capability Inquiry (sent automatically on connect to any
+  bidirectional device -- MIDI 2.0 not required, this works over
+  plain MIDI 1.0 and DIN links too): manufacturer / model /
+  version, supported capability categories, and -- when the device
+  supports Property Exchange -- its self-reported friendly name and
+  serial number. Devices without an identity yet offer an
+  **Identify** button to re-ask. Probing can be disabled globally
+  (`midi2.ci_enabled`) or per device (`midi2.ci_disabled`) in the
+  config for devices whose firmware chokes on universal SysEx.
 - **Copy / Paste** (controllers, plugins) -- copies the whole
   instance. Paste creates a new instance with all parameters
   cloned.

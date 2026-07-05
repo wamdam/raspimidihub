@@ -102,6 +102,13 @@ class MidiEngine:
         # (capability minus force-midi1 mask); refreshed on every
         # monitor-subscription update.
         self._hi_res_clients: set[int] = set()
+        # MIDI-CI (FSD-10): identity results keyed by stable_id,
+        # session-scoped (device MUIDs are random per power-cycle and
+        # never persisted — D7). _ci_inquired prevents re-probing the
+        # same device every rescan; cleared per-device by Identify.
+        self._ci_info: dict[str, dict] = {}
+        self._ci_inquired: set[str] = set()
+        self._ci_session = None
         self._debounce_task: asyncio.Task | None = None
         self._running = False
         self._config = None  # set externally for config-aware rescan
@@ -339,7 +346,14 @@ class MidiEngine:
         # inside the scan. Recomputed every time so Load / Restore /
         # Import are automatically covered.
         self._device_registry.set_referenced_ids(self._referenced_stable_ids())
-        self._device_registry.scan(hw_client_ids, client_names=client_names)
+        # Virtual MIDI 2.0 devices (user clients that declared a UMP
+        # endpoint — see alsa_seq.scan_devices) have no ALSA card; the
+        # registry keys them on their endpoint name instead. Hardware
+        # UMP devices have cards and take the normal sysfs path.
+        ump_virtual = {d.client_id for d in self._devices
+                       if d.is_ump and d.client_id not in plugin_only_clients}
+        self._device_registry.scan(hw_client_ids, client_names=client_names,
+                                   ump_virtual=ump_virtual)
         # Register plugin devices in the registry
         if self._plugin_host:
             for inst in self._plugin_host.get_instances():
@@ -879,6 +893,7 @@ class MidiEngine:
                 self.connect_all()
 
         self._update_monitor_subscriptions()
+        self._schedule_ci_inquiries()
 
         device_names = [d.name for d in self._devices]
         log.info("Devices: %s", device_names if device_names else "(none)")
@@ -908,6 +923,10 @@ class MidiEngine:
         if self._ump_monitor is not None:
             mon_fd = self._ump_monitor.fileno()
             loop.add_reader(mon_fd, self._pump_ump_monitor)
+
+        # Boot-time device scan ran before the loop existed — cover
+        # those devices for MIDI-CI discovery now.
+        self._schedule_ci_inquiries()
 
         try:
             await self._drain_alsa_events(readable, max_events=256)
@@ -1029,6 +1048,66 @@ class MidiEngine:
 
             if hotplug:
                 self._schedule_rescan()
+
+    def ci_info(self, stable_id: str) -> dict | None:
+        """MIDI-CI identity for a device, if discovery succeeded."""
+        return self._ci_info.get(stable_id)
+
+    def reidentify(self, stable_id: str) -> None:
+        """Forget a device's CI state so the next rescan re-probes it
+        (the manual Identify action)."""
+        self._ci_inquired.discard(stable_id)
+        self._ci_info.pop(stable_id, None)
+        self._schedule_ci_inquiries()
+
+    def _schedule_ci_inquiries(self) -> None:
+        """Kick off MIDI-CI discovery for newly-seen bidirectional
+        devices. Skips plugins (our own code), network mirrors (CI
+        must never fan out over Hub-Link) and devices the user opted
+        out. Inquiries run on worker threads via a dedicated
+        point-to-point seq client; results land in _ci_info."""
+        if self._config is None or not self._config.midi2.get("ci_enabled", True):
+            return
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return  # boot-time scan: run_event_loop re-triggers
+        disabled = set(self._config.midi2.get("ci_disabled", []))
+        forced = set(self._config.midi2.get("force_midi1", []))
+        for dev in self._devices:
+            info = self._device_registry.get_by_client(dev.client_id)
+            if info is None or info.is_plugin or info.is_network:
+                continue
+            sid = info.stable_id
+            if sid in self._ci_inquired or sid in disabled or sid in forced:
+                continue
+            if not dev.input_ports or not dev.output_ports:
+                continue  # CI needs a bidirectional link
+            self._ci_inquired.add(sid)
+            loop.create_task(self._run_ci_inquiry(
+                dev.client_id, sid,
+                dev.output_ports[0].port_id,   # device's receiving port
+                dev.input_ports[0].port_id))   # device's sending port
+
+    async def _run_ci_inquiry(self, client_id: int, stable_id: str,
+                              device_in_port: int, device_out_port: int) -> None:
+        from .midi_ci import CiSession
+        if self._ci_session is None:
+            try:
+                self._ci_session = CiSession()
+            except OSError:
+                log.warning("MIDI-CI: session client failed to open")
+                return
+        loop = asyncio.get_running_loop()
+        result = await loop.run_in_executor(
+            None, lambda: self._ci_session.inquire(
+                client_id, device_in_port, device_out_port))
+        if result:
+            self._ci_info[stable_id] = result
+            log.info("MIDI-CI: %s identified (mfr %s, model %d, %s)",
+                     stable_id, result["manufacturer"], result["model"],
+                     [k for k, v in result["categories"].items() if v] or "no categories")
+            self._notify_change()
 
     def _feed_clock_bus(self, ev, is_monitor_copy: bool) -> None:
         """Forward clock/transport events to the global ClockBus.

@@ -599,6 +599,40 @@ export function DeviceDetailPanel({ device, onClose, showToast, refresh, pluginD
                     </div>
                 `}
 
+                ${/* MIDI-CI identity — filled in when the device answered
+                    the hub's Capability Inquiry (any MIDI generation; needs
+                    a bidirectional link). */ ''}
+                ${!isPlugin && device.midi_ci && html`
+                    <div class="card">
+                        <h3>MIDI-CI</h3>
+                        <div style="font-size:11px;color:var(--text-dim);line-height:1.6">
+                            ${device.midi_ci.device_info && html`
+                                <div>${[device.midi_ci.device_info.manufacturer,
+                                        device.midi_ci.device_info.model].filter(Boolean).join(' — ')}</div>
+                                ${device.midi_ci.device_info.serialNumber && html`<div>Serial: ${device.midi_ci.device_info.serialNumber}</div>`}`}
+                            <div>Identity: mfr ${device.midi_ci.manufacturer} · family ${device.midi_ci.family} · model ${device.midi_ci.model} · v${device.midi_ci.version}</div>
+                            <div>Supports: ${['profiles', 'property_exchange', 'process_inquiry']
+                                .filter(k => device.midi_ci.categories && device.midi_ci.categories[k])
+                                .map(k => k.replace(/_/g, ' ')).join(', ') || 'discovery only'}</div>
+                        </div>
+                    </div>
+                `}
+                ${!isPlugin && device.online !== false && !device.midi_ci && html`
+                    <div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+                        <div style="font-size:11px;color:var(--text-dim);line-height:1.4;flex:1">
+                            No MIDI-CI identity yet. Identify asks the device
+                            who it is over SysEx (needs a bidirectional link).
+                        </div>
+                        <button class="rubber-btn" onclick=${async () => {
+                            const r = await api(`/devices/${device.client_id}/identify`, { method: 'POST' });
+                            showToast(r && !r.error ? 'Identifying…' : 'Failed');
+                        }}>
+                            <div class="btn-led green"></div>
+                            <span class="btn-text">Identify</span>
+                        </button>
+                    </div>
+                `}
+
                 ${/* Ports — second for plugins, first (and only) for hardware
                     devices with multiple ports. */ ''}
                 ${isPlugin && html`

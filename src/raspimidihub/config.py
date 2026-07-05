@@ -158,6 +158,13 @@ DEFAULT_CONFIG = {
         # (badge, hi-res paths, MIDI-CI); the kernel-level driver
         # binding is a boot-time module option, not this switch.
         "force_midi1": [],
+        # MIDI-CI discovery: on connect the hub sends a Capability
+        # Inquiry to bidirectional devices and shows the identity in
+        # device detail. ci_enabled=False switches the probing off
+        # globally; ci_disabled lists stable_ids to skip individually
+        # (devices whose firmware chokes on universal SysEx).
+        "ci_enabled": True,
+        "ci_disabled": [],
     },
     "wifi": {
         "mode": "ap",

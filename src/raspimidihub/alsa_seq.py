@@ -128,7 +128,9 @@ SND_SEQ_REMOVE_TAG_MATCH = 0x200
 # Variable-length payload bit. Set in ev.flags for SYSEX events whose
 # payload lives in data.ext.{len, ptr}. Without it the kernel reads
 # fixed-layout fields and the SysEx bytes never leave userspace.
-SND_SEQ_EVENT_LENGTH_VARIABLE = 0x01
+SND_SEQ_EVENT_LENGTH_VARIABLE = 1 << 2  # kernel: SNDRV_SEQ_EVENT_LENGTH_VARIABLE
+# (was 0x01 — the TIME_STAMP_REAL bit — which made every variable-length
+# SysEx send fail with EINVAL; found by the MIDI-CI work, fixed 2026-07)
 
 
 # --- snd_seq_client_info_t / snd_seq_port_info_t (opaque) ---

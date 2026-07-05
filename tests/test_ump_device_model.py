@@ -39,4 +39,6 @@ def test_device_defaults_non_ump():
 
 
 def test_config_midi2_default_block():
-    assert DEFAULT_CONFIG["midi2"] == {"force_midi1": []}
+    assert DEFAULT_CONFIG["midi2"] == {"force_midi1": [],
+                                       "ci_enabled": True,
+                                       "ci_disabled": []}
