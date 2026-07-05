@@ -71,6 +71,12 @@ replug by the same stable-identity rules. On kernels without MIDI
 2.0 support the same device simply appears as a regular MIDI 1.0
 device — everything still works at classic resolution.
 
+A MIDI 2.0-capable device carries a small **2.0 badge** next to its
+name in the matrix row headers and on its rack faceplate. The badge
+reflects what the device *is*; whether the hub *uses* MIDI 2.0 with
+it is controlled per device in the device-detail panel (below). A
+struck-through badge means the device has been forced to MIDI 1.0.
+
 ## Remote Hub Groups
 
 Devices mirrored from a peer hub (chapter 17's *Network MIDI*
@@ -171,6 +177,12 @@ Tapping a row or column header opens a menu of device-level actions:
   atomic RPN/NRPN (`RPN 0.0=…`), Per-Note CC, Per-Note Bend --
   appear as their own typed rows instead of bursts of CCs. MIDI 1.0
   devices display exactly as before, as whole numbers.
+  For MIDI 2.0-capable devices the panel also shows a **MIDI 2.0
+  card** with the device's endpoint name, product ID and function
+  blocks, plus a **Use MIDI 2.0** toggle -- switch it off to treat
+  the device as MIDI 1.0 (the escape hatch for devices that
+  misbehave under the new protocol; persists across replug and
+  reboot).
 - **Copy / Paste** (controllers, plugins) -- copies the whole
   instance. Paste creates a new instance with all parameters
   cloned.
@@ -335,3 +347,8 @@ Screenshots needed:
   (pre-setup phase, like `01-routing`), so it regenerates with
   `make screenshots`. The committed shot was captured against a live
   rig; rerun to refresh against the curated demo set if desired.
+- `09-midi2-badge.png` -- a matrix row header showing the 2.0 badge
+  next to a MIDI 2.0 device's name, plus the same device's rack
+  faceplate. Needs real MIDI 2.0 hardware (or the f_midi2 gadget)
+  connected to a UMP-enabled hub; not coverable by scripted scenes
+  yet.
