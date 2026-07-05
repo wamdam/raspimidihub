@@ -11,6 +11,8 @@ Unreleased
 - Added: per-device "force MIDI 1.0" escape hatch (config midi2.force_midi1 + device action API) for devices that misbehave under MIDI 2.0
 - Added: the MIDI monitor shows MIDI 2.0 sources at full resolution — fractional 0-127 values (vel=100.53) and typed RPN/NRPN/Per-Note rows; MIDI 1.0 devices display unchanged
 - Added: "2.0" badge on MIDI 2.0-capable devices (matrix row headers + rack faceplates) and a MIDI 2.0 card in device detail with endpoint info and a Use-MIDI-2.0 toggle
+- Added: filtered/mapped connections carry full MIDI 2.0 resolution end-to-end (32-bit values through filters and mappings; MIDI 1.0 devices see byte-identical values as before)
+- Added: "MIDI 2.0" message-type filter toggle (gates per-note messages); mapping value fields accept fractional values like 63.5
 
 
 2026-07-01 — Version 5.2.0

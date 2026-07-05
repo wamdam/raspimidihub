@@ -403,6 +403,17 @@ class SndSeqUmpEvent(Structure):
     def ump_words(self) -> tuple[int, int, int, int]:
         return tuple(self.u.ump)
 
+    @property
+    def data(self) -> SndSeqEventData:
+        """Legacy union view — valid when is_ump is False, so code
+        written for SndSeqEvent (announce handling etc.) works on
+        non-UMP events read from a UMP client unchanged."""
+        return self.u.data
+
+    @property
+    def channel(self) -> int:
+        return self.u.data.note.channel
+
 
 SndSeqUmpEventPtr = POINTER(SndSeqUmpEvent)
 

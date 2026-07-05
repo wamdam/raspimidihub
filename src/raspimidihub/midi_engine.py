@@ -15,6 +15,19 @@ from .midi_filter import FilterEngine, MidiFilter, MidiMapping
 
 log = logging.getLogger(__name__)
 
+# UMP system-message status → legacy seq event type, for feeding the
+# ClockBus from filter-port copies on a MIDI 2.0 main client.
+_UMP_TRANSPORT_TYPES = {0xF8: 36, 0xFA: 30, 0xFB: 31, 0xFC: 32}
+
+
+class _ClockShim:
+    """Minimal event shim for _feed_clock_bus (type + source only)."""
+    __slots__ = ("type", "source")
+
+    def __init__(self, ev_type: int, source):
+        self.type = ev_type
+        self.source = source
+
 DEBOUNCE_SECONDS = 0.5
 
 
@@ -225,15 +238,21 @@ class MidiEngine:
 
     def start(self) -> None:
         """Open ALSA sequencer. Caller must run _scan_and_connect after plugins load."""
-        self._seq = AlsaSeq("RaspiMIDIHub")
+        ump = probe_ump_support()
+        log.info("UMP (MIDI 2.0) support: kernel=%s alsa-lib=%s",
+                 "yes" if ump.kernel else "no", "yes" if ump.alsa_lib else "no")
+        # On capable systems the main client runs at MIDI 2.0 (D1):
+        # filtered-edge traffic then arrives at full resolution and the
+        # kernel down-converts our output for 1.0 receivers. Announce /
+        # hotplug events still arrive classic on the same fd.
+        self._seq = AlsaSeq("RaspiMIDIHub", midi_version=2 if ump.capable else 0)
+        if self._seq.midi_version == 2:
+            log.info("Main seq client running at UMP MIDI 2.0")
         self._filter_engine = FilterEngine(self._seq)
         # Create a monitor port to receive copies of MIDI events for the UI
         self._monitor_port = self._seq.create_port("monitor", writable=True)
         log.info("ALSA sequencer opened, client ID %d, monitor port %d",
                  self._seq.client_id, self._monitor_port)
-        ump = probe_ump_support()
-        log.info("UMP (MIDI 2.0) support: kernel=%s alsa-lib=%s",
-                 "yes" if ump.kernel else "no", "yes" if ump.alsa_lib else "no")
         # Hi-res monitor: a second, UMP MIDI 2.0 seq client that takes
         # over the monitor role on capable systems (decision D1, first
         # client flip — FSD-05). The main client stays legacy so the
@@ -912,13 +931,36 @@ class MidiEngine:
             # bounded so a hot ALSA queue can't starve the asyncio loop
             # of other work for too long.
             hotplug = False
+            ump_client = self._seq.midi_version == 2
             for _ in range(max_events):
-                ev = self._seq.read_event()
+                ev = (self._seq.read_ump_event() if ump_client
+                      else self._seq.read_event())
                 if ev is None:
                     break
 
                 # Ignore events from our own client (filter port creation/events)
                 if ev.source.client == self._seq.client_id:
+                    continue
+
+                if ump_client and ev.is_ump:
+                    # Filtered-edge traffic (the only UMP arriving here —
+                    # monitoring lives on the hi-res client). Transport /
+                    # clock copies on filter read-ports must keep feeding
+                    # the ClockBus like they did on the legacy path.
+                    w0 = ev.u.ump[0]
+                    if (w0 >> 28) & 0xF == 0x1:
+                        t = _UMP_TRANSPORT_TYPES.get((w0 >> 16) & 0xFF)
+                        if t is not None:
+                            self._feed_clock_bus(_ClockShim(t, ev.source),
+                                                 is_monitor_copy=False)
+                    if self._filter_engine:
+                        t0 = time.monotonic()
+                        forwarded = self._filter_engine.process_ump(ev)
+                        if forwarded and self._latency_cb:
+                            self._latency_cb(
+                                "midi_in_midi_out",
+                                (time.monotonic() - t0) * 1000.0,
+                            )
                     continue
 
                 # Check for hotplug announce events
