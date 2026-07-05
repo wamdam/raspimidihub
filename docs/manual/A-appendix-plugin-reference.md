@@ -152,8 +152,8 @@ or clock-synced rate up to 8 bars; live scope display.
 | Timing | **Frequency** | Fader | 0.1--20.0 Hz (raw 1--200) | 0.5 Hz (CC 74 default) |
 | Output | **Channel** | ChannelSelect | 1--16 | 1 |
 | Output | **CC #** | Wheel | 0--127 | 1 |
-| Output | **Depth** | Fader | 0--127 | 127 (CC 75 default) |
-| Output | **Center** | Fader | 0--127 | 64 (CC 76 default) |
+| Output | **Depth** | Fader (fine, 1 decimal) | 0--127 | 127 (CC 75 default) |
+| Output | **Center** | Fader (fine, 1 decimal) | 0--127 | 64 (CC 76 default) |
 
 **Input.** Clock (when **Sync to Clock** is on).
 **Output.** CC (the LFO stream).

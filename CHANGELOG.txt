@@ -13,6 +13,8 @@ Unreleased
 - Added: "2.0" badge on MIDI 2.0-capable devices (matrix row headers + rack faceplates) and a MIDI 2.0 card in device detail with endpoint info and a Use-MIDI-2.0 toggle
 - Added: filtered/mapped connections carry full MIDI 2.0 resolution end-to-end (32-bit values through filters and mappings; MIDI 1.0 devices see byte-identical values as before)
 - Added: "MIDI 2.0" message-type filter toggle (gates per-note messages); mapping value fields accept fractional values like 63.5
+- Added: plugin CC automation follows MIDI 2.0 controllers at full 32-bit resolution; new "fine" parameters hold fractional values (CC LFO Depth/Center first)
+- Added: scripts/fake_midi2_synth.py — a virtual MIDI 2.0 device for testing every 2.0 feature without 2.0 hardware
 
 
 2026-07-01 — Version 5.2.0

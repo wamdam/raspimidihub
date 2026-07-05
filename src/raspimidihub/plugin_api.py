@@ -54,6 +54,13 @@ class Param:
     # controls that would duplicate / crowd the same params already
     # visible in fullscreen.
     play_only: bool = field(default=False, kw_only=True)
+    # Fine-resolution param (FSD-08): values are floats with `decimals`
+    # places instead of integers. Bound MIDI 2.0 controllers drive the
+    # param at their full resolution; MIDI 1.0 controllers and the UI
+    # wheel still work, just coarser. Only meaningful on ranged types
+    # (Wheel / Knob / Fader).
+    fine: bool = field(default=False, kw_only=True)
+    decimals: int = field(default=2, kw_only=True)
 
     def to_dict(self) -> dict:
         d = {"type": self.__class__.__name__.lower(), "name": self.name, "label": self.label}
@@ -65,6 +72,9 @@ class Param:
             d["config_only"] = True
         if self.play_only:
             d["play_only"] = True
+        if self.fine:
+            d["fine"] = True
+            d["decimals"] = self.decimals
         return d
 
 

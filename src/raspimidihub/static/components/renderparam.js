@@ -86,6 +86,7 @@ export function renderParam(param, values, onChange, allValues, displayCtx) {
                 min=${param.min} max=${param.max} value=${val != null ? val : param.default}
                 vertical=${param.vertical} onChange=${onChange}
                 displayFactor=${param.display_factor} displayFormat=${param.display_format}
+                fine=${param.fine} decimals=${param.decimals}
                 onBindRequest=${onBind} />`;
         case 'radio':
             return html`<${PluginRadio} name=${param.name} label=${param.label}

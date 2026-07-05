@@ -12,6 +12,12 @@ import time
 
 log = logging.getLogger(__name__)
 
+# Sentinel returned by read_event for packets that were consumed or
+# deliberately ignored (utility, partial SysEx, stream metadata) —
+# distinct from None, which means "queue drained, stop the loop".
+SKIP_EVENT = object()
+_SKIP = SKIP_EVENT
+
 # ALSA constants (duplicated here to avoid circular imports through alsa_seq)
 SND_SEQ_OPEN_DUPLEX = 3
 SND_SEQ_NONBLOCK = 1
@@ -35,6 +41,7 @@ class PluginAlsaClient:
         from ..alsa_seq import (
             SndSeqPtr,
             check,
+            probe_ump_support,
             snd_seq_client_id,
             snd_seq_create_simple_port,
             snd_seq_open,
@@ -49,6 +56,17 @@ class PluginAlsaClient:
         ), "plugin: open seq")
         snd_seq_set_client_name(self._handle, client_name.encode())
         self._client_id = snd_seq_client_id(self._handle)
+
+        # MIDI 2.0 inbound (FSD-08): on capable systems the client runs
+        # at midi_version=2 so bound CC automation receives the full
+        # controller resolution. read_event() shims UMP packets back to
+        # legacy-shaped events, so plugins keep their 0-127 API (D3).
+        self._midi_version = 0
+        if (probe_ump_support().capable
+                and self._alsa.snd_seq_set_client_midi_version is not None
+                and self._alsa.snd_seq_set_client_midi_version(self._handle, 2) >= 0):
+            self._midi_version = 2
+        self._sysex_asm = None  # lazy ump.Sysex7Assembler
 
         # IN port — receives MIDI (writable by subscribers)
         self._in_port = snd_seq_create_simple_port(
@@ -109,11 +127,41 @@ class PluginAlsaClient:
         return struct.unpack_from("i", buf, 0)[0]
 
     def read_event(self):
-        ev = self._alsa.SndSeqEventPtr()
-        ret = self._alsa.snd_seq_event_input(self._handle, ctypes.byref(ev))
+        """Read one inbound event (non-blocking).
+
+        Legacy clients return the raw snd_seq_event. MIDI 2.0 clients
+        read UMP and return a legacy-shaped shim (ump.to_monitor_shim)
+        with byte-identical 7-bit fields plus a `hires` dict carrying
+        the 32-bit values — plugins and the dispatch code are agnostic.
+        Returns None when the queue is drained; unmapped UMP packets
+        return the sentinel None too, so callers just skip them.
+        """
+        if self._midi_version != 2:
+            ev = self._alsa.SndSeqEventPtr()
+            ret = self._alsa.snd_seq_event_input(self._handle, ctypes.byref(ev))
+            if ret < 0:
+                return None
+            return ev.contents
+        from .. import ump as _ump
+        uev_p = self._alsa.SndSeqUmpEventPtr()
+        ret = self._alsa.snd_seq_ump_event_input(self._handle, ctypes.byref(uev_p))
         if ret < 0:
             return None
-        return ev.contents
+        uev = uev_p.contents
+        if not uev.is_ump:
+            return uev  # classic event (queue control etc.) — legacy view
+        words = uev.ump_words
+        if ((words[0] >> 28) & 0xF) == _ump.MT_DATA64:
+            if self._sysex_asm is None:
+                self._sysex_asm = _ump.Sysex7Assembler()
+            m = self._sysex_asm.feed(words)
+        else:
+            m = _ump.decode(words)
+        if m is None:
+            return _SKIP
+        shim = _ump.to_monitor_shim(m, uev.source.client, uev.source.port,
+                                    uev.dest.client, uev.dest.port, hires=True)
+        return shim if shim is not None else _SKIP
 
     def send_event(self, ev_type: int, **kwargs) -> None:
         """Build and send an ALSA event on the OUT port. Rate-limited."""

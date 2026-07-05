@@ -204,7 +204,7 @@ def test_dispatch_routes_cc_to_bound_param():
 
     host._dispatch_event(inst, _build_cc_event(0, 74, 100), MidiEventType)
 
-    host._cc_to_param.assert_called_once_with(inst, "rate", 100)
+    host._cc_to_param.assert_called_once_with(inst, "rate", 100, None)
     assert plugin.on_cc_calls == []  # matched binding short-circuits on_cc
 
 
@@ -251,7 +251,7 @@ def test_dispatch_honours_channel_filter():
     host._cc_to_param.reset_mock()
     plugin.on_cc_calls.clear()
     host._dispatch_event(inst, _build_cc_event(0, 75, 100), MidiEventType)
-    host._cc_to_param.assert_called_once_with(inst, "gate", 100)
+    host._cc_to_param.assert_called_once_with(inst, "gate", 100, None)
     assert plugin.on_cc_calls == []
 
 

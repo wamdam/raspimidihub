@@ -498,7 +498,10 @@ def to_monitor_shim(m: UmpMessage, src_client: int, src_port: int,
                                     value=_scale.scale_down(m.value, 32, 7))
         ev.data.note.channel = m.channel
         if hires:
-            ev.hires = {"value_f": round(_scale.to_midi_units(m.value, 32), 3)}
+            # value32 lets consumers (CC→param binding) distinguish
+            # 7-bit-lattice values from genuine hi-res ones.
+            ev.hires = {"value_f": round(_scale.to_midi_units(m.value, 32), 3),
+                        "value32": m.value}
         return ev
     if k == "pitch_bend":
         ev = ShimEvent(_T_PITCHBEND, src, dst)

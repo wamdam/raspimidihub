@@ -162,6 +162,14 @@ arrives. Touching the on-screen control while a CC is also
 moving the parameter produces a single resolved value, with no
 flicker between sources.
 
+**MIDI 2.0 controllers** drive bound parameters at their full
+32-bit resolution on a MIDI 2.0-capable hub (chapter 21): a bound
+knob sweeps the parameter smoothly through values a 7-bit CC would
+skip. Parameters declared *fine* by the plugin (e.g. the CC LFO's
+Depth and Center) hold fractional values like `63.7` and show one
+extra decimal on their control; ordinary integer parameters simply
+hit every step. MIDI 1.0 controllers behave exactly as before.
+
 Bindings are per *instance*: two Arpeggiators can carry the same
 factory default and be re-bound to different CCs without
 affecting each other. They persist in the saved config.
