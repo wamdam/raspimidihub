@@ -32,7 +32,7 @@ all: deb deb-rosetup
 
 deb: $(DEB_FILE)
 
-$(DEB_FILE): src/raspimidihub/*.py src/raspimidihub/plugin_host/*.py src/raspimidihub/runtime/*.py src/raspimidihub/static/*.* $(wildcard src/raspimidihub/static/*/*.*) plugins/*/*.py plugins/*/*.svg systemd/raspimidihub.service systemd/raspimidihub-hostapd.service udev/90-raspimidihub.rules debian/postinst debian/postrm CHANGELOG.txt
+$(DEB_FILE): src/raspimidihub/*.py src/raspimidihub/plugin_host/*.py src/raspimidihub/runtime/*.py src/raspimidihub/static/*.* $(wildcard src/raspimidihub/static/*/*.*) plugins/*/*.py plugins/*/*.svg systemd/raspimidihub.service systemd/raspimidihub-hostapd.service udev/90-raspimidihub.rules debian/postinst debian/postrm debian/copyright CHANGELOG.txt
 	@# Belt-and-braces: fail the build if Makefile VERSION and the
 	@# Python __version__ have drifted. The Python value is what the
 	@# header badge in the UI shows, and 3.0.0a2 shipped with it stuck
@@ -79,6 +79,8 @@ $(DEB_FILE): src/raspimidihub/*.py src/raspimidihub/plugin_host/*.py src/raspimi
 	# history; the deb is the user-facing slice.
 	sed '/Version 2\./Q' CHANGELOG.txt \
 	    > $(BUILD_DIR)/usr/share/doc/$(PACKAGE)/CHANGELOG.txt
+	# Debian-standard license declaration (GPL-3 + bundled Preact/HTM)
+	cp debian/copyright $(BUILD_DIR)/usr/share/doc/$(PACKAGE)/copyright
 	cp udev/90-raspimidihub.rules $(BUILD_DIR)/lib/udev/rules.d/
 	cp scripts/reset-wifi.sh $(BUILD_DIR)/usr/local/bin/reset-wifi
 	chmod 755 $(BUILD_DIR)/usr/local/bin/reset-wifi
