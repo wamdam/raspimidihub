@@ -11,10 +11,13 @@ from ctypes import (
     POINTER,
     Structure,
     byref,
+    c_char,
     c_char_p,
     c_int,
     c_uint,
     c_uint8,
+    c_uint16,
+    c_uint32,
     c_void_p,
     pointer,
 )
@@ -159,6 +162,12 @@ class MidiEventType(IntEnum):
     PITCHBEND = 13
     # System messages
     SYSEX = 130
+    # High-resolution channel messages the kernel emits when it
+    # down-converts MIDI 2.0 traffic for a legacy client (previously
+    # invisible to us — unknown types were silently dropped)
+    CONTROL14 = 14      # SND_SEQ_EVENT_CONTROL14 (14-bit CC pair)
+    NONREGPARAM = 15    # SND_SEQ_EVENT_NONREGPARAM (NRPN)
+    REGPARAM = 16       # SND_SEQ_EVENT_REGPARAM (RPN)
     # Realtime / Clock (ALSA seq event types, NOT raw MIDI bytes)
     CLOCK = 36          # SND_SEQ_EVENT_CLOCK
     START = 30          # SND_SEQ_EVENT_START
@@ -356,6 +365,117 @@ def probe_ump_support(force: bool = False) -> UmpSupport:
     _ump_support = UmpSupport(alsa_lib=alsa_lib, kernel=kernel)
     return _ump_support
 
+
+# --- UMP event + endpoint/function-block info (alsa-lib >= 1.2.10) ---
+
+SND_SEQ_EVENT_UMP = 1 << 5  # ev.flags bit: the event carries a UMP packet
+
+
+class SndSeqUmpEventUnion(ctypes.Union):
+    _fields_ = [
+        ("data", SndSeqEventData),
+        ("ump", c_uint32 * 4),
+    ]
+
+
+class SndSeqUmpEvent(Structure):
+    """snd_seq_ump_event_t — same header as snd_seq_event_t, but the
+    payload union additionally holds one full 128-bit UMP packet.
+    Valid member is selected by flags & SND_SEQ_EVENT_UMP."""
+    _fields_ = [
+        ("type", c_uint8),
+        ("flags", c_uint8),
+        ("tag", c_uint8),
+        ("queue", c_uint8),
+        ("time", c_uint8 * 8),
+        ("source", SndSeqAddr),
+        ("dest", SndSeqAddr),
+        ("u", SndSeqUmpEventUnion),
+    ]
+
+    @property
+    def is_ump(self) -> bool:
+        return bool(self.flags & SND_SEQ_EVENT_UMP)
+
+    @property
+    def ump_words(self) -> tuple[int, int, int, int]:
+        return tuple(self.u.ump)
+
+
+SndSeqUmpEventPtr = POINTER(SndSeqUmpEvent)
+
+
+class SndUmpEndpointInfo(Structure):
+    """struct snd_ump_endpoint_info (kernel uapi sound/asound.h, __packed)."""
+    _pack_ = 1
+    _fields_ = [
+        ("card", c_int),
+        ("device", c_int),
+        ("flags", c_uint),
+        ("protocol_caps", c_uint),
+        ("protocol", c_uint),
+        ("num_blocks", c_uint),
+        ("version", c_uint16),
+        ("family_id", c_uint16),
+        ("model_id", c_uint16),
+        ("manufacturer_id", c_uint),
+        ("sw_revision", c_uint8 * 4),
+        ("padding", c_uint16),
+        ("name", c_char * 128),
+        ("product_id", c_char * 128),
+        ("reserved", c_uint8 * 32),
+    ]
+
+
+class SndUmpBlockInfo(Structure):
+    """struct snd_ump_block_info (kernel uapi sound/asound.h, __packed)."""
+    _pack_ = 1
+    _fields_ = [
+        ("card", c_int),
+        ("device", c_int),
+        ("block_id", c_uint8),
+        ("direction", c_uint8),
+        ("active", c_uint8),
+        ("first_group", c_uint8),
+        ("num_groups", c_uint8),
+        ("midi_ci_version", c_uint8),
+        ("sysex8_streams", c_uint8),
+        ("ui_hint", c_uint8),
+        ("flags", c_uint),
+        ("name", c_char * 128),
+        ("reserved", c_uint8 * 32),
+    ]
+
+
+# Endpoint info flags / protocol bits (kernel uapi)
+SNDRV_UMP_EP_INFO_STATIC_BLOCKS = 0x01
+SNDRV_UMP_EP_INFO_PROTO_MIDI1 = 0x0100
+SNDRV_UMP_EP_INFO_PROTO_MIDI2 = 0x0200
+# Block direction / flags
+SNDRV_UMP_DIR_INPUT = 0x01
+SNDRV_UMP_DIR_OUTPUT = 0x02
+SNDRV_UMP_DIR_BIDIRECTION = 0x03
+SNDRV_UMP_BLOCK_IS_MIDI1 = 1 << 0
+
+snd_seq_ump_event_input = _optional_func(
+    "snd_seq_ump_event_input", c_int, SndSeqPtr, POINTER(SndSeqUmpEventPtr))
+snd_seq_ump_event_output = _optional_func(
+    "snd_seq_ump_event_output", c_int, SndSeqPtr, SndSeqUmpEventPtr)
+snd_seq_set_client_midi_version = _optional_func(
+    "snd_seq_set_client_midi_version", c_int, SndSeqPtr, c_int)
+snd_seq_get_ump_endpoint_info = _optional_func(
+    "snd_seq_get_ump_endpoint_info", c_int, SndSeqPtr, c_int, c_void_p)
+snd_seq_get_ump_block_info = _optional_func(
+    "snd_seq_get_ump_block_info", c_int, SndSeqPtr, c_int, c_int, c_void_p)
+snd_seq_set_ump_endpoint_info = _optional_func(
+    "snd_seq_set_ump_endpoint_info", c_int, SndSeqPtr, c_void_p)
+snd_seq_set_ump_block_info = _optional_func(
+    "snd_seq_set_ump_block_info", c_int, SndSeqPtr, c_int, c_void_p)
+snd_seq_port_info_get_ump_group = _optional_func(
+    "snd_seq_port_info_get_ump_group", c_int, SndSeqPortInfoPtr)
+snd_seq_port_info_set_ump_group = _optional_func(
+    "snd_seq_port_info_set_ump_group", None, SndSeqPortInfoPtr, c_int)
+
 # Port info
 snd_seq_port_info_malloc = _func("snd_seq_port_info_malloc", c_int, POINTER(SndSeqPortInfoPtr))
 snd_seq_port_info_free = _func("snd_seq_port_info_free", None, SndSeqPortInfoPtr)
@@ -482,7 +602,7 @@ class AlsaSeq:
     """Wrapper around an ALSA sequencer client handle."""
 
     def __init__(self, client_name: str = "RaspiMIDIHub",
-                 default_ports: bool = True):
+                 default_ports: bool = True, midi_version: int = 0):
         """Wrap an ALSA seq client.
 
         `default_ports=True` (the historical behaviour) auto-creates
@@ -490,12 +610,25 @@ class AlsaSeq:
         False when the caller wants a clean slate — e.g. the BLE-MIDI
         bridge creates its own OUT / IN ports and would otherwise end
         up with a confusing extra "output" port hanging off the same
-        client."""
+        client.
+
+        `midi_version` requests a UMP client (1 = UMP MIDI 1.0, 2 =
+        UMP MIDI 2.0). Best-effort: on kernels/libs without UMP the
+        client stays legacy — check `self.midi_version` for what was
+        actually granted. The kernel converts events between clients
+        of different versions, so a UMP client interoperates with
+        legacy peers transparently."""
         self._handle = SndSeqPtr()
         check(snd_seq_open(byref(self._handle), b"default", SND_SEQ_OPEN_DUPLEX, SND_SEQ_NONBLOCK),
               "Failed to open ALSA sequencer")
         snd_seq_set_client_name(self._handle, client_name.encode())
         self._client_id = snd_seq_client_id(self._handle)
+
+        self._midi_version = 0
+        if midi_version and probe_ump_support().capable \
+                and snd_seq_set_client_midi_version is not None:
+            if snd_seq_set_client_midi_version(self._handle, midi_version) >= 0:
+                self._midi_version = midi_version
 
         self._announce_port = -1
         self._output_port = -1
@@ -828,6 +961,77 @@ class AlsaSeq:
         if ret < 0:
             return None  # EAGAIN or error
         return ev.contents
+
+    @property
+    def midi_version(self) -> int:
+        """Effective client MIDI version (0 legacy, 1/2 UMP)."""
+        return self._midi_version
+
+    def read_ump_event(self) -> SndSeqUmpEvent | None:
+        """Read one event as snd_seq_ump_event (non-blocking).
+
+        For UMP clients this is the input path: UMP packets arrive with
+        flags & SND_SEQ_EVENT_UMP set (payload in .ump_words); classic
+        events (announce, queue control, ...) still arrive on the same
+        fd with the flag clear and the legacy .u.data union valid."""
+        if snd_seq_ump_event_input is None:
+            return None
+        ev = SndSeqUmpEventPtr()
+        ret = snd_seq_ump_event_input(self._handle, byref(ev))
+        if ret < 0:
+            return None  # EAGAIN or error
+        return ev.contents
+
+    def send_ump(self, words, dest_client: int, dest_port: int,
+                 source_port: int | None = None) -> None:
+        """Send one UMP packet (1-4 x 32-bit words) directly."""
+        ev = SndSeqUmpEvent()
+        ev.flags = SND_SEQ_EVENT_UMP
+        ev.queue = SND_SEQ_QUEUE_DIRECT
+        ev.source.client = self._client_id
+        ev.source.port = self._output_port if source_port is None else source_port
+        ev.dest.client = dest_client
+        ev.dest.port = dest_port
+        for i, w in enumerate(words):
+            ev.u.ump[i] = w
+        ret = snd_seq_ump_event_output(self._handle, pointer(ev))
+        if ret >= 0:
+            ret = snd_seq_drain_output(self._handle)
+        if ret < 0:
+            err = snd_strerror(ret)
+            import logging
+            logging.getLogger(__name__).warning(
+                "send_ump to %d:%d failed: %s", dest_client, dest_port,
+                err.decode() if err else f"error {ret}")
+
+    def get_ump_endpoint_info(self, client_id: int) -> SndUmpEndpointInfo | None:
+        """UMP endpoint info of a client, or None (not a UMP endpoint /
+        no kernel support)."""
+        if snd_seq_get_ump_endpoint_info is None:
+            return None
+        info = SndUmpEndpointInfo()
+        if snd_seq_get_ump_endpoint_info(self._handle, client_id, byref(info)) < 0:
+            return None
+        return info
+
+    def get_ump_block_info(self, client_id: int, block: int) -> SndUmpBlockInfo | None:
+        """Function block info of a UMP endpoint client, or None."""
+        if snd_seq_get_ump_block_info is None:
+            return None
+        info = SndUmpBlockInfo()
+        if snd_seq_get_ump_block_info(self._handle, client_id, block, byref(info)) < 0:
+            return None
+        return info
+
+    def set_ump_endpoint_info(self, info: SndUmpEndpointInfo) -> bool:
+        """Declare this client's own UMP endpoint info (UMP clients only)."""
+        return (snd_seq_set_ump_endpoint_info is not None
+                and snd_seq_set_ump_endpoint_info(self._handle, byref(info)) >= 0)
+
+    def set_ump_block_info(self, block: int, info: SndUmpBlockInfo) -> bool:
+        """Declare one of this client's own function blocks."""
+        return (snd_seq_set_ump_block_info is not None
+                and snd_seq_set_ump_block_info(self._handle, block, byref(info)) >= 0)
 
     def close(self) -> None:
         if self._handle:

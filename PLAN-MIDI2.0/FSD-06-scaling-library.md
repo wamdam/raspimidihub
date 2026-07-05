@@ -49,6 +49,11 @@ velocity edge cases as named helpers so call sites can't get them wrong:
 
 - min-center-max: `scale_down(scale_up(x)) == x` must hold for all x and
   all bit-width pairs — property-test it.
+- **Kernel-verified vector (A6DC, 2026-07-05):** the ALSA kernel
+  up-converts 7-bit velocity 100 → **0xC924** (observed live via a
+  midi_version=2 client receiving from a legacy sender) — matches the
+  spec bit-repeat algorithm exactly. Pin `scale_up(100, 7, 16) ==
+  0xC924` as a test vector.
 - Worked values to pin as test vectors (7→16): 0→0x0000, 32→0x4000,
   64→0x8000, 70→0x8C30, 96→0xC104, 120→0xF1C7, 127→0xFFFF; (7→32):
   70→0x8C30C30C, 127→0xFFFFFFFF; 1-bit: 0→0, 1→max.
