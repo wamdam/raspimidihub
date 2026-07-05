@@ -26,9 +26,7 @@ results on); otherwise independent
   (sysex_sender plugin included) failed with EINVAL since ever.
 - Open: real-hardware CI check (Korg Keystage class) over USB + DIN;
   ProgramList fetch (manual button) deliberately not implemented;
-  suggested-rename from DeviceInfo.model parked. — **can be developed in parallel from
-day one** (MIDI-CI is plain SysEx over MIDI 1.0, works on today's
-kernel/hardware, testable against any CI-capable synth over USB or DIN)
+  suggested-rename from DeviceInfo.model parked.
 
 ## Goal
 
