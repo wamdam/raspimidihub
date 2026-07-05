@@ -172,6 +172,20 @@ class PluginAlsaClient:
             return
         self._rate_window.append(now)
 
+        MidiEventType = self._alsa.MidiEventType
+
+        # Float values are fractional MIDI units (FSD-09): on a MIDI 2.0
+        # client they go out as UMP at full resolution, interpolated so
+        # 1.0 receivers see exactly int(value) — byte-identical to the
+        # legacy generators' int() casts. On legacy clients the float
+        # simply floors.
+        if self._midi_version == 2 and self._try_send_hires(ev_type, kwargs):
+            return
+        for k in ("value", "velocity"):
+            v = kwargs.get(k)
+            if isinstance(v, float):
+                kwargs[k] = int(v)
+
         ev = self._alsa.SndSeqEvent()
         ev.type = ev_type
         ev.source.client = self._client_id
@@ -180,8 +194,6 @@ class PluginAlsaClient:
         ev.dest.port = 0
         ev.queue = SND_SEQ_QUEUE_DIRECT
         ev.flags = 0
-
-        MidiEventType = self._alsa.MidiEventType
 
         if ev_type in (MidiEventType.NOTEON, MidiEventType.NOTEOFF, MidiEventType.KEYPRESS):
             ev.data.note.channel = kwargs.get("channel", 0)
@@ -196,6 +208,40 @@ class PluginAlsaClient:
             ev.data.control.value = kwargs.get("value", 0)
 
         self._alsa.snd_seq_event_output_direct(self._handle, ctypes.pointer(ev))
+
+    def _try_send_hires(self, ev_type: int, kwargs: dict) -> bool:
+        """Emit float-valued CC / note events as full-resolution UMP.
+        Returns False for everything else (caller sends classic)."""
+        from .. import midi_scale as _ms
+        from .. import ump as _ump
+        MidiEventType = self._alsa.MidiEventType
+        if ev_type == MidiEventType.CONTROLLER \
+                and isinstance(kwargs.get("value"), float):
+            words = _ump.cc(0, kwargs.get("channel", 0) & 0xF,
+                            kwargs.get("cc", 0),
+                            _ms.lattice_interp(kwargs["value"]))
+        elif ev_type == MidiEventType.NOTEON \
+                and isinstance(kwargs.get("velocity"), float):
+            words = _ump.note_on(0, kwargs.get("channel", 0) & 0xF,
+                                 kwargs.get("note", 0),
+                                 _ms.lattice_interp(kwargs["velocity"], 7, 16))
+        else:
+            return False
+        self._send_ump_words(words)
+        return True
+
+    def _send_ump_words(self, words) -> None:
+        ev = self._alsa.SndSeqUmpEvent()
+        ev.flags = self._alsa.SND_SEQ_EVENT_UMP
+        ev.queue = SND_SEQ_QUEUE_DIRECT
+        ev.source.client = self._client_id
+        ev.source.port = self._out_port
+        ev.dest.client = SND_SEQ_ADDRESS_SUBSCRIBERS
+        ev.dest.port = 0
+        for i, w in enumerate(words):
+            ev.u.ump[i] = w
+        if self._alsa.snd_seq_ump_event_output(self._handle, ctypes.pointer(ev)) >= 0:
+            self._alsa.snd_seq_drain_output(self._handle)
 
     def send_event_at(self, when_monotonic: float, ev_type: int,
                       tag: int = 0, **kwargs) -> None:

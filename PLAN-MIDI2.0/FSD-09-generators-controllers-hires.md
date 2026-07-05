@@ -2,6 +2,25 @@
 
 **Step:** 5 · **Depends on:** FSD-08 · **Parallel with:** FSD-10
 
+## Status (2026-07-05): implemented (core), several adoptions deferred
+
+- Send API: PluginAlsaClient.send_event accepts float MIDI units for
+  CC value / note-on velocity — emitted as UMP at full width on v2
+  clients via midi_scale.lattice_interp (floor-compatible: 1.0
+  receivers see exactly the legacy int() projection, unit-tested as a
+  truncation property over the whole units range); floats floor on
+  legacy clients. Scheduled sends (send_event_at) stay int-only.
+- cc_lfo emits float (dedup quantized to 0.01): live dual-tap on A6DC
+  shows identical 7-bit ints on a legacy reader and off-lattice 32-bit
+  on a UMP reader.
+- **Deferred with rationale:** cc_smoother (its legacy projection is
+  round(), not floor — emitting floats would shift 1.0 output by ±1;
+  needs a round-compatible interp variant), velocity_curve /
+  velocity_equalizer (need a hi-res *inbound* velocity API first —
+  plugins only see 7-bit velocity per D3), pitch_cc (same, for bend),
+  controller templates (cells intentionally stay 7-bit for hardware-
+  mirror byte-stability; receiving side already rounds consistently).
+
 ## Goal
 
 The hub's own MIDI *sources* can emit high resolution: CC-generating

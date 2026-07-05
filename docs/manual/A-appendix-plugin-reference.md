@@ -142,7 +142,10 @@ is `free`.
 ## CC LFO
 
 Generates a CC waveform on the output. Five wave shapes; free-run
-or clock-synced rate up to 8 bars; live scope display.
+or clock-synced rate up to 8 bars; live scope display. On a MIDI
+2.0-capable hub the waveform is emitted at full 32-bit resolution --
+stepless into MIDI 2.0 destinations, while MIDI 1.0 destinations
+receive exactly the classic 0--127 steps.
 
 | Group | Parameter | Type | Range | Default |
 |-------|-----------|------|-------|---------|

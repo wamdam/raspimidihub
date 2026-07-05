@@ -124,6 +124,28 @@ def to_midi_units(val: int, bits: int = 32) -> float:
     return 64.0 + (val - center) * 63.0 / (top - center)
 
 
+def lattice_interp(units: float, src_bits: int = 7, dst_bits: int = 32) -> int:
+    """Float MIDI units → dst-width value that truncates back to
+    int(units) at src_bits width.
+
+    For hub-side generators (CC LFO etc.) whose legacy code cast with
+    int(): MIDI 1.0 receivers keep seeing exactly the old truncated
+    values, while 2.0 receivers get the fractional part interpolated
+    within the lattice bucket. Monotonic; clamped to the valid range.
+    """
+    top = (1 << src_bits) - 1
+    units = min(float(top), max(0.0, units))
+    b = int(units)
+    if b >= top:
+        return (1 << dst_bits) - 1
+    lo = scale_up(b, src_bits, dst_bits)
+    # Interpolate only up to the truncation-bucket end — above the
+    # center the next lattice point sits past the bucket boundary and
+    # crossing it would truncate to b+1.
+    end = (b + 1) << (dst_bits - src_bits)
+    return lo + int((units - b) * (end - lo))
+
+
 def from_midi_units(units: float, bits: int = 32) -> int:
     units = min(127.0, max(0.0, units))
     center = 1 << (bits - 1)
