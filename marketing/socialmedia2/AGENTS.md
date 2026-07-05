@@ -2,6 +2,62 @@
 
 This document describes the architecture and patterns for the RaspiMIDIHub social media posting system (`announce/`).
 
+## Key Decisions
+
+### Deduplication Pattern
+
+**Hash the SOURCE text, not the LLM output.**
+
+The dedupe key is computed on the raw source material (CHANGELOG entry, fact text, joke text), not on the LLM's rewritten version. This ensures:
+- Same source → same hash → no reposting
+- LLM can vary the wording without breaking deduplication
+- Cycle rotation works correctly
+
+### Features Source: Full CHANGELOG Coverage
+
+**Parse ALL versions, not just recent ones.**
+
+The features source parses all 67 versions from v5.2.0 to v1.0.0 (375 candidates):
+- Includes "Added", "Improved", AND "Fix" entries
+- Handles both CHANGELOG formats:
+  - New: `2026-07-01 — Version 5.2.0` (em-dash)
+  - Old: `2026-04-25 - Version 2.0.9` (single dash)
+- Regex: `r'(\d{4}-\d{2}-\d{2}) —?-? Version ([\d.a-z]+)'`
+
+**Why include fixes?**
+Many fixes are user-visible improvements worth announcing:
+- "Network MIDI mirroring over a direct cable"
+- "WiFi always survives a reboot"
+- "Bluetooth MIDI section no longer disappears"
+
+**Why include old versions?**
+Major features from early releases:
+- Spectator mirroring (v4.3.0)
+- Light/Dark theme (v4.2.0)
+- User-bindable MIDI CC (v4.1.0)
+- Euclidean plugin (v4.0.0)
+- Autosave/Backup (v4.7.0)
+- First stable release features (v1.0.0)
+
+At 1 post per 4 hours, this gives ~62 days of unique content before cycling.
+
+### Jokes Source: Curated List Pattern
+
+**Use a fixed list of 100 jokes, not LLM generation on-the-fly.**
+
+The jokes source:
+- Stores 100 pre-written MIDI-themed jokes in a Python list
+- Posts one joke per 9-hour interval
+- Hashes the SOURCE joke text for deduplication
+- LLM can polish each joke before posting (optional enhancement)
+- Cycle restarts after all 100 jokes are posted
+
+**Why not generate on-the-fly?**
+- LLM-generated jokes can't be deduplicated (output varies)
+- Curated list ensures quality and variety
+- Proper state tracking works correctly
+- 100 jokes = ~375 days of content at 1 per 9 hours
+
 ## Overview
 
 The system autonomously posts to Mastodon and Discord using a modular, source-based architecture. Each source knows how to find content, render it with an LLM, and post to configured publishers.
@@ -154,7 +210,7 @@ class MySource(Source):
         pass
 
     def render(self, item, llm) -> Post:
-        # Transform item into a Post using the LLM
+        # Transform one item into a Post using the LLM
         text = llm_or_template(llm, _SYSTEM, user_prompt, fallback, max_len=280)
         return Post(
             text=append_link(text, "https://raspimidihub.com"),
@@ -401,9 +457,9 @@ python -m announce.dispatch
 
 | Source | Schedule | Target | Content |
 |--------|----------|--------|---------|
-| jokes | 9h | Mastodon | MIDI-themed jokes (LLM-generated) |
+| jokes | 9h | Mastodon | MIDI-themed jokes (curated list of 100) |
 | midi_facts | 12h | Mastodon | "Did you know?" facts from Wikipedia/midi.guide |
-| features | 4h | Mastodon | Feature spotlights from CHANGELOG |
+| features | 4h | Mastodon | Feature spotlights from CHANGELOG (all 375 entries) |
 | youtube | 1h | Mastodon + Discord | New YouTube uploads |
 | github | 1h | Mastodon + Discord | GitHub releases |
 
