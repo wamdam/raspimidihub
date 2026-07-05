@@ -48,11 +48,11 @@ class FeaturesSource(Source):
     name = 'features'
 
     def _candidates(self) -> list:
-        """Parse recent CHANGELOG 'Added'/'Improved'/'Fix' lines into items."""
+        """Parse all CHANGELOG 'Added'/'Improved'/'Fix' lines into items."""
         text = content.read_text('CHANGELOG.txt') or ''
         items = []
-        for block in re.split(r'\n(?=\d{4}-\d{2}-\d{2})', text)[:60]:
-            m = re.match(r'(\d{4}-\d{2}-\d{2}) — Version ([\d.a-z]+)', block, re.I)
+        for block in re.split(r'\n(?=\d{4}-\d{2}-\d{2})', text):
+            m = re.match(r'(\d{4}-\d{2}-\d{2}) —?-? Version ([\d.a-z]+)', block, re.I)
             if not m:
                 continue
             version = m.group(2)
