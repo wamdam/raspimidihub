@@ -349,6 +349,6 @@ Screenshots needed:
   rig; rerun to refresh against the curated demo set if desired.
 - `09-midi2-badge.png` -- a matrix row header showing the 2.0 badge
   next to a MIDI 2.0 device's name, plus the same device's rack
-  faceplate. Needs real MIDI 2.0 hardware (or the f_midi2 gadget)
-  connected to a UMP-enabled hub; not coverable by scripted scenes
-  yet.
+  faceplate. Coverable on a UMP-enabled hub with
+  `scripts/fake_midi2_synth.py` running (no 2.0 hardware needed);
+  add a scripted scene when the screenshot set is next regenerated.

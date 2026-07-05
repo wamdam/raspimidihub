@@ -750,7 +750,17 @@ class AlsaSeq:
 
                 client_type = snd_seq_client_info_get_type(cinfo)
                 if client_type == SND_SEQ_USER_CLIENT and client_id not in include_user_clients:
-                    continue  # Only connect hardware (kernel) MIDI devices + whitelisted plugins
+                    # Only connect hardware (kernel) MIDI devices +
+                    # whitelisted plugins — EXCEPT user clients that
+                    # declare a UMP endpoint with function blocks:
+                    # that's a deliberate "I am a MIDI 2.0 device"
+                    # announcement (virtual soft-synths, test peers,
+                    # future gadget-side bridges), so treat them like
+                    # hardware. Cheap ioctl; returns None for everyone
+                    # else, including our own monitor client.
+                    info = self.read_ump_device_info(client_id)
+                    if not (info and info["function_blocks"]):
+                        continue
 
                 name_raw = snd_seq_client_info_get_name(cinfo)
                 client_name = name_raw.decode("utf-8", errors="replace") if name_raw else f"Client {client_id}"
