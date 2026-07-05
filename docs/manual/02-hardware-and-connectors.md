@@ -26,7 +26,7 @@ reservation require a multi-core ARMv8 system.
 The Pi boots from a microSD card:
 
 - **Capacity** -- 4 GB minimum (enough -- updates keep only the
-  latest three debs, chapter 17.6); 8 or 16 GB recommended.
+  latest three debs, chapter 13.7); 8 or 16 GB recommended.
 - **Class** -- A1 or better; endurance class A2 is unnecessary on
   the read-only filesystem.
 - **Brand** -- reputable vendors; counterfeit cards are the top
@@ -40,12 +40,12 @@ interfaces that also expose MIDI ports). Pi 3B+: four USB 2.0 ports
 on one bus shared with Ethernet. Pi Zero 2 W: one micro-USB OTG
 port; use a powered USB hub for multiple devices.
 
-Hot-plug is supported (chapter 18.7.3); the matrix updates within
+Hot-plug is supported (chapter 14.7.3); the matrix updates within
 seconds.
 
 ## USB-A Ports -- Tethered Phone
 
-Any USB-A port accepts a tethered phone (chapter 17.4): enable
+Any USB-A port accepts a tethered phone (chapter 13.4): enable
 Personal Hotspot / USB Tethering and the Pi gets internet over USB
 while its AP stays up.
 
@@ -63,21 +63,21 @@ undervolt warnings and USB drop-outs.
 
 Gigabit on Pi 4B and Pi 5, Fast Ethernet on Pi 3B+, none on the
 Pi Zero 2 W (a USB-Ethernet dongle works). Ethernet carries IP
-only, never raw MIDI signalling: software updates (chapter 17.3)
+only, never raw MIDI signalling: software updates (chapter 13.3)
 and **Network MIDI** -- RTP-MIDI (AppleMIDI) sessions to Macs,
 iPads, and other hubs. Configure under **Settings → Ethernet**
-(chapter 16.2) and **Settings → Network MIDI**.
+(chapter 12.5) and **Settings → Network MIDI**.
 
 ## Bluetooth
 
 All supported models have on-board Bluetooth for BLE-MIDI
-peripherals (chapter 14); the Pi 3B / 3B+ radio has shorter range.
+peripherals (chapter 10); the Pi 3B / 3B+ radio has shorter range.
 
 On the Pi 3B, 3B+, and Pi Zero 2 W, Bluetooth and WiFi share one
 chip and antenna; the AP's continuous 2.4 GHz load can abort
 BLE-MIDI connections the instant they form (unit-dependent). For a
 BLE-dependent rig use a Pi 4 or Pi 5, whose separate radios coexist
-cleanly; chapter 14's *Limits* and *Troubleshooting* cover
+cleanly; chapter 10's *Limits* and *Troubleshooting* cover
 confirmation and workarounds.
 
 External Bluetooth USB dongles are not supported -- the bridge
@@ -90,9 +90,9 @@ Pi 3B+ are dual-band (2.4 and 5 GHz), the Pi 3B and Pi Zero 2 W
 2.4 GHz only.
 
 The AP defaults to 2.4 GHz; a dual-band Pi can switch it to 5 GHz
-(Settings → Network → *AP radio*, chapter 16), freeing the band
+(Settings → Network → *AP radio*, chapter 12), freeing the band
 Bluetooth shares -- the fix for the coexistence trouble above. One
-radio serves both AP and client mode (chapter 17.1), which is why
+radio serves both AP and client mode (chapter 13.1), which is why
 **WiFi for updates** briefly drops the AP.
 
 ## Audio Output
@@ -103,7 +103,7 @@ recognised for their MIDI ports only.
 ## On-Board LEDs
 
 The routing service repurposes the Pi's two LEDs for status
-(chapter 18.5):
+(chapter 14.5):
 
 | Green ACT | Red PWR | Meaning |
 |-----------|---------|---------|
@@ -133,7 +133,7 @@ stays valid across releases.
    **EDIT SETTINGS**. The install needs internet, so set one path:
     - **WiFi SSID + password** -- cleanest; also sets the
       regulatory country and works around a Pi Imager / Trixie bug
-      that otherwise leaves WiFi rfkilled (chapter 17.5).
+      that otherwise leaves WiFi rfkilled.
     - **Or plug in ethernet** at boot; the WiFi field can stay
       empty.
 
@@ -170,12 +170,12 @@ stays valid across releases.
 
 6. **Join the AP** `RaspiMIDIHub-XXXX` (default password
    `midihub1`); the captive portal opens the UI.
-7. **Plug in MIDI devices** and continue with chapter 7 (Quick
-   Start), or change the AP password first (chapter 16).
+7. **Plug in MIDI devices** and continue with chapter 4 (Quick
+   Start), or change the AP password first (chapter 12).
 
 ::: tip
 The wizard's user, SSH key, locale, and timezone survive the
-install; use that account for later SSH maintenance (chapter 17).
+install; use that account for later SSH maintenance (chapter 13).
 :::
 
 ::: tip

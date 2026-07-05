@@ -2,7 +2,7 @@
 
 Per-controller layout, default CC assignments, and template-specific
 mechanics. The conceptual model -- drop buttons, themes, maximisation
--- is in chapter 12.
+-- is in chapter 8.
 
 ## Mixer 8
 
@@ -157,5 +157,5 @@ Part of the project state:
 - The chosen theme
 
 **Save Config** persists it; **Export Config** captures it in a JSON
-snapshot (chapter 15); **Copy → Paste-as-new** duplicates it with a
+snapshot (chapter 11); **Copy → Paste-as-new** duplicates it with a
 fresh instance ID.

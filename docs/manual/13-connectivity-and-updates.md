@@ -14,8 +14,8 @@ The Pi broadcasts the `RaspiMIDIHub-XXXX` SSID and never joins
 another network -- no internet on the Pi, the right default for
 stage / studio use. The AP runs on 2.4 GHz by default; a dual-band
 Pi can move it to 5 GHz (**Settings → Network → AP radio**,
-chapter 16), freeing the band the onboard Bluetooth shares --
-worth doing when BLE-MIDI is unreliable (chapter 14, *Limits*).
+chapter 12), freeing the band the onboard Bluetooth shares --
+worth doing when BLE-MIDI is unreliable (chapter 10, *Limits*).
 Updates need another internet path (17.3, 17.4) or a temporary
 mode switch.
 
@@ -25,7 +25,7 @@ The AP stays up at idle; an install flips `wlan0` to client mode,
 fetches the deb, and flips back, dropping the phone or laptop AP
 connection roughly 30 seconds each way (the Pi has one wireless
 radio). If anything hangs in client mode, the 180-second watchdog
-(17.7) brings the AP back.
+(13.8) brings the AP back.
 
 ### WiFi always
 
@@ -105,7 +105,7 @@ wired-LAN latency is well under a millisecond.
 
 When two RaspiMIDIHubs see each other, the peer's exported devices
 **mirror automatically** into the local matrix as violet network
-devices, grouped under a collapsible `@hubname` header (chapter 9,
+devices, grouped under a collapsible `@hubname` header (chapter 5,
 *Remote Hub Groups*). No pairing flow: export on one side, route
 on the other. Each side controls its own export list; the
 receiving side can **Unmirror** per session (device's header menu)
@@ -165,9 +165,9 @@ Versions** runs the same pipeline regardless of internet path:
 
 | Path | AP impact | Recommended for |
 |------|-----------|-----------------|
-| **Ethernet** (17.3) | AP stays up | Headless / fixed installations |
-| **USB tethering** (17.4) | AP stays up | Field updates when no ethernet |
-| **WiFi for updates** (17.1) | AP drops ~30 s twice | When neither cable is available |
+| **Ethernet** (13.3) | AP stays up | Headless / fixed installations |
+| **USB tethering** (13.4) | AP stays up | Field updates when no ethernet |
+| **WiFi for updates** (13.1) | AP drops ~30 s twice | When neither cable is available |
 
 Once a deb is on disk, **Install** needs no internet at all.
 
@@ -193,7 +193,7 @@ A console (USB keyboard + HDMI, or
 `ssh user@raspimidihub-<id>.local`) reaches the underlying Pi OS.
 The bootstrap image ships with **sshd enabled**, using the user
 and key/password from the Pi Imager wizard -- which also makes a
-failed first boot diagnosable (chapter 3). Commonly useful:
+failed first boot diagnosable (chapter 2). Commonly useful:
 
 - `sudo reset-wifi` -- forces AP mode with default credentials;
   use when the WiFi state is wedged or access is locked out.

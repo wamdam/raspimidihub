@@ -3,7 +3,7 @@
 From "no MIDI flowing" to "two devices routed through a plugin, saved
 across reboots" in under ten minutes. Later chapters cover each topic
 in depth. The Pi must already be imaged with the RaspiMIDIHub
-installation (chapter 3).
+installation (chapter 2).
 
 ## Boot the Pi
 
@@ -11,7 +11,7 @@ Plug in power. After roughly twenty seconds the red **PWR** LED turns
 off and the green **ACT** LED settles to steady-on: the routing
 service is running. The WiFi access point comes up at the same time,
 broadcasting an SSID of the form `RaspiMIDIHub-XXXX`. (Full LED
-table: chapter 3; if steady-on is never reached: chapter 18.)
+table: chapter 2; if steady-on is never reached: chapter 14.)
 
 ## Join the Access Point
 
@@ -48,19 +48,19 @@ Tap the keyboard's row header. The **MIDI Monitor** section of its
 device-detail panel scrolls every event *from* the keyboard as a
 readable line (e.g. `Note On ch1 C3 vel=100`). Tap the synth's column
 header to confirm the destination receives the same events. If
-nothing shows, see chapter 20 -- the first three items cover the
+nothing shows, see chapter 16 -- the first three items cover the
 common "no MIDI" cases.
 
 ## Add a Plugin
 
 Tap **Add** at the bottom of the matrix. The overlay lists plugins
-(chapter 11), controllers (chapter 12), play surfaces (chapter 13),
-and the Bluetooth scan (chapter 14). Pick **Arpeggiator** under
+(chapter 7), controllers (chapter 8), play surfaces (chapter 9),
+and the Bluetooth scan (chapter 10). Pick **Arpeggiator** under
 **Play** (Tracker, Arpeggiator, Euclidean, and Cartesian all render
-fullscreen play surfaces; chapter 13). A new row and column appear
+fullscreen play surfaces; chapter 9). A new row and column appear
 for the instance.
 
-Plugins start *unconnected* by design (chapter 11). Tap the cell
+Plugins start *unconnected* by design (chapter 7). Tap the cell
 where the keyboard row meets the Arpeggiator column to route the
 keyboard *in*; tap where the Arpeggiator row meets the synth column
 to route it *out*. Hold a chord -- the arpeggiator runs it.
@@ -93,7 +93,7 @@ Everything so far lives in memory; the dark-red asterisk next to the
 of the **Routing** tab. The asterisk disappears; the configuration
 survives a reboot. To capture the setup as a JSON file -- backup,
 sharing with another unit, before/after snapshots -- use **Export
-Config**; **Import Config** restores it later (chapter 15).
+Config**; **Import Config** restores it later (chapter 11).
 
 ## Change the AP Password
 
@@ -108,6 +108,6 @@ momentarily drops and reconnects with the new credentials.
   copy/paste between cells, multi-port devices, offline rows).
 - **Chapter 10** for channel and message-type filters and the five
   mapping types (Note → CC, Note → Note, CC → CC, ...).
-- **Chapter 11** for the full plugin model; chapter 12 for
+- **Chapter 11** for the full plugin model; chapter 8 for
   controllers.
 - **Chapter 17** when it comes time to update the software.

@@ -42,7 +42,7 @@ pitch if it has one, otherwise from the sticky **OCT** wheel:
 
 If the focused cell holds a real pitch, its octave digit follows
 the wheel -- the note jumps with it. Sentinel cells (`---` / `Off`
-/ `End`) stay put. Details in chapter 13.
+/ `End`) stay put. Details in chapter 9.
 
 ## Tracker -- selection and editing
 

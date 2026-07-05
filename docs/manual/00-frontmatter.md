@@ -46,14 +46,16 @@ A shortcut, gesture, or workflow that makes a task faster.
 
 ## How to Read This Manual {.unnumbered}
 
-Chapters 1--7 are introductory -- the product, the hardware, the
-system architecture, and a guided quick-start that gets MIDI flowing
--- and best read in order. Chapters 8--18 are per-subsystem reference
-chapters (routing, filters and mappings, plugins, controllers, the
-Tracker, Bluetooth, saving and exporting, settings, connectivity,
-updates), each usable on its own. Chapters 19--22 collect setup
-walkthroughs, troubleshooting, technical specifications, and credits.
+Chapters 1--4 are introductory -- the product, the hardware, the
+web UI, and a guided quick-start that gets MIDI flowing -- and best
+read in order. Chapters 5--14 are per-subsystem reference chapters
+(routing, filters and mappings, plugins, controllers, the play
+surfaces, Bluetooth, saving and backup, settings, connectivity and
+updates, appliance reliability), each usable on its own. Chapters
+15--18 collect setup walkthroughs, troubleshooting, the technical
+reference, and credits.
 
 The **Appendices** are the parameter-level reference: every plugin,
-every controller, the MIDI mapping cheat sheet, and all keyboard
-shortcuts. A short **Index** closes the manual.
+every controller, the MIDI mapping cheat sheet, all keyboard
+shortcuts, and the REST/SSE API. A short **Index** closes the
+manual.

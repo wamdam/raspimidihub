@@ -10,7 +10,7 @@ The panel slides up from the bottom, with three sections top to
 bottom: **MIDI Channels** (the 16-channel grid), **Message Types**
 (the toggles), and **Mappings** (the active list plus **+ Add
 Mapping**). Dismiss with any of the four standard overlay gestures
-(chapter 8.17).
+(chapter 3.15).
 
 ![The filter panel: channel toggles, message-type toggles, and the list of active mappings.](../screenshots/05-filter-panel.png){width=42%}
 
@@ -45,7 +45,7 @@ Toggles apply instantly; there is no per-cell Save. **Save Config**
 on the routing matrix persists filter state, and the dirty-state
 asterisk fires as soon as a toggle flips.
 
-**MIDI 2.0 resolution.** On a capable hub (chapter 21), a filtered
+**MIDI 2.0 resolution.** On a capable hub (chapter 17), a filtered
 or mapped connection between two MIDI 2.0 devices carries full
 32-bit resolution end to end; MIDI 1.0 devices see exactly the
 values they always did. Mapping value fields accept fractionals like
@@ -152,7 +152,7 @@ performance.
 
 ## Clipboards Revisited
 
-From chapter 9: cell-menu **Copy** takes the whole filter + mappings
+From chapter 5: cell-menu **Copy** takes the whole filter + mappings
 set; mapping-row **Copy** takes one mapping; **+ Paste Mapping**
 pastes it, bumping a duplicate CC onto the next free slot. The
-plugin clipboard lives at the row/column header level (chapter 9.6).
+plugin clipboard lives at the row/column header level (chapter 5.8).

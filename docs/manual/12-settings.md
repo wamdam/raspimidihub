@@ -18,7 +18,7 @@ last sub-page across tab switches.
 
 (plus **Spectator mirroring**, documented below.)
 
-Most Settings changes bypass the dirty-state asterisk (chapter 6.4)
+Most Settings changes bypass the dirty-state asterisk (chapter 3.4)
 and apply the moment you save them. The exceptions (default routing;
 the activity-bar toggle) are noted in their subsections.
 
@@ -109,8 +109,8 @@ One row per CC binding across every plugin instance. Columns:
 - **CC** — the CC number (`—`, dimmed, for a cleared binding).
 
 Tap a row to open the same long-press popup as on the control —
-CcBinding for plugin params (chapter 11.7), CellBinding for
-controller cells (chapter 12): Edit, MIDI Learn, Reset to factory,
+CcBinding for plugin params (chapter 7.7), CellBinding for
+controller cells (chapter 8): Edit, MIDI Learn, Reset to factory,
 Clear, Save. The table is live — edits from anywhere and instance
 renames appear within milliseconds.
 
@@ -119,46 +119,9 @@ With no plugin instances, a placeholder points at the Routing tab's
 
 ## Backup
 
-Rolling save checkpoints: every **Save Config** (chapter 15.2)
-writes a compressed copy of the whole project state here, newest
-first; the last 50 are kept. Distinct from the background
-**autosave** (chapter 15.6).
-
-A **Last autosave** line at the top shows how long ago the
-resume-snapshot was written (`30s ago`, `2 min ago`, …), **before
-last reboot** if from a previous boot, or **no autosave yet**. It
-reflects page-load time; **↻** re-reads it and the list.
-
-![Settings → Backup: the **Last autosave** line at the top (uptime-relative), then the rolling Save checkpoints newest-first — each with its `#number`, relative age, a one-line summary, size, and Restore / Download.](../screenshots/32-settings-backup.png){width=42%}
-
-Each row shows:
-
-- **#number** — monotonic; orders checkpoints even across reboots.
-- **When** — a relative "n ago". No real-time clock, so age is
-  uptime-based and only honest within the current boot; older
-  checkpoints show **before last reboot**, ordered by `#number`
-  alone.
-- **Summary** — a coarse diff vs. the previous checkpoint, counting
-  instruments, connections, mappings, device names ("+1 instrument ·
-  −18 mappings"). If none moved: **"settings changed"** when
-  anything else differs (renamed cell, re-bound CC, edited plugin
-  parameter…), **"(no changes)"** when identical, **"(initial)"**
-  for the first. The stored copy always holds the *full* state — a
-  Restore is faithful regardless of the summary.
-- **Size** — compressed size.
-
-Per-row actions:
-
-- **Restore** replaces the live config with the checkpoint (plugins
-  stopped and recreated, routing re-diffed) and lights the dirty
-  asterisk: **Save Config** commits it as the new boot default,
-  **Load Config** returns to your last Save. A Restore is autosaved
-  immediately, so it survives a power cut before you Save.
-- **Download** saves the checkpoint as plain JSON
-  (`raspimidihub-backup-NNNNN.json`) — the same format **Export
-  Config** produces, re-importable anywhere.
-
-A never-Saved fresh unit shows a placeholder.
+Restore or download one of the rolling save checkpoints written by
+every **Save Config**. Documented with the rest of the save/backup
+model in chapter 11 (*Backup Checkpoints*).
 
 ## WiFi
 
@@ -175,7 +138,7 @@ during a transition. Colour mirrors the state.
 the **WiFi for updates** and **WiFi always** modes. These
 credentials are part of the saved project state and appear in
 **Export Config** JSON — edit the WiFi section out before sharing
-an export (chapter 15.8).
+an export (chapter 11.9).
 
 ### AP Password
 
@@ -192,7 +155,7 @@ the first time the unit is used outside a personal home.
 
 - **Band** — **2.4 GHz** (default) works on every supported Pi with
   the longest range, but shares the combo-chip radio with Bluetooth
-  and can disrupt BLE-MIDI on Pi 3-class boards (chapter 14,
+  and can disrupt BLE-MIDI on Pi 3-class boards (chapter 10,
   *Limits*). **5 GHz** stops that competition — the fix for flaky
   BLE-MIDI on a 5 GHz-capable Pi (3B+, 4, 5) — but has shorter
   range and needs a 5 GHz-capable phone. Greyed out on radios that
@@ -214,11 +177,14 @@ always comes back up.
   flips `wlan0` to client to fetch the deb, then back. The AP drops
   for ~30 seconds.
 - **WiFi always** — AP off; the Pi is a normal WiFi client. For
-  units permanently on a home or venue network.
+  units permanently on a home or venue network. If the configured
+  network goes away, the hub falls back to AP mode on its own;
+  fallback timing and console recovery (`sudo reset-wifi`) are in
+  chapter 13.
 
 ### USB-tethered phone link
 
-With a phone USB-tethered (chapter 17.4), the card shows the
+With a phone USB-tethered (chapter 13.4), the card shows the
 tethered URL as a clickable "Open http://x.y.z.w/ on your phone"
 row — a quick switch to the faster link.
 
@@ -231,7 +197,7 @@ When `eth0` is connected, the card lists **every** IPv4 address it
 holds — often a DHCP lease (or static address) *and* the
 `169.254.x.y` address tagged *(link-local)*, which is always
 present while `eth0` is up, independent of the Network MIDI toggle
-(chapter 17, *direct cable*). If it is the *only* address, no DHCP
+(chapter 13, *direct cable*). If it is the *only* address, no DHCP
 answered and nothing static is set — two hubs on a back-to-back
 cable still reach each other over it. The same addresses appear on
 **Sys Info**.
@@ -305,12 +271,12 @@ Config**.
   night-rig alternative. Persists across reloads and seeds the PWA
   status-bar colour; first-time visitors inherit the OS
   `prefers-color-scheme`. Hidden with only one theme installed. See
-  chapter 4 §"Themes" for a comparison.
+  chapter 17 §"Themes" for a comparison.
 
 ## Stats
 
 A pocket health dashboard — the first stop when the unit feels
-sluggish. Chapter 20 explains out-of-range values.
+sluggish. Chapter 16 explains out-of-range values.
 
 - **Loop lag** — the asyncio loop's last cycle time on reserved
   CPU 3. ~2 ms normal, under 5 ms fine; sustained above 5 ms means
@@ -346,7 +312,7 @@ forces the Pi back to AP mode if the install hangs.
 
 The installer also manages the `raspimidihub-rosetup` package
 alongside `raspimidihub`; both are kept and offered together. See
-chapter 17 for the three internet paths an install can use
+chapter 13 for the three internet paths an install can use
 (ethernet, USB tethering, WiFi for updates).
 
 ## PWA Install
@@ -381,19 +347,3 @@ deliberately:
 The reset clears the resume snapshot, so the unit does not resume
 the pre-reset state. Newly-plugged devices then arrive disconnected
 (the factory default; see **MIDI Routing** above).
-
-## The Safety Net
-
-If the Pi is in WiFi-client mode and the configured network goes
-away, the service falls back to AP mode within roughly 90 seconds,
-automatically.
-
-For a hard reset of the WiFi state from a console (USB keyboard +
-HDMI, or SSH from another network):
-
-```
-sudo reset-wifi
-```
-
-This forces AP mode with default credentials — for when even the
-fallback has failed or access is locked out.

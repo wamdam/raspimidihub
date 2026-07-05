@@ -11,7 +11,7 @@ The SD-card root is mounted read-only during normal operation (the
 filesystem. Writable paths live on tmpfs (RAM):
 
 - `/var/lib/raspimidihub/` -- runtime project state.
-- `/var/lib/bluetooth/` -- BlueZ pairing state (chapter 14.3).
+- `/var/lib/bluetooth/` -- BlueZ pairing state (chapter 10.3).
 - `/var/log/` -- service logs.
 - `/run/` and `/tmp/` -- standard ephemeral paths.
 
@@ -53,7 +53,7 @@ make this power-cut-safe:
   a cut can only corrupt the slot being written, and a torn write
   fails the gzip CRC on decompress, so boot uses the other slot.
 - **No clock, so no dates.** With no real-time clock, the autosave
-  (and the Backup list, chapter 16) records uptime + a per-boot
+  (and the Backup list, chapter 11) records uptime + a per-boot
   id: "n ago" is shown only within the current boot; older items
   show only a sequence number.
 - **Debounced and launch-free.** Autosave fires a few seconds
@@ -61,7 +61,7 @@ make this power-cut-safe:
   patterns or tapping pattern slots changes no saveable content --
   no autosave, no Routing dirty-asterisk; only real edits
   (recording, routing changes, parameter edits) count. **Load**,
-  **Restore** (chapter 16), and **Import** force an immediate
+  **Restore** (chapter 11), and **Import** force an immediate
   autosave so the just-loaded state is the resume point.
 
 Pulling the power loses at most the few seconds of editing since
@@ -107,7 +107,7 @@ default (power present).
 
 ### WiFi client lost mid-update
 
-The 180-second watchdog (chapter 17.7) restarts the routing
+The 180-second watchdog (chapter 13.8) restarts the routing
 service, bringing the AP back; the deb cache (latest 3) survives,
 so the retry can install offline.
 
@@ -128,7 +128,7 @@ visible and dimmed.
 
 If the AP is unreachable but the routing service is healthy (rare,
 usually hostapd hanging), `sudo reset-wifi` from a console forces
-AP mode with default credentials.
+AP mode with default credentials (chapter 13, *Console Recovery*).
 
 ### Config file corrupt
 
@@ -141,7 +141,7 @@ be recovered over SSH.
 
 ### Updating
 
-See chapter 17: pick an internet path (ethernet, USB tethering, or
+See chapter 13: pick an internet path (ethernet, USB tethering, or
 temporary WiFi-client mode), tap **Check GitHub for newer
 versions**, then **Install**.
 
@@ -156,15 +156,6 @@ sudo reboot
 
 After the reboot the Pi is a plain Raspberry Pi OS Lite install
 again (plus whatever else was installed on top).
-
-### Resetting WiFi
-
-```bash
-sudo reset-wifi
-```
-
-Forces AP mode with default credentials -- the console alternative
-to chasing a wedged AP through the UI.
 
 ### Re-flashing the SD card
 

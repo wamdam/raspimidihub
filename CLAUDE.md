@@ -30,28 +30,28 @@ does not need to move. If the perf optimisation *is* user-visible
 
 | You are touching... | The chapter(s) that move |
 |---------------------|--------------------------|
-| The routing matrix UI (cell menu, headers, Add overlay, bottom bar) | `09-routing-matrix.md` |
-| Filter panel, mapping types, MIDI Learn flow | `10-filters-and-mappings.md`, `C-appendix-midi-mapping-reference.md` |
-| **A built-in plugin** (params, behaviour) | `11-plugins.md` (table + concept), `A-appendix-plugin-reference.md` (param table) |
-| **A new built-in plugin** | `11-plugins.md` (add table row, summary), new section in `A-appendix-plugin-reference.md` |
-| **A controller template** (cells, drop buttons) | `12-controllers.md`, `B-appendix-controller-reference.md` |
-| Play surfaces (Tracker / Arpeggiator / Euclidean) | `13-play-surfaces.md`, `A-appendix-plugin-reference.md` (per-plugin param tables) |
-| Bluetooth pairing / bridge | `14-bluetooth-midi.md` |
-| Save / Load / Export / Import Config | `15-saving-and-exporting-configs.md`, `09-routing-matrix.md` §9.8 |
-| Settings page (hub, sub-pages, Plugin Control Mappings) | `16-settings.md` |
-| Long-press CC binding popup / `default_cc` semantics | `11-plugins.md` §"CC Automation", `12-controllers.md` "Play Surface" |
-| WiFi modes, captive portal, USB tether, update path | `17-connectivity-and-updates.md` |
-| Read-only FS, LEDs, watchdog, failure modes | `18-appliance-reliability.md` |
+| The routing matrix UI (cell menu, headers, Add overlay, bottom bar) | `05-routing-matrix.md` |
+| Filter panel, mapping types, MIDI Learn flow | `06-filters-and-mappings.md`, `C-appendix-midi-mapping-reference.md` |
+| **A built-in plugin** (params, behaviour) | `07-plugins.md` (table + concept), `A-appendix-plugin-reference.md` (param table) |
+| **A new built-in plugin** | `07-plugins.md` (add table row, summary), new section in `A-appendix-plugin-reference.md` |
+| **A controller template** (cells, drop buttons) | `08-controllers.md`, `B-appendix-controller-reference.md` |
+| Play surfaces (Tracker / Arpeggiator / Euclidean / Cartesian) | `09-play-surfaces.md`, `A-appendix-plugin-reference.md` (per-plugin param tables; shared Setup params live in the appendix preamble) |
+| Bluetooth pairing / bridge | `10-bluetooth-midi.md` |
+| Save / Load / Export / Import Config, autosave, **Backup checkpoints** | `11-saving-and-exporting-configs.md`, `05-routing-matrix.md` §5.10 |
+| Settings page (hub, sub-pages, Plugin Control Mappings) | `12-settings.md` (Backup sub-page content lives in chapter 11) |
+| Long-press CC binding popup / `default_cc` semantics | `07-plugins.md` §"CC Automation", `08-controllers.md` "Play Surface" |
+| WiFi modes, captive portal, USB tether, update path, **WiFi fallback / `reset-wifi`** | `13-connectivity-and-updates.md` |
+| Read-only FS, LEDs, watchdog, failure modes | `14-appliance-reliability.md` |
 | New REST endpoint, SSE event type, or API behaviour | `E-appendix-rest-and-sse-api.md` |
-| Config schema (`DEFAULT_CONFIG`, new top-level key) | `05-configuration-and-data-structure.md` |
-| Architecture (new module, moved boundary) | `04-system-architecture.md` |
-| Pi model support, USB topology, BLE adapter handling | `03-hardware-and-connectors.md`, `21-technical-information.md` §21.1 |
+| Config schema (`DEFAULT_CONFIG`, new top-level key) | `17-technical-reference.md` |
+| Architecture (new module, moved boundary) | `17-technical-reference.md` (UI-implementation notes: `docs/UI-INTERNALS.md`) |
+| Pi model support, USB topology, BLE adapter handling | `02-hardware-and-connectors.md` (single home; `17-technical-reference.md` only points there) |
 | Keyboard shortcut added / removed (Tracker note entry, ESC, ...) | `D-appendix-keyboard-shortcuts.md` |
-| New tab in the bottom nav, or a tab made conditional | `06-interacting-with-the-web-ui.md` §6.2 |
-| New UI control type (a new wheel-variant, a new editor) | `08-ui-controls.md` |
-| **MIDI 2.0 / UMP** (badge, FB ports, Use-MIDI-2.0 toggle, MIDI-CI card) | `09-routing-matrix.md` (grid + device detail), `04-system-architecture.md` (UMP note), `21-technical-information.md` ("MIDI 2.0 Kernel Requirements") |
-| MIDI 2.0 resolution behaviour (filters, mappings, fine params) | `10-filters-and-mappings.md` + appendix C, `08-ui-controls.md` (fine faders), `11-plugins.md` §"CC Automation" |
-| `midi2` config keys (`force_midi1`, `ci_enabled`, `ci_disabled`) | `05-configuration-and-data-structure.md` |
+| New tab in the bottom nav, or a tab made conditional | `03-interacting-with-the-web-ui.md` §3.2 |
+| New UI control type (a new wheel-variant, a new editor) | `03-interacting-with-the-web-ui.md` §"The Controls" |
+| **MIDI 2.0 / UMP** (badge, FB ports, Use-MIDI-2.0 toggle, MIDI-CI card) | `05-routing-matrix.md` (grid + device detail), `17-technical-reference.md` (UMP note + "MIDI 2.0 Kernel Requirements") |
+| MIDI 2.0 resolution behaviour (filters, mappings, fine params) | `06-filters-and-mappings.md` + appendix C, `03-interacting-with-the-web-ui.md` (fine faders), `07-plugins.md` §"CC Automation" |
+| `midi2` config keys (`force_midi1`, `ci_enabled`, `ci_disabled`) | `17-technical-reference.md` |
 
 The README under `docs/manual/README.md` is the editor-facing
 overview of the layout. Keep its file list current if you add or

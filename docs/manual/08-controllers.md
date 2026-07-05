@@ -1,4 +1,4 @@
-# Controllers and Play Surfaces
+# Controllers
 
 Controllers are fullscreen tap-to-play surfaces that send CCs over
 MIDI. The **Controller** tab appears in the bottom navigation once a
@@ -38,12 +38,12 @@ Universal across templates:
   CC) silently mirrors the cell: touch emits, hardware mirrors.
 - **Long-press rebinds a cell** -- set channel + CC manually,
   MIDI-Learn from a hardware twist, or **Reset to factory**. Same
-  popup as the plugin-control popup (chapter 11.7), but symmetric.
+  popup as the plugin-control popup (chapter 7.7), but symmetric.
 - **XY pads learn per axis** -- the popup grows to two axis sections
   (X / Y), each with Channel + CC + Learn; Save commits both.
 
 The label, button **On / Off** values, and XY-pad spring config live
-in the *plugin config* panel (section 12.7); the popup is
+in the *plugin config* panel (section 8.7); the popup is
 binding-only.
 
 ![Long-press the Mixer 8 K1 knob — the cell-binding popup with Channel + CC wheels ("touch emits, hardware mirrors").](../screenshots/33-cell-bind-popup.png){width=48%}
@@ -108,7 +108,7 @@ on, the return fires a CC per axis; off, the dot stays put.
 Top bar: the **instance selector** (name plus arrows / swipe /
 dropdown) and the **pencil** icon, which opens the controller's
 *plugin config* without leaving the tab. The MIDI activity bar
-(section 6.9) shows at the bottom when enabled in Settings.
+(section 3.9) shows at the bottom when enabled in Settings.
 
 ## The Configuration Panel
 
@@ -120,10 +120,10 @@ matrix header. One card per cell, carrying everything except the
 - **Button On / Off values** (button cells) -- sent on press /
   release; `↔` swaps them.
 - **XY pad spring** (XY pad cells) -- Force and Home, see
-  section 12.5.
+  section 8.5.
 
-Bindings are set by long-pressing the cell (section 12.2);
-**Settings → Plugin Control Mappings** (chapter 16) lists every
+Bindings are set by long-pressing the cell (section 8.2);
+**Settings → Plugin Control Mappings** (chapter 12) lists every
 cell's binding in one table.
 
 Each drop button gets its own card: **Sync to bars** toggle, **Fade
@@ -137,9 +137,9 @@ A controller sends MIDI (its row) but is also a useful destination
 column. Route its row to the device it drives; route a source *into*
 it for:
 
-- **MIDI-Learn capture** -- cell Learn (chapter 10) listens on the
+- **MIDI-Learn capture** -- cell Learn (chapter 6) listens on the
   controller's IN port; the source you learn from must be routed in.
-- **Drop-button trigger notes** (12.3.4) -- route the keyboard or
+- **Drop-button trigger notes** (8.3.4) -- route the keyboard or
   pad that fires them in.
 - **Mirroring** -- route a hardware controller (e.g. a Launch
   Control XL) to its software twin; every cell with a matching
@@ -153,11 +153,11 @@ The common live recipe: hardware controller → software controller
 
 Cell renames, learned CCs, themes, and captured drop-button
 snapshots are project state: **Save Config** persists them, **Export
-Config** snapshots them (chapter 15). Removing an instance discards
+Config** snapshots them (chapter 11). Removing an instance discards
 its state; **Copy → Paste-as-new** duplicates it.
 
 *Performing* -- moving a fader / knob / XY pad, firing or cancelling
-a drop button -- is not saved: no dirty asterisk (chapter 9.9), no
+a drop button -- is not saved: no dirty asterisk (chapter 5.11), no
 autosave. **Capturing** a drop *does* count -- it writes a new
 snapshot into saved state -- as do renames, rebinds, theme changes,
 and drop-button settings.

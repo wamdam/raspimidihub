@@ -1,14 +1,11 @@
 # MIDI Mapping Reference
 
 A flat reference for every mapping type and form parameter; the
-walkthrough is in chapter 10.
+walkthrough is in chapter 6.
 
-Value fields are **MIDI units**: 0--127 with fractional values
-(`63.5`) accepted since MIDI 2.0. Whole numbers behave exactly as
-before; fractions carry extra precision to MIDI 2.0 destinations and
-round for MIDI 1.0 ones. On a MIDI 2.0 connection the engine
-computes in full resolution -- a hi-res sweep through a CC → CC
-range remap stays stepless.
+Value fields are **MIDI units**: 0--127, fractional values (`63.5`)
+accepted — full-resolution on MIDI 2.0 connections, rounded for
+MIDI 1.0 destinations (chapter 6, *MIDI 2.0 resolution*).
 
 ## Mapping types
 

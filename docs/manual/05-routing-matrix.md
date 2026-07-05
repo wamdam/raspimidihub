@@ -33,7 +33,7 @@ Long header names middle-truncate
 header menu. Header tint: teal plugins, blue Bluetooth, violet plus
 a link icon for Network-MIDI mirrors.
 
-**MIDI 2.0 devices.** On a MIDI 2.0-capable kernel (chapter 21), a
+**MIDI 2.0 devices.** On a MIDI 2.0-capable kernel (chapter 17), a
 device's *function blocks* — its declared sections, e.g. "Keys" and
 "Pads" — are its port rows (one for a single-block device); routing,
 filters, mappings and replug identity work as for any port. Without
@@ -43,7 +43,7 @@ forced to MIDI 1.0 via the device-detail toggle (below).
 
 ## Remote Hub Groups
 
-Devices mirrored from a peer hub (chapter 17, *Network MIDI*) sit at
+Devices mirrored from a peer hub (chapter 13, *Network MIDI*) sit at
 the bottom under a violet group row per hub — `@hub2 · 3 devices`.
 Tap to collapse (hides that hub's rows **and columns**) or expand; a
 per-browser preference. Rows show the bare device name, the
@@ -93,7 +93,7 @@ Tapping a cell opens a state-dependent menu:
 
 **Connected cell.**
 
-- **Edit** — opens the filter and mappings panel (chapter 10).
+- **Edit** — opens the filter and mappings panel (chapter 6).
 - **Copy** — copies the filter + mappings to the cell clipboard.
 - **Paste** — overwrites the cell's filter + mappings from the
   clipboard.
@@ -128,7 +128,7 @@ Tapping a row or column header opens device-level actions:
 - **Copy / Paste** (controllers, plugins) — Paste creates a new
   instance with all parameters cloned.
 - **Reconnect / Disconnect / Forget** (Bluetooth devices) —
-  chapter 14.
+  chapter 10.
 - **Unmirror** (network devices) — drops the mirrored device from
   this hub's matrix; the peer's export is untouched. Re-add from
   the Add menu or Settings → Network MIDI.
@@ -140,7 +140,7 @@ follow the device — a USB serial is recognised on any port, and a
 serial-less device is matched by vendor/product ID while it is the
 only one of its model — so name and routing survive replugging into
 a different port. Only *identical serial-less* devices used side by
-side stay bound to their ports (chapter 5, "Device Topology and
+side stay bound to their ports (chapter 17, "Device Topology and
 Renames"). Multi-port devices get one row and column per port, each
 renamable — name the **Octatrack** DIN output instead of
 `<Device> Port 2`.
@@ -173,23 +173,23 @@ theme: Copy a configured Mixer 8, Paste, rename.
 
 The **Add** button at the bottom of the matrix opens an overlay:
 
-1. **Plugins** (chapter 11) — CC LFO, CC Smoother, Chord Generator,
+1. **Plugins** (chapter 7) — CC LFO, CC Smoother, Chord Generator,
    Clock Divider, Hold, Master Clock, MIDI Delay, Note Splitter,
    Note Transpose, Panic Button, Pitch CC, Scale Remapper, SysEx
    Sender, Velocity Curve, Velocity Equalizer; tapping an entry
    creates a new instance.
 2. **Controllers** — the four play-surface templates (Mixer 8,
    FX 6, Performance 16, XY 4) on the **Controller** tab
-   (chapter 12).
+   (chapter 8).
 3. **Play** — fullscreen play surfaces on the **Play** tab:
-   Tracker, Arpeggiator, Euclidean, Cartesian (chapter 13;
+   Tracker, Arpeggiator, Euclidean, Cartesian (chapter 9;
    parameter tables in Appendix A).
 4. **Bluetooth MIDI** — Scan plus the paired-peripheral list
-   (chapter 14).
+   (chapter 10).
 5. **Network MIDI** (when enabled in Settings) — discovered,
    unmirrored RTP-MIDI sessions: peer-hub exports plus foreign
    sessions from Macs / iPads / DAWs, which never mirror
-   automatically; **Add** mirrors one into the matrix (chapter 17).
+   automatically; **Add** mirrors one into the matrix (chapter 13).
 
 User-supplied plugins appear in the section matching their declared
 surface kind.
@@ -198,7 +198,7 @@ surface kind.
 
 - **Save Config** — persists the current state as the boot default
   and drops a rolling backup checkpoint (Settings → Backup,
-  chapter 16). Clears the dirty-state asterisk.
+  chapter 12). Clears the dirty-state asterisk.
 - **Load Config** — reloads the last deliberate Save (not the
   autosave); unsaved plugin instances are stopped and discarded.
 - **Export Config** — downloads the current state as JSON.
@@ -223,14 +223,14 @@ pattern launches or switches, and firing or cancelling a drop button
 change no saveable content — no asterisk, no autosave; capturing a
 drop snapshot *is* an edit and counts. Unsaved state runs fine —
 even a hard power cut resumes your last edit from the background
-autosave (chapter 15.6).
+autosave (chapter 11.6).
 
 ## The Direct-Path vs Filter-Path Distinction
 
 Unfiltered connections are wired directly in the kernel sequencer —
 effectively zero added latency; a filter or mapping routes the
 connection through the hub, adding roughly 1--3 ms. Red = direct,
-purple = filtered / mapped. See chapter 4.
+purple = filtered / mapped. See chapter 17.
 
 
 Screenshots needed:

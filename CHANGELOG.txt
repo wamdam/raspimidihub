@@ -6,6 +6,8 @@ hashes. Tags: Added, Improved, Fix, Changed, Removed.
 
 Unreleased
 
+- Changed: the manual was reorganized from 22 to 18 chapters — architecture/config/tech-specs merged into one Technical Reference, UI controls folded into the Web UI chapter, Backup documented alongside Save/Load, and every fact given one canonical home; all cross-references renumbered and machine-validated
+- Fix: Appendix A stated wrong octave names for the play-surface trigger-note defaults (36..43 is C1..G1, not C2..G2)
 - Improved: the user manual was rewritten in a tighter, more precise style — ~30% shorter with no user-facing facts removed (159-page PDF)
 - Fix: manual stated wrong MIDI Learn windows (it's 10 s in the filter/mapping panel, 30 s in the CC-binding popups) and carried four stale section cross-references
 - Fix: the cc_map_changed / cc_learn_result / cc_learn_timeout SSE events were missing from the /docs event registry (each emit warn-logged)

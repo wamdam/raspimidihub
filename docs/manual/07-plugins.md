@@ -19,7 +19,7 @@ matrix.
 
 Multiple instances of one plugin can coexist, each with its own
 parameters. **Remove** in the row/column header menu destroys state
-and routing; **Copy → Paste-as-new** (chapter 9.6) keeps a duplicate
+and routing; **Copy → Paste-as-new** (chapter 5.8) keeps a duplicate
 first.
 
 ## Why Plugins Start Unconnected
@@ -32,7 +32,7 @@ start unconnected too, set the default routing to **None** in
 ## The Plugin Configuration Panel
 
 Tap the plugin's row or column header. The panel renders the
-plugin's parameter UI inline (chapter 8) plus three header controls:
+plugin's parameter UI inline (chapter 3) plus three header controls:
 
 - **Maximize (double-arrow) icon** -- jumps to the plugin's
   fullscreen tab if it has one (controllers to **Controller**;
@@ -44,7 +44,7 @@ plugin's parameter UI inline (chapter 8) plus three header controls:
 **MIDI Monitor** and **MIDI Test Sender** work as on USB devices:
 the monitor streams every event on the plugin's ports, the test
 sender fires notes or CCs into its input. Some plugins add live
-displays (section 11.8).
+displays (section 7.8).
 
 ## MIDI Clock and Sync
 
@@ -95,7 +95,7 @@ animates as CCs arrive, and simultaneous touch + CC input resolves
 to one value without flicker.
 
 **MIDI 2.0 controllers** drive bound parameters at full 32-bit
-resolution on a capable hub (chapter 21): *fine* parameters (the
+resolution on a capable hub (chapter 17): *fine* parameters (the
 CC LFO's Depth and Center) hold fractional values like `63.7` with
 one extra decimal; integer parameters hit every step. MIDI 1.0
 controllers behave exactly as before.
@@ -103,9 +103,9 @@ controllers behave exactly as before.
 Bindings are per *instance* and persist in the saved config. There
 is no per-plugin CC list in the panel or help -- the popup is the
 discovery surface; **Settings → Plugin Control Mappings**
-(chapter 16) lists every binding, Appendix A the factory defaults.
+(chapter 12) lists every binding, Appendix A the factory defaults.
 If the hardware can't send the wanted CC, a **CC → CC** mapping
-(chapter 10) can rewrite the CC number instead of rebinding every
+(chapter 6) can rewrite the CC number instead of rebinding every
 plugin.
 
 ## Live Display Outputs
@@ -121,7 +121,7 @@ only while the panel is open:
 ## Per-Instance State
 
 Parameters are project state: saved by **Save Config**, captured
-and restored by **Export / Import Config** (chapter 15),
+and restored by **Export / Import Config** (chapter 11),
 re-instantiated on **Load Config** or reboot. State survives
 renaming and re-routing, not removal (re-adding gives defaults);
 **Copy → Paste-as-new** clones it.
@@ -155,7 +155,7 @@ renaming and re-routing, not removal (re-adding gives defaults);
 The **Tracker**, **Arpeggiator**, **Euclidean** and **Cartesian**
 are *play-surface* plugins: normal matrix plugins that also render a
 fullscreen surface on the **Play** tab. Add them from **Add → Play**;
-workflow in chapter 13, parameters in **Appendix A**.
+workflow in chapter 9, parameters in **Appendix A**.
 
 ## User-Supplied Plugins
 

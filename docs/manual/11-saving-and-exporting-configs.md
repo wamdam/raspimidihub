@@ -2,9 +2,10 @@
 
 Four bottom-bar buttons on the routing matrix manage the project
 state: **Save Config**, **Load Config**, **Export Config**, and
-**Import Config**. There is no "Presets" tab — the boot config is
-*one* state; **Export Config** JSON files hold additional
-snapshots and move state between units.
+**Import Config** — plus the automatic autosave and the rolling
+backup checkpoints, both covered here. There is no "Presets" tab —
+the boot config is *one* state; **Export Config** JSON files hold
+additional snapshots and move state between units.
 
 ## The Two States
 
@@ -15,21 +16,20 @@ snapshots and move state between units.
   boot.
 
 The dark-red asterisk on the **Routing** bottom-nav icon (chapter
-6.4) shows whenever the two diverge.
+3.4) shows whenever the two diverge.
 
 ## Save Config
 
 Tap **Save Config**. The in-memory state is written to the boot
-config (chapter 4.7) and the asterisk clears. The button shows
+config (chapter 17.10) and the asterisk clears. The button shows
 **Saving…** until the write has completed, then **Configuration
 saved**; a failed write is reported, never claimed as success. The
 save does not disturb live MIDI — safe mid-set.
 
-Save writes the *entire* project state (chapter 15.7) and drops a
-**rolling backup checkpoint** — a compressed copy tagged with a
-short change summary ("+1 instrument · −18 mappings"); the last 50
-can be restored or downloaded from **Settings → Backup**
-(chapter 16). Separate from the automatic **autosave** below.
+Save writes the *entire* project state (see *What the State
+Contains* below) and drops a **rolling backup checkpoint** (see
+*Backup Checkpoints* below). Separate from the automatic
+**autosave** below.
 
 ## Load Config
 
@@ -79,12 +79,55 @@ defaults).
   or tapping pattern slots changes no saveable content — no
   autosave, no asterisk; the active pattern is still written by a
   deliberate **Save**.
-- After **Load**, a backup **Restore** (chapter 16), or **Import**,
+- After **Load**, a backup **Restore** (below), or **Import**,
   the new state is autosaved at once, making it the resume point.
 
 The autosave is double-buffered and integrity-checked, so a cut
 mid-write never leaves the unit without a good snapshot to resume
-from (chapter 18.3).
+from (chapter 14.3).
+
+## Backup Checkpoints
+
+Rolling save checkpoints, managed under **Settings → Backup**:
+every **Save Config** writes a compressed copy of the whole project
+state there, newest first; the last 50 are kept. Distinct from the
+background autosave above.
+
+A **Last autosave** line at the top shows how long ago the
+resume-snapshot was written (`30s ago`, `2 min ago`, …), **before
+last reboot** if from a previous boot, or **no autosave yet**. It
+reflects page-load time; **↻** re-reads it and the list.
+
+![Settings → Backup: the **Last autosave** line at the top (uptime-relative), then the rolling Save checkpoints newest-first — each with its `#number`, relative age, a one-line summary, size, and Restore / Download.](../screenshots/32-settings-backup.png){width=42%}
+
+Each row shows:
+
+- **#number** — monotonic; orders checkpoints even across reboots.
+- **When** — a relative "n ago". No real-time clock, so age is
+  uptime-based and only honest within the current boot; older
+  checkpoints show **before last reboot**, ordered by `#number`
+  alone.
+- **Summary** — a coarse diff vs. the previous checkpoint, counting
+  instruments, connections, mappings, device names ("+1 instrument ·
+  −18 mappings"). If none moved: **"settings changed"** when
+  anything else differs (renamed cell, re-bound CC, edited plugin
+  parameter…), **"(no changes)"** when identical, **"(initial)"**
+  for the first. The stored copy always holds the *full* state — a
+  Restore is faithful regardless of the summary.
+- **Size** — compressed size.
+
+Per-row actions:
+
+- **Restore** replaces the live config with the checkpoint (plugins
+  stopped and recreated, routing re-diffed) and lights the dirty
+  asterisk: **Save Config** commits it as the new boot default,
+  **Load Config** returns to your last Save. A Restore is autosaved
+  immediately, so it survives a power cut before you Save.
+- **Download** saves the checkpoint as plain JSON
+  (`raspimidihub-backup-NNNNN.json`) — the same format **Export
+  Config** produces, re-importable anywhere.
+
+A never-Saved fresh unit shows a placeholder.
 
 ## What the State Contains
 
@@ -110,7 +153,7 @@ Everything that affects how the unit *runs*:
 ## What the State Does Not Contain
 
 - **BlueZ bonds** — stored separately on `/boot/firmware/`
-  (chapter 14.3); an import does not overwrite paired devices.
+  (chapter 10.3); an import does not overwrite paired devices.
 - **System logs and the deb cache** — ephemeral.
 - **Display preferences** (activity bar, tick sounds, scroll-assist
   buttons, layout density) — per-browser.

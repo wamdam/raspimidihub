@@ -43,12 +43,12 @@ Tracker adds launch modes (**Trigger Mode**, below).
 **Dirty state.** Switching the active pattern -- tap or
 control-channel launch (above) -- is performance, not an edit:
 it changes no stored slot, marks nothing dirty (no Routing asterisk)
-and triggers no autosave (chapter 15.6). **Save Config** still writes
+and triggers no autosave (chapter 11.6). **Save Config** still writes
 the active pattern; content edits (recording, Overwrite, Reset) dirty
 as usual.
 
 Routing-matrix appearance, instance lifecycle and config-panel chrome
-follow chapter 11; parameter tables are in **Appendix A**.
+follow chapter 7; parameter tables are in **Appendix A**.
 
 ## The Arpeggiator
 
@@ -133,7 +133,7 @@ arping until pedal lift), CC 70..83, Clock + Transport (Sync `tempo`
 
 Holds incoming notes and plays them as an evenly-distributed
 (Bjorklund) pattern over **Steps**, with the same Pattern and Rate
-wheels at the top. For polyrhythm see 13.2.9.
+wheels at the top. For polyrhythm see 9.2.9.
 
 ![Euclidean play surface: five rows of shapers above the step grid; P1..P8 bank at the bottom.](../screenshots/euclidean-play.png){width=42%}
 
@@ -720,7 +720,7 @@ Open the Tracker's row or column header in the matrix:
 Grid contents, page count, per-track channels, the **Send Clock** /
 **Send Trnsp.** / **Rcv Trnsp.** toggles and the cursor position are
 instance state: **Save Config** persists them, **Export Config**
-captures them in a JSON snapshot (chapter 15).
+captures them in a JSON snapshot (chapter 11).
 
 Cloning a Tracker (Copy → Paste-as-new from the header menu) makes a
 second instance with the same grid -- an "A part" / "B part" pair for

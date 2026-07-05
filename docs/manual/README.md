@@ -19,28 +19,24 @@ the body chapters; uppercase letters mark the appendices.
 ```
 metadata.yaml                                  pandoc title block
 00-frontmatter.md                              copyright, conventions
-01-introduction.md
-02-the-raspimidihub.md
-03-hardware-and-connectors.md
-04-system-architecture.md
-05-configuration-and-data-structure.md
-06-interacting-with-the-web-ui.md
-07-quick-start.md
-08-ui-controls.md
-09-routing-matrix.md
-10-filters-and-mappings.md
-11-plugins.md
-12-controllers.md
-13-play-surfaces.md
-14-bluetooth-midi.md
-15-saving-and-exporting-configs.md
-16-settings.md
-17-connectivity-and-updates.md
-18-appliance-reliability.md
-19-setup-examples.md
-20-troubleshooting.md
-21-technical-information.md
-22-credits-and-contact.md
+01-introduction.md                             product, pillars, how to read
+02-hardware-and-connectors.md
+03-interacting-with-the-web-ui.md              connection, tabs, controls
+04-quick-start.md
+05-routing-matrix.md
+06-filters-and-mappings.md
+07-plugins.md
+08-controllers.md
+09-play-surfaces.md
+10-bluetooth-midi.md
+11-saving-and-exporting-configs.md             save/load/export + backups
+12-settings.md
+13-connectivity-and-updates.md
+14-appliance-reliability.md
+15-setup-examples.md
+16-troubleshooting.md
+17-technical-reference.md                      architecture, schema, specs
+18-credits-and-contact.md
 A-appendix-plugin-reference.md
 B-appendix-controller-reference.md
 C-appendix-midi-mapping-reference.md

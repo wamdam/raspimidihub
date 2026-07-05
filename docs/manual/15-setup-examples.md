@@ -18,7 +18,7 @@ channel 2, the upper plays leads on channel 1.
    already sends on channel 1.
 4. Tap **Save Config**.
 
-A Note Splitter plugin (chapter 11) also works; a Channel Remap
+A Note Splitter plugin (chapter 7) also works; a Channel Remap
 mapping is simpler when each *keyboard* maps cleanly to one channel.
 
 ## Drum Machine + Sequencer with Master Clock
@@ -51,7 +51,7 @@ across eight MIDI channels.
    wheels (T1..T8) to channels 1..8 (or whatever the synth expects).
 4. Wire the matrix: Tracker row → Synth column.
 5. On the **Play** tab, enter notes on the grid (cell format:
-   chapter 13.4.2). Each track fires into a different voice of the
+   chapter 9.4.2). Each track fires into a different voice of the
    synth.
 6. To make the Tracker the clock master for downstream gear, enable
    **Send Clock** (and **Send Trnsp.** to also forward START / STOP /
@@ -87,7 +87,7 @@ A wireless BLE-MIDI controller alongside USB instruments, with
 the wireless controller's response.
 
 1. Pair the BLE controller: **Add → Bluetooth MIDI → Scan →
-   Connect** (chapter 14.2).
+   Connect** (chapter 10.2).
 2. Plug the USB instruments into the Pi.
 3. Tap **Add → Plugin → Velocity Curve**. Pick or draw a curve that
    softens the controller's hot top end — BLE-MIDI velocity is often
@@ -100,7 +100,7 @@ the wireless controller's response.
      relevant cell.
 5. Tap **Save Config**. The Velocity Curve and its parameters are
    persisted; the BLE pairing lives in its own snapshot
-   (chapter 14.3).
+   (chapter 10.3).
 
 ## Routing for a Recording Session
 
@@ -122,7 +122,7 @@ creative effect, Master Clock feeding the DAW clock.
 6. Tap **Save Config**.
 
 MIDI Delay's pre-scheduled echoes are sample-accurate
-(chapter 11.6).
+(chapter 7.6).
 
 ## Send-Only SysEx Batch
 
@@ -134,9 +134,8 @@ restoring a patch bank after a factory reset.
 3. Wire the matrix: SysEx Sender row → Synth column.
 4. In the plugin's config panel, tap the file-picker button and
    pick the `.syx` file from your phone. The plugin streams it in
-   256-byte chunks with ~5 ms gaps — deliberately conservative,
-   because SysEx uploads from a DAW are sometimes flaky on USB MIDI
-   buffers.
+   conservatively timed chunks (appendix A, *SysEx Sender*), which
+   avoids the buffer overruns that make DAW SysEx uploads flaky.
 5. The display shows progress; when done, the synth has the new
    state.
 6. Nothing persists — the plugin does not save the uploaded file,

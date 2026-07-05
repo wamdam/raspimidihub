@@ -3,7 +3,7 @@
 BLE-MIDI peripherals appear in the routing matrix alongside USB
 devices and plugins, with the same filtering, mapping, and
 clipboard behaviour. Sharing devices over the network:
-chapter 17, *Network MIDI*.
+chapter 13, *Network MIDI*.
 
 ## The Bridge
 
@@ -29,7 +29,7 @@ matrix like any USB device (limits: 14.8).
 Pairing state is snapshotted to the boot partition on every change
 and restored on boot -- bonds survive reboots *and* hard
 power-offs. The write uses the same brief remount cycle as Save
-Config (chapter 5).
+Config (chapter 14).
 
 ## Auto-Reconnect on Boot
 
@@ -69,13 +69,13 @@ millisecond. For latency-critical use, prefer USB or DIN.
 ## Limits
 
 - **SysEx is not bridged; Active Sensing / Reset are filtered**
-  (14.6).
+  (10.6).
 - **One adapter, one peripheral at a time** is the tested
   configuration; two BLE-MIDI peripherals at once is untested.
 - **Pi 3-class boards (3B, 3B+, Zero 2 W) share one 2.4 GHz radio
   and antenna between Bluetooth and WiFi**: the running access
   point can starve BLE connects (unit- and chip-dependent).
-  Pi 4 / 5 have separate radios (chapter 21.1). See *"Connection
+  Pi 4 / 5 have separate radios (chapter 2). See *"Connection
   failed"* below.
 - **External Bluetooth USB dongles are not supported** -- only the
   Pi's onboard radio is used.
@@ -110,7 +110,7 @@ destination: check the cell's filter and mappings.
 
 **"Connection failed" on a Pi 3-class board that's running the
 access point.**
-The shared radio (14.8) aborts the connect locally: the device
+The shared radio (10.8) aborts the connect locally: the device
 flashes "connected" and drops; BlueZ logs
 `le-connection-abort-by-local`. To confirm coexistence rather than
 the peripheral:

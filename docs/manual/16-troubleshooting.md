@@ -15,7 +15,7 @@ full 30 seconds for boot. Last resort, over Ethernet or SSH:
 ### The AP is visible but the captive portal does not open
 
 Navigate manually to `http://raspimidihub-<id>.local/` (needs
-mDNS; chapter 17.5) or the AP gateway IP from the phone's
+mDNS; chapter 13.5) or the AP gateway IP from the phone's
 WiFi-info screen. Some phones cache "this network has no internet"
 and suppress the portal probe; toggle the phone's WiFi off and on.
 
@@ -54,7 +54,7 @@ via the **Clock** message-type filter on its outgoing cells.
 
 ## Bluetooth Issues
 
-(Full coverage in chapter 14.9; the highlights here.)
+(Full coverage in chapter 10.9; the highlights here.)
 
 ### Peripheral will not pair
 
@@ -78,7 +78,7 @@ Long-press the row header → **Forget**, then re-run
 
 ## Network MIDI Issues
 
-(Full coverage in chapter 17's *Network MIDI* section.)
+(Full coverage in chapter 13's *Network MIDI* section.)
 
 ### Peer hub not discovered
 
@@ -150,8 +150,8 @@ Versions** with the GitHub releases page.
 
 The error toast usually names the cause: disk full (unlikely
 unless the deb cache could not clean) or a package conflict (only
-when the Pi is used for other purposes; chapter 3 warns against
-this). If the install hung, the 180-second watchdog (chapter 17.7)
+when the Pi is used for other purposes; chapter 1 warns against
+this). If the install hung, the 180-second watchdog (chapter 13.8)
 restarts the routing service and the AP comes back; retry.
 
 ## Plugins
@@ -172,7 +172,7 @@ parameters, tap **Save Config**, *then* restart.
 
 A destination receives clock from both the Master Clock plugin and
 an external source. Pick one; block clock from the other at the
-device-level filter (chapter 10.3) or by not routing it through.
+device-level filter (chapter 6.3) or by not routing it through.
 
 ## Controllers
 
@@ -206,7 +206,7 @@ intact; re-run **Save Config** after fixing it.
 
 ### Custom Pi tweaks lost on reboot
 
-Expected: the appliance is read-only by design (chapter 18).
+Expected: the appliance is read-only by design (chapter 14).
 Manual edits survive only when made in a `rw`-remount session
 followed by `ro`.
 
@@ -245,6 +245,5 @@ re-check.
 
 ### Last resort
 
-Re-flash the SD card with Raspberry Pi OS Lite and re-run the
-install one-liner. Use **Export Config** beforehand to keep the
-routing state recoverable.
+Re-flash the SD card (chapter 14, *Re-flashing the SD card*).
+**Export Config** first — a re-flash loses all saved state.

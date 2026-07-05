@@ -6,15 +6,26 @@
 
 Per-plugin parameter reference: summary, parameter table with
 ranges and defaults, input/output behaviour, clock semantics.
-The conceptual model of plugins is in chapter 11.
+The conceptual model of plugins is in chapter 7.
 
 **CC defaults.** A `(CC N default)` note is the factory binding
 (Any channel, CC N). Override per instance via long-press → MIDI
-Learn (chapter 11.7).
+Learn (chapter 7).
+
+**Play-surface plugins.** The Arpeggiator, Cartesian, Euclidean,
+and Tracker share the play-surface chrome and Setup parameters
+(behaviour: chapter 9): an end-of-surface **P1--P8** pattern strip
+(slot 1 active by default); **Sync** (Radio: free / tempo /
+transport, default transport) with a **BPM** wheel (40--300,
+default 120) visible when Sync is free; a **Ctrl Ch** wheel
+(Off / 1--16, default Off; named **Pt. Ctrl Ch** on the Tracker);
+and, when Ctrl Ch is set, eight learnable **P1..P8** trigger notes
+(NoteSelect, defaults 36..43 = C1..G1). The tables below list only
+what is specific to each plugin.
 
 ## Arpeggiator
 
-Surface and workflow: chapter 13.
+Surface and workflow: chapter 9.
 
 | Trait | Value |
 |-------|-------|
@@ -25,7 +36,7 @@ Surface and workflow: chapter 13.
 | Rate range | 4/1 / 4/1T / 2/1 / ... / 1/16T / 1/32 (15 values) |
 | Steps per pattern | 1..32 |
 | Octaves | 1..4 |
-| Patterns per instance | 8 numbered slots (see chapter 13) |
+| Patterns per instance | 8 numbered slots (see chapter 9) |
 
 | Surface | Parameter | Type | Range | Default |
 |---------|-----------|------|-------|---------|
@@ -36,12 +47,7 @@ Surface and workflow: chapter 13.
 | Play    | **Gate %** | Wheel | 10--100 | 80 |
 | Play    | **Octaves** | Wheel | 1--4 | 1 |
 | Play    | **Step Pattern** | StepEditor | per-step on/off + offset + accent | all-on, offset 0 |
-| Play    | **Patterns** | PatternStrip | end-of-surface P1--P8 bank | slot 1 active |
 | Setup   | **Arp Ch** | ChannelSelect | 1--16 or any | any |
-| Setup   | **Sync** | Radio | free / tempo / transport | transport |
-| Setup   | **BPM** (visible when Sync = free) | Wheel | 40--300 | 120 |
-| Setup   | **Ctrl Ch** | Wheel | Off / 1--16 | Off |
-| Setup   | **P1..P8** (visible when Ctrl Ch is on) | NoteSelect ×8 | one learnable trigger note per slot | C2..G2 (36..43) |
 
 CC automation:
 
@@ -65,7 +71,7 @@ Bend pass through.
 
 ## Cartesian
 
-Surface and workflow: chapter 13.
+Surface and workflow: chapter 9.
 
 | Trait | Value |
 |-------|-------|
@@ -80,7 +86,7 @@ Surface and workflow: chapter 13.
 | Grid sizes | 2×2 / 3×3 / 4×4 |
 | Scales | major / minor / dorian / mixolydian / pentatonic / blues / harmonic m / whole tone / chromatic (9) |
 | Rate range | 4/1 ... 1/32 (15 values, same as Arp) |
-| Patterns per instance | 8 numbered slots (see chapter 13) |
+| Patterns per instance | 8 numbered slots (see chapter 9) |
 
 | Surface | Parameter | Type | Range | Default |
 |---------|-----------|------|-------|---------|
@@ -96,13 +102,8 @@ Surface and workflow: chapter 13.
 | Play    | **Accent Vel.** | Knob | 0--127 | 30 |
 | Play    | **Autofill** | Button (latching) | on = Live (re-stamps), off = Latch (frozen) | on |
 | Play    | *(grid)* | CartesianGrid | side×side cells; tap = off/on/accent, mini-wheel = per-cell offset | all on, offsets from voicing |
-| Play    | **Patterns** | PatternStrip | end-of-surface P1--P8 bank | slot 1 active |
-| Setup   | **Sync** | Radio | free / tempo / transport | transport |
 | Setup   | **Play Ch** | ChannelSelect | 1--16 or any | any |
 | Setup   | **Fill Ch** | Wheel | Off / 1--16 | Off |
-| Setup   | **Ctrl Ch** | Wheel | Off / 1--16 | Off |
-| Setup   | **BPM** (visible when Sync = free) | Wheel | 40--300 | 120 |
-| Setup   | **P1..P8** (visible when Ctrl Ch is on) | NoteSelect ×8 | one learnable trigger note per slot | C2..G2 (36..43) |
 
 CC automation (shared params match the Arp / Euclidean):
 
@@ -239,7 +240,7 @@ Continue through.
 
 ## Euclidean
 
-Surface and workflow: chapter 13.
+Surface and workflow: chapter 9.
 
 | Trait | Value |
 |-------|-------|
@@ -251,7 +252,7 @@ Surface and workflow: chapter 13.
 | Rate range | 4/1 ... 1/32 (15 values, same as Arp) |
 | Steps per pattern | 1..32 |
 | Scales | major / minor / dorian / mixolydian / pentatonic / blues / harmonic m / whole tone / chromatic (9) |
-| Patterns per instance | 8 numbered slots (see chapter 13) |
+| Patterns per instance | 8 numbered slots (see chapter 9) |
 
 | Surface | Parameter | Type | Range | Default |
 |---------|-----------|------|-------|---------|
@@ -274,13 +275,8 @@ Surface and workflow: chapter 13.
 | Play    | **Root** | Wheel | C ... B | C |
 | Play    | **Scale** | Wheel | 9 scales (see above) | major |
 | Play    | **Step Pattern** | StepEditor (override mode) | per-step default / force-on / force-on+accent / force-off + offset | all default |
-| Play    | **Patterns** | PatternStrip | end-of-surface P1--P8 bank | slot 1 active |
 | Setup   | **Arp Ch** | ChannelSelect | 1--16 or any | any |
-| Setup   | **Sync** | Radio | free / tempo / transport | transport |
-| Setup   | **BPM** (visible when Sync = free) | Wheel | 40--300 | 120 |
 | Setup   | **Retrig** | Button | reset cycle on first key of a phrase | on |
-| Setup   | **Ctrl Ch** | Wheel | Off / 1--16 | Off |
-| Setup   | **P1..P8** (visible when Ctrl Ch is on) | NoteSelect ×8 | one learnable trigger note per slot | C2..G2 (36..43) |
 
 CC automation (full block CC 70..88, skipping CC 84 = GM
 Portamento Control):
@@ -508,7 +504,7 @@ is safe.
 
 ## Tracker
 
-Surface and workflow: chapter 13.
+Surface and workflow: chapter 9.
 
 | Trait | Value |
 |-------|-------|
@@ -517,7 +513,7 @@ Surface and workflow: chapter 13.
 | Voices | 8 (T1..T8) |
 | Rows per page | 16 (hex 0..F) |
 | Pages per pattern | up to 16, chained linearly, loops back to page 0 |
-| Patterns per instance | 8 numbered slots; see chapter 13 |
+| Patterns per instance | 8 numbered slots; see chapter 9 |
 
 Configuration parameters (device-detail panel):
 
@@ -555,16 +551,15 @@ Configuration parameters (device-detail panel):
   re-press. Launching is monophonic (a new trigger replaces the
   one in flight) and applies to MIDI triggers only; on-screen slot
   taps always behave as Switch.
-- **Pattern Notes (P1..P8)** -- 8 × NoteSelect, learnable,
-  defaults 36..43 (C1..G1); visible only when **Ctrl Ch** is not
-  Off. Each is the note that triggers that pattern slot;
-  non-matching notes on the control channel are dropped.
+- **Pattern Notes (P1..P8)** -- as in the play-surface preamble;
+  visible only when **Ctrl Ch** is not Off. Non-matching notes on
+  the control channel are dropped.
 
 Grid data is part of the instance state; **Save Config** and
 **Export Config** capture it.
 
 **Input.** Notes, CC (live recording, channel-routed -- see
-chapter 13 §Routing), Clock, Start, Stop, Continue.
+chapter 9 §Routing), Clock, Start, Stop, Continue.
 **Output.** Notes, CC (from the grid), optionally Clock (when
 **Send Clock** is on) and Start / Stop / Continue (when **Send
 Trnsp.** is on).
@@ -614,7 +609,5 @@ see the classic integer results.
 
 ## User-Supplied Plugins
 
-A plugin dropped into the project's plugin directory appears in
-the **Add → Plugin** overlay alongside the built-ins, with the
-same lifecycle, sandbox and persistence model. The plugin
-developer guide in the project repository covers the API.
+See chapter 7, *User-Supplied Plugins*; the plugin developer guide
+in the project repository covers the API.
