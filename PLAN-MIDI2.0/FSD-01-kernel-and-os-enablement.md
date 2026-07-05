@@ -3,7 +3,7 @@
 **Step:** 0 · **Depends on:** nothing · **Blocks:** all on-hardware
 verification (software FSDs can proceed against mocks/laptop)
 
-## Status (2026-07-05): DONE except final USB regression check
+## Status (2026-07-05): DONE — Step 0 gate passed
 
 - Work item 1 — upstream request **filed**:
   https://github.com/raspberrypi/linux/issues/7474 (watch per release).
@@ -20,9 +20,15 @@ verification (software FSDs can proceed against mocks/laptop)
   `aseqdump -u 2` runs as a UMP client.
 - Work items 4/5 — log line ships with the probe; decision memo waits
   on the upstream issue's outcome.
-- **Open:** plug a USB MIDI 1.0 device into A6DC to regression-check
-  the rebuilt snd-usb-audio (enumeration, routing, hotplug); optional
-  cross-check of the deb on the stock-kernel 5A5D reference Pi.
+- USB MIDI 1.0 regression vs the rebuilt snd-usb-audio: **passed**
+  (Keystation Mini 32). Probe fell back per design ("Quirk or no
+  altset; falling back to MIDI 1.0"), enumeration + hub registry +
+  real hotplug + simulated replug (sysfs unbind/rebind) + TX
+  (note_on/off via /api/devices/{id}/send) + RX (41 captured
+  note-ons, correct velocities) all clean; zero errors in the boot
+  journal. Optional cross-check on the stock-kernel 5A5D reference
+  Pi remains available but the same deb was already verified
+  pre-modules on A6DC itself (kernel=no path).
 
 ## Goal
 
