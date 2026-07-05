@@ -279,10 +279,11 @@ core.
 
 ## MIDI 2.0 / UMP (design decisions)
 
-Implemented 2026-07 across the `midi2-step0` branch (Steps 0–6 of
-`PLAN-MIDI2.0/` — read that directory's README + FSD status sections
-before touching anything MIDI 2.0; research annexes there hold the
-spec details and kernel findings). Honour these unless revisited:
+Implemented 2026-07, released as v6.0.0a1 (Steps 0–6 of the
+PLAN-MIDI2.0 planning package — the directory was removed after the
+merge; its README, FSDs and research annexes live in git history at
+the `v6.0.0a1` tag if the spec details or kernel findings are ever
+needed again). Honour these unless revisited:
 
 **Hard invariants**
 - **MIDI 1.0 behaviour is byte-identical, always.** Every hi-res path
@@ -337,8 +338,10 @@ spec details and kernel findings). Honour these unless revisited:
   MIDI-CI hit it (fixed to 1<<2, 2026-07).
 - `make kernelrelease` lies until `modules_prepare` regenerates
   `include/config/auto.conf`; kernel-module builds for the Pi live
-  in `PLAN-MIDI2.0/build-ump-modules.sh` + `kernel-build-notes.md`
+  in `scripts/build-ump-modules.sh` + `scripts/kernel-build-notes.md`
   (vermagic, version-exact apt source, cross-M= symvers — all
-  already solved there, don't re-derive).
+  already solved there, don't re-derive). Re-run on the test Pi
+  after every kernel upgrade, or MIDI 2.0 silently goes dormant.
+  Upstream config request: raspberrypi/linux#7474.
 - `pkill -f` over ssh matches the ssh command line itself — use a
   `[b]racket` pattern.
