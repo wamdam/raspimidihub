@@ -2,6 +2,32 @@
 
 **Step:** 5 · **Depends on:** FSD-08 · **Parallel with:** FSD-10
 
+## Status (2026-07-05): implemented (core), several adoptions deferred
+
+- Send API: PluginAlsaClient.send_event accepts float MIDI units for
+  CC value / note-on velocity — emitted as UMP at full width on v2
+  clients via midi_scale.lattice_interp (floor-compatible: 1.0
+  receivers see exactly the legacy int() projection, unit-tested as a
+  truncation property over the whole units range); floats floor on
+  legacy clients. Scheduled sends (send_event_at) stay int-only.
+- cc_lfo emits float (dedup quantized to 0.01): live dual-tap on A6DC
+  shows identical 7-bit ints on a legacy reader and off-lattice 32-bit
+  on a UMP reader.
+- **Deferred adoptions completed 2026-07-05:**
+  `midi_scale.units_in_bucket(anchor, value)` positions a float
+  trajectory inside a legacy-computed integer's truncation bucket —
+  byte-compat by construction for ANY legacy rounding scheme. The
+  shim's value_f/velocity_f snap 7-bit-lattice values to exact
+  integers, and `PluginBase.wants_hires_input` (opt-in, D3) delivers
+  float MIDI units to on_note_on / on_cc. Adopted: cc_smoother
+  (stepless glide, legacy round() projection preserved),
+  velocity_curve (curve interpolation between points),
+  velocity_equalizer (compress/expand in float), pitch_cc
+  (lossless pass-through). Live-verified: smoother glide off-lattice
+  on a UMP tap, clean legacy ints on a 1.0 tap. Still 7-bit by
+  design: controller templates (hardware-mirror byte-stability),
+  sequencer pattern data.
+
 ## Goal
 
 The hub's own MIDI *sources* can emit high resolution: CC-generating

@@ -131,10 +131,18 @@ The shipped **[User Manual](https://github.com/wamdam/raspimidihub/releases/late
 
 ### MIDI Filtering and Mapping
 - **Per-connection channel filtering** -- enable/disable any of 16 MIDI channels
-- **Message type filtering** -- block notes, CCs, program changes, pitch bend, aftertouch, SysEx, or clock
+- **Message type filtering** -- block notes, CCs, program changes, pitch bend, aftertouch, SysEx, clock, or MIDI 2.0 per-note messages
 - **Note to CC / Note to CC toggle / CC to CC / Channel remap** mappings (CC-to-CC supports range scaling and inversion; Channel remap supports fan-out)
 - **MIDI Learn** -- press a key or move a knob to auto-fill the mapping source
 - **Wheels, faders, radio buttons, and toggles** replace dropdowns for fast editing on stage
+
+### MIDI 2.0
+- **Full 32-bit resolution end to end** -- filters, mappings and plugin CC automation carry a MIDI 2.0 controller's complete resolution; a bound knob sweeps a parameter smoothly through values 7-bit MIDI physically skips
+- **Devices as they describe themselves** -- MIDI 2.0 devices show their named *function blocks* ("Keys", "Pads") as ports, carry a "2.0" badge, and offer a per-device *Use MIDI 2.0* switch as an escape hatch
+- **MIDI-CI identification** -- the hub asks connected gear who it is (manufacturer, model, capabilities, Property-Exchange friendly names) over any bidirectional link, MIDI 2.0 not required
+- **Hi-res monitoring** -- the MIDI monitor shows fractional values (`vel=100.53`) and MIDI 2.0-only messages (atomic RPN/NRPN, Per-Note CC / Bend) as typed rows
+- **MIDI 1.0 stays byte-identical** -- every hi-res path degrades to exactly the classic behaviour for 1.0 devices, and on kernels without MIDI 2.0 support (all stock Raspberry Pi OS kernels today -- [enable request pending](https://github.com/raspberrypi/linux/issues/7474)) the hub simply runs as before
+- **Test without 2.0 hardware** -- `scripts/fake_midi2_synth.py` is a virtual MIDI 2.0 device (UMP endpoint, hi-res sweeps, MIDI-CI responder)
 
 ### Connectivity
 - **Built-in WiFi access point** -- connect from your phone, captive portal opens automatically

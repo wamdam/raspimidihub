@@ -35,6 +35,17 @@ is worth knowing: filters and mappings have a cost; toggling a
 filter off temporarily can shave a couple of milliseconds on a
 latency-critical chain.
 
+**MIDI 2.0 (UMP).** On kernels with MIDI 2.0 support (chapter 21,
+*MIDI 2.0 Kernel Requirements*) the ALSA sequencer speaks the
+Universal MIDI Packet format natively and converts between MIDI
+1.0 and 2.0 clients per delivery — so direct-path routing between
+two MIDI 2.0 devices already preserves their full resolution, and
+mixed 1.0/2.0 wiring works without any special handling. The hub
+reads each device's UMP *endpoint* description (name, protocol
+capability, function blocks) at scan time and models the device's
+ports from its function blocks (chapter 9). Kernel-side discovery
+is automatic; the hub never needs to probe the wire itself.
+
 ## Plugins Are Virtual Devices
 
 Plugin instances appear as rows and columns in the routing matrix

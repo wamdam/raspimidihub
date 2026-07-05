@@ -12,6 +12,12 @@ import time
 
 log = logging.getLogger(__name__)
 
+# Sentinel returned by read_event for packets that were consumed or
+# deliberately ignored (utility, partial SysEx, stream metadata) —
+# distinct from None, which means "queue drained, stop the loop".
+SKIP_EVENT = object()
+_SKIP = SKIP_EVENT
+
 # ALSA constants (duplicated here to avoid circular imports through alsa_seq)
 SND_SEQ_OPEN_DUPLEX = 3
 SND_SEQ_NONBLOCK = 1
@@ -35,6 +41,7 @@ class PluginAlsaClient:
         from ..alsa_seq import (
             SndSeqPtr,
             check,
+            probe_ump_support,
             snd_seq_client_id,
             snd_seq_create_simple_port,
             snd_seq_open,
@@ -49,6 +56,17 @@ class PluginAlsaClient:
         ), "plugin: open seq")
         snd_seq_set_client_name(self._handle, client_name.encode())
         self._client_id = snd_seq_client_id(self._handle)
+
+        # MIDI 2.0 inbound (FSD-08): on capable systems the client runs
+        # at midi_version=2 so bound CC automation receives the full
+        # controller resolution. read_event() shims UMP packets back to
+        # legacy-shaped events, so plugins keep their 0-127 API (D3).
+        self._midi_version = 0
+        if (probe_ump_support().capable
+                and self._alsa.snd_seq_set_client_midi_version is not None
+                and self._alsa.snd_seq_set_client_midi_version(self._handle, 2) >= 0):
+            self._midi_version = 2
+        self._sysex_asm = None  # lazy ump.Sysex7Assembler
 
         # IN port — receives MIDI (writable by subscribers)
         self._in_port = snd_seq_create_simple_port(
@@ -109,11 +127,41 @@ class PluginAlsaClient:
         return struct.unpack_from("i", buf, 0)[0]
 
     def read_event(self):
-        ev = self._alsa.SndSeqEventPtr()
-        ret = self._alsa.snd_seq_event_input(self._handle, ctypes.byref(ev))
+        """Read one inbound event (non-blocking).
+
+        Legacy clients return the raw snd_seq_event. MIDI 2.0 clients
+        read UMP and return a legacy-shaped shim (ump.to_monitor_shim)
+        with byte-identical 7-bit fields plus a `hires` dict carrying
+        the 32-bit values — plugins and the dispatch code are agnostic.
+        Returns None when the queue is drained; unmapped UMP packets
+        return the sentinel None too, so callers just skip them.
+        """
+        if self._midi_version != 2:
+            ev = self._alsa.SndSeqEventPtr()
+            ret = self._alsa.snd_seq_event_input(self._handle, ctypes.byref(ev))
+            if ret < 0:
+                return None
+            return ev.contents
+        from .. import ump as _ump
+        uev_p = self._alsa.SndSeqUmpEventPtr()
+        ret = self._alsa.snd_seq_ump_event_input(self._handle, ctypes.byref(uev_p))
         if ret < 0:
             return None
-        return ev.contents
+        uev = uev_p.contents
+        if not uev.is_ump:
+            return uev  # classic event (queue control etc.) — legacy view
+        words = uev.ump_words
+        if ((words[0] >> 28) & 0xF) == _ump.MT_DATA64:
+            if self._sysex_asm is None:
+                self._sysex_asm = _ump.Sysex7Assembler()
+            m = self._sysex_asm.feed(words)
+        else:
+            m = _ump.decode(words)
+        if m is None:
+            return _SKIP
+        shim = _ump.to_monitor_shim(m, uev.source.client, uev.source.port,
+                                    uev.dest.client, uev.dest.port, hires=True)
+        return shim if shim is not None else _SKIP
 
     def send_event(self, ev_type: int, **kwargs) -> None:
         """Build and send an ALSA event on the OUT port. Rate-limited."""
@@ -124,6 +172,20 @@ class PluginAlsaClient:
             return
         self._rate_window.append(now)
 
+        MidiEventType = self._alsa.MidiEventType
+
+        # Float values are fractional MIDI units (FSD-09): on a MIDI 2.0
+        # client they go out as UMP at full resolution, interpolated so
+        # 1.0 receivers see exactly int(value) — byte-identical to the
+        # legacy generators' int() casts. On legacy clients the float
+        # simply floors.
+        if self._midi_version == 2 and self._try_send_hires(ev_type, kwargs):
+            return
+        for k in ("value", "velocity"):
+            v = kwargs.get(k)
+            if isinstance(v, float):
+                kwargs[k] = int(v)
+
         ev = self._alsa.SndSeqEvent()
         ev.type = ev_type
         ev.source.client = self._client_id
@@ -132,8 +194,6 @@ class PluginAlsaClient:
         ev.dest.port = 0
         ev.queue = SND_SEQ_QUEUE_DIRECT
         ev.flags = 0
-
-        MidiEventType = self._alsa.MidiEventType
 
         if ev_type in (MidiEventType.NOTEON, MidiEventType.NOTEOFF, MidiEventType.KEYPRESS):
             ev.data.note.channel = kwargs.get("channel", 0)
@@ -148,6 +208,40 @@ class PluginAlsaClient:
             ev.data.control.value = kwargs.get("value", 0)
 
         self._alsa.snd_seq_event_output_direct(self._handle, ctypes.pointer(ev))
+
+    def _try_send_hires(self, ev_type: int, kwargs: dict) -> bool:
+        """Emit float-valued CC / note events as full-resolution UMP.
+        Returns False for everything else (caller sends classic)."""
+        from .. import midi_scale as _ms
+        from .. import ump as _ump
+        MidiEventType = self._alsa.MidiEventType
+        if ev_type == MidiEventType.CONTROLLER \
+                and isinstance(kwargs.get("value"), float):
+            words = _ump.cc(0, kwargs.get("channel", 0) & 0xF,
+                            kwargs.get("cc", 0),
+                            _ms.lattice_interp(kwargs["value"]))
+        elif ev_type == MidiEventType.NOTEON \
+                and isinstance(kwargs.get("velocity"), float):
+            words = _ump.note_on(0, kwargs.get("channel", 0) & 0xF,
+                                 kwargs.get("note", 0),
+                                 _ms.lattice_interp(kwargs["velocity"], 7, 16))
+        else:
+            return False
+        self._send_ump_words(words)
+        return True
+
+    def _send_ump_words(self, words) -> None:
+        ev = self._alsa.SndSeqUmpEvent()
+        ev.flags = self._alsa.SND_SEQ_EVENT_UMP
+        ev.queue = SND_SEQ_QUEUE_DIRECT
+        ev.source.client = self._client_id
+        ev.source.port = self._out_port
+        ev.dest.client = SND_SEQ_ADDRESS_SUBSCRIBERS
+        ev.dest.port = 0
+        for i, w in enumerate(words):
+            ev.u.ump[i] = w
+        if self._alsa.snd_seq_ump_event_output(self._handle, ctypes.pointer(ev)) >= 0:
+            self._alsa.snd_seq_drain_output(self._handle)
 
     def send_event_at(self, when_monotonic: float, ev_type: int,
                       tag: int = 0, **kwargs) -> None:

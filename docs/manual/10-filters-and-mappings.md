@@ -44,24 +44,34 @@ is the **destination** side's filter, not this one.)
 
 ## Message-Type Filtering
 
-A row of seven toggles controls which categories of MIDI events
+A row of eight toggles controls which categories of MIDI events
 pass through the connection:
 
 | Toggle | Default | Covers |
 |--------|---------|--------|
-| **Notes** | On | Note On, Note Off |
-| **CCs** | On | Control Change |
+| **Notes** | On | Note On, Note Off, polyphonic pressure |
+| **CCs** | On | Control Change (incl. MIDI 2.0 atomic RPN/NRPN) |
 | **PC** | On | Program Change |
 | **Pitch Bend** | On | Pitch Bend |
-| **Aftertouch** | On | Channel pressure and polyphonic pressure |
+| **Aftertouch** | On | Channel pressure |
 | **SysEx** | On | System Exclusive |
 | **Clock** | On | MIDI Clock, Start, Stop, Continue, Song Position |
+| **MIDI 2.0** | On | MIDI 2.0-only per-note messages (Per-Note CC / Pitch Bend / Management) — only ever carried between MIDI 2.0 devices |
 
 Toggles apply instantly. There is no "Save" button for the per-cell
 filter state -- changes take effect the moment the toggle flips.
 The **Save Config** at the bottom of the routing matrix persists
 the filter state across reboots; the dirty-state asterisk fires as
 soon as a toggle flips.
+
+**MIDI 2.0 resolution.** On a MIDI 2.0-capable hub (chapter 21), a
+filtered or mapped connection between two MIDI 2.0 devices carries
+the full 32-bit resolution end to end — filters and mappings no
+longer flatten values to 0–127 steps. MIDI 1.0 devices on either
+end of the connection see exactly the same values they always did.
+Mapping value fields (CC on/off values, scaling ranges) accept
+fractional values like `63.5` — meaningful for MIDI 2.0
+destinations, rounded for MIDI 1.0 ones.
 
 ## Mappings
 

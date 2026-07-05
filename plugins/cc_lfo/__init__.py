@@ -52,8 +52,10 @@ vibrato to a synth pad without touching a physical controller."""
             ChannelSelect("out_ch", "Channel", default=1),
             Wheel("cc_num", "CC #", min=0, max=127, default=1),
             Display("_scope", "Scope", display_name="level", span=2),
-            Fader("depth", "Depth", min=0, max=127, default=127, span=4, default_cc=75),
-            Fader("center", "Center", min=0, max=127, default=64, span=4, default_cc=76),
+            Fader("depth", "Depth", min=0, max=127, default=127, span=4,
+                  default_cc=75, fine=True, decimals=1),
+            Fader("center", "Center", min=0, max=127, default=64, span=4,
+                  default_cc=76, fine=True, decimals=1),
         ]),
     ]
 
@@ -172,10 +174,14 @@ vibrato to a synth pad without touching a physical controller."""
             raw = 0
 
         half_depth = depth / 2.0
-        value = int(center + raw * half_depth)
-        value = max(0, min(127, value))
+        # Float MIDI units: full 32-bit resolution to MIDI 2.0
+        # receivers, floor-truncated (identical to the old int() cast)
+        # for MIDI 1.0. Quantize the dedup to ~1/100 step so the wire
+        # rate stays comparable to the integer days.
+        value = max(0.0, min(127.0, center + raw * half_depth))
+        value = round(value, 2)
 
         if value != self._last_value:
             self._last_value = value
             self.send_cc(out_ch, cc_num, value)
-            self.set_display("level", value)
+            self.set_display("level", int(value))

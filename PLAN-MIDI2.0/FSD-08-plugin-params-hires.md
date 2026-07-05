@@ -3,6 +3,26 @@
 **Step:** 4 · **Depends on:** FSD-03, FSD-06 (FSD-07 recommended first
 for the D1 pattern) · **Parallel with:** FSD-10
 
+## Status (2026-07-05): implemented
+
+- Plugin clients run at midi_version=2 on capable systems; inbound UMP
+  is shimmed via ump.to_monitor_shim (SKIP_EVENT sentinel keeps the
+  drain loop honest), so plugins keep the 0-127 API (D3) and dispatch
+  code is unchanged except the CC-binding walk.
+- _cc_to_param: lattice inputs use the legacy integer math verbatim
+  (unit-tested over the full domain); off-lattice inputs map in float.
+  New `fine`/`decimals` flags on Param (schema-exported); fine params
+  round to their declared decimals, shipped on CC LFO Depth + Center.
+- Fader UI steps/displays at fine precision; renderparam passes the
+  flags. Learn already works via the FSD-05 monitor shims.
+- Live on A6DC: fake_midi2_synth CC75 → cc_lfo depth tracks
+  fractionally (126.9 → 114.8 → 79.9), zero errors; 1.0 path
+  byte-identical by golden tests.
+- **Deferred:** wheel per-integer-tick threshold for very large ranges
+  (fine params keep 0-127 ranges, so not yet needed); knob/wheel fine
+  display (fader was the shipped candidate); plugin-param SSE floats
+  work via the untouched pass-through payloads.
+
 ## Goal
 
 CC automation of plugin parameters uses the controller's full

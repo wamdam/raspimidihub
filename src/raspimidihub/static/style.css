@@ -3074,3 +3074,12 @@ body.spectator-mode * { scrollbar-width: none; }
 .rack-cables.peek path.wire.hl { opacity: 1; stroke-width: 4.5; filter: drop-shadow(0 0 7px currentColor); }
 .rack-cables.peek circle.plug.hl, .rack-cables.peek .fdot.hl { opacity: 1; }
 
+
+/* --- MIDI 2.0 capability badge (matrix row headers, rack faceplates) --- */
+.midi2-badge {
+    display: inline-block; margin-left: 4px; padding: 0 3px;
+    font-size: 8px; font-weight: 700; line-height: 12px;
+    border-radius: 3px; letter-spacing: .5px; vertical-align: middle;
+    background: var(--accent); color: var(--bg, #fff);
+}
+.midi2-badge.forced { opacity: .45; text-decoration: line-through; }

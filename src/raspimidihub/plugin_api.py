@@ -54,6 +54,13 @@ class Param:
     # controls that would duplicate / crowd the same params already
     # visible in fullscreen.
     play_only: bool = field(default=False, kw_only=True)
+    # Fine-resolution param (FSD-08): values are floats with `decimals`
+    # places instead of integers. Bound MIDI 2.0 controllers drive the
+    # param at their full resolution; MIDI 1.0 controllers and the UI
+    # wheel still work, just coarser. Only meaningful on ranged types
+    # (Wheel / Knob / Fader).
+    fine: bool = field(default=False, kw_only=True)
+    decimals: int = field(default=2, kw_only=True)
 
     def to_dict(self) -> dict:
         d = {"type": self.__class__.__name__.lower(), "name": self.name, "label": self.label}
@@ -65,6 +72,9 @@ class Param:
             d["config_only"] = True
         if self.play_only:
             d["play_only"] = True
+        if self.fine:
+            d["fine"] = True
+            d["decimals"] = self.decimals
         return d
 
 
@@ -736,6 +746,14 @@ class PluginBase:
     # like Clock Divider must not feed the bus or they'd pollute the
     # system's tempo perception with their own divided output.
     feeds_clock_bus: bool = False
+
+    # --- Hi-res input (FSD-09) ---
+    # Opt-in: when True (and the system is MIDI 2.0 capable), on_note_on
+    # velocity and on_cc value arrive as FLOAT MIDI units (0.0-127.0)
+    # carrying the full controller resolution. 7-bit sources still
+    # deliver exact integers (as floats), so int-based math keeps
+    # working; plugins that never opt in keep plain ints forever (D3).
+    wants_hires_input: bool = False
 
     # --- Surface kind ---
     # Which top-level UI panel this plugin's instances appear in:

@@ -21,7 +21,14 @@ log = logging.getLogger(__name__)
 
 # Default: all channels, all message types pass through
 ALL_CHANNELS = 0xFFFF  # bits 0-15 = channels 1-16
-ALL_MSG_TYPES = {"note", "cc", "pc", "pitchbend", "aftertouch", "sysex", "clock"}
+# "midi2" gates the MIDI 2.0-only per-note messages (per-note CC /
+# pitch bend / management) that have no MIDI 1.0 form. RPN/NRPN gate
+# under "cc" (their 1.0 wire form IS a CC sequence).
+ALL_MSG_TYPES = {"note", "cc", "pc", "pitchbend", "aftertouch", "sysex",
+                 "clock", "midi2"}
+# The pre-MIDI-2.0 full set: filters saved by older builds that allowed
+# everything keep allowing everything (see MidiFilter.from_dict).
+_LEGACY_ALL_MSG_TYPES = ALL_MSG_TYPES - {"midi2"}
 
 
 # --- Mapping types ---
@@ -44,10 +51,12 @@ class MidiMapping:
     #   None = any note (wildcard). Useful with cc_value_source="velocity"
     #   to turn every keypress into a CC sweep, or with NOTE_TO_NOTE to
     #   fold a whole keyboard onto a single pitch.
+    # Value fields are fractional MIDI units (decision D2): ints and
+    # floats are both valid; whole numbers serialize back as ints.
     src_note: int | None = None      # Note number to match, or None for any
     dst_cc: int | None = None        # CC number to output
-    cc_on_value: int = 127           # CC value when note on (cc_value_source=fixed)
-    cc_off_value: int = 0            # CC value when note off (always sent on release)
+    cc_on_value: float = 127         # CC value when note on (cc_value_source=fixed)
+    cc_off_value: float = 0          # CC value when note off (always sent on release)
     # Note→CC value source: "fixed" uses cc_on_value/cc_off_value; "velocity"
     # forwards the note-on velocity (0-127) as the CC value and still uses
     # cc_off_value on release so the CC has a defined off-state.
@@ -57,14 +66,19 @@ class MidiMapping:
     # CC→CC fields
     src_cc: int | None = None        # CC number to match
     dst_cc_num: int | None = None    # Output CC number (None = same as src)
-    in_range_min: int = 0            # Input range min
-    in_range_max: int = 127          # Input range max
-    out_range_min: int = 0           # Output range min
-    out_range_max: int = 127         # Output range max
+    in_range_min: float = 0          # Input range min (MIDI units)
+    in_range_max: float = 127        # Input range max
+    out_range_min: float = 0         # Output range min
+    out_range_max: float = 127       # Output range max
     # Channel remap fields
     dst_channel: int | None = None   # Target channel (0-15)
     # Behavior
     pass_through: bool = False       # Also forward the original event
+
+    @staticmethod
+    def _num(v):
+        """Serialize whole numbers as ints (diff-friendly configs)."""
+        return int(v) if isinstance(v, float) and v.is_integer() else v
 
     def to_dict(self) -> dict:
         d = {"type": self.type.value}
@@ -77,8 +91,8 @@ class MidiMapping:
         if self.type in (MappingType.NOTE_TO_CC, MappingType.NOTE_TO_CC_TOGGLE):
             d["src_note"] = self.src_note
             d["dst_cc"] = self.dst_cc
-            d["cc_on_value"] = self.cc_on_value
-            d["cc_off_value"] = self.cc_off_value
+            d["cc_on_value"] = self._num(self.cc_on_value)
+            d["cc_off_value"] = self._num(self.cc_off_value)
             if self.type == MappingType.NOTE_TO_CC and self.cc_value_source != "fixed":
                 d["cc_value_source"] = self.cc_value_source
         elif self.type == MappingType.NOTE_TO_NOTE:
@@ -87,10 +101,10 @@ class MidiMapping:
         elif self.type == MappingType.CC_TO_CC:
             d["src_cc"] = self.src_cc
             d["dst_cc_num"] = self.dst_cc_num
-            d["in_range_min"] = self.in_range_min
-            d["in_range_max"] = self.in_range_max
-            d["out_range_min"] = self.out_range_min
-            d["out_range_max"] = self.out_range_max
+            d["in_range_min"] = self._num(self.in_range_min)
+            d["in_range_max"] = self._num(self.in_range_max)
+            d["out_range_min"] = self._num(self.out_range_min)
+            d["out_range_max"] = self._num(self.out_range_max)
         return d
 
     @staticmethod
@@ -127,6 +141,54 @@ class MidiMapping:
             return self.out_range_min
         scaled = (val - self.in_range_min) / in_span * out_span + self.out_range_min
         return max(0, min(127, int(round(scaled))))
+
+
+# UMP message kind → filter group. Mirrors the legacy allows_event
+# outcome for kinds with a 1.0 equivalent (poly pressure gates under
+# "note", matching MSG_FILTER_GROUPS iteration order); RPN/NRPN gate
+# under "cc" (their 1.0 wire form is a CC sequence); the 2.0-only
+# per-note messages gate under the new "midi2" group.
+_UMP_KIND_TO_GROUP = {
+    "note_on": "note", "note_off": "note", "poly_pressure": "note",
+    "cc": "cc", "rpn": "cc", "nrpn": "cc", "rel_rpn": "cc", "rel_nrpn": "cc",
+    "program": "pc", "pitch_bend": "pitchbend", "chan_pressure": "aftertouch",
+    "per_note_rcc": "midi2", "per_note_acc": "midi2",
+    "per_note_bend": "midi2", "per_note_mgmt": "midi2",
+}
+_SYSTEM_CLOCK_STATUSES = {0xF8, 0xF9, 0xFA, 0xFB, 0xFC, 0xFE}
+_MIDI1_STATUS_TO_GROUP = {0x80: "note", 0x90: "note", 0xA0: "note",
+                          0xB0: "cc", 0xC0: "pc", 0xD0: "aftertouch",
+                          0xE0: "pitchbend"}
+
+
+def _classify_ump(words):
+    """(group, channel, msg) for one UMP packet.
+
+    group None = passes unconditionally (unknown/opaque types, same as
+    the legacy path's unknown-event behaviour); "_drop" = never
+    forwarded (utility/JR per D5, stream metadata). msg is the decoded
+    UmpMessage only for kinds that mappings can act on.
+    """
+    from . import ump as _u
+    mt = (words[0] >> 28) & 0xF
+    if mt in (_u.MT_UTILITY, _u.MT_STREAM):
+        return "_drop", None, None
+    if mt == _u.MT_DATA64:
+        return "sysex", None, None
+    if mt == _u.MT_SYSTEM:
+        status = (words[0] >> 16) & 0xFF
+        return ("clock" if status in _SYSTEM_CLOCK_STATUSES else None), None, None
+    if mt == _u.MT_MIDI2_CV:
+        m = _u.decode(words)
+        if m is None:
+            return None, None, None
+        return _UMP_KIND_TO_GROUP.get(m.kind), m.channel, m
+    if mt == _u.MT_MIDI1_CV:
+        # Shouldn't occur on a MIDI 2.0 client (the kernel converts),
+        # but gate it correctly if it does; opaque to mappings.
+        status = (words[0] >> 16) & 0xF0
+        return _MIDI1_STATUS_TO_GROUP.get(status), (words[0] >> 16) & 0x0F, None
+    return None, None, None  # Flex Data / SysEx8 / reserved: opaque pass
 
 
 def validate_new_mapping(existing: list["MidiMapping"],
@@ -288,9 +350,16 @@ class MidiFilter:
 
     @staticmethod
     def from_dict(data: dict) -> "MidiFilter":
+        msg_types = set(data.get("msg_types", ALL_MSG_TYPES))
+        # Migration: a filter saved before the "midi2" group existed
+        # that allowed every then-known type keeps allowing everything.
+        # (A filter with deliberate deselections stays as saved — the
+        # new group arrives unticked there.)
+        if msg_types == _LEGACY_ALL_MSG_TYPES:
+            msg_types = ALL_MSG_TYPES.copy()
         return MidiFilter(
             channel_mask=data.get("channel_mask", ALL_CHANNELS),
-            msg_types=set(data.get("msg_types", ALL_MSG_TYPES)),
+            msg_types=msg_types,
         )
 
 
@@ -524,6 +593,142 @@ class FilterEngine:
         ev.data.control.param = cc
         ev.data.control.value = value
         self._forward_event(ev, fc)
+
+    # --- UMP (MIDI 2.0) path — used when the engine's seq client runs
+    # at midi_version=2. The kernel then delivers every filtered-edge
+    # event as a UMP packet (1.0 sources arrive up-converted) and
+    # down-converts our output for 1.0 receivers. Semantics mirror the
+    # legacy path exactly for 7-bit-lattice values (golden-tested);
+    # genuine hi-res values scale in float MIDI units (decision D2).
+
+    def process_ump(self, uev) -> bool:
+        """UMP counterpart of process_event. Returns True if at least
+        one connection forwarded or mapped the packet."""
+        words = uev.ump_words
+        src_client, src_port = uev.source.client, uev.source.port
+        forwarded = False
+        decoded = False
+        group = channel = msg = None
+        for fc in self._filtered.values():
+            if fc.src_client != src_client or fc.src_port != src_port:
+                continue
+            if uev.dest.client != self._seq.client_id or uev.dest.port != fc._read_port:
+                continue
+            if not decoded:
+                decoded = True
+                group, channel, msg = _classify_ump(words)
+                if group == "_drop":
+                    return False  # utility/JR (D5) + stream metadata
+            if group is not None:
+                if group not in fc.filter.msg_types:
+                    continue
+                if channel is not None and not (fc.filter.channel_mask & (1 << channel)):
+                    continue
+            if fc.mappings and msg is not None:
+                if self._apply_mappings_ump(msg, words, fc):
+                    forwarded = True
+                    continue
+                forwarded = True
+            self._forward_ump(words, fc)
+            forwarded = True
+        return forwarded
+
+    def _forward_ump(self, words, fc: FilteredConnection) -> None:
+        from .alsa_seq import SND_SEQ_ADDRESS_SUBSCRIBERS
+        self._seq.send_ump(words, SND_SEQ_ADDRESS_SUBSCRIBERS, 0,
+                           source_port=fc._write_port)
+
+    def _forward_cc_ump(self, fc: FilteredConnection, group: int,
+                        channel: int, cc: int, value32: int) -> None:
+        from . import ump as _u
+        self._forward_ump(_u.cc(group, channel, cc, value32), fc)
+
+    def _apply_mappings_ump(self, m, words, fc: FilteredConnection) -> bool:
+        """Mapping semantics on a decoded UMP message. Mirrors
+        _apply_mappings; returns True if the event was consumed."""
+        from . import midi_scale as _ms
+        ch = m.channel
+        is_note = m.kind in ("note_on", "note_off")
+        consumed = False
+        for idx, mp in enumerate(fc.mappings):
+            if mp.src_channel is not None and ch != mp.src_channel:
+                continue
+
+            if mp.type == MappingType.NOTE_TO_CC:
+                if is_note and (mp.src_note is None or m.note == mp.src_note) \
+                        and mp.dst_cc is not None:
+                    # In MIDI 2.0 a vel-0 note-on is a note-ON (the
+                    # kernel translates 1.0 vel-0 note-ons to note_off
+                    # before they reach us, so 1.0 semantics hold).
+                    is_on = m.kind == "note_on"
+                    if is_on and mp.cc_value_source == "velocity":
+                        val32 = _ms.scale_up(m.velocity, 16, 32)
+                    else:
+                        val32 = _ms.from_midi_units(
+                            float(mp.cc_on_value if is_on else mp.cc_off_value))
+                    out_ch = mp.dst_channel if mp.dst_channel is not None else ch
+                    self._forward_cc_ump(fc, m.group, out_ch, mp.dst_cc, val32)
+                    if not mp.pass_through:
+                        consumed = True
+
+            elif mp.type == MappingType.NOTE_TO_CC_TOGGLE:
+                if is_note and mp.src_note is not None and m.note == mp.src_note \
+                        and mp.dst_cc is not None:
+                    if m.kind == "note_on":
+                        toggled = not fc._toggle_state.get(idx, False)
+                        fc._toggle_state[idx] = toggled
+                        val32 = _ms.from_midi_units(
+                            float(mp.cc_on_value if toggled else mp.cc_off_value))
+                        out_ch = mp.dst_channel if mp.dst_channel is not None else ch
+                        self._forward_cc_ump(fc, m.group, out_ch, mp.dst_cc, val32)
+                    if not mp.pass_through:
+                        consumed = True
+
+            elif mp.type == MappingType.NOTE_TO_NOTE:
+                if is_note and (mp.src_note is None or m.note == mp.src_note) \
+                        and mp.dst_note is not None:
+                    w0 = (words[0] & ~0x0000FF00) | ((mp.dst_note & 0x7F) << 8)
+                    if mp.dst_channel is not None:
+                        w0 = (w0 & ~0x000F0000) | ((mp.dst_channel & 0xF) << 16)
+                    self._forward_ump((w0, words[1]), fc)
+                    if not mp.pass_through:
+                        consumed = True
+
+            elif mp.type == MappingType.CC_TO_CC:
+                if m.kind == "cc" and mp.src_cc is not None and m.index == mp.src_cc:
+                    out_cc = mp.dst_cc_num if mp.dst_cc_num is not None else mp.src_cc
+                    val32 = m.value
+                    v7 = val32 >> 25
+                    if _ms.scale_up(v7, 7, 32) == val32:
+                        # 7-bit-lattice input (1.0 source upscaled by the
+                        # kernel): use the legacy integer math verbatim so
+                        # results are byte-identical, rounding quirks
+                        # included.
+                        out32 = _ms.scale_up(mp._scale_value(v7), 7, 32)
+                    else:
+                        units = _ms.to_midi_units(val32, 32)
+                        in_span = mp.in_range_max - mp.in_range_min
+                        out_span = mp.out_range_max - mp.out_range_min
+                        if in_span == 0:
+                            scaled = float(mp.out_range_min)
+                        else:
+                            scaled = ((units - mp.in_range_min) / in_span
+                                      * out_span + mp.out_range_min)
+                        out32 = _ms.from_midi_units(max(0.0, min(127.0, scaled)))
+                    out_ch = mp.dst_channel if mp.dst_channel is not None else ch
+                    self._forward_cc_ump(fc, m.group, out_ch, out_cc, out32)
+                    if not mp.pass_through:
+                        consumed = True
+
+            elif mp.type == MappingType.CHANNEL_MAP:
+                if mp.dst_channel is not None:
+                    # MT 0x2 and MT 0x4 both keep the channel in bits
+                    # 16-19 of word 0.
+                    w0 = (words[0] & ~0x000F0000) | ((mp.dst_channel & 0xF) << 16)
+                    self._forward_ump((w0,) + tuple(words[1:]), fc)
+                    consumed = True
+
+        return consumed
 
     def _apply_mappings(self, ev: SndSeqEvent, fc: FilteredConnection) -> bool:
         """Apply mappings to an event. Returns True if the event was consumed."""

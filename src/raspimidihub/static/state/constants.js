@@ -2,8 +2,8 @@
  * Shared constants and tiny pure helpers used across the app.
  */
 
-export const MSG_TYPES = ['note', 'cc', 'pc', 'pitchbend', 'aftertouch', 'sysex', 'clock'];
-export const MSG_LABELS = { note: 'Notes', cc: 'CC', pc: 'Program', pitchbend: 'Pitch Bend', aftertouch: 'Aftertouch', sysex: 'SysEx', clock: 'Clock/RT' };
+export const MSG_TYPES = ['note', 'cc', 'pc', 'pitchbend', 'aftertouch', 'sysex', 'clock', 'midi2'];
+export const MSG_LABELS = { note: 'Notes', cc: 'CC', pc: 'Program', pitchbend: 'Pitch Bend', aftertouch: 'Aftertouch', sysex: 'SysEx', clock: 'Clock/RT', midi2: 'MIDI 2.0' };
 
 export const MAPPING_TYPES = [
     { value: 'note_to_cc', label: 'Note \u2192 CC' },

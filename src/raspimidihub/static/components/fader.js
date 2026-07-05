@@ -8,7 +8,7 @@ import { useState, useEffect, useRef } from '../lib/hooks.module.js';
 // =======================================================================
 // FADER — mixer-strip style
 // =======================================================================
-export function PluginFader({ name, label, min, max, value, onChange, vertical, suffix, displayFactor, displayFormat, onBindRequest }) {
+export function PluginFader({ name, label, min, max, value, onChange, vertical, suffix, displayFactor, displayFormat, onBindRequest, fine, decimals }) {
     const trackRef = useRef(null);
     const onChangeRef = useRef(onChange);
     onChangeRef.current = onChange;
@@ -32,7 +32,10 @@ export function PluginFader({ name, label, min, max, value, onChange, vertical, 
                 ? 1 - (clientY - rect.top) / rect.height
                 : (clientX - rect.left) / rect.width;
             ratio = Math.max(0, Math.min(1, ratio));
-            return Math.round(min + ratio * (max - min));
+            const raw = min + ratio * (max - min);
+            // Fine params step at their declared precision instead of 1
+            if (fine) return +raw.toFixed(decimals != null ? decimals : 2);
+            return Math.round(raw);
         }
 
         function handleMove(clientX, clientY) {
@@ -135,7 +138,7 @@ export function PluginFader({ name, label, min, max, value, onChange, vertical, 
         <div class="fader-track ${vertical ? 'vertical' : ''}" ref=${trackRef}>
             <div class="fader-fill" style=${fillStyle}></div>
             <div class="fader-thumb" style=${thumbStyle}>
-                <span class="fader-thumb-val">${displayFactor ? ((val * displayFactor) % 1 === 0 ? (val * displayFactor) : (val * displayFactor).toFixed(1)) + (displayFormat || '') : val + (suffix || '')}</span>
+                <span class="fader-thumb-val">${displayFactor ? ((val * displayFactor) % 1 === 0 ? (val * displayFactor) : (val * displayFactor).toFixed(1)) + (displayFormat || '') : (fine ? (+val).toFixed(decimals != null ? decimals : 2) : val) + (suffix || '')}</span>
             </div>
         </div>
     </div>`;

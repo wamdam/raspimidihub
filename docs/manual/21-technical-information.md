@@ -92,6 +92,26 @@ service uses the standard library exclusively. The optional
 `python3-dbus-next` package is recommended (and pulled by the
 `raspimidihub` deb's Recommends) for Bluetooth support.
 
+## MIDI 2.0 Kernel Requirements
+
+The hub detects at startup whether the system can speak MIDI 2.0
+(UMP) and reports the result in `GET /api/system` under `midi2`.
+Two things must both be present:
+
+- **alsa-lib ≥ 1.2.10** — shipped by Raspberry Pi OS Trixie
+  (1.2.14). Bookworm's 1.2.8 predates UMP entirely.
+- **A kernel with the UMP options enabled** (`CONFIG_SND_SEQ_UMP`,
+  `CONFIG_SND_USB_AUDIO_MIDI_V2`, `CONFIG_SND_UMP`). Stock
+  Raspberry Pi OS kernels currently ship with these **off** — the
+  request to enable them is tracked upstream
+  (raspberrypi/linux#7474). Without them the hub runs exactly as
+  before: MIDI 2.0 devices fall back to their mandatory MIDI 1.0
+  mode and every feature works at classic resolution.
+
+When the kernel side is missing, the startup log shows
+`UMP (MIDI 2.0) support: kernel=no` and all MIDI 2.0 features stay
+dormant; nothing needs configuring.
+
 The web UI is **Preact + HTM**, served as static assets. No build
 step. No npm.
 

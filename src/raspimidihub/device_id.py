@@ -426,6 +426,7 @@ class DeviceRegistry:
 
     def scan(self, alsa_client_ids: list[int],
              client_names: dict[int, str] | None = None,
+             ump_virtual: set[int] | None = None,
              ) -> dict[int, StableDeviceInfo]:
         """Scan and register devices for the given ALSA client IDs.
 
@@ -433,7 +434,13 @@ class DeviceRegistry:
         mapping. When provided, BlueALSA-managed BLE-MIDI clients are
         detected by name and registered with `bt-<MAC>` stable ids.
         Caller passes None for non-BT setups to skip the bluetoothctl
-        subprocess entirely."""
+        subprocess entirely.
+
+        `ump_virtual` lists client ids of card-less user clients that
+        declared a UMP endpoint (virtual MIDI 2.0 devices — soft
+        synths, test peers): they register with a name-keyed
+        `ump-<name>` stable id so connections, renames and MIDI-CI
+        results survive reconnects."""
         self._by_client.clear()
         self._by_stable_id.clear()
 
@@ -476,6 +483,18 @@ class DeviceRegistry:
 
             card_num = alsa_client_to_card(client_id)
             if card_num is None:
+                # Virtual MIDI 2.0 device (UMP-declared user client):
+                # no sysfs identity — key on the endpoint/client name.
+                if ump_virtual and client_id in ump_virtual and name:
+                    slug = "".join(c if c.isalnum() else "-"
+                                   for c in name.lower()).strip("-")
+                    info = StableDeviceInfo(
+                        stable_id=f"ump-{slug}",
+                        vid="", pid="", usb_path="",
+                        card_num=-1,
+                        display_name=name,
+                    )
+                    self._register(client_id, info, seen_ids)
                 continue
 
             info = get_card_stable_id(card_num)

@@ -2,6 +2,28 @@
 
 **Step:** 1 · **Depends on:** FSD-02 · **Parallel with:** FSD-06, FSD-10
 
+## Status (2026-07-05): implemented (backend)
+
+- Capability fields live on `MidiDevice` (filled by `_fill_ump_info`
+  during both scans); `GET /api/devices` carries `midi2 = {protocol,
+  capable, forced_midi1, endpoint_name, product_id, function_blocks}`.
+- Port policy implemented as pure `apply_ump_port_policy` (unit
+  tested): ≥2 FBs → named group ports, catch-all hidden; ≤1 FB →
+  endpoint port only; inactive group ports dropped via
+  `SND_SEQ_PORT_CAP_INACTIVE`.
+- **Design deviation from §2:** no stable-ID `#g` suffix — UMP group
+  ports have stable kernel port numbers (group N = port N), so the
+  existing stable_id + port-number config resolution works unchanged.
+- `midi2.force_midi1` config block + `POST
+  /api/devices/{id}/force-midi1` action (persisted, masks `protocol`
+  in the API payload). Verified live on A6DC (round-trip into config).
+- Endpoint/FB reading verified live against a fake 2-FB UMP peer
+  ("Keys"/"Pads" blocks read back correctly by a second client).
+- **Open (needs a real UMP *kernel* client, i.e. gadget or hardware):**
+  matrix rows from FB ports end-to-end — the fake peer is a *user*
+  client, which the device scan intentionally skips; FB-change
+  hotplug behaviour on live hardware.
+
 ## Goal
 
 Teach `MidiEngine` and the device registry that UMP endpoints exist:

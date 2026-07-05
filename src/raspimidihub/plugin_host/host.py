@@ -20,7 +20,7 @@ from ..plugin_api import (
     params_to_dicts,
 )
 from ..runtime.coalesce import TrailingCoalescer
-from .alsa_client import PluginAlsaClient
+from .alsa_client import SKIP_EVENT, PluginAlsaClient
 from .clock_bus import ClockBus
 from .instance import PluginInstance
 
@@ -465,6 +465,8 @@ class PluginHost:
                         ev = alsa_client.read_event()
                         if ev is None:
                             break
+                        if ev is SKIP_EVENT:
+                            continue
                         if ev.type not in _logged_types:
                             _logged_types.add(ev.type)
                             log.info("Plugin %s first event type=%d from %d:%d",
@@ -512,7 +514,14 @@ class PluginHost:
         try:
             if ev.type == MidiEventType.NOTEON:
                 if ev.data.note.velocity > 0:
-                    plugin.on_note_on(ev.data.note.channel, ev.data.note.note, ev.data.note.velocity)
+                    vel = ev.data.note.velocity
+                    hires = getattr(ev, "hires", None)
+                    if hires and plugin.wants_hires_input \
+                            and "velocity_f" in hires:
+                        # Float MIDI units; exact ints for 7-bit sources
+                        # (lattice snap in the shim).
+                        vel = hires["velocity_f"]
+                    plugin.on_note_on(ev.data.note.channel, ev.data.note.note, vel)
                 else:
                     plugin.on_note_off(ev.data.note.channel, ev.data.note.note)
             elif ev.type == MidiEventType.NOTEOFF:
@@ -521,6 +530,17 @@ class PluginHost:
                 cc_num = ev.data.control.param
                 cc_val = ev.data.control.value
                 cc_ch = ev.data.control.channel
+                # 32-bit value from a MIDI 2.0 client's shim (None on
+                # legacy clients / plain 7-bit sources).
+                hires = getattr(ev, "hires", None)
+                cc_val32 = hires.get("value32") if hires else None
+                # Opted-in plugins get float MIDI units in on_cc (exact
+                # ints for 7-bit sources); the binding walk always uses
+                # the int + value32 pair.
+                on_cc_val = cc_val
+                if hires and plugin.wants_hires_input \
+                        and "value_f" in hires:
+                    on_cc_val = hires["value_f"]
                 # Walk the per-instance cc_map. Multiple params may bind
                 # to the same CC (collisions are intentional — one CC
                 # can drive several controls); each matching entry fires
@@ -534,10 +554,10 @@ class PluginHost:
                     b_ch = binding.get("ch")
                     if b_ch is not None and b_ch != cc_ch:
                         continue
-                    self._cc_to_param(instance, param_name, cc_val)
+                    self._cc_to_param(instance, param_name, cc_val, cc_val32)
                     matched = True
                 if not matched:
-                    plugin.on_cc(cc_ch, cc_num, cc_val)
+                    plugin.on_cc(cc_ch, cc_num, on_cc_val)
             elif ev.type == MidiEventType.PITCHBEND:
                 plugin.on_pitchbend(ev.data.control.channel, ev.data.control.value)
             elif ev.type == MidiEventType.CHANPRESS:
@@ -564,8 +584,18 @@ class PluginHost:
             instance.crash_error = f"Callback timeout ({elapsed:.1f}s)"
             instance.running = False
 
-    def _cc_to_param(self, instance: PluginInstance, param_name: str, cc_value: int) -> None:
-        """Map a CC value (0-127) to a param's range and update it."""
+    def _cc_to_param(self, instance: PluginInstance, param_name: str,
+                     cc_value: int, cc_value32: int | None = None) -> None:
+        """Map a CC value to a param's range and update it.
+
+        cc_value is the classic 7-bit value; cc_value32 (when the
+        plugin client runs at MIDI 2.0) is the full 32-bit controller
+        value. 7-bit-lattice values use the legacy integer math so 1.0
+        controllers behave byte-identically; genuine hi-res values map
+        in float — visible as intermediate steps on integer params and
+        as full resolution on params declared `fine`.
+        """
+        from .. import midi_scale as _ms
         all_params = get_all_params(instance.plugin.__class__.params)
         param_def = None
         for p in all_params:
@@ -576,15 +606,23 @@ class PluginHost:
         if param_def is None:
             return
 
-        # Map 0-127 to param range
+        if cc_value32 is not None and _ms.scale_up(cc_value, 7, 32) != cc_value32:
+            t = _ms.to_midi_units(cc_value32, 32) / 127.0
+        else:
+            t = cc_value / 127.0
+
+        # Map normalized position to param range
         if hasattr(param_def, "min") and hasattr(param_def, "max"):
             pmin = param_def.min
             pmax = param_def.max
-            value = pmin + (cc_value / 127) * (pmax - pmin)
-            value = round(value)
+            value = pmin + t * (pmax - pmin)
+            if getattr(param_def, "fine", False):
+                value = round(value, getattr(param_def, "decimals", 2))
+            else:
+                value = round(value)
         elif hasattr(param_def, "options"):
             # Radio: map to option index
-            idx = round(cc_value / 127 * (len(param_def.options) - 1))
+            idx = round(t * (len(param_def.options) - 1))
             value = param_def.options[idx]
         elif isinstance(param_def, type) and issubclass(param_def.__class__, type):
             value = cc_value

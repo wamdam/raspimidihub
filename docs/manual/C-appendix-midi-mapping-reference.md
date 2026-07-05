@@ -4,6 +4,14 @@ A flat reference for every mapping type, every parameter on the
 mapping form, and the underlying behaviour. The walkthrough is in
 chapter 10; this appendix is the lookup.
 
+Value fields are **MIDI units**: the familiar 0--127 scale, with
+fractional values (e.g. `63.5`) accepted since MIDI 2.0 support.
+Whole numbers behave exactly as they always did; fractions carry
+extra precision to MIDI 2.0 destinations and round for MIDI 1.0
+ones. On a MIDI 2.0 connection the mapping engine computes in full
+resolution — a hi-res controller swept through a CC → CC range
+remap stays stepless.
+
 ## Mapping types
 
 | Type | Source event | Output event(s) |

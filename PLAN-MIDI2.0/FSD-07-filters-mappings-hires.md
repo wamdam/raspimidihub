@@ -3,6 +3,36 @@
 **Step:** 3 · **Depends on:** FSD-03, FSD-06 · **Parallel with:** FSD-08
 (coordinate on decision D1 client strategy)
 
+## Status (2026-07-05): implemented (commit a7959c6)
+
+- Main client flipped to midi_version=2 (not just the per-edge ports —
+  they live on the main client); announce/hotplug/classic sends
+  verified working on the v2 client (hotplug sim, test sender, panic).
+- Golden equivalence implemented as *live pairwise tests* (legacy path
+  vs UMP path over the full 7-bit domain, all 5 types + toggle
+  sequences) instead of a committed fixture — the legacy code stays
+  untouched as the reference. Mapped scalar outputs snap to legacy
+  integer math for lattice inputs (§design), float MIDI units
+  otherwise.
+- Filter-group decision: **RPN/NRPN gate under "cc"**, per-note
+  messages under a new **"midi2"** group (8th toggle, shipped);
+  old all-allowing saved filters migrate to include it.
+- Live-verified on A6DC end-to-end: LFO → filtered edge → Keystation;
+  write-port tap shows 7-bit for a legacy reader and 32-bit for a
+  UMP reader simultaneously.
+- **Open:** fractional *entry* widgets in the mapping form (values
+  render + persist; typing fractions rides with FSD-08's fine-value
+  widgets). Perf guardrail **measured and passed 2026-07-05**: CC LFO through
+  a filtered edge, 90 s windows, A6DC (UMP path) vs the untouched
+  5A5D reference (5.2.0b1 legacy path): midi_in_midi_out windowed
+  max 0.5-0.7 ms vs 0.2-0.6 ms (~+0.3 ms UMP decode cost, well
+  inside the documented 1-3 ms envelope); loop_lag p50/p95/p99
+  statistically identical (0.86/1.99/2.83 vs 0.95/1.99/2.79 ms).
+  Observation from the measurement: live UNSAVED plugin edges are
+  torn down by hotplug rescans on the stock build too (pre-existing
+  semantics, not a branch regression — verified on 5A5D). Hi-res *source* verification needs 2.0
+  hardware, as everywhere.
+
 ## Goal
 
 Filtered/mapped edges stop being a resolution bottleneck: when both

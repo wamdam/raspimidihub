@@ -142,7 +142,10 @@ is `free`.
 ## CC LFO
 
 Generates a CC waveform on the output. Five wave shapes; free-run
-or clock-synced rate up to 8 bars; live scope display.
+or clock-synced rate up to 8 bars; live scope display. On a MIDI
+2.0-capable hub the waveform is emitted at full 32-bit resolution --
+stepless into MIDI 2.0 destinations, while MIDI 1.0 destinations
+receive exactly the classic 0--127 steps.
 
 | Group | Parameter | Type | Range | Default |
 |-------|-----------|------|-------|---------|
@@ -152,8 +155,8 @@ or clock-synced rate up to 8 bars; live scope display.
 | Timing | **Frequency** | Fader | 0.1--20.0 Hz (raw 1--200) | 0.5 Hz (CC 74 default) |
 | Output | **Channel** | ChannelSelect | 1--16 | 1 |
 | Output | **CC #** | Wheel | 0--127 | 1 |
-| Output | **Depth** | Fader | 0--127 | 127 (CC 75 default) |
-| Output | **Center** | Fader | 0--127 | 64 (CC 76 default) |
+| Output | **Depth** | Fader (fine, 1 decimal) | 0--127 | 127 (CC 75 default) |
+| Output | **Center** | Fader (fine, 1 decimal) | 0--127 | 64 (CC 76 default) |
 
 **Input.** Clock (when **Sync to Clock** is on).
 **Output.** CC (the LFO stream).
@@ -167,7 +170,10 @@ the **Frequency** when off.
 
 Smooths jitter on a noisy CC input by interpolating between
 incoming values over a configurable window. Dual scope -- input
-and output side by side -- makes the smoothing visible.
+and output side by side -- makes the smoothing visible. On a MIDI
+2.0-capable hub the smoother reads and emits full resolution: the
+glide is stepless into 2.0 destinations while MIDI 1.0 destinations
+receive exactly the classic smoothed integers.
 
 | Parameter | Type | Range | Default |
 |-----------|------|-------|---------|
@@ -620,7 +626,9 @@ Trnsp.** is on).
 
 Remaps velocity through a drawable 128-point curve. Shape presets
 (linear, ease-in, ease-out, S-curve) are available along the
-canvas edge.
+canvas edge. On a MIDI 2.0-capable hub, fractional velocity from a
+2.0 keyboard is interpolated *between* curve points and re-emitted
+at full resolution; integer velocity behaves exactly as before.
 
 | Parameter | Type | Range | Default |
 |-----------|------|-------|---------|
@@ -635,7 +643,9 @@ canvas edge.
 ## Velocity Equalizer
 
 Normalises incoming velocity, either to a fixed value or by
-compressing / expanding the range.
+compressing / expanding the range. Compress / expand preserve a
+MIDI 2.0 keyboard's fine velocity gradations end to end; MIDI 1.0
+devices see the classic integer results.
 
 | Group | Parameter | Type | Range | Default |
 |-------|-----------|------|-------|---------|

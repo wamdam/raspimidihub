@@ -1,5 +1,6 @@
 """Velocity Curve — remap note velocity through a drawable curve."""
 
+from raspimidihub import midi_scale
 from raspimidihub.plugin_api import CurveEditor, PluginBase
 
 
@@ -25,10 +26,26 @@ accidental loud notes on a sensitive controller."""
     inputs = ["Notes", "All other events (pass-through)"]
     outputs = ["Notes (velocity remapped)", "All other events (pass-through)"]
 
+    # Float MIDI-unit velocity in (7-bit sources deliver exact ints),
+    # so hi-res keyboards keep their fine gradations through the curve.
+    wants_hires_input = True
+
     def on_note_on(self, channel, note, velocity):
         curve = self.get_param("curve")
         if curve and 0 <= velocity <= 127:
-            velocity = max(1, min(127, curve[velocity]))
+            # Evaluate the 128-point curve with linear interpolation
+            # between points for fractional velocity; integer velocity
+            # hits curve[v] exactly (legacy behaviour). Emit positioned
+            # in the legacy result's bucket: MIDI 1.0 receivers stay
+            # byte-identical, 2.0 receivers keep the fine trajectory.
+            i = int(velocity)
+            frac = velocity - i
+            lo = curve[i]
+            hi = curve[min(i + 1, 127)]
+            out = max(1.0, min(127.0, lo + frac * (hi - lo)))
+            anchor = max(1, min(127, curve[i] if frac == 0
+                                else int(round(out))))
+            velocity = midi_scale.units_in_bucket(anchor, out)
         self.send_note_on(channel, note, velocity)
 
     def on_note_off(self, channel, note):

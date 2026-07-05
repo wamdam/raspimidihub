@@ -1,5 +1,6 @@
 """Velocity Equalizer — normalize note velocities to a fixed value or compressed range."""
 
+from raspimidihub import midi_scale
 from raspimidihub.plugin_api import Group, PluginBase, Radio, Wheel
 
 
@@ -37,20 +38,34 @@ volume -- ideal for triggering samples where dynamics are unwanted."""
               "CC (long-press a Velocity / Min / Max wheel to bind)"]
     outputs = ["Notes (velocity adjusted)", "All other events (pass-through)"]
 
+    # Float MIDI-unit velocity in (7-bit sources deliver exact ints):
+    # hi-res keyboards keep their gradations through compress/expand.
+    wants_hires_input = True
+
     def on_note_on(self, channel, note, velocity):
         mode = self.get_param("mode") or "fixed"
         if mode == "fixed":
             velocity = self.get_param("fixed_vel") or 100
-        elif mode == "compress":
+        elif mode in ("compress", "expand"):
             lo = self.get_param("out_min") or 60
             hi = self.get_param("out_max") or 120
-            velocity = lo + round((velocity / 127) * (hi - lo))
-        elif mode == "expand":
-            lo = self.get_param("out_min") or 60
-            hi = self.get_param("out_max") or 120
-            # Expand: stretch to full 1-127 from narrow input
-            velocity = round(max(1, min(127, (velocity - lo) / max(1, hi - lo) * 127)))
-        self.send_note_on(channel, note, max(1, min(127, velocity)))
+            if mode == "compress":
+                out = lo + (velocity / 127) * (hi - lo)
+                anchor = lo + round((velocity / 127) * (hi - lo))
+            else:
+                # Expand: stretch to full 1-127 from narrow input
+                out = max(1.0, min(127.0,
+                                   (velocity - lo) / max(1, hi - lo) * 127))
+                anchor = round(out)
+            # Float trajectory positioned in the legacy round() bucket:
+            # MIDI 1.0 receivers stay byte-identical, 2.0 receivers get
+            # the fine gradations.
+            anchor = max(1, min(127, anchor))
+            velocity = midi_scale.units_in_bucket(anchor,
+                                                  max(1.0, min(127.0, out)))
+        self.send_note_on(channel, note,
+                          velocity if isinstance(velocity, float)
+                          else max(1, min(127, velocity)))
 
     def on_note_off(self, channel, note):
         self.send_note_off(channel, note)

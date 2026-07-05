@@ -207,6 +207,12 @@ export function DeviceDetailPanel({ device, onClose, showToast, refresh, pluginD
     const [clockBlocked, setClockBlocked] = useState(!!device.clock_blocked);
     useEffect(() => { setClockBlocked(!!device.clock_blocked); },
               [device.client_id, device.clock_blocked]);
+
+    // Force-MIDI-1.0 escape hatch for MIDI 2.0-capable devices.
+    const midi2 = device.midi2 || null;
+    const [forcedMidi1, setForcedMidi1] = useState(!!(midi2 && midi2.forced_midi1));
+    useEffect(() => { setForcedMidi1(!!(midi2 && midi2.forced_midi1)); },
+              [device.client_id, midi2 && midi2.forced_midi1]);
     const sid = device.stable_id || device.client_id;
     const _saved = useRef(JSON.parse(localStorage.getItem(`sender_${sid}`) || '{}'));
     const [sendChannel, _setSendChannel] = useState(_saved.current.ch || 0);
@@ -355,6 +361,22 @@ export function DeviceDetailPanel({ device, onClose, showToast, refresh, pluginD
     const formatEvent = (d) => {
         let s = d.event;
         if (d.channel != null) s += ` ch${d.channel}`;
+        if (d.proto === 2) {
+            // MIDI 2.0 source: show fractional MIDI units (0-127 with
+            // decimals); 1.0 sources keep the classic integer lines.
+            if (d.note != null && d.velocity_f != null)
+                s += ` ${noteName(d.note)} vel=${d.velocity_f.toFixed(2)}`;
+            else if (d.note != null && d.index != null)
+                s += ` ${noteName(d.note)} #${d.index}=${d.value_f?.toFixed(2)}`;
+            else if (d.note != null && d.value_f != null)
+                s += ` ${noteName(d.note)} ${d.value_f.toFixed(2)}`;
+            else if (d.note != null) s += ` ${noteName(d.note)}`;
+            else if (d.bank != null && d.index != null)
+                s += ` ${d.bank}.${d.index}=${d.value_f?.toFixed(2)}`;
+            else if (d.cc != null) s += ` cc${d.cc}=${d.value_f?.toFixed(2) ?? d.value}`;
+            else if (d.value_f != null) s += ` ${d.value_f.toFixed(2)}`;
+            return s;
+        }
         if (d.note != null) s += ` ${noteName(d.note)} vel=${d.velocity}`;
         if (d.cc != null) s += ` cc${d.cc}=${d.value}`;
         return s;
@@ -529,6 +551,85 @@ export function DeviceDetailPanel({ device, onClose, showToast, refresh, pluginD
                                 <span class="btn-text">${clockBlocked ? 'Off' : 'On'}</span>
                             </button>
                         </div>
+                    </div>
+                `}
+
+                ${/* MIDI 2.0 endpoint info + Force-MIDI-1.0 escape hatch.
+                    Only shown for devices whose endpoint declares MIDI 2.0
+                    capability; capability reflects what the device IS, the
+                    toggle controls whether the hub USES it. */ ''}
+                ${!isPlugin && midi2 && midi2.capable && html`
+                    <div class="card">
+                        <h3>MIDI 2.0</h3>
+                        <div style="font-size:11px;color:var(--text-dim);line-height:1.6;margin-bottom:8px">
+                            ${midi2.endpoint_name && html`<div>Endpoint: ${midi2.endpoint_name}</div>`}
+                            ${midi2.product_id && html`<div>Product ID: ${midi2.product_id}</div>`}
+                            ${(midi2.function_blocks || []).length > 0 && html`
+                                <div>Function blocks: ${midi2.function_blocks.map(b =>
+                                    `${b.name || '?'}${b.active ? '' : ' (inactive)'}`).join(', ')}</div>`}
+                        </div>
+                        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+                            <div style="flex:1">
+                                <div style="font-size:13px;font-weight:600">Use MIDI 2.0</div>
+                                <div style="font-size:11px;color:var(--text-dim);margin-top:2px;line-height:1.4">
+                                    Off = treat this device as MIDI 1.0. Use this if the
+                                    device misbehaves with MIDI 2.0 enabled.
+                                </div>
+                            </div>
+                            <button class="rubber-btn ${forcedMidi1 ? '' : 'active'}"
+                                onclick=${async () => {
+                                    const next = !forcedMidi1;
+                                    setForcedMidi1(next);
+                                    const r = await api(`/devices/${device.client_id}/force-midi1`, {
+                                        method: 'POST',
+                                        body: JSON.stringify({ enabled: next }),
+                                    });
+                                    if (!r || r.error) {
+                                        setForcedMidi1(!next);
+                                        showToast('Failed: ' + ((r && r.error) || 'unknown'));
+                                    } else {
+                                        showToast(next ? 'Forced to MIDI 1.0' : 'MIDI 2.0 enabled');
+                                        if (refresh) refresh();
+                                    }
+                                }}>
+                                <div class="btn-led green"></div>
+                                <span class="btn-text">${forcedMidi1 ? 'Off' : 'On'}</span>
+                            </button>
+                        </div>
+                    </div>
+                `}
+
+                ${/* MIDI-CI identity — filled in when the device answered
+                    the hub's Capability Inquiry (any MIDI generation; needs
+                    a bidirectional link). */ ''}
+                ${!isPlugin && device.midi_ci && html`
+                    <div class="card">
+                        <h3>MIDI-CI</h3>
+                        <div style="font-size:11px;color:var(--text-dim);line-height:1.6">
+                            ${device.midi_ci.device_info && html`
+                                <div>${[device.midi_ci.device_info.manufacturer,
+                                        device.midi_ci.device_info.model].filter(Boolean).join(' — ')}</div>
+                                ${device.midi_ci.device_info.serialNumber && html`<div>Serial: ${device.midi_ci.device_info.serialNumber}</div>`}`}
+                            <div>Identity: mfr ${device.midi_ci.manufacturer} · family ${device.midi_ci.family} · model ${device.midi_ci.model} · v${device.midi_ci.version}</div>
+                            <div>Supports: ${['profiles', 'property_exchange', 'process_inquiry']
+                                .filter(k => device.midi_ci.categories && device.midi_ci.categories[k])
+                                .map(k => k.replace(/_/g, ' ')).join(', ') || 'discovery only'}</div>
+                        </div>
+                    </div>
+                `}
+                ${!isPlugin && device.online !== false && !device.midi_ci && html`
+                    <div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+                        <div style="font-size:11px;color:var(--text-dim);line-height:1.4;flex:1">
+                            No MIDI-CI identity yet. Identify asks the device
+                            who it is over SysEx (needs a bidirectional link).
+                        </div>
+                        <button class="rubber-btn" onclick=${async () => {
+                            const r = await api(`/devices/${device.client_id}/identify`, { method: 'POST' });
+                            showToast(r && !r.error ? 'Identifying…' : 'Failed');
+                        }}>
+                            <div class="btn-led green"></div>
+                            <span class="btn-text">Identify</span>
+                        </button>
                     </div>
                 `}
 

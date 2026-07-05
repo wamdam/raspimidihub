@@ -94,7 +94,7 @@ export function MatrixHeader({ item, label, isPlugin, pluginType, isBluetooth, i
     const iconCls = isBluetooth ? 'bt' : isNetwork ? 'net' : 'din';
     return html`<th class="row-header ${online ? '' : 'offline'} ${isPlugin ? 'plugin-row' : ''} ${isBluetooth ? 'bt-row' : ''} ${isNetwork ? 'net-row' : ''}" style="cursor:pointer;max-width:${ROW_HEADER_WIDTH}px"
         title="${label || ''}"
-        onClick=${trigger.onClick} onContextMenu=${trigger.onContextMenu}>${isPlugin ? html`<${PluginIcon} type=${pluginType} />` : html`<span class="dev-icon ${iconCls}" style="display:inline-flex;vertical-align:middle;margin-right:3px">${devIcon}</span>`} <span class="row-header-label">${displayLabel}</span>${sendsClock ? html`<span key=${clockBeat || 0} class="clock-icon ${cls}" title="${title}"></span>` : ''}
+        onClick=${trigger.onClick} onContextMenu=${trigger.onContextMenu}>${isPlugin ? html`<${PluginIcon} type=${pluginType} />` : html`<span class="dev-icon ${iconCls}" style="display:inline-flex;vertical-align:middle;margin-right:3px">${devIcon}</span>`} <span class="row-header-label">${displayLabel}</span>${item.midi2 && item.midi2.capable ? html`<span class="midi2-badge${item.midi2.protocol ? '' : ' forced'}" title="${item.midi2.protocol ? 'MIDI 2.0 device' : 'MIDI 2.0 device — forced to MIDI 1.0'}">2.0</span>` : ''}${sendsClock ? html`<span key=${clockBeat || 0} class="clock-icon ${cls}" title="${title}"></span>` : ''}
         <${RateMeter} rate=${midiRate} /></th>`;
 }
 
@@ -122,7 +122,7 @@ export function ConnectionMatrix({ devices, connections, showToast, clockSources
         const inCount = dev.ports.filter(p => p.is_input).length;
         const outCount = dev.ports.filter(p => p.is_output).length;
         for (const p of dev.ports) {
-            const extra = { client_id: dev.client_id, dev_name: dev.name, dev_default_name: dev.default_name || dev.name, port_name: p.name, port_default_name: p.default_name || p.name, online: dev.online !== false, stable_id: dev.stable_id, is_plugin: !!dev.is_plugin, plugin_type: dev.plugin_type, is_bluetooth: !!dev.is_bluetooth, is_network: !!dev.is_network, remote_hub: dev.remote_hub || '' };
+            const extra = { client_id: dev.client_id, dev_name: dev.name, dev_default_name: dev.default_name || dev.name, port_name: p.name, port_default_name: p.default_name || p.name, online: dev.online !== false, stable_id: dev.stable_id, is_plugin: !!dev.is_plugin, plugin_type: dev.plugin_type, is_bluetooth: !!dev.is_bluetooth, is_network: !!dev.is_network, remote_hub: dev.remote_hub || '', midi2: dev.midi2 || null };
             if (p.is_input) inputs.push({ ...p, ...extra, multi: inCount > 1 });
             if (p.is_output) outputs.push({ ...p, ...extra, multi: outCount > 1 });
         }

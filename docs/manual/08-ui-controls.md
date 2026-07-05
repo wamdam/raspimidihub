@@ -43,6 +43,11 @@ catches the eye when scanning a panel of many controls. The
 **CC LFO** rate fader is the canonical example -- displayed as
 `0.5 Hz`, stored as a raw integer.
 
+*Fine* faders (marked per parameter by the plugin, e.g. the CC
+LFO's Depth) step and display at fractional precision -- `63.7`
+instead of `64` -- and follow a bound MIDI 2.0 controller at its
+full resolution.
+
 ## Knob
 
 The circular control used on the controller surfaces. Vertical

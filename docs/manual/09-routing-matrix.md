@@ -60,6 +60,23 @@ teal for plugins, blue for Bluetooth, violet for devices mirrored
 from a peer hub over Network MIDI (which also carry a two-node
 link icon).
 
+**MIDI 2.0 devices.** On a hub whose kernel supports MIDI 2.0 (see
+chapter 21), a connected MIDI 2.0 device presents its *function
+blocks* — the sections the device itself declares, e.g. "Keys" and
+"Pads" — as its port rows, using the device's own names for them.
+A device with a single function block appears as one port, exactly
+like a MIDI 1.0 device. Routing, filters, and mappings work on
+these ports as on any other; saved connections resolve across
+replug by the same stable-identity rules. On kernels without MIDI
+2.0 support the same device simply appears as a regular MIDI 1.0
+device — everything still works at classic resolution.
+
+A MIDI 2.0-capable device carries a small **2.0 badge** next to its
+name in the matrix row headers and on its rack faceplate. The badge
+reflects what the device *is*; whether the hub *uses* MIDI 2.0 with
+it is controlled per device in the device-detail panel (below). A
+struck-through badge means the device has been forced to MIDI 1.0.
+
 ## Remote Hub Groups
 
 Devices mirrored from a peer hub (chapter 17's *Network MIDI*
@@ -154,6 +171,28 @@ Tapping a row or column header opens a menu of device-level actions:
   monitor and test-sender. For plugins, it is the plugin-config
   panel. (There is no separate *Rename* entry -- renaming lives in
   this panel, which also shows the original ALSA name in grey.)
+  The MIDI monitor shows MIDI 2.0 sources at their real resolution:
+  values appear as fractional 0--127 readings (`vel=100.53`,
+  `cc74=63.99`) and 2.0-only messages that have no MIDI 1.0 form --
+  atomic RPN/NRPN (`RPN 0.0=…`), Per-Note CC, Per-Note Bend --
+  appear as their own typed rows instead of bursts of CCs. MIDI 1.0
+  devices display exactly as before, as whole numbers.
+  For MIDI 2.0-capable devices the panel also shows a **MIDI 2.0
+  card** with the device's endpoint name, product ID and function
+  blocks, plus a **Use MIDI 2.0** toggle -- switch it off to treat
+  the device as MIDI 1.0 (the escape hatch for devices that
+  misbehave under the new protocol; persists across replug and
+  reboot).
+  A **MIDI-CI card** appears when the device answered the hub's
+  Capability Inquiry (sent automatically on connect to any
+  bidirectional device -- MIDI 2.0 not required, this works over
+  plain MIDI 1.0 and DIN links too): manufacturer / model /
+  version, supported capability categories, and -- when the device
+  supports Property Exchange -- its self-reported friendly name and
+  serial number. Devices without an identity yet offer an
+  **Identify** button to re-ask. Probing can be disabled globally
+  (`midi2.ci_enabled`) or per device (`midi2.ci_disabled`) in the
+  config for devices whose firmware chokes on universal SysEx.
 - **Copy / Paste** (controllers, plugins) -- copies the whole
   instance. Paste creates a new instance with all parameters
   cloned.
@@ -318,3 +357,8 @@ Screenshots needed:
   (pre-setup phase, like `01-routing`), so it regenerates with
   `make screenshots`. The committed shot was captured against a live
   rig; rerun to refresh against the curated demo set if desired.
+- `09-midi2-badge.png` -- a matrix row header showing the 2.0 badge
+  next to a MIDI 2.0 device's name, plus the same device's rack
+  faceplate. Coverable on a UMP-enabled hub with
+  `scripts/fake_midi2_synth.py` running (no 2.0 hardware needed);
+  add a scripted scene when the screenshot set is next regenerated.

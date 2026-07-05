@@ -54,6 +54,7 @@ The exported / saved JSON has the following top-level keys:
 | `disconnected` | list | Connections explicitly toggled off but kept for re-enable. |
 | `wifi` | object | WiFi configuration; see 5.4. |
 | `network_midi` | object | Network MIDI (RTP-MIDI) sharing; see the *Network MIDI Configuration* section below. |
+| `midi2` | object | MIDI 2.0 behaviour: `force_midi1` (list of device stable-IDs the hub treats as MIDI 1.0 — escape hatch for devices that misbehave under the new protocol), `ci_enabled` (bool, default true — send MIDI-CI Capability Inquiry to bidirectional devices on connect), `ci_disabled` (list of stable-IDs to never probe). |
 
 Plugin instances, controller instances, device renames, port
 renames, and per-cell filter/mapping state all live inside the

@@ -475,11 +475,13 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
     # GET /api/system — system info
     # ================================================================
 
-    @server.route("GET", "/api/system", summary="Hub status: hostname, IPs, version, CPU/RAM/temp, per-core load, SSE + latency stats, ALSA port budget.")
+    @server.route("GET", "/api/system", summary="Hub status: hostname, IPs, version, CPU/RAM/temp, per-core load, SSE + latency stats, ALSA port budget, MIDI 2.0 (UMP) capability.")
     async def api_system(req: Request) -> Response:
         import subprocess
 
+        from .alsa_seq import probe_ump_support
         from .wifi import default_ap_ssid
+        _ump = probe_ump_support()
         hostname = socket.gethostname()
         # The AP SSID is what the user sees in the WiFi list and the
         # header badge mirrors it. Configured name wins; else the
@@ -590,6 +592,8 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
             "config_fallback": config.fallback_active,
             "default_routing": config.default_routing,
             "config_dirty": engine.config_dirty,
+            "midi2": {"alsa_lib": _ump.alsa_lib, "kernel": _ump.kernel,
+                      "capable": _ump.capable},
         })
 
     # ================================================================
@@ -729,7 +733,23 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
                 "default_name": dev.name,
                 "ports": ports,
             }
+            if dev.is_ump:
+                # force_midi1 masks the hub's *use* of the capability
+                # (badge, hi-res paths, MIDI-CI); topology stays visible.
+                forced = bool(info and info.stable_id
+                              in config.midi2.get("force_midi1", []))
+                entry["midi2"] = {
+                    "protocol": dev.midi2_protocol and not forced,
+                    "capable": dev.midi2_protocol,
+                    "forced_midi1": forced,
+                    "endpoint_name": dev.endpoint_name,
+                    "product_id": dev.product_id,
+                    "function_blocks": dev.function_blocks,
+                }
             if info:
+                ci = engine.ci_info(info.stable_id)
+                if ci:
+                    entry["midi_ci"] = ci
                 entry["stable_id"] = info.stable_id
                 entry["vid"] = info.vid
                 entry["pid"] = info.pid
@@ -840,7 +860,7 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
     # POST /api/devices/{client_id}/rename — rename a device
     # ================================================================
 
-    @server.route("POST", "/api/devices/", exact=False, summary="Per-device actions: rename, rename-port, clock-source toggle, or send a test MIDI message.")
+    @server.route("POST", "/api/devices/", exact=False, summary="Per-device actions: rename, rename-port, clock-source toggle, force-midi1 toggle, identify (MIDI-CI), or send a test MIDI message.")
     async def api_device_action(req: Request) -> Response:
         path = req.path_param("/api/devices/")
 
@@ -878,6 +898,44 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
                     "plugin-changed",
                     {"instance_id": info.stable_id, "client_id": client_id})
             return Response.json({"status": "renamed", "name": name})
+
+        # POST /api/devices/{client_id}/force-midi1 — treat a MIDI 2.0
+        # capable device as MIDI 1.0 (escape hatch for devices that
+        # misbehave under UMP). Body: {enabled: bool}. Persisted in
+        # config.midi2.force_midi1 by stable_id.
+        if path.endswith("/force-midi1"):
+            try:
+                client_id = int(path[:-len("/force-midi1")])
+            except ValueError:
+                return Response.error("Invalid client ID")
+            data = req.json
+            enabled = bool(data.get("enabled", True))
+            info = engine.device_registry.get_by_client(client_id)
+            if info is None:
+                return Response.not_found()
+            forced = set(config.midi2.get("force_midi1", []))
+            if enabled:
+                forced.add(info.stable_id)
+            else:
+                forced.discard(info.stable_id)
+            config.data.setdefault("midi2", {})["force_midi1"] = sorted(forced)
+            await config.asave()
+            await server.send_sse("device-connected", {"client_id": client_id})
+            return Response.json({"status": "ok", "forced_midi1": enabled})
+
+        # POST /api/devices/{client_id}/identify — re-run MIDI-CI
+        # discovery against this device (results arrive via the usual
+        # device refresh SSE once the device answers).
+        if path.endswith("/identify"):
+            try:
+                client_id = int(path[:-len("/identify")])
+            except ValueError:
+                return Response.error("Invalid client ID")
+            info = engine.device_registry.get_by_client(client_id)
+            if info is None:
+                return Response.not_found()
+            engine.reidentify(info.stable_id)
+            return Response.json({"status": "identifying"})
 
         # POST /api/devices/{client_id}/clock-source — toggle whether
         # this device's MIDI Clock / Start / Stop feeds the global
