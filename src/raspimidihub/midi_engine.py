@@ -498,6 +498,13 @@ class MidiEngine:
                 info = self._device_registry.get_by_client(dev.client_id)
                 if not (info and info.stable_id in forced):
                     hi_res.add(dev.client_id)
+        # The hub's own plugins are hi-res sources too (their clients
+        # run midi_version=2 whenever UMP is available): float emitters
+        # (CC LFO, Smoother, velocity plugins) display fractionally in
+        # the monitor. Integer emitters are unaffected — the shim's
+        # lattice snap keeps their values exact ints.
+        if self._ump_monitor is not None and self._plugin_host:
+            hi_res |= self._plugin_host.get_plugin_client_ids()
         self._hi_res_clients = hi_res
 
         for dev in self._devices:

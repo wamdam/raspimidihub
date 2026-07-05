@@ -4,7 +4,17 @@ User-visible changes. Short tagged one-liners, no code or commit
 hashes. Tags: Added, Improved, Fix, Changed, Removed.
 
 
-2026-07-05 — Version 6.0.0a1 (pre-release)
+2026-07-05 — Version 6.0.0a1
+
+The hub speaks MIDI 2.0. Full 32-bit controller resolution flows end
+to end — through filters, mappings, plugin CC automation and the
+hub's own generators — MIDI 2.0 devices are modelled from their UMP
+endpoint descriptions, MIDI-CI asks connected gear who it is, and the
+monitor shows it all at real resolution. MIDI 1.0 gear keeps behaving
+byte-for-byte as before, and on kernels without MIDI 2.0 support
+(all stock Raspberry Pi OS kernels today) the hub simply runs as it
+always did. Testable without any MIDI 2.0 hardware via the bundled
+virtual synth.
 
 - Fix: pitch bend over Network MIDI and Bluetooth MIDI was shifted by half its range (center played as minimum bend) — ALSA's signed convention was never converted to the unsigned wire form
 - Added: MIDI 2.0 groundwork — the hub now detects at startup whether the kernel and ALSA support UMP/MIDI 2.0 and reports it in /api/system (all current Raspberry Pi OS kernels: not yet)
@@ -20,6 +30,7 @@ hashes. Tags: Added, Improved, Fix, Changed, Removed.
 - Added: MIDI-CI discovery — the hub asks connected devices who they are (manufacturer/model/version + capabilities, incl. Property-Exchange friendly names) and shows it in device detail; works over MIDI 1.0/DIN links too; Identify button + midi2.ci_enabled/ci_disabled opt-outs
 - Fix: SysEx transmission was broken (wrong ALSA variable-length flag since the beginning) — affected the SysEx Sender plugin; found and fixed by the MIDI-CI work
 - Added: CC Smoother, Velocity Curve, Velocity Equalizer and Pitch CC handle MIDI 2.0 resolution end to end (stepless glides, interpolated curves, preserved velocity gradations); MIDI 1.0 output stays byte-identical
+- Added: the hub's own plugins count as hi-res sources in the MIDI monitor — a CC LFO sweep displays fractionally (51.61) instead of as integer steps
 
 
 2026-07-01 — Version 5.2.0

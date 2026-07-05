@@ -358,6 +358,10 @@ export function DeviceDetailPanel({ device, onClose, showToast, refresh, pluginD
 
     useEscapeClose(close);
 
+    // Fractional MIDI units display: whole values render as plain
+    // integers (a 7-bit source through the hi-res monitor still reads
+    // "64", not "64.00"); genuine fractions get two decimals.
+    const fmtU = (v) => (v == null ? v : (Number.isInteger(v) ? v : v.toFixed(2)));
     const formatEvent = (d) => {
         let s = d.event;
         if (d.channel != null) s += ` ch${d.channel}`;
@@ -365,16 +369,16 @@ export function DeviceDetailPanel({ device, onClose, showToast, refresh, pluginD
             // MIDI 2.0 source: show fractional MIDI units (0-127 with
             // decimals); 1.0 sources keep the classic integer lines.
             if (d.note != null && d.velocity_f != null)
-                s += ` ${noteName(d.note)} vel=${d.velocity_f.toFixed(2)}`;
+                s += ` ${noteName(d.note)} vel=${fmtU(d.velocity_f)}`;
             else if (d.note != null && d.index != null)
-                s += ` ${noteName(d.note)} #${d.index}=${d.value_f?.toFixed(2)}`;
+                s += ` ${noteName(d.note)} #${d.index}=${fmtU(d.value_f)}`;
             else if (d.note != null && d.value_f != null)
-                s += ` ${noteName(d.note)} ${d.value_f.toFixed(2)}`;
+                s += ` ${noteName(d.note)} ${fmtU(d.value_f)}`;
             else if (d.note != null) s += ` ${noteName(d.note)}`;
             else if (d.bank != null && d.index != null)
-                s += ` ${d.bank}.${d.index}=${d.value_f?.toFixed(2)}`;
-            else if (d.cc != null) s += ` cc${d.cc}=${d.value_f?.toFixed(2) ?? d.value}`;
-            else if (d.value_f != null) s += ` ${d.value_f.toFixed(2)}`;
+                s += ` ${d.bank}.${d.index}=${fmtU(d.value_f)}`;
+            else if (d.cc != null) s += ` cc${d.cc}=${fmtU(d.value_f) ?? d.value}`;
+            else if (d.value_f != null) s += ` ${fmtU(d.value_f)}`;
             return s;
         }
         if (d.note != null) s += ` ${noteName(d.note)} vel=${d.velocity}`;
