@@ -20,10 +20,11 @@ from ..text import append_link, llm_or_template
 from .base import Source
 
 _SYSTEM = (
-    "You announce a feature of RaspiMIDIHub, an open-source Raspberry Pi USB "
+    "You announce a change in RaspiMIDIHub, an open-source Raspberry Pi USB "
     "MIDI hub, in the plain voice of its developer talking to fellow musicians. "
-    "Describe concretely what the feature does and why it is useful, grounded "
-    "in the reference notes from the manual. ONE or TWO short sentences. Do NOT "
+    "For features: describe concretely what it does and why it is useful. "
+    "For fixes: explain what problem was solved. Ground your description in "
+    "the reference notes from the manual. ONE or TWO short sentences. Do NOT "
     "write like an advertisement: no hype words (seamless, effortless, "
     "instantly, unleash, transform, supercharge, elevate, experience, "
     "game-changer), no second-person sales pitch ('turn your...', 'expand "
@@ -47,7 +48,7 @@ class FeaturesSource(Source):
     name = 'features'
 
     def _candidates(self) -> list:
-        """Parse recent CHANGELOG 'Added'/'Improved' lines into items."""
+        """Parse recent CHANGELOG 'Added'/'Improved'/'Fix' lines into items."""
         text = content.read_text('CHANGELOG.txt') or ''
         items = []
         for block in re.split(r'\n(?=\d{4}-\d{2}-\d{2})', text)[:25]:
@@ -56,7 +57,7 @@ class FeaturesSource(Source):
                 continue
             version = m.group(2)
             for line in block.splitlines():
-                lm = re.match(r'-\s*(Added|Improved):\s*(.+)', line.strip(), re.S)
+                lm = re.match(r'-\s*(Added|Improved|Fix):\s*(.+)', line.strip(), re.S)
                 if not lm:
                     continue
                 body = lm.group(2).strip()
@@ -115,8 +116,14 @@ class FeaturesSource(Source):
     def render(self, item, llm) -> Post:
         shot = self._select_screenshot(item, llm, content.screenshot_catalog())
         notes = self._manual_notes(shot)
-        kind = 'feature' if item['kind'] == 'added' else 'improvement'
-        user = f"Announce this {kind} (RaspiMIDIHub v{item['version']}):\n{item['text']}\n"
+        kind = item['kind']  # 'added', 'improved', or 'fix'
+        if kind == 'added':
+            kind_text = 'feature'
+        elif kind == 'improved':
+            kind_text = 'improvement'
+        else:
+            kind_text = 'fix'
+        user = f"Announce this {kind_text} (RaspiMIDIHub v{item['version']}):\n{item['text']}\n"
         if notes:
             user += ("\nReference notes from the user manual (for accuracy — "
                      "summarise in your own words, do not quote):\n"
