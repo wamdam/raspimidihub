@@ -355,6 +355,22 @@ export function DeviceDetailPanel({ device, onClose, showToast, refresh, pluginD
     const formatEvent = (d) => {
         let s = d.event;
         if (d.channel != null) s += ` ch${d.channel}`;
+        if (d.proto === 2) {
+            // MIDI 2.0 source: show fractional MIDI units (0-127 with
+            // decimals); 1.0 sources keep the classic integer lines.
+            if (d.note != null && d.velocity_f != null)
+                s += ` ${noteName(d.note)} vel=${d.velocity_f.toFixed(2)}`;
+            else if (d.note != null && d.index != null)
+                s += ` ${noteName(d.note)} #${d.index}=${d.value_f?.toFixed(2)}`;
+            else if (d.note != null && d.value_f != null)
+                s += ` ${noteName(d.note)} ${d.value_f.toFixed(2)}`;
+            else if (d.note != null) s += ` ${noteName(d.note)}`;
+            else if (d.bank != null && d.index != null)
+                s += ` ${d.bank}.${d.index}=${d.value_f?.toFixed(2)}`;
+            else if (d.cc != null) s += ` cc${d.cc}=${d.value_f?.toFixed(2) ?? d.value}`;
+            else if (d.value_f != null) s += ` ${d.value_f.toFixed(2)}`;
+            return s;
+        }
         if (d.note != null) s += ` ${noteName(d.note)} vel=${d.velocity}`;
         if (d.cc != null) s += ` cc${d.cc}=${d.value}`;
         return s;

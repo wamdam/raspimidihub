@@ -52,7 +52,12 @@ _PER_INSTANCE_EVENTS = frozenset({"plugin-param", "plugin-display"})
 SSE_EVENTS = {
     "connection": "Handshake sent once on connect; carries the conn_id "
                   "used for /api/sse/subscribe.",
-    "midi-activity": "A MIDI message passed through a monitored port.",
+    "midi-activity": "A MIDI message passed through a monitored port. "
+                     "MIDI 2.0 sources add proto:2, fractional MIDI-unit "
+                     "fields (velocity_f / value_f, 0-127 with decimals) "
+                     "and typed 2.0-only messages (RPN/NRPN, Per-Note "
+                     "CC/Bend/Mgmt with kind/bank/index); the integer "
+                     "fields stay 7-bit for compatibility.",
     "cc": "A Control Change value, broadcast for CC monitoring / MIDI-learn.",
     "clock-quarter": "Quarter-note tick from the active clock.",
     "transport-start": "Transport / clock started.",

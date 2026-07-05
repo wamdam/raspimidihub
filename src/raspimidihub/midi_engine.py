@@ -79,6 +79,16 @@ class MidiEngine:
         self._plugin_host = None  # set externally after import
         self._monitor_port: int = -1
         self._monitored_clients: set[int] = set()
+        # Hi-res (UMP MIDI 2.0) monitor client — created in start() on
+        # capable systems; None means monitoring runs on the legacy
+        # client exactly as before.
+        self._ump_monitor: AlsaSeq | None = None
+        self._ump_monitor_port: int = -1
+        self._sysex_assembler = None  # lazy ump.Sysex7Assembler
+        # Client ids of devices whose traffic is genuinely MIDI 2.0
+        # (capability minus force-midi1 mask); refreshed on every
+        # monitor-subscription update.
+        self._hi_res_clients: set[int] = set()
         self._debounce_task: asyncio.Task | None = None
         self._running = False
         self._config = None  # set externally for config-aware rescan
@@ -127,6 +137,9 @@ class MidiEngine:
         # is fanned out to every matrix destination of its source.
         # `_cc_dest_dirty` tracks keys changed since the last delta snapshot.
         self._cc_dest_cache: dict[tuple[int, int, int, int], int] = {}
+        # Fractional MIDI-unit values for hi-res (MIDI 2.0) sources,
+        # keyed like _cc_dest_cache; absent for 1.0 sources.
+        self._cc_dest_values_f: dict[tuple[int, int, int, int], float] = {}
         self._cc_dest_dirty: set[tuple[int, int, int, int]] = set()
 
     @property
@@ -221,9 +234,31 @@ class MidiEngine:
         ump = probe_ump_support()
         log.info("UMP (MIDI 2.0) support: kernel=%s alsa-lib=%s",
                  "yes" if ump.kernel else "no", "yes" if ump.alsa_lib else "no")
+        # Hi-res monitor: a second, UMP MIDI 2.0 seq client that takes
+        # over the monitor role on capable systems (decision D1, first
+        # client flip — FSD-05). The main client stays legacy so the
+        # filter engine and hotplug handling are untouched.
+        if ump.capable:
+            try:
+                mon = AlsaSeq("RaspiMIDIHub Monitor", default_ports=False,
+                              midi_version=2)
+                if mon.midi_version == 2:
+                    self._ump_monitor = mon
+                    self._ump_monitor_port = mon.create_port(
+                        "monitor", writable=True)
+                    log.info("Hi-res monitor: UMP client %d, port %d",
+                             mon.client_id, self._ump_monitor_port)
+                else:
+                    mon.close()
+            except OSError:
+                log.exception("Hi-res monitor client failed; monitoring "
+                              "stays on the legacy client")
 
     def stop(self) -> None:
         """Disconnect all and close ALSA sequencer."""
+        if self._ump_monitor:
+            self._ump_monitor.close()
+            self._ump_monitor = None
         if self._seq:
             self.disconnect_all()
             self._seq.close()
@@ -410,11 +445,33 @@ class MidiEngine:
         # grow without bound across hotplugs.
         self._monitored_clients &= live_clients
 
+        # On UMP-capable systems the monitor role lives on the hi-res
+        # client (midi_version=2): the kernel then delivers every
+        # source up-converted to MIDI 2.0 width and the pump decides
+        # per source whether to expose hi-res (see _pump_ump_monitor).
+        if self._ump_monitor is not None:
+            mon_seq, mon_port = self._ump_monitor, self._ump_monitor_port
+        else:
+            mon_seq, mon_port = self._seq, self._monitor_port
+
+        # Sources whose events are genuinely MIDI 2.0 (capability from
+        # FSD-03 scan, minus the per-device force-midi1 mask).
+        forced = set()
+        if self._config is not None:
+            forced = set(self._config.midi2.get("force_midi1", []))
+        hi_res = set()
+        for dev in self._devices:
+            if dev.is_ump and dev.midi2_protocol:
+                info = self._device_registry.get_by_client(dev.client_id)
+                if not (info and info.stable_id in forced):
+                    hi_res.add(dev.client_id)
+        self._hi_res_clients = hi_res
+
         for dev in self._devices:
             for port in dev.input_ports:  # input = produces MIDI data
                 try:
-                    self._seq.subscribe(dev.client_id, port.port_id,
-                                        self._seq.client_id, self._monitor_port)
+                    mon_seq.subscribe(dev.client_id, port.port_id,
+                                      mon_seq.client_id, mon_port)
                 except OSError:
                     pass  # already subscribed (EBUSY) — re-attempt is harmless
                 self._monitored_clients.add(dev.client_id)
@@ -828,10 +885,17 @@ class MidiEngine:
         loop.add_reader(fd, readable.set)
         log.info("Listening for MIDI hotplug events on fd %d", fd)
 
+        mon_fd = None
+        if self._ump_monitor is not None:
+            mon_fd = self._ump_monitor.fileno()
+            loop.add_reader(mon_fd, self._pump_ump_monitor)
+
         try:
             await self._drain_alsa_events(readable, max_events=256)
         finally:
             loop.remove_reader(fd)
+            if mon_fd is not None:
+                loop.remove_reader(mon_fd)
 
     async def _drain_alsa_events(self, readable: asyncio.Event,
                                   max_events: int) -> None:
@@ -901,43 +965,10 @@ class MidiEngine:
                         except Exception:
                             pass
 
-                # Forward clock events to the global ClockBus.
-                #
-                # Sources that feed the bus:
-                # - External hardware (not a plugin) — always feeds.
-                # - Plugins with `feeds_clock_bus = True` (Master Clock).
-                #
-                # Plugins that process clock (Clock Divider, etc.) must NOT
-                # feed the bus — their divided OUT would pollute the bus's
-                # tempo and re-fire bus subscribers at the wrong rate.
-                # Source-routed clock for those plugins is delivered via
-                # `on_clock()` directly from the IN port (host.py).
-                if self._plugin_host:
-                    plugin_clients = self._plugin_host.get_plugin_client_ids()
-                    is_plugin = ev.source.client in plugin_clients
-                    feeds_bus = (not is_plugin) or self._plugin_host.client_feeds_clock_bus(ev.source.client)
-                    # Per-device clock veto: hardware sources the user
-                    # has unticked in the device-detail panel must not
-                    # drive the bus. Plugins already gate via
-                    # feeds_clock_bus and never appear here, so this
-                    # only narrows hardware (and self-loop plugins
-                    # never set feeds_clock_bus anyway).
-                    if feeds_bus and self._device_registry.is_client_clock_blocked(ev.source.client):
-                        feeds_bus = False
-                    if ev.type == MidiEventType.CLOCK:
-                        if ev.dest.port == self._monitor_port and feeds_bus:
-                            self._plugin_host.clock_bus.on_clock_tick()
-                    elif ev.type == MidiEventType.START and feeds_bus:
-                        self._plugin_host.clock_bus.on_start()
-                        for cb in self._on_transport_start_callbacks:
-                            try:
-                                cb()
-                            except Exception:
-                                log.exception("transport_start callback failed")
-                    elif ev.type == MidiEventType.CONTINUE and feeds_bus:
-                        self._plugin_host.clock_bus.on_continue()
-                    elif ev.type == MidiEventType.STOP and feeds_bus:
-                        self._plugin_host.clock_bus.on_stop()
+                # Forward clock events to the global ClockBus (shared
+                # with the hi-res monitor pump — see _feed_clock_bus).
+                self._feed_clock_bus(
+                    ev, is_monitor_copy=(ev.dest.port == self._monitor_port))
 
                 # Process filtered MIDI events. Time the userspace-routed
                 # path so the engine can report a midi-in→midi-out latency
@@ -956,6 +987,94 @@ class MidiEngine:
 
             if hotplug:
                 self._schedule_rescan()
+
+    def _feed_clock_bus(self, ev, is_monitor_copy: bool) -> None:
+        """Forward clock/transport events to the global ClockBus.
+
+        Sources that feed the bus:
+        - External hardware (not a plugin) — always feeds.
+        - Plugins with `feeds_clock_bus = True` (Master Clock).
+
+        Plugins that process clock (Clock Divider, etc.) must NOT feed
+        the bus — their divided OUT would pollute the bus's tempo and
+        re-fire bus subscribers at the wrong rate. Source-routed clock
+        for those plugins is delivered via `on_clock()` directly from
+        the IN port (host.py). CLOCK counts only monitor-port copies
+        (one delivery per source — filter-port copies would double the
+        tempo); transport events act on any copy, as before.
+        """
+        if not self._plugin_host:
+            return
+        plugin_clients = self._plugin_host.get_plugin_client_ids()
+        is_plugin = ev.source.client in plugin_clients
+        feeds_bus = (not is_plugin) or self._plugin_host.client_feeds_clock_bus(ev.source.client)
+        # Per-device clock veto: hardware sources the user has unticked
+        # in the device-detail panel must not drive the bus.
+        if feeds_bus and self._device_registry.is_client_clock_blocked(ev.source.client):
+            feeds_bus = False
+        if ev.type == MidiEventType.CLOCK:
+            if is_monitor_copy and feeds_bus:
+                self._plugin_host.clock_bus.on_clock_tick()
+        elif ev.type == MidiEventType.START and feeds_bus:
+            self._plugin_host.clock_bus.on_start()
+            for cb in self._on_transport_start_callbacks:
+                try:
+                    cb()
+                except Exception:
+                    log.exception("transport_start callback failed")
+        elif ev.type == MidiEventType.CONTINUE and feeds_bus:
+            self._plugin_host.clock_bus.on_continue()
+        elif ev.type == MidiEventType.STOP and feeds_bus:
+            self._plugin_host.clock_bus.on_stop()
+
+    def _pump_ump_monitor(self) -> None:
+        """Drain the hi-res monitor client (fd-reader callback).
+
+        Applies the same monitor-role bookkeeping the legacy loop does
+        for monitor-port copies: rate counts, note / CC tracking,
+        listener callbacks (SSE activity, cc-learn) and the ClockBus
+        feed. Every event arrives as UMP (the kernel up-converts 1.0
+        sources); sources not in `_hi_res_clients` are shimmed back to
+        byte-identical 7-bit values, hi-res sources carry a `hires`
+        dict with fractional MIDI-unit values.
+        """
+        mon = self._ump_monitor
+        if mon is None or not self._seq:
+            return
+        from . import ump as _ump
+        if self._sysex_assembler is None:
+            self._sysex_assembler = _ump.Sysex7Assembler()
+        for _ in range(256):
+            uev = mon.read_ump_event()
+            if uev is None:
+                break
+            if not uev.is_ump:
+                continue  # subscription notifications etc.
+            words = uev.ump_words
+            if ((words[0] >> 28) & 0xF) == _ump.MT_DATA64:
+                m = self._sysex_assembler.feed(words)
+            else:
+                m = _ump.decode(words)
+            if m is None:
+                continue
+            src_c, src_p = uev.source.client, uev.source.port
+            ev = _ump.to_monitor_shim(
+                m, src_c, src_p, self._seq.client_id, self._monitor_port,
+                hires=src_c in self._hi_res_clients)
+            if ev is None:
+                continue
+            key = f"{src_c}:{src_p}"
+            self._port_msg_counts[key] = self._port_msg_counts.get(key, 0) + 1
+            if ev.type in (int(MidiEventType.NOTEON), int(MidiEventType.NOTEOFF)):
+                self._track_note_event(ev)
+            elif ev.type == int(MidiEventType.CONTROLLER):
+                self._track_cc_to_destinations(ev)
+            for cb in self._on_midi_event_callbacks:
+                try:
+                    cb(ev)
+                except Exception:
+                    pass
+            self._feed_clock_bus(ev, is_monitor_copy=True)
 
     def panic(self, hard: bool = False) -> None:
         """Silence sounding notes across every outbound destination.
@@ -1311,18 +1430,24 @@ class MidiEngine:
         val = ev.data.control.value
         sc = ev.source.client
         sp = ev.source.port
+        hires = getattr(ev, "hires", None)
+        vf = hires.get("value_f") if hires else None
         for conn in self._connections:
             if conn.src_client != sc or conn.src_port != sp:
                 continue
             key = (conn.dst_client, conn.dst_port, ch, cc)
-            if self._cc_dest_cache.get(key) != val:
+            if (self._cc_dest_cache.get(key) != val
+                    or (vf is not None and self._cc_dest_values_f.get(key) != vf)):
                 self._cc_dest_cache[key] = val
+                if vf is not None:
+                    self._cc_dest_values_f[key] = vf
                 self._cc_dest_dirty.add(key)
 
     def _purge_cc_dest_cache_for_client(self, client_id: int) -> None:
         """Drop dest-keyed cache entries whose destination matches client_id."""
         for key in [k for k in self._cc_dest_cache if k[0] == client_id]:
             self._cc_dest_cache.pop(key, None)
+            self._cc_dest_values_f.pop(key, None)
             self._cc_dest_dirty.discard(key)
 
     def last_cc_to(self, dst_client: int, dst_port: int,
@@ -1331,23 +1456,23 @@ class MidiEngine:
         None if no CC for that destination has been observed yet."""
         return self._cc_dest_cache.get((dst_client, dst_port, channel, cc))
 
+    def _cc_dest_entry(self, key: tuple) -> dict:
+        dc, dp, ch, cc = key
+        entry = {"dst_client": dc, "dst_port": dp,
+                 "channel": ch, "cc": cc, "value": self._cc_dest_cache[key]}
+        vf = self._cc_dest_values_f.get(key)
+        if vf is not None:
+            entry["value_f"] = vf
+        return entry
+
     def cc_dest_snapshot(self) -> list[dict]:
         """Full current state of the destination-keyed CC cache."""
-        return [
-            {"dst_client": dc, "dst_port": dp,
-             "channel": ch, "cc": cc, "value": val}
-            for (dc, dp, ch, cc), val in self._cc_dest_cache.items()
-        ]
+        return [self._cc_dest_entry(key) for key in self._cc_dest_cache]
 
     def cc_dest_snapshot_dirty(self) -> list[dict]:
         """Entries changed since the last call. Clears the dirty set."""
-        out = []
-        for key in self._cc_dest_dirty:
-            if key not in self._cc_dest_cache:
-                continue
-            dc, dp, ch, cc = key
-            out.append({"dst_client": dc, "dst_port": dp,
-                        "channel": ch, "cc": cc, "value": self._cc_dest_cache[key]})
+        out = [self._cc_dest_entry(key) for key in self._cc_dest_dirty
+               if key in self._cc_dest_cache]
         self._cc_dest_dirty.clear()
         return out
 

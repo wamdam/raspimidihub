@@ -165,6 +165,10 @@ async def async_main() -> None:
         10: "CC", 11: "Program Change", 12: "Channel Pressure",
         13: "Pitch Bend", 36: "Clock", 30: "Start", 31: "Continue",
         32: "Stop", 130: "SysEx",
+        # MIDI 2.0 (hi-res monitor shims; 15/16 are real ALSA types,
+        # 20x are ump.py pseudo-types for messages with no 1.0 form)
+        15: "NRPN", 16: "RPN",
+        201: "Per-Note CC", 202: "Per-Note Bend", 203: "Per-Note Mgmt",
     }
 
     # Per-source clock counter so the UI can pulse the matrix indicator at
@@ -218,7 +222,9 @@ async def async_main() -> None:
             "src_client": ev.source.client,
             "src_port": ev.source.port,
             "event": ev_name,
-            "channel": ev.channel + 1 if ev.type in (6,7,8,10,11,12,13) else None,
+            "channel": (ev.channel + 1
+                        if ev.type in (6, 7, 8, 10, 11, 12, 13, 15, 16,
+                                       201, 202, 203) else None),
         }
         # Add note/CC specific data
         if ev.type in (6, 7, 8):  # Note events
@@ -227,6 +233,15 @@ async def async_main() -> None:
         elif ev.type == 10:  # CC
             data["cc"] = ev.data.control.param
             data["value"] = ev.data.control.value
+        elif ev.type in (201, 202, 203):  # MIDI 2.0 per-note messages
+            data["note"] = ev.data.note.note
+        # Hi-res extras from the UMP monitor (2.0 sources only): the
+        # integer fields above stay byte-compatible; consumers that
+        # understand fractional MIDI units read the *_f fields.
+        hires = getattr(ev, "hires", None)
+        if hires:
+            data["proto"] = 2
+            data.update(hires)
         # Carry the routing destinations of this (src_client, src_port)
         # so the device-detail MIDI monitor on a downstream device
         # (e.g. Mixer 8 receiving from LCXL3) can match incoming events

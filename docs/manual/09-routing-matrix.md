@@ -165,6 +165,12 @@ Tapping a row or column header opens a menu of device-level actions:
   monitor and test-sender. For plugins, it is the plugin-config
   panel. (There is no separate *Rename* entry -- renaming lives in
   this panel, which also shows the original ALSA name in grey.)
+  The MIDI monitor shows MIDI 2.0 sources at their real resolution:
+  values appear as fractional 0--127 readings (`vel=100.53`,
+  `cc74=63.99`) and 2.0-only messages that have no MIDI 1.0 form --
+  atomic RPN/NRPN (`RPN 0.0=…`), Per-Note CC, Per-Note Bend --
+  appear as their own typed rows instead of bursts of CCs. MIDI 1.0
+  devices display exactly as before, as whole numbers.
 - **Copy / Paste** (controllers, plugins) -- copies the whole
   instance. Paste creates a new instance with all parameters
   cloned.

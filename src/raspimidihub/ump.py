@@ -382,6 +382,205 @@ def _decode_stream(words) -> UmpMessage:
     return m
 
 
+# --- Monitor shim: UmpMessage -> legacy-seq-event look-alike ---
+#
+# The hi-res monitor client receives everything as UMP (the kernel
+# up-converts 1.0 sources). Downstream consumers (__main__.on_midi_event,
+# engine note/CC tracking, cc-learn) speak snd_seq_event attribute
+# paths, so the pump converts each UmpMessage into a ShimEvent that
+# duck-types the fields they read. For sources that are genuinely
+# MIDI 2.0 the shim carries a `hires` dict with fractional MIDI-unit
+# values (decision D2); for 1.0 sources the legacy integer fields are
+# byte-identical to what the old monitor path produced (min-center-max
+# round-trips losslessly).
+
+from . import midi_scale as _scale  # noqa: E402  (pure, no ALSA)
+
+# ALSA seq event type ints (mirror alsa_seq.MidiEventType — kept as
+# plain ints here so ump.py stays import-light)
+_T_NOTEON, _T_NOTEOFF, _T_KEYPRESS = 6, 7, 8
+_T_CONTROLLER, _T_PGMCHANGE, _T_CHANPRESS, _T_PITCHBEND = 10, 11, 12, 13
+_T_NONREGPARAM, _T_REGPARAM = 15, 16
+_T_SYSEX = 130
+# Pseudo event types for MIDI 2.0-only messages (no ALSA equivalent;
+# used only on monitor shims / SSE payloads, never sent to ALSA)
+T_PER_NOTE_CC = 201
+T_PER_NOTE_BEND = 202
+T_PER_NOTE_MGMT = 203
+
+_SYSTEM_STATUS_TO_TYPE = {
+    0xF8: 36,   # CLOCK
+    0xFA: 30,   # START
+    0xFB: 31,   # CONTINUE
+    0xFC: 32,   # STOP
+    0xF9: 33,   # TICK
+    0xFE: 35,   # SENSING
+    0xF2: 38,   # SONGPOS
+}
+
+_MIDI1_STATUS_TO_TYPE = {
+    0x80: _T_NOTEOFF, 0x90: _T_NOTEON, 0xA0: _T_KEYPRESS,
+    0xB0: _T_CONTROLLER, 0xC0: _T_PGMCHANGE, 0xD0: _T_CHANPRESS,
+    0xE0: _T_PITCHBEND,
+}
+
+
+@dataclass(slots=True)
+class _ShimAddr:
+    client: int = 0
+    port: int = 0
+
+
+@dataclass(slots=True)
+class _ShimNote:
+    channel: int = 0
+    note: int = 0
+    velocity: int = 0
+    off_velocity: int = 0
+
+
+@dataclass(slots=True)
+class _ShimCtrl:
+    channel: int = 0
+    param: int = 0
+    value: int = 0
+
+
+@dataclass(slots=True)
+class _ShimData:
+    note: _ShimNote = field(default_factory=_ShimNote)
+    control: _ShimCtrl = field(default_factory=_ShimCtrl)
+
+
+@dataclass(slots=True)
+class ShimEvent:
+    """Duck-types the snd_seq_event fields the monitor path reads."""
+    type: int
+    source: _ShimAddr
+    dest: _ShimAddr
+    data: _ShimData = field(default_factory=_ShimData)
+    hires: dict | None = None
+    flags: int = 0
+
+    @property
+    def channel(self) -> int:
+        return self.data.note.channel
+
+
+def to_monitor_shim(m: UmpMessage, src_client: int, src_port: int,
+                    dest_client: int, dest_port: int,
+                    hires: bool) -> ShimEvent | None:
+    """Convert a decoded UmpMessage to a monitor ShimEvent.
+
+    `hires=False` (source is a MIDI 1.0 device the kernel upscaled):
+    values are scaled back down so the result is byte-identical to the
+    legacy monitor path, and no `hires` dict is attached. Returns None
+    for messages the monitor ignores.
+    """
+    src = _ShimAddr(src_client, src_port)
+    dst = _ShimAddr(dest_client, dest_port)
+    k = m.kind
+
+    if k in ("note_on", "note_off"):
+        ev = ShimEvent(_T_NOTEON if k == "note_on" else _T_NOTEOFF, src, dst)
+        # Note-on velocity uses the spec's 2.0→1.0 floor (0 becomes 1):
+        # a vel-0 note-on is a legal NOTE ON in MIDI 2.0 and must not
+        # read as a note-off downstream.
+        vel7 = (_scale.vel16_to_vel7(m.velocity) if k == "note_on"
+                else _scale.scale_down(m.velocity, 16, 7))
+        ev.data.note = _ShimNote(channel=m.channel, note=m.note, velocity=vel7)
+        if hires:
+            ev.hires = {"velocity_f": round(_scale.to_midi_units(m.velocity, 16), 3)}
+        return ev
+    if k == "cc":
+        ev = ShimEvent(_T_CONTROLLER, src, dst)
+        ev.data.control = _ShimCtrl(channel=m.channel, param=m.index,
+                                    value=_scale.scale_down(m.value, 32, 7))
+        ev.data.note.channel = m.channel
+        if hires:
+            ev.hires = {"value_f": round(_scale.to_midi_units(m.value, 32), 3)}
+        return ev
+    if k == "pitch_bend":
+        ev = ShimEvent(_T_PITCHBEND, src, dst)
+        ev.data.control = _ShimCtrl(channel=m.channel,
+                                    value=_scale.alsa_from_bend32(m.value))
+        ev.data.note.channel = m.channel
+        if hires:
+            ev.hires = {"value_f": round(_scale.to_midi_units(m.value, 32), 3)}
+        return ev
+    if k == "poly_pressure":
+        ev = ShimEvent(_T_KEYPRESS, src, dst)
+        ev.data.note = _ShimNote(channel=m.channel, note=m.note,
+                                 velocity=_scale.scale_down(m.value, 32, 7))
+        if hires:
+            ev.hires = {"value_f": round(_scale.to_midi_units(m.value, 32), 3)}
+        return ev
+    if k == "chan_pressure":
+        ev = ShimEvent(_T_CHANPRESS, src, dst)
+        ev.data.control = _ShimCtrl(channel=m.channel,
+                                    value=_scale.scale_down(m.value, 32, 7))
+        ev.data.note.channel = m.channel
+        if hires:
+            ev.hires = {"value_f": round(_scale.to_midi_units(m.value, 32), 3)}
+        return ev
+    if k == "program":
+        ev = ShimEvent(_T_PGMCHANGE, src, dst)
+        ev.data.control = _ShimCtrl(channel=m.channel, value=m.program)
+        ev.data.note.channel = m.channel
+        if hires and m.bank_valid:
+            ev.hires = {"bank": m.bank}
+        return ev
+    if k in ("rpn", "nrpn", "rel_rpn", "rel_nrpn"):
+        ev = ShimEvent(_T_REGPARAM if k in ("rpn", "rel_rpn")
+                       else _T_NONREGPARAM, src, dst)
+        ev.data.control = _ShimCtrl(channel=m.channel,
+                                    param=(m.bank << 7) | m.index,
+                                    value=_scale.scale_down(m.value, 32, 14))
+        ev.data.note.channel = m.channel
+        ev.hires = {"kind": k, "bank": m.bank, "index": m.index,
+                    "value_f": round(_scale.to_midi_units(m.value, 32), 3)}
+        return ev
+    if k in ("per_note_rcc", "per_note_acc"):
+        ev = ShimEvent(T_PER_NOTE_CC, src, dst)
+        ev.data.note = _ShimNote(channel=m.channel, note=m.note)
+        ev.hires = {"kind": k, "index": m.index,
+                    "value_f": round(_scale.to_midi_units(m.value, 32), 3)}
+        return ev
+    if k == "per_note_bend":
+        ev = ShimEvent(T_PER_NOTE_BEND, src, dst)
+        ev.data.note = _ShimNote(channel=m.channel, note=m.note)
+        ev.hires = {"kind": k,
+                    "value_f": round(_scale.to_midi_units(m.value, 32), 3)}
+        return ev
+    if k == "per_note_mgmt":
+        ev = ShimEvent(T_PER_NOTE_MGMT, src, dst)
+        ev.data.note = _ShimNote(channel=m.channel, note=m.note)
+        ev.hires = {"kind": k, "flags": m.flags}
+        return ev
+    if k == "system":
+        t = _SYSTEM_STATUS_TO_TYPE.get(m.status)
+        if t is None:
+            return None
+        ev = ShimEvent(t, src, dst)
+        return ev
+    if k == "midi1":
+        t = _MIDI1_STATUS_TO_TYPE.get(m.status & 0xF0)
+        if t is None:
+            return None
+        ev = ShimEvent(t, src, dst)
+        if t in (_T_NOTEON, _T_NOTEOFF, _T_KEYPRESS):
+            ev.data.note = _ShimNote(channel=m.channel, note=m.data1,
+                                     velocity=m.data2)
+        else:
+            ev.data.control = _ShimCtrl(channel=m.channel, param=m.data1,
+                                        value=m.data2)
+            ev.data.note.channel = m.channel
+        return ev
+    if k == "sysex7":
+        return ShimEvent(_T_SYSEX, src, dst)
+    return None
+
+
 def endpoint_discovery(filter_bitmap: int = 0x1F,
                        ump_version: tuple[int, int] = (1, 1)) -> tuple:
     """Endpoint Discovery request (ask for everything by default)."""
