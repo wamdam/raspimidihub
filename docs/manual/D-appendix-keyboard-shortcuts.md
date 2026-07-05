@@ -1,9 +1,8 @@
 # Keyboard Shortcuts
 
-Every keyboard shortcut in the UI, grouped by context. The Tracker
+Every keyboard shortcut in the UI, grouped by context. Tracker
 shortcuts resolve through `event.code`, so the *physical key
-position* is what counts -- QWERTY and QWERTZ keyboards behave
-identically.
+position* counts -- QWERTY and QWERTZ behave identically.
 
 ## Global
 
@@ -21,9 +20,7 @@ identically.
 
 ## Tracker -- note entry
 
-Physical-key positions on a US-QWERTY layout. The same physical
-keys produce the same notes on a German QWERTZ layout (because
-the implementation reads `event.code`, not the OS keymap).
+Physical-key positions, shown on a US-QWERTY layout:
 
 | Key | Note | Key | Note |
 |-----|------|-----|------|
@@ -35,21 +32,17 @@ the implementation reads `event.code`, not the OS keymap).
 |     |     | `7` | A#  |
 |     |     | `u` | B   |
 
-The octave for the next typed note is taken from the focused
-cell's pitch if it has one, otherwise from the sticky **OCT**
-wheel. Two shortcuts adjust the sticky value without touching
-the mouse:
+The octave for the next typed note comes from the focused cell's
+pitch if it has one, otherwise from the sticky **OCT** wheel:
 
 | Shortcut | Action |
 |----------|--------|
 | `+` (or `=`) | Octave up (clamped at 9) |
 | `-` (or `_`) | Octave down (clamped at 0) |
 
-If the focused cell currently holds a real pitch, the cell's
-octave digit is rewritten in step with the wheel — the note jumps
-along with the OCT wheel. Sentinel cells (`---` / `Off` / `End`)
-stay as they were; only the sticky value moves. Details in
-chapter 13.
+If the focused cell holds a real pitch, its octave digit follows
+the wheel -- the note jumps with it. Sentinel cells (`---` / `Off`
+/ `End`) stay put. Details in chapter 13.
 
 ## Tracker -- selection and editing
 
@@ -59,24 +52,20 @@ chapter 13.
 | `Shift` + arrows | Extend the selection rectangle by one cell. Up/Down wrap within the current page while Shift is held |
 | `Delete` | Cut (copy the selection to the paste buffer, clear it from the grid) |
 
-The action row buttons on the Tracker surface (**Shift / Cut /
-Copy / Paste**) are the primary entry point for editing
-operations and do not have direct keyboard shortcuts beyond
-`Delete`. While a selection is active, Cut and Copy act on the
-selection, release Shift, and move the cursor to the selection's
-top-left. `Shift+Cut` / `Shift+Copy` target the whole current
-page only when nothing is selected.
+The action row buttons (**Shift / Cut / Copy / Paste**) are the
+primary editing entry point; only `Delete` has a keyboard
+equivalent. With a selection active, Cut and Copy act on it,
+release Shift, and move the cursor to its top-left. `Shift+Cut` /
+`Shift+Copy` target the whole page only when nothing is selected.
 
 ## Routing matrix
 
-No global keyboard shortcuts at this time. The matrix is touch-
-first; all interactions are taps.
+No keyboard shortcuts; the matrix is touch-first.
 
 ## Controller surface
 
-No global keyboard shortcuts at this time. The surface is touch-
-first; all interactions are drag / tap / long-press on cells and
-drop buttons.
+No keyboard shortcuts; the surface is touch-first (drag / tap /
+long-press).
 
 ## Plugin and overlay panels
 
@@ -86,6 +75,5 @@ drop buttons.
 | `Tab` / `Shift + Tab` | Move focus between form fields where applicable |
 | `Enter` | Confirm the focused button or text field |
 
-These are standard browser behaviours rather than RaspiMIDIHub-
-specific shortcuts; they work because the UI respects native
-form semantics.
+These are native browser form semantics, not RaspiMIDIHub-specific
+shortcuts.

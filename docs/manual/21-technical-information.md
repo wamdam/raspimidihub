@@ -1,8 +1,7 @@
 # Technical Information
 
 Hardware requirements, software stack, performance envelopes, and
-the interfaces RaspiMIDIHub speaks. The right place to look when
-deciding whether RaspiMIDIHub fits a particular setup.
+the interfaces RaspiMIDIHub speaks.
 
 ## Hardware
 
@@ -21,38 +20,35 @@ deciding whether RaspiMIDIHub fits a particular setup.
 +-------------+------------------+-------+----------------------------------------------+
 
 Pi 1, Pi 2, and the original Pi Zero are **not** supported -- the
-read-only filesystem and the isolated-core reservation assume a
+read-only filesystem and isolated-core reservation assume a
 multi-core ARMv8 system.
 
 ### SD card
 
-- **Capacity** -- 4 GB minimum, 8 GB or 16 GB recommended.
-- **Class** -- A1 or better. A2 (high endurance) is not required;
-  the read-only root means the card is rarely written.
+- **Capacity** -- 4 GB minimum, 8 or 16 GB recommended.
+- **Class** -- A1 or better; A2 (high endurance) is unnecessary on
+  the read-only root.
 
 ### USB topology
 
-- USB-A ports double as MIDI device inputs and as tethered-phone
-  internet inputs.
-- Hot-plug supported.
-- USB hubs supported on any USB-A port; powered hubs recommended
-  if the attached devices are bus-powered.
+- USB-A ports double as MIDI inputs and tethered-phone internet
+  inputs; hot-plug supported.
+- USB hubs work on any USB-A port; powered hubs recommended for
+  bus-powered devices.
 
 ### Device identity
 
-- Devices with a usable USB serial number are identified by it
-  (`usb-<vid>:<pid>-<serial>`) -- port-independent.
-- Devices without one (or with a factory placeholder) are
-  identified by hub-tree path (`usb-<path>-<vid>:<pid>`); a single
-  such device replugged elsewhere is re-matched by vendor/product
-  ID when unambiguous. Details in chapter 5, "Device Topology and
-  Renames".
-- Bluetooth devices are identified by MAC address (`bt-<mac>`),
-  plugin instruments by instance ID (`plugin-<id>`).
-- Devices mirrored from a peer hub over Network MIDI are
-  identified by the peer's hub ID plus the device's stable ID on
-  that hub (`net-<hub>-<remote-id>`) -- stable across reboots and
-  IP changes on both ends.
+- A usable USB serial number → `usb-<vid>:<pid>-<serial>`,
+  port-independent.
+- No serial (or a factory placeholder) → hub-tree path
+  (`usb-<path>-<vid>:<pid>`); a single such device replugged
+  elsewhere is re-matched by vendor/product ID when unambiguous
+  (chapter 5, "Device Topology and Renames").
+- Bluetooth devices: MAC address (`bt-<mac>`); plugin instruments:
+  instance ID (`plugin-<id>`).
+- Network MIDI mirrors: peer hub ID + the device's stable ID there
+  (`net-<hub>-<remote-id>`) -- stable across reboots and IP changes
+  on both ends.
 
 ### Bluetooth
 
@@ -62,16 +58,15 @@ multi-core ARMv8 system.
   share one 2.4 GHz radio between hostapd (the AP) and BLE. With
   the AP up, BLE *central* connects may be aborted locally
   (`le-connection-abort-by-local`), surfacing as **Connection
-  failed**; confirmed by the connect succeeding once
+  failed**; confirmed if the connect succeeds once
   `raspimidihub-hostapd` is stopped. Unit/chip-dependent -- a
-  controller that booted on a generic fallback BD address (`dmesg`:
-  "Using default device address") has even less margin. Pi 4 / 5
-  use separate radios and are unaffected. Chapter 14, *Limits*.
+  controller on a generic fallback BD address (`dmesg`: "Using
+  default device address") has even less margin. Pi 4 / 5 use
+  separate radios and are unaffected. Chapter 14, *Limits*.
 
 ### Audio
 
-- Audio I/O is not used by RaspiMIDIHub. The appliance is MIDI-
-  only.
+- Audio I/O is not used. The appliance is MIDI-only.
 
 ## Software Stack
 
@@ -87,33 +82,28 @@ multi-core ARMv8 system.
 | **avahi-daemon** | mDNS (`raspimidihub-<id>.local`) |
 | **systemd** | Service supervision |
 
-No external Python packages are required at runtime; the routing
-service uses the standard library exclusively. The optional
-`python3-dbus-next` package is recommended (and pulled by the
-`raspimidihub` deb's Recommends) for Bluetooth support.
+The routing service uses the Python standard library exclusively;
+the optional `python3-dbus-next` package (deb Recommends) enables
+Bluetooth. The web UI is **Preact + HTM**, served as static
+assets -- no build step, no npm.
 
 ## MIDI 2.0 Kernel Requirements
 
 The hub detects at startup whether the system can speak MIDI 2.0
 (UMP) and reports the result in `GET /api/system` under `midi2`.
-Two things must both be present:
+Both must be present:
 
 - **alsa-lib ≥ 1.2.10** — shipped by Raspberry Pi OS Trixie
   (1.2.14). Bookworm's 1.2.8 predates UMP entirely.
 - **A kernel with the UMP options enabled** (`CONFIG_SND_SEQ_UMP`,
   `CONFIG_SND_USB_AUDIO_MIDI_V2`, `CONFIG_SND_UMP`). Stock
-  Raspberry Pi OS kernels currently ship with these **off** — the
-  request to enable them is tracked upstream
-  (raspberrypi/linux#7474). Without them the hub runs exactly as
-  before: MIDI 2.0 devices fall back to their mandatory MIDI 1.0
-  mode and every feature works at classic resolution.
+  Raspberry Pi OS kernels currently ship with these **off**;
+  enabling them is tracked upstream (raspberrypi/linux#7474).
 
 When the kernel side is missing, the startup log shows
 `UMP (MIDI 2.0) support: kernel=no` and all MIDI 2.0 features stay
-dormant; nothing needs configuring.
-
-The web UI is **Preact + HTM**, served as static assets. No build
-step. No npm.
+dormant: devices fall back to their mandatory MIDI 1.0 mode at
+classic resolution, and nothing needs configuring.
 
 ## Performance Envelope
 
@@ -126,11 +116,10 @@ step. No npm.
 | **BLE-MIDI** | 7.5--15 ms | Bound by BLE connection interval, not the bridge |
 | **Web UI → MIDI out** | 2--6 ms (Stats card readout) | HTTP POST + routing |
 
-The Stats card in **Settings** is the live readout of loop lag,
-MIDI in→out latency, and Control in→MIDI out latency. Values
-significantly above the typical range almost always indicate one
-of: USB bus contention from a bus-powered device, an underpowered
-PSU, or a plugin doing more work than expected in a callback.
+The Stats card in **Settings** shows live loop lag, MIDI in→out
+latency, and Control in→MIDI out latency. Values well above typical
+usually mean USB bus contention from a bus-powered device, an
+underpowered PSU, or a plugin overworking a callback.
 
 ## Capacities
 
@@ -173,37 +162,30 @@ PSU, or a plugin doing more work than expected in a callback.
 | `/tmp/` | tmpfs | Standard ephemeral |
 | `/boot/firmware/` | vfat, read-only (rw on demand) | Boot partition; persistent state lives here |
 
-Both `/` and `/boot/firmware` are mounted read-only in steady
-state. Save Config (and the BlueZ snapshot, and the update
-downloader) briefly remounts `/boot/firmware` rw, writes the
-file, syncs, and remounts it ro -- the main root never gets
-remounted. Volatile state lives on tmpfs. See chapter 18 for
-the rationale and the `rw` / `ro` helpers.
+Save Config, the BlueZ snapshot, and the update downloader briefly
+remount `/boot/firmware` rw, write, sync, and remount it ro; the
+root is never remounted (chapter 18).
 
 ## Power Budget
 
-- The Pi itself draws around 3--7 W under typical load
-  (model-dependent).
+- Pi draw: ~3--7 W under typical load, model-dependent.
 - Bus-powered MIDI devices add ~50--200 mA each; large keyboards
-  and class-compliant interfaces add more.
-- Use the manufacturer's official PSU (5V/3A on Pi 4, 5V/5A on Pi
-  5) to avoid undervolt warnings. Phone chargers and laptop USB-C
-  ports are sometimes inadequate, particularly when bus-powered
-  MIDI devices are present.
-- A powered USB hub is recommended for any setup with three or
-  more bus-powered MIDI devices.
+  and class-compliant interfaces more.
+- Use the official PSU (5V/3A on Pi 4, 5V/5A on Pi 5); phone
+  chargers and laptop USB-C ports can be inadequate with
+  bus-powered devices attached.
+- A powered USB hub is recommended for three or more bus-powered
+  MIDI devices.
 
 ## Compliance and Licences
 
 - **Application licence** -- GPL.
 - **Bundled third-party** -- Preact (MIT), HTM (Apache 2.0).
-- **OS underneath** -- Raspberry Pi OS Lite, which has its own
-  licence terms. Out of scope here; consult the OS documentation.
+- **OS underneath** -- Raspberry Pi OS Lite, under its own licence
+  terms.
 
 ## Project Repository
 
-The project lives on GitHub at
-`https://github.com/wamdam/raspimidihub`. Releases are tagged
-`vX.Y.Z` and attached as GitHub releases with the matching `.deb`
-files (chapter 17).
-
+The project lives at `https://github.com/wamdam/raspimidihub`.
+Releases are tagged `vX.Y.Z` with the matching `.deb` files
+attached (chapter 17).

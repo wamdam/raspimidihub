@@ -1,36 +1,20 @@
 # The Routing Matrix
 
-The **Routing** tab is the central screen of RaspiMIDIHub. Every USB
-MIDI device, every Bluetooth MIDI peripheral, every plugin instance,
-and every controller instance appears here. Every potential
-connection between them can be made on this screen.
-
-The tab offers **two views of the same routing**, switched with the
-**Matrix / Rack** toggle at the top:
-
-- **Matrix** -- the dense grid where rows are sources, columns are
-  destinations, and each cell is a connection. Best for an at-a-glance
-  overview of a whole rig.
-- **Rack** -- devices drawn as 19" rack units with cables hanging
-  between IN/OUT jacks. Best for following signal flow and for touch.
-
-Both views read and write the *same* connections, filters, mappings
-and clipboard, so the cell/header menus, the Add menu and the bottom
-bar described in this chapter behave identically in either. The view
-choice is a per-browser display preference (like layout density); it
-is not part of the saved config. This chapter documents the matrix
-first, then the rack.
+The **Routing** tab is where every USB device, Bluetooth peripheral,
+plugin and controller instance appears and every connection is made.
+The **Matrix / Rack** toggle at the top switches two views of the
+same routing: **Matrix** — a grid, rows sources, columns
+destinations, cells connections — for overview; **Rack** — 19" rack
+units with cables between IN/OUT jacks — for signal flow and touch.
+Both share all connections, filters, mappings, clipboards, menus and
+the bottom bar; the view choice is a per-browser preference, not
+saved config.
 
 ![The Routing matrix. Rows are sources, columns are destinations, cells are connections. The bottom-nav Routing icon carries the dirty-state asterisk.](../screenshots/01-routing.png){width=42%}
 
 ## Reading the Grid
 
-Rows are **sources** (FROM). Columns are **destinations** (TO).
-Headers along the top show the columns; headers along the left show
-the rows. The intersection cell of a source row and a destination
-column represents that one connection.
-
-Cells are in one of four visual states:
+Cell states:
 
 | Appearance | Meaning |
 |------------|---------|
@@ -39,204 +23,139 @@ Cells are in one of four visual states:
 | Lit (purple) | Connection active, with an active filter or mapping |
 | Dimmed | Connection saved but at least one side is offline |
 
-A live **rate meter** ticks on every cell with traffic, showing
-MIDI message throughput. The clock indicator (a pulsing play icon
-next to a row header) marks devices currently sending MIDI Clock;
-when more than one device sends clock the icon turns orange to
-warn of a typical misconfiguration.
+A live **rate meter** ticks on cells with traffic. A pulsing play
+icon by a row header marks a device sending MIDI Clock — orange when
+more than one does, a typical misconfiguration. The diagonal
+(self-connection) is blocked.
 
-The diagonal -- a device's own row meeting its own column -- is
-always blocked. Self-connections would feed a device into itself
-and the loop-prevention logic disallows them.
+Long header names middle-truncate
+(`Velocity Equalizer 1 → Velo…ar 1`); the full name shows atop the
+header menu. Header tint: teal plugins, blue Bluetooth, violet plus
+a link icon for Network-MIDI mirrors.
 
-The row-header column on the left is held to a fixed narrow
-width (~96 px) so the rest of the matrix gets the room. Long
-device names are middle-truncated to fit (`Velocity Equalizer
-1 → Velo…ar 1`); tapping a row header opens its context menu
-with the full name at the top of the menu.
-
-Row and column headers are colour-tinted by device category:
-teal for plugins, blue for Bluetooth, violet for devices mirrored
-from a peer hub over Network MIDI (which also carry a two-node
-link icon).
-
-**MIDI 2.0 devices.** On a hub whose kernel supports MIDI 2.0 (see
-chapter 21), a connected MIDI 2.0 device presents its *function
-blocks* — the sections the device itself declares, e.g. "Keys" and
-"Pads" — as its port rows, using the device's own names for them.
-A device with a single function block appears as one port, exactly
-like a MIDI 1.0 device. Routing, filters, and mappings work on
-these ports as on any other; saved connections resolve across
-replug by the same stable-identity rules. On kernels without MIDI
-2.0 support the same device simply appears as a regular MIDI 1.0
-device — everything still works at classic resolution.
-
-A MIDI 2.0-capable device carries a small **2.0 badge** next to its
-name in the matrix row headers and on its rack faceplate. The badge
-reflects what the device *is*; whether the hub *uses* MIDI 2.0 with
-it is controlled per device in the device-detail panel (below). A
-struck-through badge means the device has been forced to MIDI 1.0.
+**MIDI 2.0 devices.** On a MIDI 2.0-capable kernel (chapter 21), a
+device's *function blocks* — its declared sections, e.g. "Keys" and
+"Pads" — are its port rows (one for a single-block device); routing,
+filters, mappings and replug identity work as for any port. Without
+kernel support the device is plain MIDI 1.0. A **2.0 badge** by the
+name (matrix and rack) marks a capable device; struck through means
+forced to MIDI 1.0 via the device-detail toggle (below).
 
 ## Remote Hub Groups
 
-Devices mirrored from a peer hub (chapter 17's *Network MIDI*
-section) sit at the bottom of the matrix, grouped under a violet
-header row per hub -- `@hub2 · 3 devices`. Tapping the group row
-collapses or expands the hub: collapsing hides the hub's **rows
-and columns** entirely (the group row stays as the re-expand
-handle), keeping the grid compact when the far end shares more
-than you currently need. The collapse state is a per-browser
-display preference, like layout density -- it is not part of the
-saved config.
-
-The matrix row shows the device's bare name ("TX-7"); the group
-header carries the hub, and the context menu's title line shows
-the full `TX-7 @hub2` so twin device names across hubs stay
-unambiguous.
-
-When the peer hub goes offline, its mirrored devices behave
-exactly like unplugged hardware: rows and columns stay, dimmed,
-with all connections, filters and mappings intact, and everything
-reconnects by itself when the peer comes back.
+Devices mirrored from a peer hub (chapter 17, *Network MIDI*) sit at
+the bottom under a violet group row per hub — `@hub2 · 3 devices`.
+Tap to collapse (hides that hub's rows **and columns**) or expand; a
+per-browser preference. Rows show the bare device name, the
+context-menu title the full `TX-7 @hub2` — twin names across hubs
+stay unambiguous. An offline peer's devices act like unplugged
+hardware: dimmed, intact, reconnecting automatically when the peer
+returns.
 
 ## The Rack View
 
-Flip the **Rack** toggle and the grid becomes a 19" rack. Each
-device is a rack unit -- its name and icon at the top-left, its
-ports listed below as rows: an **IN** jack (where the device
-receives) on the left, an **OUT** jack (where it sends) pushed to
-the right. Hardware sits at the top, then plugins and controllers,
-then one collapsible sub-rack per Network-MIDI peer hub. Group
-blendes collapse and expand exactly as the matrix's hub groups do,
-sharing the same per-browser state -- fold a hub in one view and it
-is folded in the other.
+Each device is a rack unit: name and icon top-left, ports as rows —
+**IN** jack (receive) left, **OUT** jack (send) right. Hardware
+first, then plugins and controllers, then one collapsible sub-rack
+per peer hub (shares the matrix's collapse state). Connections are
+**cables**, one colour per source port; a **funnel badge** marks a
+filtered or mapped cable. Jacks glow on MIDI activity; a
+clock-sending jack gets a green ring.
 
-Connections are **cables** that hang between jacks, one colour per
-source port so a strand stays recognisable where it crosses others.
-A small **funnel badge** sits on a cable that carries a filter or
-mapping. Port jacks glow on MIDI activity; a jack that is sending
-MIDI Clock gets a green ring.
+**Patching.** Tap a jack, then its counterpart (either order) — the
+chosen jack pulses, valid targets pulse with it. Or **drag** jack to
+jack: the edges auto-scroll, the target shows an "insert here" ring,
+and a second finger scrolls the rack while a cable is in hand.
 
-**Patching.** Make a connection by tapping a jack and then its
-counterpart -- tap an OUT then an IN (or the reverse); the chosen jack
-pulses and valid targets pulse with it. You can also **drag** from one
-jack to the other; dragging toward the top or bottom edge auto-scrolls
-the rack so you can reach an off-screen unit, and the target jack shows
-an expanding "insert here" ring. A second finger scrolls the rack
-normally while a cable is in hand.
-
-**Inspecting and editing.** Hover (desktop) or **press and hold**
-(touch) a jack -- or just tap it -- to spotlight its cables: the others
-dim and the highlighted ones fan apart so a single cable is easy to
-pick out. Selecting a port with no connections dims *all* cables,
-making "nothing here" obvious. The highlight stays until you pick
-another jack or tap the same one again. Tap a cable (or its funnel badge) to open the connection's
-menu -- the same Edit / Copy / Paste / Remove menu as a matrix cell,
-where **Edit** opens the filter & mapping panel. Press and hold (or
-right-click) a unit's faceplate for its device menu -- Edit (which is
-where renaming lives) and the plugin/network actions, identical to the
-matrix's header menu. The **+ Add Device** button at the foot opens the same Add
-menu as the matrix.
+**Inspecting and editing.** Hover (desktop), press-and-hold (touch)
+or tap a jack to spotlight its cables: others dim, highlighted ones
+fan apart; a jack with no connections dims *all* cables; the
+highlight stays until you pick another jack or tap the same one
+again. Tap a cable or its funnel badge for the connection menu (same
+Edit / Copy / Paste / Remove as a matrix cell). Press-and-hold or
+right-click a faceplate for the device menu — identical to the
+header menu, renaming included. **+ Add Device** at the foot opens
+the Add menu.
 
 ![The Rack view: devices as 19" rack units, patch cables hanging between their IN and OUT jacks; each cable's colour follows its source port.](../screenshots/01-routing-rack.png){width=42%}
 
 ## The Cell Context Menu
 
-Tapping a cell opens its context menu. The entries depend on the
-cell state:
+Tapping a cell opens a state-dependent menu:
 
 **Empty cell.**
 
-- **Add connection** -- enables the connection with the default
-  empty filter (all channels, all message types pass).
-- **Paste** -- pastes the cell clipboard contents (filter +
-  mappings) and enables the connection. Visible only when the
-  clipboard holds a cell payload.
+- **Add connection** — enables the connection with the default
+  empty filter (everything passes).
+- **Paste** — pastes the cell clipboard (filter + mappings) and
+  enables the connection; shown only with a cell payload on the
+  clipboard.
 
 **Connected cell.**
 
-- **Edit** -- opens the filter and mappings panel (chapter 10).
-- **Copy** -- copies the filter + mappings to the cell clipboard.
-- **Paste** -- overwrites the cell's filter + mappings from the
-  clipboard, keeping the connection enabled.
-- **Remove** -- disables the connection. The filter and mappings
-  are *not* discarded; re-enabling the cell restores them.
+- **Edit** — opens the filter and mappings panel (chapter 10).
+- **Copy** — copies the filter + mappings to the cell clipboard.
+- **Paste** — overwrites the cell's filter + mappings from the
+  clipboard.
+- **Remove** — disables the connection; filter and mappings are
+  kept and restored on re-enable.
 
 ## Row and Column Header Menus
 
-Tapping a row or column header opens a menu of device-level actions:
+Tapping a row or column header opens device-level actions:
 
-- **Edit** -- opens the device-detail panel. For USB devices, this
-  is where you **rename** the device (and each port), plus the MIDI
-  monitor and test-sender. For plugins, it is the plugin-config
-  panel. (There is no separate *Rename* entry -- renaming lives in
-  this panel, which also shows the original ALSA name in grey.)
-  The MIDI monitor shows MIDI 2.0 sources at their real resolution:
-  values appear as fractional 0--127 readings (`vel=100.53`,
-  `cc74=63.99`) and 2.0-only messages that have no MIDI 1.0 form --
-  atomic RPN/NRPN (`RPN 0.0=…`), Per-Note CC, Per-Note Bend --
-  appear as their own typed rows instead of bursts of CCs. MIDI 1.0
-  devices display exactly as before, as whole numbers.
-  For MIDI 2.0-capable devices the panel also shows a **MIDI 2.0
-  card** with the device's endpoint name, product ID and function
-  blocks, plus a **Use MIDI 2.0** toggle -- switch it off to treat
-  the device as MIDI 1.0 (the escape hatch for devices that
-  misbehave under the new protocol; persists across replug and
-  reboot).
+- **Edit** — the device-detail panel: USB devices get **rename**
+  for the device and each port (the original ALSA name shows in
+  grey; there is no separate Rename entry), a MIDI monitor and a
+  test-sender; plugins get their config panel.
+  The monitor shows MIDI 2.0 sources at real resolution —
+  fractional values (`vel=100.53`, `cc74=63.99`) and 2.0-only
+  messages (atomic RPN/NRPN, Per-Note CC, Per-Note Bend) as typed
+  rows; MIDI 1.0 devices show whole numbers as before.
+  Capable devices add a **MIDI 2.0 card** (endpoint name, product
+  ID, function blocks) and a **Use MIDI 2.0** toggle — off forces
+  MIDI 1.0, the escape hatch for misbehaving devices, persisting
+  across replug and reboot.
   A **MIDI-CI card** appears when the device answered the hub's
-  Capability Inquiry (sent automatically on connect to any
-  bidirectional device -- MIDI 2.0 not required, this works over
-  plain MIDI 1.0 and DIN links too): manufacturer / model /
-  version, supported capability categories, and -- when the device
-  supports Property Exchange -- its self-reported friendly name and
-  serial number. Devices without an identity yet offer an
-  **Identify** button to re-ask. Probing can be disabled globally
-  (`midi2.ci_enabled`) or per device (`midi2.ci_disabled`) in the
-  config for devices whose firmware chokes on universal SysEx.
-- **Copy / Paste** (controllers, plugins) -- copies the whole
-  instance. Paste creates a new instance with all parameters
-  cloned.
-- **Reconnect / Disconnect / Forget** (Bluetooth devices) --
+  Capability Inquiry, sent automatically on connect to any
+  bidirectional device (MIDI 2.0 not required — plain MIDI 1.0 and
+  DIN work too): manufacturer / model / version, capability
+  categories, and with Property Exchange the self-reported friendly
+  name and serial number. **Identify** re-asks a device without an
+  identity yet. Disable probing globally (`midi2.ci_enabled`) or
+  per device (`midi2.ci_disabled`) for firmware that chokes on
+  universal SysEx.
+- **Copy / Paste** (controllers, plugins) — Paste creates a new
+  instance with all parameters cloned.
+- **Reconnect / Disconnect / Forget** (Bluetooth devices) —
   chapter 14.
-- **Unmirror** (network devices) -- drops the mirrored device from
-  this hub's matrix. The peer's export is untouched; the session
-  stays discoverable and can be re-added from the Add menu or
-  Settings → Network MIDI.
+- **Unmirror** (network devices) — drops the mirrored device from
+  this hub's matrix; the peer's export is untouched. Re-add from
+  the Add menu or Settings → Network MIDI.
 
 ## Adding and Renaming Devices
 
 USB devices appear as soon as they are plugged in. Custom names
-follow the device: hardware with a real USB serial number is
-recognised on any port, and a serial-less device is matched by
-vendor/product ID when it is the only one of its model -- so
-re-plugging into a different port restores the name and routing in
-both cases. Only *identical serial-less* devices used side by side
-stay bound to their ports (chapter 5, "Device Topology and
-Renames").
-
-Multi-port devices (some interfaces expose multiple MIDI ports per
-USB connection) appear as one row and one column *per port*.
-Individual ports can be renamed; the **Octatrack** DIN output, for
-example, can be named explicitly instead of appearing as
+follow the device — a USB serial is recognised on any port, and a
+serial-less device is matched by vendor/product ID while it is the
+only one of its model — so name and routing survive replugging into
+a different port. Only *identical serial-less* devices used side by
+side stay bound to their ports (chapter 5, "Device Topology and
+Renames"). Multi-port devices get one row and column per port, each
+renamable — name the **Octatrack** DIN output instead of
 `<Device> Port 2`.
 
 ## Offline Devices
 
-When a saved device is unplugged, it does not disappear from the
-matrix. Its row and column stay visible, dimmed, with any saved
-connections still shown as toggleable cells. This means you can
-build up routing in advance and only physically connect the gear
-when you are ready, or recover from a cable getting kicked out
-without losing the routing state.
-
-The dimmed cells can still be toggled on or off; the changes apply
-the moment the device is plugged back in. Offline cells in the
-purple state (filtered / mapped) keep their filter and mapping
-state through the offline period.
+An unplugged saved device keeps its row and column, dimmed, with
+saved connections shown — build routing in advance or survive a
+kicked-out cable. Dimmed cells still toggle; changes apply the
+moment the device returns. Purple cells keep their filter and
+mapping state while offline.
 
 ## The Clipboard
 
-The matrix supports three clipboards, each with its own scope:
+Three clipboards, each with its own scope:
 
 | Clipboard | Holds | Pasted by |
 |-----------|-------|-----------|
@@ -244,74 +163,52 @@ The matrix supports three clipboards, each with its own scope:
 | **Plugin clipboard** | One plugin instance with all parameters | Pasting from a plugin's header menu |
 | **Mapping clipboard** | One mapping (Note → CC, CC → CC, ...) | Pasting from the **+ Paste Mapping** button in the filter panel |
 
-The cell clipboard and the mapping clipboard interact with their
-own paste-conflict resolution:
-
-- **Cell paste** overwrites the destination cell's filter and
-  mappings wholesale.
-- **Mapping paste-with-bump** auto-resolves duplicate CC conflicts
-  by bumping the pasted mapping onto the next free slot.
-
-The plugin clipboard duplicates the *instance*: a Mixer 8 with all
-its renamed cells, learned CCs, drop-button captures, and theme
-choices can be cloned for a second venue by Copy on the original,
-Paste on the matrix, and renaming the duplicate.
+**Cell paste** overwrites the destination's filter and mappings
+wholesale; **mapping paste** bumps a duplicate CC onto the next free
+slot. The plugin clipboard duplicates the whole *instance*,
+including renamed cells, learned CCs, drop-button captures and
+theme: Copy a configured Mixer 8, Paste, rename.
 
 ## The Add Menu
 
-The **Add** button at the bottom of the matrix opens an overlay
-with four sections, each grouping addable instances by what they
-do:
+The **Add** button at the bottom of the matrix opens an overlay:
 
-1. **Plugins** -- routing-graph plugins that consume / transform /
-   produce MIDI events: CC LFO, CC Smoother, Chord Generator, Clock
-   Divider, Hold, Master Clock, MIDI Delay, Note Splitter, Note
-   Transpose, Panic Button, Pitch CC, Scale Remapper, SysEx Sender,
-   Velocity Curve, Velocity Equalizer (chapter 11). Tapping an
-   entry creates a new instance and adds it to the matrix.
-2. **Controllers** -- the four play-surface templates (Mixer 8,
-   FX 6, Performance 16, XY 4) that live on the **Controller** tab.
-   See chapter 12.
-3. **Play** -- fullscreen play surfaces that live on the **Play**
-   tab. Currently the Tracker, the Arpeggiator, the Euclidean and the Cartesian
-   (chapter 13; per-plugin parameter tables in Appendix A).
-4. **Bluetooth MIDI** -- a Scan button and a list of paired
-   peripherals. See chapter 14 for the pairing flow.
-5. **Network MIDI** (when enabled in Settings) -- discovered but
-   unmirrored RTP-MIDI sessions: peer-hub exports you previously
-   unmirrored, and foreign sessions from Macs / iPads / DAWs,
-   which never mirror automatically. **Add** mirrors one into the
-   matrix. See chapter 17's *Network MIDI* section.
+1. **Plugins** (chapter 11) — CC LFO, CC Smoother, Chord Generator,
+   Clock Divider, Hold, Master Clock, MIDI Delay, Note Splitter,
+   Note Transpose, Panic Button, Pitch CC, Scale Remapper, SysEx
+   Sender, Velocity Curve, Velocity Equalizer; tapping an entry
+   creates a new instance.
+2. **Controllers** — the four play-surface templates (Mixer 8,
+   FX 6, Performance 16, XY 4) on the **Controller** tab
+   (chapter 12).
+3. **Play** — fullscreen play surfaces on the **Play** tab:
+   Tracker, Arpeggiator, Euclidean, Cartesian (chapter 13;
+   parameter tables in Appendix A).
+4. **Bluetooth MIDI** — Scan plus the paired-peripheral list
+   (chapter 14).
+5. **Network MIDI** (when enabled in Settings) — discovered,
+   unmirrored RTP-MIDI sessions: peer-hub exports plus foreign
+   sessions from Macs / iPads / DAWs, which never mirror
+   automatically; **Add** mirrors one into the matrix (chapter 17).
 
-User-supplied plugins discovered at startup appear in the
-appropriate section based on their declared surface kind.
+User-supplied plugins appear in the section matching their declared
+surface kind.
 
 ## The Bottom Bar -- Save, Load, Export, Import
 
-Four buttons run across the bottom of the matrix:
-
-- **Save Config** -- persists the current in-memory state to disk
-  as the boot default, and drops a rolling backup checkpoint
-  (Settings -> Backup, chapter 16). Clears the dirty-state asterisk.
-- **Load Config** -- reloads the last saved state (the deliberate
-  Save, not the autosave). Plugin instances that exist only in
-  memory (unsaved) are stopped and discarded.
-- **Export Config** -- downloads the current state as a JSON file.
-  Useful for backing up before a risky experiment.
-- **Import Config** -- uploads a JSON file and replaces the current
-  state. The import is validated before commit; a partial / corrupt
-  file is rejected with an error.
-
-**Save Config** is the most-used button in the UI. The dirty-state
-asterisk on the bottom-nav **Routing** icon is the reminder to use
-it -- though edits are also autosaved in the background, so a hard
-power cut resumes your last edit even before you Save (chapter 15.6).
+- **Save Config** — persists the current state as the boot default
+  and drops a rolling backup checkpoint (Settings → Backup,
+  chapter 16). Clears the dirty-state asterisk.
+- **Load Config** — reloads the last deliberate Save (not the
+  autosave); unsaved plugin instances are stopped and discarded.
+- **Export Config** — downloads the current state as JSON.
+- **Import Config** — uploads a JSON file and replaces the current
+  state; invalid or partial files are rejected.
 
 ## The Dirty-State Asterisk
 
-A dark-red `*` next to the **Routing** icon in the bottom navigation
-lights up whenever any of the following diverges from the saved
-config:
+A dark-red `*` next to the **Routing** icon lights whenever anything
+diverges from the saved config:
 
 - A connection added or removed
 - A filter or mapping edited
@@ -321,44 +218,32 @@ config:
 - A device renamed
 - A port renamed
 
-**Performing does not light it.** Live play — moving a fader / knob /
-XY pad, launching or switching Tracker patterns, firing or cancelling
-a drop button — changes no saveable content, so it leaves the
-asterisk clear and triggers no autosave. Only edits to the saved
-state do. (Capturing a drop snapshot *is* an edit and does count.)
-
-The asterisk is *only* about persistence. The unit runs perfectly
-fine with unsaved state; the next reboot is the only thing that
-loses it -- and even then the background autosave (chapter 15.6)
-resumes your last edit.
+**Performing does not light it.** Fader / knob / XY moves, Tracker
+pattern launches or switches, and firing or cancelling a drop button
+change no saveable content — no asterisk, no autosave; capturing a
+drop snapshot *is* an edit and counts. Unsaved state runs fine —
+even a hard power cut resumes your last edit from the background
+autosave (chapter 15.6).
 
 ## The Direct-Path vs Filter-Path Distinction
 
-Connections without a filter and without mappings are wired
-directly in the ALSA kernel sequencer -- effectively zero added
-latency, no userspace involvement after setup. Connections with any
-filter or mapping go through the userspace filter/mapper, adding
-roughly 1--3 ms. Most of the time this distinction does not matter
-in practice, but it is the reason the matrix differentiates red
-(direct) from purple (filtered/mapped) cells: the colour also
-hints at the latency profile.
-
-See chapter 4 for the architectural details.
+Unfiltered connections are wired directly in the kernel sequencer —
+effectively zero added latency; a filter or mapping routes the
+connection through the hub, adding roughly 1--3 ms. Red = direct,
+purple = filtered / mapped. See chapter 4.
 
 
 Screenshots needed:
 
 - `09-matrix-remote-hub-group.png` -- the matrix with a second
-  hub's devices mirrored: the violet `@hub2` group row expanded
-  with two device rows, and a second capture collapsed. Needs two
-  real hubs on one network; not coverable by the scripted scenes.
+  hub's devices mirrored: the violet `@hub2` group row, one capture
+  expanded, one collapsed. Needs two real hubs on one network; not
+  coverable by the scripted scenes.
 - `01-routing-rack.png` -- the Routing tab on the **Rack** toggle.
-  Wired as the `_open_rack_view` scene in `scripts/screenshots/run.py`
-  (pre-setup phase, like `01-routing`), so it regenerates with
-  `make screenshots`. The committed shot was captured against a live
-  rig; rerun to refresh against the curated demo set if desired.
-- `09-midi2-badge.png` -- a matrix row header showing the 2.0 badge
-  next to a MIDI 2.0 device's name, plus the same device's rack
-  faceplate. Coverable on a UMP-enabled hub with
-  `scripts/fake_midi2_synth.py` running (no 2.0 hardware needed);
-  add a scripted scene when the screenshot set is next regenerated.
+  Wired as the `_open_rack_view` scene in `scripts/screenshots/run.py`,
+  so `make screenshots` regenerates it; the committed shot came from
+  a live rig.
+- `09-midi2-badge.png` -- a matrix row header with the 2.0 badge,
+  plus the same device's rack faceplate. Coverable with
+  `scripts/fake_midi2_synth.py` on a UMP-enabled hub (no 2.0
+  hardware needed); add a scripted scene at the next regeneration.

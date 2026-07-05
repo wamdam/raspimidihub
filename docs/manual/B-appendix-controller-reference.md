@@ -1,9 +1,8 @@
 # Controller Reference
 
-The per-controller layout, default CC assignments, and template-
-specific mechanics. The conceptual model -- drop buttons, themes,
-maximisation -- is in chapter 12; this appendix is the cell-by-
-cell cheat sheet.
+Per-controller layout, default CC assignments, and template-specific
+mechanics. The conceptual model -- drop buttons, themes, maximisation
+-- is in chapter 12.
 
 ## Mixer 8
 
@@ -16,17 +15,13 @@ cell cheat sheet.
 
 **Layout.**
 
-- **3 rows of 8 knobs each** -- 24 knobs total. The three rows
-  cover typical send / send / channel-volume layouts on a hardware
-  mixer.
-- **1 row of 8 faders** -- the eight channel faders.
-- **2 rows of 8 buttons each** -- 16 buttons total. The two rows
-  typically cover mute / solo per channel.
+- **3 rows of 8 knobs** (24) -- send / send / channel-volume rows.
+- **1 row of 8 faders** -- the channel faders.
+- **2 rows of 8 buttons** (16) -- typically mute / solo per channel.
 
-Default channel for every cell is 1. Per-cell override is allowed
-on the configuration panel (Ch wheel per cell).
-
-The four drop buttons sit above the play surface.
+Every cell defaults to channel 1; override per cell via the Ch wheel
+on the configuration panel. The four drop buttons sit above the play
+surface.
 
 ![Mixer 8 play surface.](../screenshots/controller-mixer-8.png){width=40%}
 
@@ -43,9 +38,8 @@ The four drop buttons sit above the play surface.
 
 **Layout.**
 
-- **3 rows of 6 knobs each** -- 18 knobs total. Typically the
-  three knobs of an FX unit (e.g. delay time / feedback / mix)
-  for six FX channels.
+- **3 rows of 6 knobs** (18) -- e.g. delay time / feedback / mix for
+  six FX channels.
 - **1 row of 6 faders** -- per-FX channel level.
 - **1 row of 6 buttons** -- per-FX bypass / enable.
 
@@ -64,13 +58,9 @@ The four drop buttons sit above the play surface.
 
 **Layout.**
 
-- **4 rows of 4 knobs each** -- 16 macro knobs. Each knob is
-  intended as a "macro" -- a single knob mapped to multiple
-  destination parameters at the routing-mappings level.
-- **1 row of 4 buttons** -- the four scene buttons.
-
-The drop-button row remains separate and sits above the play
-surface.
+- **4 rows of 4 knobs** (16 macros) -- each intended as one knob
+  mapped to multiple destination parameters via routing mappings.
+- **1 row of 4 buttons** -- the scene buttons.
 
 ![Performance 16 play surface.](../screenshots/controller-performance-16.png){width=40%}
 
@@ -87,18 +77,14 @@ surface.
 
 **Layout.**
 
-- **2 large XY pads** at the top. Each pad sends two CCs (one per
-  axis); per-axis MIDI Learn is supported.
-- **2 rows of 4 knobs each** in the middle -- 8 knobs total.
+- **2 large XY pads** at the top -- each sends two CCs (one per
+  axis), with per-axis MIDI Learn.
+- **2 rows of 4 knobs** (8) in the middle.
 - **1 row of 4 buttons** along the bottom.
 
-**XY pad specifics:**
-
-- Each pad has per-cell **Force** (0--127, 0 disables spring) and
-  **Home** (Bottom-left or Centre).
-- The dot returns to **Home** when released (if Force > 0).
-- Releasing fires a CC event for each axis as the dot returns to
-  home.
+**XY pad specifics:** per-cell **Force** (0--127, 0 disables the
+spring) and **Home** (Bottom-left or Centre). With Force > 0 the dot
+returns to Home on release, firing a CC event per axis as it travels.
 
 ![XY 4 play surface.](../screenshots/controller-xy-4.png){width=40%}
 
@@ -106,10 +92,7 @@ surface.
 
 ## Drop Buttons -- Complete Reference
 
-Every controller carries a row of four drop buttons. The drop-
-button system is identical across templates; only the snapshot
-contents differ (a Mixer 8 snapshot is bigger than an FX 6
-snapshot).
+Identical across templates; only the snapshot contents differ.
 
 | Per-button parameter | Type | Values |
 |----------------------|------|--------|
@@ -127,31 +110,25 @@ snapshot).
 | on | off | Snapshot applies on the next mode-boundary (Bar / 2-Bar / 4-Bar / 8-Bar / 16-Bar) |
 | on | on | Snapshot interpolates over the next mode-boundary cycle |
 
-**Capture vs fire.** Long-press the button (~600 ms) to capture
-the current state into the slot. Tap to fire the captured
-snapshot. A captured drop button shows a filled dot; an empty
-slot shows a hollow dot.
+**Capture vs fire.** Long-press (~600 ms) captures the current state
+into the slot; tap fires it. Captured = filled dot; empty = hollow
+dot.
 
-**MIDI-note trigger.** With **Trg. Note** set, receiving that note
-on any channel routed to the controller triggers the drop button
-just as if you tapped it.
+**MIDI-note trigger.** With **Trg. Note** set, that note on any
+channel routed to the controller triggers the button as if tapped.
 
-**Dual-slot scheduling.** One fade and one hard drop can be
-queued at once. Two fades cannot overlap; queueing a second fade
-overrides the first.
+**Dual-slot scheduling.** One fade and one hard drop can queue at
+once; a second fade overrides the first.
 
-**Progress ring.** A segmented arc around the drop button
-indicates progress within the scheduled cycle. The arc:
-
-- Peach-pulses while waiting for the boundary.
-- Fills the cycle in real time once the fire starts (for fade
-  mode).
-- Freezes if MIDI Stop arrives mid-cycle.
+**Progress ring.** The segmented arc peach-pulses while waiting for
+the boundary, fills the cycle in real time during a fade, and freezes
+if MIDI Stop arrives mid-cycle.
 
 ## Themes
 
-Eight dark themes ship with every controller. Theme is **per
-controller instance**, not global.
+Eight dark themes ship with every controller; theme is **per
+controller instance**, chosen in the plugin-config panel, applied
+instantly.
 
 | Theme | Accent colour |
 |-------|---------------|
@@ -164,17 +141,12 @@ controller instance**, not global.
 | Sienna | Burnt orange |
 | Slate | Cool grey |
 
-The theme is chosen in the controller's plugin-config panel.
-Changing themes is instant; the running surface re-renders with
-the new accent colour.
-
-**Screenshot needed.** `controller-themes-grid.png` -- a single
-controller in all eight themes, side by side, for visual
-comparison.
+**Screenshot needed.** `controller-themes-grid.png` -- one controller
+in all eight themes, side by side.
 
 ## Saved State
 
-The controller's full state is part of the project state:
+Part of the project state:
 
 - Per-cell rename
 - Per-cell CC, channel, On / Off values
@@ -184,7 +156,6 @@ The controller's full state is part of the project state:
 - Per-drop-button **Mode**, **Sync**, **Fade**, **Trg. Note**
 - The chosen theme
 
-**Save Config** persists it; **Export Config** captures it in a
-JSON snapshot (chapter 15); cloning the instance (Copy →
-Paste-as-new from the header menu) duplicates it with a fresh
-instance ID.
+**Save Config** persists it; **Export Config** captures it in a JSON
+snapshot (chapter 15); **Copy → Paste-as-new** duplicates it with a
+fresh instance ID.

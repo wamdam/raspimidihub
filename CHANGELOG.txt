@@ -4,6 +4,16 @@ User-visible changes. Short tagged one-liners, no code or commit
 hashes. Tags: Added, Improved, Fix, Changed, Removed.
 
 
+Unreleased
+
+- Improved: the user manual was rewritten in a tighter, more precise style — ~30% shorter with no user-facing facts removed (159-page PDF)
+- Fix: manual stated wrong MIDI Learn windows (it's 10 s in the filter/mapping panel, 30 s in the CC-binding popups) and carried four stale section cross-references
+- Fix: the cc_map_changed / cc_learn_result / cc_learn_timeout SSE events were missing from the /docs event registry (each emit warn-logged)
+- Fix: the manual PDF silently dropped Appendix E (REST & SSE API) — the build's file glob was never widened past appendix D
+- Improved: manual PDF no longer starts a section heading in the last centimetres of a page (orphaned-heading protection)
+- Improved: architecture diagram (figure 4.1) caught up with the software — Network MIDI source/exports, MIDI 2.0 (UMP) in the ALSA tier, the full persistence tiers (autosave ping-pong, rolling backups, boot preference), and the per-hub mDNS name
+
+
 2026-07-05 — Version 6.0.0a1
 
 The hub speaks MIDI 2.0. Full 32-bit controller resolution flows end

@@ -1,102 +1,73 @@
 # The RaspiMIDIHub
 
-A short product introduction that frames the rest of the manual:
-what the appliance does on its own, what it adds beyond plain
-ALSA routing, and why it has the shape it has.
+What the appliance does on its own and why it has the shape it has.
 
 ## What It Is
 
-Plug a Raspberry Pi running RaspiMIDIHub into power. Plug some
-USB MIDI devices into its USB ports. They are now talking to
-each other. No computer in the rig, no driver install, no app to
-configure on first run.
-
-That is the whole pitch. Everything below is layered on top of
-this default behaviour.
+Plug a Raspberry Pi running RaspiMIDIHub into power, plug USB MIDI
+devices into its ports, and they are talking to each other -- no
+computer, no driver install, no app to configure. Everything else is
+layered on top of this default.
 
 ## The Three Pillars
 
-RaspiMIDIHub stands on three pillars:
-
 ### Routing matrix
 
-A tap-to-edit grid for connections between MIDI devices. By
-default every USB MIDI device is connected to every other USB
-MIDI device. Past the default, per-cell channel filters,
-message-type filters, and four kinds of mappings (Note → CC,
-Note → CC toggle, CC → CC, Channel Remap) let you reshape the
-flow without writing code.
+A tap-to-edit grid of connections between MIDI devices. Per-cell
+channel filters, message-type filters, and four mapping types
+(Note → CC, Note → CC toggle, CC → CC, Channel Remap) reshape the
+flow without code.
 
 ### Virtual instruments and play surfaces
 
-Plugins -- LFOs, chord generators, delays, scale remappers,
-velocity curves, a dozen others -- appear in the same matrix
-as virtual MIDI devices. Three of them (the Tracker step
-sequencer, the Arpeggiator, the Euclidean step generator)
-additionally render fullscreen play surfaces on the **Play**
-tab. Controllers -- Mixer 8, FX 6, Performance 16, XY 4 --
-turn the phone or tablet into a tap-to-play MIDI controller
-surface that the matrix routes like any other device.
+Plugins -- LFOs, chord generators, delays, scale remappers, velocity
+curves, a dozen others -- appear in the matrix as virtual MIDI
+devices; the Tracker, Arpeggiator, and Euclidean also render
+fullscreen play surfaces on the **Play** tab. Controllers (Mixer 8,
+FX 6, Performance 16, XY 4) turn a phone or tablet into a tap-to-play
+surface the matrix routes like any other device.
 
 ### Appliance reliability
 
-Read-only filesystem, captive-portal access point, power-pull-
-safe configuration writes, an isolated CPU for the audio path.
-The Pi is treated like a guitar pedal: yank the power, throw it
-in a bag, plug it back in next week, it boots back to the same
-state.
+Read-only filesystem, captive-portal access point, power-pull-safe
+config writes, an isolated CPU core for the MIDI path. Treat the Pi
+like a guitar pedal: yank the power, plug it back in next week, it
+boots to the same state.
 
 ## Design Goals
 
-The trade-offs that pushed the project into the shape it has:
-
-- **Explicit routing by default.** New devices arrive in the matrix
-  disconnected -- a freshly-plugged device never injects MIDI until
-  you route it. One tap on a cell connects a pair; flip *Default
-  routing* to **Connect all** (Settings → MIDI) for the old
-  all-to-all plug-and-play. Everything is an explicit, visible edit.
-- **Mobile-first UI.** The configuration interface is a touch-
-  first web UI that runs from any phone. There is no desktop app.
-  Wheels, faders, radios, and toggles replace dropdowns
-  everywhere.
-- **Sub-millisecond routing on direct connections.** Connections
-  without filters or mappings are wired in the ALSA kernel
-  sequencer with no userspace involvement. Latency is
-  effectively zero.
-- **Power-pull-safe.** The SD card is mounted read-only during
-  normal operation. The config writes are atomic. The BlueZ bonds
-  are snapshotted to the boot partition on every change. Yanking
-  the power loses unsaved edits and nothing else.
-- **Open, inspectable, extensible.** The whole project is open
-  source under LGPL. The plugin API is documented; users can add
-  their own plugins in Python.
+- **Explicit routing by default.** New devices arrive disconnected
+  and never inject MIDI until routed. One tap connects a pair; flip
+  *Default routing* to **Connect all** (Settings → MIDI) for
+  all-to-all plug-and-play.
+- **Mobile-first UI.** A touch-first web UI from any phone; no
+  desktop app. Wheels, faders, radios, and toggles replace dropdowns.
+- **Sub-millisecond routing on direct connections.** Unfiltered,
+  unmapped connections are wired in the ALSA kernel sequencer;
+  latency is effectively zero.
+- **Power-pull-safe.** The SD card is read-only in normal operation,
+  config writes are atomic, BlueZ bonds are snapshotted on every
+  change. Yanking the power loses unsaved edits and nothing else.
+- **Open, inspectable, extensible.** Open source under the GPL, with
+  a documented plugin API for user plugins in Python.
 
 ## What It Is Not
 
-A few things RaspiMIDIHub deliberately is not, to set
-expectations:
-
-- **Not a DAW.** No recording, no audio editing, no automation
-  envelopes drawn on a timeline.
-- **Not an audio interface.** The appliance handles MIDI events.
-  Audio is generated by the connected synths and the receiving
-  gear; the Pi's analog audio output and HDMI audio are unused.
-- **Not a general-purpose Linux box.** The read-only root setup
-  and the isolated-core reservation are appliance-grade choices; they
-  make the Pi a worse host for unrelated software. Install on a
-  fresh Raspberry Pi OS Lite image only.
+- **Not a DAW.** No recording, audio editing, or timeline automation.
+- **Not an audio interface.** MIDI events only; audio comes from the
+  connected gear. The Pi's analog and HDMI audio are unused.
+- **Not a general-purpose Linux box.** The read-only root and
+  isolated-core reservation make it a worse host for other software.
+  Install on a fresh Raspberry Pi OS Lite image only.
 
 ## The Project's Story in Brief
 
-RaspiMIDIHub started as a routing-only utility -- ALSA `aconnect`
-wrapped in a kiosk UI -- and grew into a plugin host and a
-controller platform over a series of releases. The roadmap
-(`docs/ROADMAP.md`) documents the major shifts; the changelog
-(`CHANGELOG.txt`) is the terse per-version log.
+Started as a routing-only utility -- ALSA `aconnect` wrapped in a
+kiosk UI -- and grew into a plugin host and controller platform.
+Major shifts: `docs/ROADMAP.md`; per-version log: `CHANGELOG.txt`.
 
 ## Licence
 
-GPL. Bundled third-party software retains its own licences:
-Preact (MIT), HTM (Apache 2.0). See chapter 22 for the full
-credits and chapter 21.8 for the compliance notes.
-
+GPL. Bundled third-party software retains its own licences: Preact
+(MIT), HTM (Apache 2.0). Full credits: chapter 22; compliance notes:
+chapter 21.8.

@@ -4,25 +4,17 @@
 
 # Plugin Reference
 
-The complete per-plugin parameter reference. Each entry follows
-the same structure: a one-paragraph summary, a parameter table
-with ranges and defaults, the input and output behaviour, and the
-clock semantics (if any).
+Per-plugin parameter reference: summary, parameter table with
+ranges and defaults, input/output behaviour, clock semantics.
+The conceptual model of plugins is in chapter 11.
 
-The conceptual model of plugins -- how they fit into the routing
-matrix, how they are added and removed, how clock sync and CC
-automation work -- is in chapter 11.
-
-**CC defaults.** Where a parameter shows a `(CC N default)` note,
-that's the plugin author's factory binding -- the (Any channel,
-CC N) the param ships with. Users override per-instance via
-long-press → MIDI Learn (chapter 11.7); the default just tells
-you what to expect before any rebinding.
+**CC defaults.** A `(CC N default)` note is the factory binding
+(Any channel, CC N). Override per instance via long-press → MIDI
+Learn (chapter 11.7).
 
 ## Arpeggiator
 
-Detailed surface-and-workflow reference: chapter 13. Plugin-level
-metadata:
+Surface and workflow: chapter 13.
 
 | Trait | Value |
 |-------|-------|
@@ -51,7 +43,7 @@ metadata:
 | Setup   | **Ctrl Ch** | Wheel | Off / 1--16 | Off |
 | Setup   | **P1..P8** (visible when Ctrl Ch is on) | NoteSelect ×8 | one learnable trigger note per slot | C2..G2 (36..43) |
 
-CC automation (mirrors the Euclidean for shared params):
+CC automation:
 
 | CC | Parameter | CC | Parameter |
 |----|-----------|----|-----------|
@@ -59,13 +51,13 @@ CC automation (mirrors the Euclidean for shared params):
 | 71 | Octaves   | 75 | Gate % |
 | 73 | Steps     | 83 | Accent Vel. |
 
-**Input.** Notes (held-note buffer), CC 64 (temporary Hold via
-sustain pedal), CC 70..83 (parameter automation), Clock +
-Transport, and the 8 learnable notes on Ctrl Ch when set.
-**Output.** Notes (the arpeggiated stream). Aftertouch and Pitch
-Bend pass through unchanged.
+**Input.** Notes (held-note buffer), CC 64 (temporary Hold),
+CC 70..83 (automation), Clock + Transport, the 8 learnable notes
+on Ctrl Ch when set.
+**Output.** Notes (the arpeggiated stream); Aftertouch and Pitch
+Bend pass through.
 **Clock.** Consumes external clock when Sync is `tempo` or
-`transport`; free-runs at BPM when Sync is `free`.
+`transport`; free-runs at BPM when `free`.
 
 ![Arpeggiator play surface.](../screenshots/arpeggiator-play.png){width=42%}
 
@@ -73,8 +65,7 @@ Bend pass through unchanged.
 
 ## Cartesian
 
-Detailed surface-and-workflow reference: chapter 13. Plugin-level
-metadata:
+Surface and workflow: chapter 13.
 
 | Trait | Value |
 |-------|-------|
@@ -113,7 +104,7 @@ metadata:
 | Setup   | **BPM** (visible when Sync = free) | Wheel | 40--300 | 120 |
 | Setup   | **P1..P8** (visible when Ctrl Ch is on) | NoteSelect ×8 | one learnable trigger note per slot | C2..G2 (36..43) |
 
-CC automation (mirrors the Arp / Euclidean for shared params):
+CC automation (shared params match the Arp / Euclidean):
 
 | CC | Parameter | CC | Parameter |
 |----|-----------|----|-----------|
@@ -125,15 +116,14 @@ CC automation (mirrors the Arp / Euclidean for shared params):
 | 75 | Inv. Rate    |    |    |
 
 **Input.** Notes on Play Ch (the played root), notes on Fill Ch
-(record cell offsets), CC 70..75 / 79 / 83 / 87 (parameter
-automation), 8 learnable notes on Ctrl Ch when set (each picks a
-pattern slot; consumed, not played), Clock + Transport, Aftertouch,
-Pitch Bend.
-**Output.** Notes (grid-voiced). Aftertouch and Pitch Bend pass
-through unchanged.
+(record cell offsets), CC 70..75 / 79 / 83 / 87 (automation),
+8 learnable notes on Ctrl Ch when set (each picks a pattern slot;
+consumed, not played), Clock + Transport, Aftertouch, Pitch Bend.
+**Output.** Notes (grid-voiced); Aftertouch and Pitch Bend pass
+through.
 **Clock.** Consumes external clock when Sync is `tempo` or
-`transport` (one subdivision per axis); free-runs at BPM when Sync
-is `free`.
+`transport` (one subdivision per axis); free-runs at BPM when
+`free`.
 
 ![Cartesian play surface.](../screenshots/cartesian-play.png){width=42%}
 
@@ -141,11 +131,10 @@ is `free`.
 
 ## CC LFO
 
-Generates a CC waveform on the output. Five wave shapes; free-run
-or clock-synced rate up to 8 bars; live scope display. On a MIDI
-2.0-capable hub the waveform is emitted at full 32-bit resolution --
-stepless into MIDI 2.0 destinations, while MIDI 1.0 destinations
-receive exactly the classic 0--127 steps.
+Generates a CC waveform: five wave shapes, free-run or clock-synced
+rate up to 8 bars, live scope. On a MIDI 2.0-capable hub the wave
+is stepless into 2.0 destinations; MIDI 1.0 destinations get the
+classic 0--127 steps.
 
 | Group | Parameter | Type | Range | Default |
 |-------|-----------|------|-------|---------|
@@ -168,12 +157,10 @@ the **Frequency** when off.
 
 ## CC Smoother
 
-Smooths jitter on a noisy CC input by interpolating between
-incoming values over a configurable window. Dual scope -- input
-and output side by side -- makes the smoothing visible. On a MIDI
-2.0-capable hub the smoother reads and emits full resolution: the
-glide is stepless into 2.0 destinations while MIDI 1.0 destinations
-receive exactly the classic smoothed integers.
+Smooths jitter on a noisy CC by interpolating between incoming
+values over a configurable window. On a MIDI 2.0-capable hub the
+glide is stepless into 2.0 destinations; MIDI 1.0 destinations get
+the classic smoothed integers.
 
 | Parameter | Type | Range | Default |
 |-----------|------|-------|---------|
@@ -190,13 +177,11 @@ receive exactly the classic smoothed integers.
 
 ## Channel Selector
 
-Turns a set of momentary CC buttons into a channel picker for
-controllers without a display. Each channel slot is bound to one CC
-number; pressing that button (a CC value at or above the trigger
-threshold) makes that channel the active one. The input channel is
-ignored entirely -- notes, CC, pitch bend, aftertouch and program
-change are all re-stamped onto the active channel, so a downstream
-channel filter in the routing matrix decides where the signal goes.
+Turns momentary CC buttons into a channel picker for controllers
+without a display. Each slot binds one CC number; a value at or
+above the trigger threshold makes that channel active. The input
+channel is ignored -- every event is re-stamped onto the active
+channel, so a downstream channel filter decides where it goes.
 
 | Parameter | Type | Range | Default |
 |-----------|------|-------|---------|
@@ -204,16 +189,12 @@ channel filter in the routing matrix decides where the signal goes.
 | **Trigger ≥** | Wheel | 1--127 | 64 |
 | CC → Channel -- **Ch 1**..**Ch 16** | CCSelect | Off, CC 0--127 | Off (unbound) |
 
-**Active Channel** mirrors the live selection and can be scrolled by
-hand as a manual override; a live button press updates it without
-marking the config dirty. Each **Ch** slot has its own **Learn** button:
-tap it, then press the button on the controller -- the next incoming CC
-is captured into that slot. Slots left at "Off" are unbound.
-
-A note held while you switch channels still receives its Note Off on
-the channel it started on, so a mid-phrase switch leaves no stuck note.
-Selector CCs are swallowed (press and release); any other CC passes
-through on the active channel.
+**Active Channel** mirrors the live selection and doubles as a
+manual override; a button press updates it without dirtying the
+config. Each **Ch** slot has a **Learn** button: tap it, press the
+controller button, the next incoming CC is captured. Selector CCs
+are swallowed; other CCs pass through. A note held across a switch
+gets its Note Off on its original channel -- no stuck notes.
 
 **Input.** Notes / CC / Pitchbend / Aftertouch / Program Change
 (input channel ignored).
@@ -224,9 +205,9 @@ through on the active channel.
 
 ## Chord Generator
 
-Each incoming Note On triggers a chord. Selectable chord type,
-inversion, and an "added-note velocity scale" so the upper
-voices can be softer than the played root.
+Each incoming Note On triggers a chord with selectable type and
+inversion; the added-note velocity scale lets upper voices sound
+softer than the played root.
 
 | Group | Parameter | Type | Range | Default |
 |-------|-----------|------|-------|---------|
@@ -242,8 +223,8 @@ voices can be softer than the played root.
 
 ## Clock Divider
 
-Emits one MIDI Clock for every N received. Useful for driving a
-slow second device from a fast master clock.
+Emits one MIDI Clock for every N received -- drives a slow second
+device from a fast master clock.
 
 | Parameter | Type | Range | Default |
 |-----------|------|-------|---------|
@@ -258,8 +239,7 @@ Continue through.
 
 ## Euclidean
 
-Detailed surface-and-workflow reference: chapter 13. Plugin-level
-metadata:
+Surface and workflow: chapter 13.
 
 | Trait | Value |
 |-------|-------|
@@ -319,13 +299,13 @@ Portamento Control):
 | 79 | Rotate     |    |    |
 
 **Input.** Notes (held buffer), CC 64 (sustain pedal), CC 70..83
-/ CC 85..88 (parameter automation), 8 learnable notes on Ctrl Ch
-when set (each picks a pattern slot; consumed, not arpeggiated),
-Clock + Transport, Aftertouch, Pitch Bend.
-**Output.** Notes (Bjorklund-voiced, scale-quantised). Aftertouch
-and Pitch Bend pass through unchanged.
+/ CC 85..88 (automation), 8 learnable notes on Ctrl Ch when set
+(each picks a pattern slot; consumed, not arpeggiated), Clock +
+Transport, Aftertouch, Pitch Bend.
+**Output.** Notes (Bjorklund-voiced, scale-quantised); Aftertouch
+and Pitch Bend pass through.
 **Clock.** Consumes external clock when Sync is `tempo` or
-`transport`; free-runs at BPM when Sync is `free`.
+`transport`; free-runs at BPM when `free`.
 
 ![Euclidean play surface.](../screenshots/euclidean-play.png){width=42%}
 
@@ -333,24 +313,20 @@ and Pitch Bend pass through unchanged.
 
 ## Hold
 
-Latches incoming notes so they keep sounding after release.
-Two latch modes, chosen with **Toggle notes**:
+Latches notes so they keep sounding after release. **Toggle
+notes** picks the mode:
 
-- **off (default) -- chord-latch.** While any key is physically
-  down, further presses extend the held chord; once every key is
-  released the chord stays sounding. Pressing the Release Note
-  (default `C8`, high enough to be out of normal play range)
-  silences the chord; pressing any other note after a full
-  release replaces the held chord with a new one starting on
-  that note.
-- **on -- per-note toggle.** Each note latches independently.
-  The first press of a note plays and holds it; the next press
-  of the same note releases it. The keyboard's own note-off
-  events are ignored. The Release Note still works as an
-  "all off" trigger across every latched note.
+- **off (default) -- chord-latch.** While any key is down, presses
+  extend the held chord; on full release the chord keeps sounding.
+  The Release Note (default `C8`, above normal play range)
+  silences it; any other note after a full release starts a new
+  chord.
+- **on -- per-note toggle.** Each note latches independently:
+  first press holds, the next press of the same note releases;
+  the keyboard's own note-offs are ignored. The Release Note still
+  releases everything.
 
-Flipping Toggle notes mid-session releases everything currently
-sounding so the new mode starts from a clean slate.
+Flipping Toggle notes mid-session releases everything sounding.
 
 | Group | Parameter | Type | Range | Default |
 |-------|-----------|------|-------|---------|
@@ -359,29 +335,21 @@ sounding so the new mode starts from a clean slate.
 | Release Note | **Note** | NoteSelect | 0--127 | C8 (108) |
 
 **Input.** Notes.
-**Output.** Notes -- with sustained Note Ons. The configured
-release note acts as the off trigger for all held notes.
+**Output.** Notes -- with sustained Note Ons; the release note
+turns off all held notes.
 **Clock.** None.
 
 ![Hold config panel.](../screenshots/22-plugin-hold.png){width=35%}
 
 ## Latency
 
-Adds a fixed millisecond delay to every MIDI event before forwarding,
-via the ALSA kernel queue (sub-millisecond jitter under load).
-Compensates synths whose own MIDI-in processing lands the sound a few
-milliseconds after the message arrives -- route a tight source (the
-Arpeggiator, the Tracker, a hardware controller) through Latency
-before that synth so the audio lines up with the synth's internal
-sequencer.
-
-Clock and transport (Start / Stop / Continue) pass through
-immediately. Delaying them would shift the downstream synth's own
-sequencer and defeat the point of the plugin.
-
-The note-on / note-off pair is bookkept so a live fader move
-mid-note cannot reorder it -- the off reuses the offset captured at
-the matching on.
+Delays every MIDI event by a fixed number of milliseconds
+(kernel-timed, sub-millisecond jitter). Compensates synths whose
+MIDI-in processing lands the sound late: route a tight source
+through Latency before that synth. Clock and transport pass
+through immediately -- delaying them would shift the downstream
+sequencer. Note-on/off pairs stay matched, so a fader move
+mid-note cannot reorder them.
 
 | Parameter | Type | Range | Default |
 |-----------|------|-------|---------|
@@ -395,9 +363,8 @@ the matching on.
 
 ## Master Clock
 
-Generates MIDI Clock from an internal BPM. Includes a transport
-button, a beat meter showing the position within the bar, and a
-bar counter.
+Generates MIDI Clock from an internal BPM, with a transport
+button, beat meter and bar counter.
 
 | Parameter | Type | Range | Default |
 |-----------|------|-------|---------|
@@ -413,9 +380,8 @@ bar counter.
 
 ## MIDI Delay
 
-Pre-scheduled echoes through the ALSA queue. Sub-millisecond
-jitter under load. Supports clock-synced delay times or
-free-running milliseconds; per-repeat velocity decay.
+Note echoes, kernel-timed (sub-millisecond jitter). Clock-synced
+or free-running delay time; per-repeat velocity decay.
 
 | Group | Parameter | Type | Range | Default |
 |-------|-----------|------|-------|---------|
@@ -453,8 +419,7 @@ on the split point.
 
 ## Note Transpose
 
-Shifts all incoming notes up or down by a fixed number of
-semitones.
+Shifts all incoming notes by a fixed number of semitones.
 
 | Parameter | Type | Range | Default |
 |-----------|------|-------|---------|
@@ -469,32 +434,30 @@ semitones.
 ## Panic Button
 
 Sends *All Notes Off* and *All Sound Off* on every MIDI channel
-on each press. Kills stuck notes everywhere downstream.
+on each press -- kills stuck notes everywhere downstream.
 
 | Parameter | Type | Range | Default |
 |-----------|------|-------|---------|
 | **Panic!** | Button (momentary, red) | trigger | -- |
 | **Trigger CC #** | Wheel | 0--127 | 64 |
 
-The **Trigger CC #** lets a hardware CC fire the panic button
-remotely -- any incoming CC value of 64 or higher on that CC#
-triggers a panic.
+**Trigger CC #** fires the panic remotely: any value of 64 or
+higher on that CC# triggers it.
 
 **Input.** CC (for the trigger).
 **Output.** All Sound Off (CC 120 = 0) and All Notes Off
-(CC 123 = 0) on every MIDI channel, on every press.
+(CC 123 = 0) on every channel, on every press.
 **Clock.** None.
 
 ![Panic Button config panel.](../screenshots/17-plugin-panic.png){width=35%}
 
 ## Pitch CC
 
-Turns a keyboard into a chromatic player for synths that pitch
-via a CC rather than the MIDI note number (Korg Volca Sample,
-CC 49 = sample playback rate). Each Note On emits a pitch CC --
-value `Base CC Value + (played_note - Base Note)`, clamped to
-0--127 -- *before* forwarding the Note On. Note Off forwards
-without a CC.
+Chromatic playing for synths that pitch via a CC rather than the
+note number (Korg Volca Sample, CC 49 = sample playback rate).
+Each Note On emits a pitch CC -- value
+`Base CC Value + (played_note - Base Note)`, clamped to 0--127 --
+*before* the Note On. Note Off forwards without a CC.
 
 | Parameter | Type | Range | Default |
 |-----------|------|-------|---------|
@@ -511,8 +474,7 @@ pass through.
 
 ## Scale Remapper
 
-Quantises incoming notes to a musical scale. Labelled wheels for
-the root pitch and a radio for the scale type.
+Quantises incoming notes to a musical scale.
 
 | Parameter | Type | Range | Default |
 |-----------|------|-------|---------|
@@ -527,17 +489,16 @@ the root pitch and a radio for the scale type.
 
 ## SysEx Sender
 
-Upload a `.syx` file in the configuration panel; the bytes are
-streamed to the destination in 256-byte chunks with ~5 ms gaps
-between chunks (some legacy synths' input buffers cannot handle
-back-to-back SysEx without gaps).
+Upload a `.syx` file; the bytes stream to the destination in
+256-byte chunks with ~5 ms gaps (some legacy synths cannot handle
+back-to-back SysEx).
 
 | Parameter | Type | Range | Default |
 |-----------|------|-------|---------|
 | **File picker** | File upload | -- | -- |
 
-The uploaded file is not saved. Once the SysEx is sent, removing
-the plugin instance is safe; the destination has the new state.
+The uploaded file is not saved; once sent, removing the instance
+is safe.
 
 **Input.** None.
 **Output.** SysEx -- the file's bytes.
@@ -547,8 +508,7 @@ the plugin instance is safe; the destination has the new state.
 
 ## Tracker
 
-Detailed surface-and-workflow reference: chapter 13. Plugin-level
-metadata:
+Surface and workflow: chapter 13.
 
 | Trait | Value |
 |-------|-------|
@@ -559,57 +519,49 @@ metadata:
 | Pages per pattern | up to 16, chained linearly, loops back to page 0 |
 | Patterns per instance | 8 numbered slots; see chapter 13 |
 
-Configuration parameters (from the device-detail panel):
+Configuration parameters (device-detail panel):
 
 - **Per-track channel** (T1..T8) -- 8 × ChannelSelect, default 1
-  each. Doubles as the input matcher for direct channel routing
-  during live recording.
-- **Auto Ch.** -- Wheel, range `Off` / 1..16, default `Off`.
-  Incoming notes/CCs on this channel use the historic
-  cursor-relative recording (chord-spread from `cursor_track`
-  across consecutive tracks). All other channels route by matching
-  the per-track channel; unmatched channels are silently dropped.
+  each. Also the input matcher for direct channel routing during
+  live recording.
+- **Auto Ch.** -- Wheel, `Off` / 1..16, default `Off`. Notes/CCs
+  on this channel record cursor-relative (chord-spread from the
+  cursor track across consecutive tracks). Other channels route by
+  matching the per-track channel; unmatched channels are dropped.
 - **Internal BPM** -- used when **Send Clock** is on and no
   external clock is routed in.
-- **Send Clock** -- Button toggle; when on the Tracker is the
-  clock master, generating its own 24-PPQ at the Internal BPM and
-  emitting it to OUT (incoming clock is then ignored). Off =
+- **Send Clock** -- Button; on = clock master, generating 24-PPQ
+  at the Internal BPM to OUT (incoming clock ignored). Off =
   follow external clock.
-- **Send Trnsp.** -- Button toggle; forwards incoming START /
-  STOP / CONTINUE to OUT and emits its own when the on-screen
-  Play / Stop buttons fire.
-- **Rcv Trnsp.** -- Button toggle, default **on**. When on,
-  external transport (START / STOP / CONTINUE off the global
-  clock bus) drives the playhead. When off, the Tracker ignores
-  foreign transport and is started only by its own Play / Stop
-  buttons and the launch trigger modes; it still follows the
-  shared clock for tempo. The Play / Stop buttons bypass this
-  gate and always work.
-- **Ctrl Ch** -- Wheel, range `Off` / 1..16, default
-  `Off`. When set, the channel is reserved end-to-end (no
-  recording, no pass-through, CCs dropped too) and incoming notes
-  trigger the matching pattern slot.
+- **Send Trnsp.** -- Button; forwards incoming START / STOP /
+  CONTINUE to OUT and emits its own when the on-screen Play / Stop
+  buttons fire.
+- **Rcv Trnsp.** -- Button, default **on**. On: external transport
+  drives the playhead. Off: foreign transport is ignored -- only
+  the Play / Stop buttons and the launch trigger modes start the
+  Tracker, which still follows the shared clock for tempo. The
+  Play / Stop buttons bypass this gate.
+- **Ctrl Ch** -- Wheel, `Off` / 1..16, default `Off`. When set,
+  the channel is reserved end-to-end (no recording, no
+  pass-through, CCs dropped); incoming notes trigger the matching
+  pattern slot.
 - **Trigger Mode** -- Wheel, `Switch` / `One-shot` / `Hold` /
-  `Toggle`, default `Switch`. Only visible when **Ctrl Ch** is
-  not Off. Governs what a control-channel trigger does:
-  *Switch* selects the pattern via the queue-on-wrap path an
-  on-screen Tap uses (the historic behaviour; pre-existing
-  configs load as Switch). *One-shot* / *Hold* / *Toggle* launch
-  the pattern from row 0 on the next clock step without a
-  transport Start -- One-shot plays once through then stops, Hold
-  loops while the key is held, Toggle starts on press and stops
-  on re-press. Launching is monophonic (a new trigger replaces
-  the one in flight) and applies to MIDI triggers only; on-screen
-  slot taps always behave as Switch.
+  `Toggle`, default `Switch`; visible only when **Ctrl Ch** is not
+  Off. *Switch* selects the pattern like an on-screen Tap
+  (queue-on-wrap; pre-existing configs load as Switch). The other
+  three launch from row 0 on the next clock step without a
+  transport Start: One-shot plays once then stops, Hold loops
+  while the key is held, Toggle starts on press and stops on
+  re-press. Launching is monophonic (a new trigger replaces the
+  one in flight) and applies to MIDI triggers only; on-screen slot
+  taps always behave as Switch.
 - **Pattern Notes (P1..P8)** -- 8 × NoteSelect, learnable,
-  defaults 36..43 (C1..G1). Only visible when **Ctrl Ch**
-  is not Off. Each entry is the note that triggers that
-  pattern slot. A note that doesn't match any slot is dropped on
-  the control channel anyway.
+  defaults 36..43 (C1..G1); visible only when **Ctrl Ch** is not
+  Off. Each is the note that triggers that pattern slot;
+  non-matching notes on the control channel are dropped.
 
-The grid data is part of the plugin instance state and is
-captured by **Save Config** and **Export Config** along with the
-parameters above.
+Grid data is part of the instance state; **Save Config** and
+**Export Config** capture it.
 
 **Input.** Notes, CC (live recording, channel-routed -- see
 chapter 13 §Routing), Clock, Start, Stop, Continue.
@@ -624,11 +576,11 @@ Trnsp.** is on).
 
 ## Velocity Curve
 
-Remaps velocity through a drawable 128-point curve. Shape presets
-(linear, ease-in, ease-out, S-curve) are available along the
-canvas edge. On a MIDI 2.0-capable hub, fractional velocity from a
-2.0 keyboard is interpolated *between* curve points and re-emitted
-at full resolution; integer velocity behaves exactly as before.
+Remaps velocity through a drawable 128-point curve; shape presets
+(linear, ease-in, ease-out, S-curve) sit along the canvas edge.
+On a MIDI 2.0-capable hub, fractional velocity is interpolated
+*between* curve points and re-emitted at full resolution; integer
+velocity behaves as before.
 
 | Parameter | Type | Range | Default |
 |-----------|------|-------|---------|
@@ -642,10 +594,10 @@ at full resolution; integer velocity behaves exactly as before.
 
 ## Velocity Equalizer
 
-Normalises incoming velocity, either to a fixed value or by
-compressing / expanding the range. Compress / expand preserve a
-MIDI 2.0 keyboard's fine velocity gradations end to end; MIDI 1.0
-devices see the classic integer results.
+Normalises incoming velocity to a fixed value or by compressing /
+expanding the range. Compress / expand preserve a MIDI 2.0
+keyboard's fine velocity gradations end to end; MIDI 1.0 devices
+see the classic integer results.
 
 | Group | Parameter | Type | Range | Default |
 |-------|-----------|------|-------|---------|
@@ -662,11 +614,7 @@ devices see the classic integer results.
 
 ## User-Supplied Plugins
 
-If you have written your own plugin and dropped it into the
-project's plugin directory, it appears in the **Add → Plugin**
-overlay alongside the built-ins. User-supplied plugins are
-subject to the same lifecycle, the same sandbox, and the same
-persistence model as the built-ins.
-
-The plugin developer guide in the project repository covers the
-API in detail. This manual is not the place for that material.
+A plugin dropped into the project's plugin directory appears in
+the **Add → Plugin** overlay alongside the built-ins, with the
+same lifecycle, sandbox and persistence model. The plugin
+developer guide in the project repository covers the API.

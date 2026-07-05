@@ -1,16 +1,14 @@
 # MIDI Mapping Reference
 
-A flat reference for every mapping type, every parameter on the
-mapping form, and the underlying behaviour. The walkthrough is in
-chapter 10; this appendix is the lookup.
+A flat reference for every mapping type and form parameter; the
+walkthrough is in chapter 10.
 
-Value fields are **MIDI units**: the familiar 0--127 scale, with
-fractional values (e.g. `63.5`) accepted since MIDI 2.0 support.
-Whole numbers behave exactly as they always did; fractions carry
-extra precision to MIDI 2.0 destinations and round for MIDI 1.0
-ones. On a MIDI 2.0 connection the mapping engine computes in full
-resolution — a hi-res controller swept through a CC → CC range
-remap stays stepless.
+Value fields are **MIDI units**: 0--127 with fractional values
+(`63.5`) accepted since MIDI 2.0. Whole numbers behave exactly as
+before; fractions carry extra precision to MIDI 2.0 destinations and
+round for MIDI 1.0 ones. On a MIDI 2.0 connection the engine
+computes in full resolution -- a hi-res sweep through a CC → CC
+range remap stays stepless.
 
 ## Mapping types
 
@@ -43,36 +41,27 @@ remap stays stepless.
 | Out Max | 0--127 | --- | --- | --- | yes | --- |
 | Pass through original event | bool | yes | yes | yes | yes | yes |
 
-**Src note = Any** (Note → CC, Note → CC toggle, Note → Note):
-turns the note match into a wildcard. Every incoming note on the
-selected source channel triggers the mapping; the destination
-note (for Note → Note) or CC (for Note → CC variants) stays
-fixed. Combined with **Value Source = Velocity** on Note → CC,
-this makes the whole keyboard act as a velocity-to-CC pedal.
+**Src note = Any** (the three note types): every incoming note on
+the source channel triggers the mapping; the destination note or CC
+stays fixed. Combined with **Value Source = Velocity**, the whole
+keyboard acts as a velocity-to-CC pedal.
 
-**Value Source = Velocity** (Note → CC only): the live note-on
-velocity (0--127) is sent as the CC value, replacing the
-**On value**. The **Off value** is still emitted on Note Off so
-the CC has a defined release state.
+**Value Source = Velocity** (Note → CC only): the note-on velocity
+is sent as the CC value instead of **On value**; **Off value** is
+still emitted on Note Off, so the CC has a defined release state.
 
 ## Channel filter mask
 
-A 16-bit mask, one bit per MIDI channel, attached to every
-connection. Defaults to all-on (`0xFFFF`).
-
-- All-on -- every channel passes.
-- All-off -- the connection is silent without being removed.
-- Tap the **MIDI Channels** heading on the filter panel to flip
-  every bit at once.
-
-Channel filtering happens **before** mappings see the event. A
-Channel Remap mapping that targets channel 3 still requires
-channel 3 to be enabled in the source filter -- otherwise the
-event never reaches the mapper.
+A 16-bit mask, one bit per MIDI channel, on every connection;
+default all-on (`0xFFFF`). All-off silences the connection without
+removing it. Tap the **MIDI Channels** heading on the filter panel
+to flip every bit at once. Filtering happens **before** mappings --
+a Channel Remap targeting channel 3 still needs channel 3 enabled
+in the source filter.
 
 ## Message-type filter flags
 
-Per-connection on/off, with defaults all on:
+Per-connection on/off, all on by default:
 
 | Flag | Covers |
 |------|--------|
@@ -84,15 +73,14 @@ Per-connection on/off, with defaults all on:
 | SysEx | System Exclusive |
 | Clock | MIDI Clock, Start, Stop, Continue, Song Position |
 
-Disabling a flag at the cell level applies instantly. The change
-is persisted to disk by **Save Config**.
+Changes apply instantly; **Save Config** persists them.
 
 ## Loop prevention
 
-- A device's own row meeting its own column on the diagonal is
-  always blocked.
-- Multi-hop loops (A → B → C → A) are detected at routing time
-  and the would-be loop-closing connection is rejected.
+- The diagonal (a device's own row meeting its own column) is always
+  blocked.
+- Multi-hop loops (A → B → C → A) are detected at routing time; the
+  loop-closing connection is rejected.
 
 ## MIDI Learn
 
@@ -106,18 +94,15 @@ is persisted to disk by **Save Config**.
 
 ## The clipboards
 
-Three clipboards interact with mappings:
-
 | Clipboard | Scope | Paste action |
 |-----------|-------|--------------|
 | **Cell** | One cell's filter + mappings | Overwrites destination cell wholesale |
 | **Mapping** | One mapping | Paste-with-bump; auto-resolves duplicate CC conflicts |
 | **Plugin** | One plugin instance | Paste-as-new; clones with fresh instance ID |
 
-The cell and mapping clipboards are surfaced as **Copy / Paste**
-on the routing matrix and as **+ Paste Mapping** on the filter
-panel respectively. The plugin clipboard is surfaced in the
-row/column header menu.
+Cell and mapping clipboards surface as **Copy / Paste** on the
+matrix and **+ Paste Mapping** on the filter panel; the plugin
+clipboard is in the row/column header menu.
 
 ## Latency
 
@@ -126,29 +111,20 @@ row/column header menu.
 | No filter, no mappings | Effectively zero (kernel-only ALSA subscribe) |
 | Any filter or mapping | 1--3 ms (userspace path) |
 
-Adding even one channel exclusion or one mapping pushes the
-connection from the *direct* path to the *filtered* path. The
-matrix renders this as the cell colour: red is direct, purple
-is filtered.
+Even one channel exclusion or one mapping moves the connection from
+the *direct* to the *filtered* path; cell colour shows it -- red
+direct, purple filtered.
 
 ## Bidirectional pairs
 
-A mapping is one-directional. To map both directions of a
-bidirectional pair (for example, a footswitch on a controller
-that should map to CC 64 on the destination *and* the destination
-should send any CC 64 changes back to a different controller),
-two cells need mappings -- one per direction. The matrix is a
-directed graph; each cell carries its own filter and mapping
-set.
+A mapping is one-directional. To map both directions of a pair (a
+footswitch to CC 64 one way, the destination's CC 64 back to another
+controller), put a mapping in each of the two cells -- each carries
+its own filter and mapping set.
 
 ## Pass-through and original-event preservation
 
-The **Pass through original event** toggle on each mapping is
-*additive*: when on, the source event is forwarded *in addition
-to* the mapped output. When off, only the mapped output is
-sent.
-
-The pass-through and the mapped event are emitted from the same
-cell, so message ordering at the destination is preserved
-(original event first, then the mapped event in the same MIDI
-tick window).
+**Pass through original event** is *additive*: on, the source event
+is forwarded in addition to the mapped output; off, only the mapped
+output is sent. The destination sees the original first, then the
+mapped event in the same MIDI tick window.

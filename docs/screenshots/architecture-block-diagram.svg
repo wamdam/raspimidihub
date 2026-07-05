@@ -27,26 +27,32 @@
 
   <!-- Sources -->
   <g>
-    <rect class="box src" x="40"  y="80" width="180" height="80"/>
-    <text x="130" y="105" text-anchor="middle" class="h">USB MIDI devices</text>
-    <text x="130" y="125" text-anchor="middle" class="sub">hot-plug, multi-port</text>
-    <text x="130" y="143" text-anchor="middle" class="sub">renamed by USB topology</text>
+    <rect class="box src" x="40"  y="80" width="145" height="80"/>
+    <text x="112" y="105" text-anchor="middle" class="h">USB MIDI devices</text>
+    <text x="112" y="125" text-anchor="middle" class="sub">hot-plug, multi-port</text>
+    <text x="112" y="143" text-anchor="middle" class="sub">renamed by topology</text>
 
-    <rect class="box src" x="240" y="80" width="180" height="80"/>
-    <text x="330" y="105" text-anchor="middle" class="h">BLE-MIDI peripherals</text>
-    <text x="330" y="125" text-anchor="middle" class="sub">via ble_midi_bridge</text>
-    <text x="330" y="143" text-anchor="middle" class="sub">bond snapshot persisted</text>
+    <rect class="box src" x="200" y="80" width="145" height="80"/>
+    <text x="272" y="105" text-anchor="middle" class="h">BLE-MIDI</text>
+    <text x="272" y="125" text-anchor="middle" class="sub">via ble_midi_bridge</text>
+    <text x="272" y="143" text-anchor="middle" class="sub">bonds persisted</text>
 
-    <rect class="box src" x="440" y="80" width="200" height="80"/>
-    <text x="540" y="105" text-anchor="middle" class="h">Plugin / Controller</text>
-    <text x="540" y="120" text-anchor="middle" class="h">instances</text>
-    <text x="540" y="143" text-anchor="middle" class="sub">each = one ALSA client</text>
+    <rect class="box src" x="360" y="80" width="145" height="80"/>
+    <text x="432" y="105" text-anchor="middle" class="h">Network MIDI</text>
+    <text x="432" y="125" text-anchor="middle" class="sub">RTP-MIDI (AppleMIDI)</text>
+    <text x="432" y="143" text-anchor="middle" class="sub">mirrored peer devices</text>
+
+    <rect class="box src" x="520" y="80" width="140" height="80"/>
+    <text x="590" y="105" text-anchor="middle" class="h">Plugin / Controller</text>
+    <text x="590" y="120" text-anchor="middle" class="h">instances</text>
+    <text x="590" y="143" text-anchor="middle" class="sub">each = one ALSA client</text>
   </g>
 
   <!-- Routing tier -->
-  <rect class="box core" x="40" y="200" width="600" height="60"/>
-  <text x="340" y="225" text-anchor="middle" class="h">ALSA sequencer (kernel)</text>
-  <text x="340" y="244" text-anchor="middle" class="sub">libasound2 via ctypes  --  alsa_seq.py / midi_engine.py</text>
+  <rect class="box core" x="40" y="200" width="620" height="74"/>
+  <text x="350" y="222" text-anchor="middle" class="h">ALSA sequencer (kernel)</text>
+  <text x="350" y="240" text-anchor="middle" class="sub">libasound2 via ctypes  --  alsa_seq.py / midi_engine.py</text>
+  <text x="350" y="258" text-anchor="middle" class="sub">MIDI 2.0 (UMP) client width on capable kernels  --  kernel converts 1.0 ↔ 2.0 per client</text>
 
   <!-- Decision: direct vs filter path -->
   <g>
@@ -72,15 +78,16 @@
   <!-- Outputs -->
   <rect class="box out" x="80" y="550" width="560" height="60"/>
   <text x="360" y="575" text-anchor="middle" class="h">Outputs</text>
-  <text x="360" y="594" text-anchor="middle" class="sub">USB MIDI  +  BLE-MIDI  +  plugin instances (loop-prevented)</text>
+  <text x="360" y="594" text-anchor="middle" class="sub">USB MIDI  +  BLE-MIDI  +  Network MIDI exports  +  plugin instances (loop-prevented)</text>
 
   <!-- Arrows hot path -->
-  <line x1="130" y1="160" x2="130" y2="198" stroke="#333" marker-end="url(#arrow)"/>
-  <line x1="330" y1="160" x2="330" y2="198" stroke="#333" marker-end="url(#arrow)"/>
-  <line x1="540" y1="160" x2="540" y2="198" stroke="#333" marker-end="url(#arrow)"/>
+  <line x1="112" y1="160" x2="112" y2="198" stroke="#333" marker-end="url(#arrow)"/>
+  <line x1="272" y1="160" x2="272" y2="198" stroke="#333" marker-end="url(#arrow)"/>
+  <line x1="432" y1="160" x2="432" y2="198" stroke="#333" marker-end="url(#arrow)"/>
+  <line x1="590" y1="160" x2="590" y2="198" stroke="#333" marker-end="url(#arrow)"/>
 
-  <line x1="250" y1="262" x2="200" y2="298" stroke="#333" marker-end="url(#arrow)"/>
-  <line x1="440" y1="262" x2="500" y2="298" stroke="#333" marker-end="url(#arrow)"/>
+  <line x1="250" y1="276" x2="200" y2="298" stroke="#333" marker-end="url(#arrow)"/>
+  <line x1="440" y1="276" x2="500" y2="298" stroke="#333" marker-end="url(#arrow)"/>
 
   <line x1="200" y1="392" x2="200" y2="428" stroke="#333" marker-end="url(#arrow)"/>
   <line x1="500" y1="392" x2="500" y2="428" stroke="#333" marker-end="url(#arrow)"/>
@@ -107,12 +114,12 @@
   </g>
 
   <!-- Cross link: web → routing core (config changes) -->
-  <line x1="700" y1="240" x2="640" y2="230" stroke="#b04a2a" marker-end="url(#arrow)" class="stroke-dash"/>
+  <line x1="700" y1="240" x2="660" y2="230" stroke="#b04a2a" marker-end="url(#arrow)" class="stroke-dash"/>
   <text x="640" y="220" class="axis-label" text-anchor="end">config + state mutations</text>
 
   <!-- Cross link: plugin host → web (SSE plugin-display / param) -->
   <line x1="640" y1="470" x2="700" y2="280" stroke="#b04a2a" marker-end="url(#arrow)" class="stroke-dash"/>
-  <text x="720" y="450" class="axis-label">SSE: plugin-display / param</text>
+  <text x="695" y="415" text-anchor="end" class="axis-label">SSE: plugin-display / param</text>
 
   <!-- Persistence -->
   <g>
@@ -121,20 +128,24 @@
     <text x="830" y="382" text-anchor="middle" class="sub">/run/raspimidihub/config.json</text>
     <text x="830" y="400" text-anchor="middle" class="sub">tmpfs (RAM)</text>
 
-    <rect class="box pers" x="700" y="450" width="260" height="90"/>
-    <text x="830" y="472" text-anchor="middle" class="h">Persistent copy</text>
-    <text x="830" y="492" text-anchor="middle" class="sub">/boot/firmware/raspimidihub/</text>
-    <text x="830" y="508" text-anchor="middle" class="sub">config.json  (FAT32, boot part.)</text>
-    <text x="830" y="526" text-anchor="middle" class="sub">+ bluetooth-state.tar (BlueZ)</text>
+    <rect class="box pers" x="700" y="450" width="260" height="118"/>
+    <text x="830" y="470" text-anchor="middle" class="h">Persistent tiers</text>
+    <text x="830" y="488" text-anchor="middle" class="sub">/boot/firmware/raspimidihub/ (FAT32)</text>
+    <text x="830" y="504" text-anchor="middle" class="sub">config.json + .bak  (Save Config)</text>
+    <text x="830" y="520" text-anchor="middle" class="sub">autosave-0/1.json.gz  (ping-pong resume)</text>
+    <text x="830" y="536" text-anchor="middle" class="sub">backups/*.json.gz  (rolling, last 50)</text>
+    <text x="830" y="552" text-anchor="middle" class="sub">+ bluetooth-state.tar (BlueZ bonds)</text>
 
     <line x1="830" y1="410" x2="830" y2="448" stroke="#333" marker-end="url(#arrow)"/>
-    <text x="845" y="432" class="axis-label">atomic copy on Save Config</text>
+    <text x="843" y="426" class="axis-label">Save Config (atomic)</text>
+    <text x="843" y="440" class="axis-label">+ debounced autosave</text>
+    <text x="830" y="586" text-anchor="middle" class="axis-label">boot prefers: autosave → config.json → .bak → defaults</text>
   </g>
 
   <!-- WiFi / network row -->
   <g>
     <rect class="box pers" x="40" y="640" width="920" height="60"/>
     <text x="60" y="662" class="h">Network layer:</text>
-    <text x="60" y="682" class="sub">hostapd + dnsmasq (AP mode)   |   wpa_supplicant (client mode)   |   avahi (raspimidihub.local)   |   usb_tether (CDC over USB-A)</text>
+    <text x="60" y="682" class="sub">hostapd + dnsmasq (AP mode)   |   wpa_supplicant (client mode)   |   avahi (raspimidihub-&lt;id&gt;.local + RTP-MIDI discovery)   |   usb_tether (CDC over USB-A)</text>
   </g>
 </svg>

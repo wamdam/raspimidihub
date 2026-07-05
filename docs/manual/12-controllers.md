@@ -1,16 +1,12 @@
 # Controllers and Play Surfaces
 
 Controllers are fullscreen tap-to-play surfaces that send CCs over
-MIDI. They live in the **Controller** tab, which appears in the
-bottom navigation as soon as at least one controller instance has
-been added. This chapter covers the cross-controller features --
-the play surface, the drop buttons, the themes, the configuration
-panel. The per-controller layout reference is in **Appendix B**.
+MIDI. The **Controller** tab appears in the bottom navigation once a
+controller instance exists. Layouts are in **Appendix B**.
 
 ## The Four Templates
 
-Four controller templates ship out of the box. Each is added from
-the **Add → Controller** section of the routing matrix overlay.
+Each is added from **Add → Controller** in the matrix overlay.
 
 | Controller | Layout | Default CC range |
 |------------|--------|------------------|
@@ -19,10 +15,9 @@ the **Add → Controller** section of the routing matrix overlay.
 | **Performance 16** | 16 macro knobs + 4 scene buttons | CC 16--35 ch 1 |
 | **XY 4** | 2 XY pads + 8 knobs + 4 buttons | CC 16--31 ch 1 |
 
-Multiple instances of the same template can coexist. The
-**Controller** tab shows them with a top-bar selector; swipe
-left / right or use the arrows / dropdown to switch between
-instances. The last-viewed instance is remembered across reloads.
+Multiple instances of one template can coexist; switch with the
+top-bar selector (swipe, arrows, dropdown). The last-viewed instance
+survives reloads.
 
 ![Mixer 8 -- 24 knobs, 8 faders, 16 buttons.](../screenshots/controller-mixer-8.png){width=42%}
 
@@ -34,214 +29,135 @@ instances. The last-viewed instance is remembered across reloads.
 
 ## The Play Surface
 
-Each controller template renders a different surface. What is
-universal:
+Universal across templates:
 
-- **Every cell sends one CC** on one channel, with an **On** value
-  and an **Off** value. Knobs and faders send the dragged value;
-  buttons toggle between On and Off; XY pads send two CCs (one
-  per axis).
+- **Every cell sends one CC** on one channel with an **On** and an
+  **Off** value: knobs and faders send the dragged value, buttons
+  toggle On / Off, XY pads send two CCs, one per axis.
 - **Symmetric in / out** -- an incoming CC with the same (channel,
-  CC) silently mirrors the on-screen cell. Touch emits, hardware
-  mirrors -- one number, both directions.
-- **Long-press to rebind a cell** -- hold any cell on the
-  Controller page and the *cell-binding popup* opens. Pick a
-  channel + CC manually, MIDI-Learn from a hardware twist, or
-  **Reset to factory** to restore the template's wiring. Same
-  popup as the plugin-control popup (chapter 11.7), but the
-  binding is symmetric.
-- **XY pads have per-axis MIDI Learn** -- the cell-binding popup
-  grows to two axis sections (X / Y), each with its own
-  Channel + CC + Learn button. Save commits both axes at once.
+  CC) silently mirrors the cell: touch emits, hardware mirrors.
+- **Long-press rebinds a cell** -- set channel + CC manually,
+  MIDI-Learn from a hardware twist, or **Reset to factory**. Same
+  popup as the plugin-control popup (chapter 11.7), but symmetric.
+- **XY pads learn per axis** -- the popup grows to two axis sections
+  (X / Y), each with Channel + CC + Learn; Save commits both.
 
-The label, button **On / Off** values, and XY-pad spring config
-live in the *plugin config* panel (section 12.7) -- not in the
-long-press popup, which is binding-only.
+The label, button **On / Off** values, and XY-pad spring config live
+in the *plugin config* panel (section 12.7); the popup is
+binding-only.
 
-![Long-press the Mixer 8 K1 knob — CellBinding popup with the "MIDI CC for this cell — touch emits, hardware mirrors." subtitle and the Channel + CC wheels.](../screenshots/33-cell-bind-popup.png){width=48%}
+![Long-press the Mixer 8 K1 knob — the cell-binding popup with Channel + CC wheels ("touch emits, hardware mirrors").](../screenshots/33-cell-bind-popup.png){width=48%}
 
-![Long-press the XY 4 XY 1 pad — the same popup grows to two axis sections, each with its own Channel + CC wheels and its own MIDI Learn button.](../screenshots/34-cell-bind-popup-xy.png){width=48%}
+![On the XY 4 pad the same popup grows to two axis sections, each with Channel + CC wheels and its own MIDI Learn button.](../screenshots/34-cell-bind-popup-xy.png){width=48%}
 
 ## Drop Buttons
 
-Each controller has a row of four **drop buttons** above the play
-surface. A drop button is a *snapshot trigger*: long-press it to
-capture the current state of every cell on the controller, then
-tap to fire that snapshot back.
-
-The drop-button row is part of the controller surface, not a
-separate widget. It is always visible while the controller is
-shown.
+Four **drop buttons** sit above every play surface, always visible:
+each stores a snapshot of every cell and fires it back on tap.
 
 ### Capturing
 
-Long-press a drop button for around 600 ms. The button flashes
-once to confirm; the current values of every cell on the
-controller are captured into that button's slot. The capture also
-fires when a learned MIDI trigger note arrives (see *Trigger
-notes* below).
+Long-press about 600 ms; the button flashes once and captures every
+cell's value into the slot. A learned MIDI trigger note can also
+capture (see *Trigger Notes*).
 
 ### Firing
 
-A tap on the captured drop button fires the snapshot. What
-"firing" means depends on the mode and the sync state:
+Tap the captured button:
 
-- **Mode = Now** with **Sync = off** -- every cell jumps to its
-  captured value immediately.
-- **Mode = Bar / 2-Bar / 4-Bar / 8-Bar / 16-Bar** with
-  **Sync = on** -- the snapshot is pre-scheduled to land *at* the
-  next bar (or 2/4/8/16-bar) boundary of the master clock. The
-  ALSA queue handles the scheduling for sub-millisecond accuracy.
-- **Fade-on-fire = on** -- the snapshot is interpolated over the
-  cycle instead of being applied in one step. Each cell sweeps
-  smoothly from its current value to the captured value across
-  the bar (or 2/4/8/16-bar) length.
-- **Fade-on-fire = off** -- the snapshot is applied in a single
-  step at the scheduled boundary.
+- **Mode = Now, Sync = off** -- every cell jumps to its captured
+  value immediately.
+- **Mode = Bar / 2-Bar / 4-Bar / 8-Bar / 16-Bar, Sync = on** -- the
+  snapshot lands exactly at the next such master-clock boundary,
+  pre-scheduled with sub-millisecond accuracy.
+- **Fade on fire = on** -- each cell sweeps from its current to its
+  captured value across the bar (or 2/4/8/16-bar) length; **off** --
+  one step at the boundary.
 
 ### The Progress Ring
 
-A segmented arc around the drop button shows the progress of a
-scheduled fire. It peach-pulses while the snapshot is scheduled
-but not yet fired and freezes if MIDI Stop arrives mid-cycle.
+A segmented arc around the button shows scheduled-fire progress:
+peach-pulsing while pending, frozen if MIDI Stop arrives mid-cycle.
 
 ### Trigger Notes
 
-A drop button can be armed by a learned MIDI note: receive the
-note on any channel routed to the controller, and the button
-fires (or captures, depending on which Learn flow you used) just
-as if you tapped it.
+A learned MIDI note, on any channel routed to the controller, fires
+(or captures, depending on which Learn flow you used) the button as
+if tapped.
 
 ### Dual-Slot Scheduling
 
-One **fade** and one **hard drop** can be queued side by side --
-useful for, say, fading a filter sweep while pre-scheduling a
-hard cut on the next bar. Two fades cannot overlap; the second
-overrides the first.
+One **fade** and one **hard drop** can queue side by side. Two fades
+cannot overlap; the second overrides the first.
 
 ## Themes
 
-Each controller carries its own theme. Eight dark themes ship:
-
-- Default
-- Navy
-- Forest
-- Wine
-- Plum
-- Teal
-- Sienna
-- Slate
-
-Theme is **per controller instance**, not global. A Mixer 8 in
-Forest and an FX 6 in Wine can sit side by side in the bottom-nav
-without affecting each other. The theme is chosen from the
-controller's plugin config panel.
+Eight dark themes ship: Default, Navy, Forest, Wine, Plum, Teal,
+Sienna, Slate -- chosen **per controller instance** in its plugin
+config panel.
 
 ## XY Pad Spring
 
-XY pads (on the **XY 4** controller) optionally spring back to a
-home position when released. Per-cell:
-
-- **Force** -- 0--127. Zero disables the spring; higher values
-  pull the dot back faster.
-- **Home** -- Bottom-left or Centre. The position the dot returns
-  to when released.
-
-With spring on, releasing the pad fires a CC event for each axis
-as the dot returns. With spring off, releasing leaves the dot
-where it was; the next CC event happens only when the pad is
-touched again.
+XY pads (on the **XY 4**) can spring back to a home position on
+release. Per cell: **Force** 0--127 (zero disables; higher pulls the
+dot back faster) and **Home** (Bottom-left or Centre). With spring
+on, the return fires a CC per axis; off, the dot stays put.
 
 ## The Controller Tab
 
-The **Controller** tab is the fullscreen play surface. Top-bar
-controls:
-
-- **Instance selector** -- name of the current controller, with
-  arrows / swipe / dropdown to switch.
-- **Pencil icon** -- opens the controller's *plugin config* in
-  the device-detail panel without leaving the controller tab.
-
-The bottom of the tab shows the standard MIDI activity bar
-(section 6.9) when enabled in Settings.
+Top bar: the **instance selector** (name plus arrows / swipe /
+dropdown) and the **pencil** icon, which opens the controller's
+*plugin config* without leaving the tab. The MIDI activity bar
+(section 6.9) shows at the bottom when enabled in Settings.
 
 ## The Configuration Panel
 
-Tapping the pencil on the controller tab (or tapping the
-controller's row / column header in the routing matrix) opens the
-*plugin config* view. It is a flat list of every cell on the
-controller -- each card carries the parts of a cell's
-configuration that aren't part of the (channel, CC) binding:
+Open via the pencil on the controller tab or the controller's
+matrix header. One card per cell, carrying everything except the
+(channel, CC) binding:
 
-- **Cell label** -- rename the on-screen text; blank to fall back
-  to the template default.
-- **Button On / Off values** (button cells only) -- the CC values
-  sent on press / release; a `↔` swap inverts them.
-- **XY pad spring config** (XY pad cells only) -- spring force
-  (0..127; 0 = off) and spring home (Bottom-left / Center) drive
-  the auto-release animation.
+- **Cell label** -- blank falls back to the template default.
+- **Button On / Off values** (button cells) -- sent on press /
+  release; `↔` swaps them.
+- **XY pad spring** (XY pad cells) -- Force and Home, see
+  section 12.5.
 
-The cell's MIDI binding (Channel, CC, Learn) is **not** here --
-long-press the cell on the Controller page for that. Settings →
-Plugin Control Mappings (chapter 16) lists every cell's current
-binding in a single table if you want a global view.
+Bindings are set by long-pressing the cell (section 12.2);
+**Settings → Plugin Control Mappings** (chapter 16) lists every
+cell's binding in one table.
 
-Each of the four drop buttons gets its own card with:
-
-- **Sync to bars** toggle
-- **Fade on fire** toggle
-- **Mode** radio (Now / Bar / 2-Bar / 4-Bar / 8-Bar / 16-Bar)
-- **Trg. Note** field + Learn button
-
-A **Maximize** button at the top of the config panel jumps back
-to the fullscreen Controller tab.
+Each drop button gets its own card: **Sync to bars** toggle, **Fade
+on fire** toggle, **Mode** radio (Now / Bar / 2-Bar / 4-Bar / 8-Bar /
+16-Bar), and **Trg. Note** field + Learn button. A **Maximize**
+button at the top jumps back to the fullscreen Controller tab.
 
 ## Routing a Controller
 
-In the routing matrix, a controller is a **row** (it sends MIDI)
-*and* a useful destination column. Route its row to the device
-you want to drive (a hardware synth, the DAW, a plugin like the
-**CC Smoother**); route a source *into* the controller when you
-want any of the following:
+A controller sends MIDI (its row) but is also a useful destination
+column. Route its row to the device it drives; route a source *into*
+it for:
 
-- **MIDI-Learn capture.** Cell-level Learn (chapter 10) listens on
-  the controller's IN port -- the source you want to learn from
-  must be routed to the controller for the next CC to reach the
-  learn logic.
-- **Drop-button trigger notes.** Trigger notes (12.3.5) arrive on
-  the controller's IN port; route the keyboard or pad that fires
-  them to the controller.
-- **Hardware-to-on-screen feedback (mirroring).** Route a hardware
-  controller (e.g. a Launch Control XL) to the matching software
-  controller and the on-screen faders / knobs / pads will follow
-  the hardware in real time. For every cell whose (channel, CC#)
-  binding matches the incoming CC the cell's stored value is
-  updated silently -- nothing is re-emitted to OUT, so there's no
-  routing loop. This is the standard pattern for keeping a
-  physical control surface and its software twin in lock-step,
-  and is what makes snapshot capture, drop fades, and theme-level
-  visual feedback reflect the real hardware state.
+- **MIDI-Learn capture** -- cell Learn (chapter 10) listens on the
+  controller's IN port; the source you learn from must be routed in.
+- **Drop-button trigger notes** (12.3.4) -- route the keyboard or
+  pad that fires them in.
+- **Mirroring** -- route a hardware controller (e.g. a Launch
+  Control XL) to its software twin; every cell with a matching
+  (channel, CC) follows in real time, silently -- nothing is
+  re-emitted, so no routing loop.
 
-For the common live setup the recipe is therefore: route the
-hardware controller to the software controller (mirroring), and
-route the software controller to the destination device(s) (the
-actual MIDI work).
+The common live recipe: hardware controller → software controller
+(mirroring), software controller → destination device(s).
 
 ## Saving Controller State
 
-Cell renames, learned CCs, theme choices, and captured drop-button
-snapshots are part of the project state. **Save Config** persists
-them; **Export Config** captures them in a JSON snapshot (chapter
-15). Removing a controller instance discards its state; cloning
-it (Copy → Paste-as-new from the header menu) duplicates the
-state.
+Cell renames, learned CCs, themes, and captured drop-button
+snapshots are project state: **Save Config** persists them, **Export
+Config** snapshots them (chapter 15). Removing an instance discards
+its state; **Copy → Paste-as-new** duplicates it.
 
-What is **not** saved -- and so does not light the dirty-state
-asterisk (chapter 9.9) -- is *performing*: moving a fader / knob /
-XY pad, and **firing or cancelling a drop button**. Those are live
-play, not edits, so a gig of pad-firing leaves the config clean and
-triggers no autosave. **Capturing** a drop (long-press) *does*
-count -- it writes a new snapshot into the saved state -- as do cell
-renames, rebinds, theme changes, and drop-button settings (mode,
-label, fade/sync).
-
+*Performing* -- moving a fader / knob / XY pad, firing or cancelling
+a drop button -- is not saved: no dirty asterisk (chapter 9.9), no
+autosave. **Capturing** a drop *does* count -- it writes a new
+snapshot into saved state -- as do renames, rebinds, theme changes,
+and drop-button settings.

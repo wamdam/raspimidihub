@@ -1,228 +1,161 @@
 # Connectivity and Software Updates
 
-How the Pi talks to the rest of the network, and how it gets new
-software when AP-mode is the default. The two topics are bundled
-here because the update path *is* the connectivity question: the
-choice of cable or radio determines whether the AP has to be
-dropped during the install.
+How the hub reaches the network and gets new software. The choice
+of cable or radio determines whether the AP drops during an
+install.
 
 ## Connectivity Modes
 
-Three WiFi modes are selectable in **Settings → WiFi → WiFi
-mode**.
+Three WiFi modes are selectable in **Settings → WiFi → WiFi mode**.
 
 ### AP only (default)
 
-The Pi broadcasts the `RaspiMIDIHub-XXXX` SSID and never
-associates as a client. No internet on the Pi. This is the right
-default for stage / studio use where the Pi is meant to be a
-self-contained appliance.
-
-The AP runs on 2.4 GHz by default. On a dual-band Pi it can be
-moved to 5 GHz (Settings → Network → *AP radio*, chapter 16) --
-worth doing when BLE-MIDI is unreliable, since it frees the
-2.4 GHz band the onboard Bluetooth shares (chapter 14, *Limits*).
-
-Software updates from AP-only require an alternative internet
-path (ethernet or USB tethering -- sections 17.3 and 17.4) or a
-temporary mode switch.
+The Pi broadcasts the `RaspiMIDIHub-XXXX` SSID and never joins
+another network -- no internet on the Pi, the right default for
+stage / studio use. The AP runs on 2.4 GHz by default; a dual-band
+Pi can move it to 5 GHz (**Settings → Network → AP radio**,
+chapter 16), freeing the band the onboard Bluetooth shares --
+worth doing when BLE-MIDI is unreliable (chapter 14, *Limits*).
+Updates need another internet path (17.3, 17.4) or a temporary
+mode switch.
 
 ### WiFi for updates
 
-The AP stays up at idle; the Pi briefly flips `wlan0` from AP to
-client when a software-update install is requested, fetches the
-deb, then flips back. The phone or laptop AP connection drops for
-roughly 30 seconds during the round-trip and again on the way
-back. The Pi has only one wireless radio, so this trade-off is
-intrinsic.
-
-A 180-second watchdog force-restarts the routing service if
-anything hangs while `wlan0` is in client mode -- the AP always
-comes back even if the update step itself fails.
+The AP stays up at idle; an install flips `wlan0` to client mode,
+fetches the deb, and flips back, dropping the phone or laptop AP
+connection roughly 30 seconds each way (the Pi has one wireless
+radio). If anything hangs in client mode, the 180-second watchdog
+(17.7) brings the AP back.
 
 ### WiFi always
 
-The AP is off. The Pi acts as a normal WiFi client on the
-configured home network. Use this for fixed-installation rigs
-where the Pi is on the venue or home network all the time.
-
-In this mode, the Pi has no captive portal; reach the UI via
-`http://raspimidihub-<id>.local/` or the static / DHCP IP shown on the
-home router.
+The AP is off; the Pi is a normal WiFi client on the configured
+home network -- for fixed installations. No captive portal: reach
+the UI via `http://raspimidihub-<id>.local/` or the static / DHCP
+IP shown on the home router.
 
 ## The Captive Portal
 
-The Pi answers the captive-portal probe URLs that Android, iOS,
-macOS, and Windows use to detect "is this network real, or is it
-a hotel-style captive network?" Each probe is redirected to the
-RaspiMIDIHub root, which signals to the OS that the network is a
-captive portal and to pop the configuration UI in a sandboxed
-browser.
-
-If the captive portal does not fire (some phones cache "this
-network has no internet" too aggressively; some MDM / carrier
-WiFi policies suppress the probe), use the manual entry URLs:
+The Pi answers the captive-portal probes of Android, iOS, macOS,
+and Windows, popping the UI in a sandboxed browser. If the portal
+does not fire (probe answer cached as "no internet", or suppressed
+by MDM / carrier WiFi policy), enter manually:
 
 - `http://raspimidihub-<id>.local/` -- the mDNS hostname.
-- The AP gateway IP (shown in the phone's WiFi-info screen).
+- The AP gateway IP (in the phone's WiFi-info screen).
 
 ## Ethernet
 
-The simplest update path. Plug a cable into the Pi's RJ45 port
-and the Pi acquires a DHCP address (or applies the static config
-set in **Settings → Ethernet**). The Settings page surfaces the
-resulting URL.
-
-The AP stays up the whole time; the phone or laptop connection to
-the Pi is unaffected. **Recommended for headless setups** where
-swapping WiFi modes is inconvenient.
-
-The Pi keeps the AP up regardless of ethernet state -- the AP and
-the wired interface are independent.
+The simplest update path. Plug a cable into the RJ45 port; the Pi
+acquires DHCP (or the static config from **Settings → Ethernet**)
+and Settings shows the resulting URL. The AP stays up -- AP and
+wired interface are independent. **Recommended for headless
+setups.**
 
 ## USB Tethering
 
-A phone plugged into one of the Pi's USB-A ports with Personal
-Hotspot / USB Tethering enabled provides internet without
-touching `wlan0`. The kernel brings up a `usb0` (Android) or
-`enx…` (some iPhones / Android devices) interface and the phone
-hands the Pi an IP via DHCP over USB.
-
-Settings shows the tethered URL as a clickable link so you can
-switch the browser to the faster link, but you do not have to --
-the AP stays up either way. Works on iOS (Personal Hotspot via
-USB) and Android (USB Tethering toggle).
-
-The tethered phone provides internet to the Pi only while it is
-plugged in; unplugging it takes the Pi back to AP-only internet
-state (which is "none").
+A phone on a USB-A port with Personal Hotspot (iOS) or USB
+Tethering (Android) enabled provides internet without touching
+`wlan0`. Settings shows the tethered URL as a clickable link; the
+AP stays up. Unplugging the phone returns the internet state to
+"none".
 
 ## mDNS
 
-Each hub advertises a **unique** mDNS name, `raspimidihub-<id>.local`,
-over multicast DNS -- `<id>` is the four-character hardware code shown
-in the title bar and used in the WiFi name (e.g. `raspimidihub-735C.local`).
-This guarantees two hubs on the same network never collide. Address a
-hub by its unique `raspimidihub-<id>.local` (the id is on its
-captive-portal page, title bar, and WiFi name). Resolution requirements:
+Each hub advertises a unique mDNS name: `raspimidihub-<id>.local`,
+where `<id>` is the four-character hardware code shown in the
+title bar, WiFi name, and captive-portal page (e.g.
+`raspimidihub-735C.local`) -- two hubs on one network never
+collide. Resolution requirements:
 
 - **macOS, iOS** -- native, no setup.
-- **Linux** -- avahi-daemon must be running (default on most
+- **Linux** -- avahi-daemon must run (default on most
   distributions).
-- **Modern Android** -- works on Android 12+ for most apps; some
-  browsers still require manual IP entry.
-- **Windows** -- Apple Bonjour must be installed (free download
-  from Apple's site, or bundled with iTunes).
+- **Modern Android** -- Android 12+ for most apps; some browsers
+  still need the IP.
+- **Windows** -- needs Apple Bonjour (free from Apple's site, or
+  bundled with iTunes).
 
-If mDNS is unavailable on the network or the client, fall back to
-the gateway IP (AP-mode) or the static / DHCP IP from the
-router's DHCP table (WiFi-always mode).
+Without mDNS, use the gateway IP (AP mode) or the static / DHCP IP
+from the router's DHCP table (WiFi-always mode).
 
 ## Network MIDI -- Sharing Devices over the Network
 
-**Settings → Network MIDI** can *export* any local MIDI device as
-a standard **RTP-MIDI (AppleMIDI)** session. Each exported device
-is advertised over mDNS under its own name -- `"TX-7 @raspimidihub-<id>"`,
-where `<id>` is the hub's four-character hardware code (the same one in
-its hostname and WiFi name, e.g. `@raspimidihub-735C`). Because every
-hub's name carries this unique suffix, two hubs never collide on the
-wire and a peer always resolves a device to the right hub. Anything
-that speaks RTP-MIDI can connect to it:
+**Settings → Network MIDI** exports any local MIDI device as a
+standard **RTP-MIDI (AppleMIDI)** session, advertised over mDNS as
+`"TX-7 @raspimidihub-<id>"`; the unique suffix means a peer always
+resolves a device to the right hub. Anything that speaks RTP-MIDI
+can connect:
 
-- **a second RaspiMIDIHub** -- the long-cable scenario: two hubs
-  joined by an Ethernet cable (up to 100 m) or any shared network,
-  routing MIDI between stages or rooms;
-- **macOS / iOS** -- exported devices appear in Audio MIDI Setup's
-  *MIDI Network Setup* directory (macOS) and in RTP-MIDI-capable
-  iOS apps, with no extra software;
-- **Linux** -- `rtpmidid` (and compatible tools) discover and
-  connect to exported sessions.
+- **a second RaspiMIDIHub** -- an Ethernet cable (up to 100 m) or
+  any shared network;
+- **macOS / iOS** -- Audio MIDI Setup's *MIDI Network Setup*
+  (macOS) and RTP-MIDI-capable iOS apps, no extra software;
+- **Linux** -- `rtpmidid` (and compatible tools).
 
-Turn the feature on with the master toggle, then tick the devices
-to share. The export list is the curation step: export a single
-plugin pair and you have a point-to-point tunnel; export
-everything and the far end sees each device individually. Several
-clients can be connected to the same exported device at once --
-a Mac and a peer hub, for example.
+Turn on the master toggle, then tick the devices to share -- one
+plugin pair for a point-to-point tunnel, or everything. Several
+clients can connect to one exported device at once. Exports are
+saved in the config; the advert exists only while the device is
+present -- unplug and the session leaves the network, replug and
+it returns. Notes, CCs, clock and SysEx all cross the wire;
+wired-LAN latency is well under a millisecond.
 
 ### Mirroring -- the two-hub scenario
 
-When two RaspiMIDIHubs see each other, the peer's exported
-devices **mirror automatically**: each appears in the local
-routing matrix as a violet network device, grouped under a
-collapsible `@hubname` header (chapter 9, *Remote Hub Groups*).
-No pairing flow, no taps -- plug the cable in, export on one
-side, route on the other. Each side decides what it *shares*
-(its export list) and the receiving side can opt out per session
-(**Unmirror** in the device's header menu) and re-add later from
-the Add menu.
+When two RaspiMIDIHubs see each other, the peer's exported devices
+**mirror automatically** into the local matrix as violet network
+devices, grouped under a collapsible `@hubname` header (chapter 9,
+*Remote Hub Groups*). No pairing flow: export on one side, route
+on the other. Each side controls its own export list; the
+receiving side can **Unmirror** per session (device's header menu)
+and re-add from the Add menu.
 
-Mirrored devices are full citizens of the matrix: filters,
-mappings, renames and clock routing all work, and connections to
-them are saved by a stable identity that survives reboots and IP
-changes on both ends. While the peer is offline its devices show
-as offline rows like unplugged hardware, and recover by
-themselves when the peer returns.
+Mirrored devices are full matrix citizens -- filters, mappings,
+renames, clock routing -- and connections are saved under a stable
+identity that survives reboots and IP changes on both ends. An
+offline peer's devices show as offline rows and recover by
+themselves.
 
 Sessions from Macs, iPads or DAWs are **not** mirrored
-automatically -- a DAW advertising a session is not an invitation,
-and a studio WLAN full of them would flood the matrix. They are
-listed under Settings → Network MIDI (and in the Add menu) and
-can be mirrored with one tap.
+automatically (a studio WLAN full of them would flood the matrix);
+they are listed under Settings → Network MIDI and in the Add menu,
+one tap to mirror.
 
-Loops are prevented structurally: a mirrored device cannot be
-re-exported, and a hub never mirrors its own sessions.
-
-Exports survive reboots (the list is part of the config); the
-network advert for a device exists only while the device is
-actually present (unplug the synth and its session leaves the
-network; replug and it returns). Notes, CCs, clock and SysEx all
-cross the wire; on a wired LAN the added latency is well under a
-millisecond.
+Loops cannot form: a mirrored device cannot be re-exported, and a
+hub never mirrors its own sessions.
 
 ### The direct cable, and life without mDNS
 
 A direct Ethernet cable between two hubs needs no router: each hub
-carries an IPv4 link-local address (`169.254.x.y`) on `eth0`, and
-discovery rides on that. NetworkManager keeps the link-local
-present **at all times and in every mode** -- it sits alongside a
-DHCP lease or a static address, and on a bare cable with no DHCP
-server it is the only address `eth0` carries. This happens
-**regardless of the Network MIDI toggle**, so a cabled hub always
-has it and enabling Network MIDI on both ends just works. Because
-NetworkManager owns the link-local, it coexists with DHCP cleanly:
-a hub set to DHCP gets its normal lease *and* the link-local, and a
-hub on a server-less cable keeps the link-local indefinitely (the
-hub never stops looking for a DHCP server, so plugging into a real
-network later picks up a lease automatically).
+keeps an IPv4 link-local address (`169.254.x.y`) on `eth0` at all
+times, in every mode, alongside any DHCP lease or static
+address -- so two cabled hubs always share a subnet. The hub keeps
+looking for a DHCP server; plugging into a real network later
+picks up a lease automatically.
 
-On networks that swallow multicast (routed LANs, some managed
-switches), add the other hub's IP or hostname under **Manual
-peers** -- the hub then asks the peer directly for its exported
-devices and everything else behaves exactly as with discovery.
+Where multicast is filtered (routed LANs, some managed switches),
+add the other hub's IP or hostname under **Manual peers**; the hub
+asks the peer directly for its exports and everything else behaves
+as with discovery.
 
 ### Failure behaviour
 
-Link loss is survived in both directions. A cable pull or peer
-power-cut is detected within ~30 seconds (the clock-sync exchange
-doubles as the liveness probe); the mirrored devices drop to the
-offline state and the hub keeps retrying in the background, so
-plugging the cable back in restores everything without a tap.
-Network clients that vanish silently are dropped from an exported
-session's participant list after 60 seconds.
+A cable pull or peer power-cut is detected within ~30 seconds;
+mirrored devices drop to offline and the hub keeps retrying --
+replugging restores everything without a tap. Silently vanished
+clients are dropped from an exported session after 60 seconds.
 
-The transport is plain UDP on ports 5004 and up (one even/odd
-port pair per exported device), discovery is the same mDNS the
-hub already uses for `raspimidihub-<id>.local`. It needs the
-`python3-zeroconf` package (a standard dependency of the deb);
-when missing, the Settings page says so instead of offering the
-toggle.
+Transport is plain UDP on ports 5004 and up (one even/odd port
+pair per exported device); discovery is the same mDNS as
+`raspimidihub-<id>.local`. Needs `python3-zeroconf` (a standard
+dependency of the deb); when missing, the Settings page says so
+instead of offering the toggle.
 
 ## Software Updates: The Three Paths
 
-The **Check GitHub for newer versions** button in **Settings →
-Software Versions** runs the same fetch-and-install pipeline
-regardless of which internet path is available. The pipeline:
+**Check GitHub for newer versions** in **Settings → Software
+Versions** runs the same pipeline regardless of internet path:
 
 1. Resolve GitHub.
 2. List the latest releases.
@@ -230,69 +163,52 @@ regardless of which internet path is available. The pipeline:
 4. Keep the newest three `.deb` files on disk; delete older ones.
 5. Install on demand from the local cache.
 
-The three paths the Pi can use to *reach* GitHub:
-
 | Path | AP impact | Recommended for |
 |------|-----------|-----------------|
 | **Ethernet** (17.3) | AP stays up | Headless / fixed installations |
 | **USB tethering** (17.4) | AP stays up | Field updates when no ethernet |
 | **WiFi for updates** (17.1) | AP drops ~30 s twice | When neither cable is available |
 
-Once a deb is on disk, **Install** applies it offline regardless
-of which path fetched it.
+Once a deb is on disk, **Install** needs no internet at all.
 
 ## The 180-Second Watchdog
 
 When `wlan0` is in client mode (WiFi for updates mid-update, or
 WiFi always), a 180-second watchdog force-restarts the routing
-service if anything hangs. The watchdog covers cases where:
-
-- The client-mode association succeeds but the DHCP lease fails.
-- The DHCP lease succeeds but DNS does not resolve.
-- The install step itself hangs partway through.
-- The orchestrator script enters an unexpected state.
-
-After the watchdog fires, the Pi reverts to AP mode and the AP
-comes back up. The user reconnects to the AP and tries again or
-checks the logs.
+service if anything hangs -- association without a DHCP lease, a
+lease without DNS, an install stuck partway, or the update
+orchestrator wedged. After it fires the Pi reverts to AP mode;
+reconnect and retry, or check the logs.
 
 ## The 90-Second AP Fallback
 
-A more conservative safety net: in **WiFi always** mode, if the
-client-mode connection is lost (router reboot, taken out of
-range, password changed elsewhere), the routing service falls
-back to AP mode within roughly 90 seconds. The AP comes back up
-with the configured AP credentials. No user action is required to
-trigger the fallback.
+In **WiFi always** mode, a lost client connection (router reboot,
+out of range, password changed elsewhere) makes the hub fall back
+to AP mode within roughly 90 seconds, with the configured AP
+credentials. No user action required.
 
 ## Console Recovery
 
-A console (USB keyboard + HDMI display, or SSH from another
-network with `ssh user@raspimidihub-<id>.local`) gives access to the
-underlying Pi OS. The bootstrap image ships with **sshd enabled**
-so SSH works out of the box with the user and key/password set in
-the Pi Imager wizard -- this is also what makes a failed first
-boot diagnosable (chapter 3). A few commands are commonly useful:
+A console (USB keyboard + HDMI, or
+`ssh user@raspimidihub-<id>.local`) reaches the underlying Pi OS.
+The bootstrap image ships with **sshd enabled**, using the user
+and key/password from the Pi Imager wizard -- which also makes a
+failed first boot diagnosable (chapter 3). Commonly useful:
 
-- `sudo reset-wifi` -- forces AP mode with default credentials.
-  Use when the WiFi state is wedged or when access to the unit
-  has been locked out.
-- `journalctl -u raspimidihub -e` -- tails the routing service
-  log. Useful for diagnosing BLE issues, update failures, or any
-  unexpected service restart.
+- `sudo reset-wifi` -- forces AP mode with default credentials;
+  use when the WiFi state is wedged or access is locked out.
+- `journalctl -u raspimidihub -e` -- tails the routing service log
+  (BLE issues, update failures, unexpected restarts).
 - `sudo mount -o remount,rw / && sudo dpkg --configure -a && sudo
   mount -o remount,ro /` -- reconciles a half-applied dpkg state
-  if **Install** keeps failing with `E: dpkg was interrupted, you
-  must manually run 'dpkg --configure -a'`. Only relevant on
-  builds older than the one that runs the same recovery
+  when **Install** keeps failing with `E: dpkg was interrupted…`;
+  only needed on builds older than the one that runs this
   automatically before every install.
 
 ## Updating the rosetup Package
 
-Both Debian packages -- `raspimidihub` (the routing service +
-web UI) and `raspimidihub-rosetup` (the read-only filesystem
-hardening) -- are listed in **Settings → Software Versions**.
-Updating the rosetup package is supported via the same install
-flow but requires a reboot to apply (the read-only mount layer
-re-initialises at boot).
-
+**Settings → Software Versions** lists both Debian packages:
+`raspimidihub` (routing service + web UI) and
+`raspimidihub-rosetup` (read-only filesystem hardening). rosetup
+updates via the same install flow but needs a reboot to apply (the
+read-only mount layer re-initialises at boot).

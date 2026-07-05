@@ -1,37 +1,27 @@
 # Appliance Reliability
 
-RaspiMIDIHub is designed to be treated like a guitar pedal: yank the
-power, throw it in a bag, plug it back in next week, get the same
-state. This chapter documents the mechanisms that make that
-behaviour safe and the failure modes the appliance plans for.
+RaspiMIDIHub is designed to be treated like a guitar pedal: yank
+the power, plug it back in next week, get the same state.
 
 ## Read-Only Filesystem
 
-The SD card root is mounted read-only during normal operation.
-The `raspimidihub-rosetup` Debian package adds the read-only mount
-layer and the `rw` / `ro` helper commands. The result: the SD
-card is never written during a typical session, so an unexpected
-power-cut cannot corrupt the filesystem.
-
-A handful of paths *are* writable, on tmpfs (RAM) instead of SD:
+The SD-card root is mounted read-only during normal operation (the
+`raspimidihub-rosetup` package adds the mount layer and the
+`rw` / `ro` helper commands), so a power-cut cannot corrupt the
+filesystem. Writable paths live on tmpfs (RAM):
 
 - `/var/lib/raspimidihub/` -- runtime project state.
 - `/var/lib/bluetooth/` -- BlueZ pairing state (chapter 14.3).
 - `/var/log/` -- service logs.
 - `/run/` and `/tmp/` -- standard ephemeral paths.
 
-The boot partition (`/boot/firmware`) is also mounted **read-only**
-in steady state. Anything that needs to land there -- Save Config,
-the BlueZ snapshot (chapter 14.3), a downloaded update deb -- runs
-the rw / write / sync / ro cycle itself: `mount -o remount,rw
-/boot/firmware`, write the file, `sync`, `mount -o remount,ro
-/boot/firmware`. The window is milliseconds and self-contained;
-between operations both filesystems are ro and a power yank can't
-hit a half-written file. The main root remains read-only throughout
--- the remount cycle is on the boot partition only.
+The boot partition (`/boot/firmware`) is read-only in steady state
+too. Writers -- Save Config, the BlueZ snapshot, a downloaded
+deb -- run a millisecond remount-rw / write / `sync` / remount-ro
+cycle; between operations both filesystems are ro, so a power yank
+cannot hit a half-written file. Root stays read-only throughout.
 
-For maintenance windows that need filesystem writes (manual
-package installs, custom tweaks):
+For maintenance windows that need root writes:
 
 ```bash
 ssh user@raspimidihub-<id>.local
@@ -40,103 +30,65 @@ rw                # remount root read-write
 ro                # remount root read-only
 ```
 
-The `rw` / `ro` commands are part of the `raspimidihub-rosetup`
-package.
-
 ## Power-Safe Operation
 
-The persistence model assumes the user *will* yank the power. The
-service explicitly:
+The persistence model assumes the power *will* be yanked:
 
-- Keeps the deliberate **Save Config** checkpoint
-  (`config.json`) as the committed state, written with
-  atomic-replace (write to temp file, fsync, rename) inside a
-  brief remount-rw / remount-ro window on the boot partition.
-- **Autosaves the live edited state in the background** so a hard
-  power cut resumes the last thing you were doing, not just the
-  last manual Save (see *Autosave and Resume* below).
-- Snapshots BlueZ bonds to the boot partition on every change,
-  not periodically (using the same rw / write / ro cycle as
-  Save Config).
-- Restores BlueZ bonds from the snapshot on every boot before the
-  routing service comes up.
+- **Save Config** (`config.json`) is written atomic-replace (temp
+  file, fsync, rename) inside a brief remount-rw window on the
+  boot partition.
+- The live edited state is autosaved in the background; a hard cut
+  resumes the last edit, not just the last manual Save (below).
+- BlueZ bonds are snapshotted to the boot partition on every
+  change and restored on boot before the routing service starts.
 
 ## Autosave and Resume
 
-Because the appliance is switched off at the wall with no clean
-shutdown, it keeps a rolling **autosave** of the live edited state
-in addition to the manual **Save Config** checkpoint. On the next
-boot the unit resumes the newest valid autosave, falling back to
-`config.json` (then its `.bak`, then defaults) if no autosave is
-usable.
-
-Three properties make this power-cut-safe and unobtrusive:
+Boot resumes the newest valid autosave, falling back to
+`config.json`, then its `.bak`, then defaults. Three properties
+make this power-cut-safe:
 
 - **Ping-pong, never overwrite-in-place.** The autosave alternates
-  between two slots (`autosave-0` / `autosave-1`). A cut can only
-  corrupt the slot being written; the other still holds the
-  previous good snapshot. Each slot is gzip-compressed, and gzip's
-  built-in CRC *is* the validity check — a torn write fails to
-  decompress, so boot simply uses the other slot.
-- **No clock, so no dates.** The appliance has no real-time clock,
-  so the autosave (and the Backup list, chapter 16) never stores a
-  wall-clock time. It records uptime + a per-boot id and shows a
-  relative "n ago" that is only honest within the current boot;
-  anything from before the last reboot shows only its sequence
-  number.
-- **Debounced and launch-free.** The autosave fires a few seconds
-  after edits settle (and on a clean shutdown / reboot), not on
-  every keystroke. Purely *performing* — launching Tracker
-  patterns, tapping pattern slots — moves the live playhead but
-  changes no saveable content, so it triggers **no** autosave and
-  leaves the Routing dirty-asterisk clear. Only real edits
-  (recording, routing changes, parameter edits) do. After a
-  **Load**, a **Restore** (chapter 16), or an **Import**, an
-  autosave is forced immediately so the just-loaded state is the
-  resume point.
+  between two gzip-compressed slots (`autosave-0` / `autosave-1`);
+  a cut can only corrupt the slot being written, and a torn write
+  fails the gzip CRC on decompress, so boot uses the other slot.
+- **No clock, so no dates.** With no real-time clock, the autosave
+  (and the Backup list, chapter 16) records uptime + a per-boot
+  id: "n ago" is shown only within the current boot; older items
+  show only a sequence number.
+- **Debounced and launch-free.** Autosave fires a few seconds
+  after edits settle and on clean shutdown. Launching Tracker
+  patterns or tapping pattern slots changes no saveable content --
+  no autosave, no Routing dirty-asterisk; only real edits
+  (recording, routing changes, parameter edits) count. **Load**,
+  **Restore** (chapter 16), and **Import** force an immediate
+  autosave so the just-loaded state is the resume point.
 
 Pulling the power loses at most the few seconds of editing since
-the last autosave settled. The boot config, the rolling backups,
-and the BlueZ bonds are all intact.
+the last autosave settled.
 
 ## Reserved Cores
 
-Two cores are isolated so the two latency-critical workloads each get a
-quiet, contention-free core:
+Two cores are isolated (`isolcpus=2,3 nohz_full=2,3
+rcu_nocbs=2,3`, set by the rosetup package at boot):
 
-- **Core 3** runs only the asyncio routing/MIDI loop.
-- **Core 2** runs only the plugin threads. Plugins emit their notes
-  immediately on their own thread, so they need the same low, consistent
-  scheduling latency as the loop.
-- **Cores 0-1** run everything else — kernel, IRQs, the WiFi AP, mDNS,
-  Bluetooth and the background config-save process.
+- **Core 3** -- only the asyncio routing/MIDI loop.
+- **Core 2** -- only the plugin threads (plugins emit notes on
+  their own threads and need the same consistent latency).
+- **Cores 0-1** -- everything else: kernel, IRQs, WiFi AP, mDNS,
+  Bluetooth, the background config-save process.
 
-The isolation is done at boot via the Linux kernel `isolcpus=2,3`
-(plus `nohz_full=2,3 rcu_nocbs=2,3`), set by the rosetup package.
-Effects:
-
-- No kernel timer ticks scheduled on cores 2 and 3.
-- No other userland processes scheduled on cores 2 and 3.
-- The routing loop has core 3 to itself and the plugins have core 2 to
-  themselves, which makes loop-lag and note-timing spikes from other
-  system activity essentially impossible.
-
-The trade-off is two general-purpose cores for the rest of the system,
-which is comfortable on a quad-core Pi for this single-purpose
-appliance.
+No kernel ticks and no other userland run on cores 2 and 3 --
+loop-lag and note-timing spikes from other system activity are
+essentially impossible.
 
 ## Auto-Start
 
-The routing service is a systemd unit that:
-
-- Starts on boot, after networking and ALSA.
-- Runs MIDI routing within roughly 30 seconds of power-on.
-- Restarts automatically on crash (`Restart=always`).
-- Brings up the AP via hostapd / dnsmasq alongside the routing
-  service.
-
-No login or web access is required for the appliance to come up
-in its last saved state.
+The routing service is a systemd unit: it starts after networking
+and ALSA, routes MIDI within roughly 30 seconds of power-on,
+restarts on crash (`Restart=always`), and brings up the AP via
+hostapd / dnsmasq. It comes up in the last saved state with no
+login or web access.
 
 ## LED Status
 
@@ -147,59 +99,51 @@ in its last saved state.
 | Fast blink    | On          | Config fallback (error) |
 | Off           | Default     | Service stopped |
 
-The green ACT LED is repurposed from its default Raspberry Pi OS
-behaviour (SD card activity) to indicate service health. The red
-PWR LED retains its hardware default (power present).
+The green ACT LED is repurposed from its OS default (SD-card
+activity) to service health; the red PWR LED keeps its hardware
+default (power present).
 
 ## Failure-Mode Catalogue
 
-A short tour of what the appliance does when things go wrong.
-
 ### WiFi client lost mid-update
 
-The 180-second service watchdog (chapter 17.7) forces the routing
-service to restart, which brings the AP back. The user
-reconnects to the AP and retries. The deb cache (latest 3) is
-preserved, so the retry can install offline.
+The 180-second watchdog (chapter 17.7) restarts the routing
+service, bringing the AP back; the deb cache (latest 3) survives,
+so the retry can install offline.
 
 ### Plugin crash
 
-Each plugin runs in its own thread inside the routing service.
-A plugin that raises an unhandled exception is logged and the
-plugin's thread restarts. The plugin's parameters are kept; in-
-flight events for that plugin may be lost.
+Each plugin runs in its own thread. An unhandled exception is
+logged and the thread restarts; parameters are kept, in-flight
+events may be lost.
 
 ### ALSA hot-plug
 
-USB MIDI devices that come and go fire ALSA hotplug events. The
-service catches them and:
-
-- On plug-in: matches the device against saved routing by USB
-  topology; if a match is found, the routing is re-applied
-  silently.
-- On unplug: marks the device's row/column as offline in the
-  matrix; saved connections stay visible and dimmed.
+On plug-in, the device is matched against saved routing by USB
+topology and the routing re-applied silently. On unplug, the
+row/column goes offline in the matrix; saved connections stay
+visible and dimmed.
 
 ### AP wedged
 
-If the AP becomes unreachable but the routing service is healthy
-(rare, usually caused by hostapd hanging), `sudo reset-wifi` from
-a console forces AP mode with default credentials.
+If the AP is unreachable but the routing service is healthy (rare,
+usually hostapd hanging), `sudo reset-wifi` from a console forces
+AP mode with default credentials.
 
 ### Config file corrupt
 
-If the routing service cannot parse the boot config on startup,
-it falls back to a clean state and lights the LED in the "fast
-blink, PWR on" pattern. The corrupt file is renamed with a
-`.bak` suffix so the user can recover its contents over SSH.
+If the boot config cannot be parsed, the service falls back to a
+clean state and lights the "fast blink, PWR on" LED pattern. The
+corrupt file is renamed with a `.bak` suffix so its contents can
+be recovered over SSH.
 
 ## Maintenance Operations
 
 ### Updating
 
-See chapter 17. The TL;DR: pick an internet path (ethernet, USB
-tethering, or temporary WiFi-client mode), tap **Check GitHub for
-newer versions**, then **Install**.
+See chapter 17: pick an internet path (ethernet, USB tethering, or
+temporary WiFi-client mode), tap **Check GitHub for newer
+versions**, then **Install**.
 
 ### Uninstalling
 
@@ -210,8 +154,8 @@ sudo apt purge raspimidihub raspimidihub-rosetup
 sudo reboot
 ```
 
-After the reboot, the Pi is back to a plain Raspberry Pi OS Lite
-install (subject to whatever else has been installed on top).
+After the reboot the Pi is a plain Raspberry Pi OS Lite install
+again (plus whatever else was installed on top).
 
 ### Resetting WiFi
 
@@ -219,14 +163,12 @@ install (subject to whatever else has been installed on top).
 sudo reset-wifi
 ```
 
-Forces AP mode with default credentials. The console alternative
+Forces AP mode with default credentials -- the console alternative
 to chasing a wedged AP through the UI.
 
 ### Re-flashing the SD card
 
-The most thorough reset: re-image the SD card with Raspberry Pi
-OS Lite and run the install one-liner. Loses all saved state
-(routing config, BlueZ bonds, AP password). Useful when the SD
-card itself is suspect. Use **Export Config** beforehand to keep
-the routing state recoverable.
-
+The most thorough reset: re-image the SD card with Raspberry Pi OS
+Lite and run the install one-liner. Loses all saved state (routing
+config, BlueZ bonds, AP password); use **Export Config**
+beforehand to keep the routing state recoverable.

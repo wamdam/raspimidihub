@@ -89,7 +89,11 @@
 % a turquoise rule underneath. Mirrors the website's mixed-colour
 % accent treatment.
 % ------------------------------------------------------------------
-\usepackage[explicit]{titlesec}
+% nobottomtitles*: a heading that would land in the last stretch of
+% a page (less than \bottomtitlespace remaining) moves to the next
+% page instead of sitting orphaned above one or two body lines.
+\usepackage[explicit,nobottomtitles*]{titlesec}
+\renewcommand{\bottomtitlespace}{0.2\textheight}
 
 \titleformat{\chapter}[display]%
   {\sffamily}%

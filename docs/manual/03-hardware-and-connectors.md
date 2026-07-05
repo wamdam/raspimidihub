@@ -1,10 +1,6 @@
 # Hardware and Connectors
 
-RaspiMIDIHub is a software appliance -- it runs on stock Raspberry
-Pi hardware that you provide. This chapter lists the supported
-hardware, describes the physical connectors used, documents the
-on-board LED status pattern, and walks through the first physical
-setup of the unit.
+RaspiMIDIHub runs on stock Raspberry Pi hardware that you provide.
 
 ## Supported Raspberry Pi Models
 
@@ -20,138 +16,94 @@ setup of the unit.
 | Pi 5        | 4 (2 × USB 3.0)  | 8+    | Best performance, fastest BLE                |
 +-------------+------------------+-------+----------------------------------------------+
 
-The Pi 4B is the sweet spot for most users -- four USB ports, two
-of them USB 3.0, plenty of CPU for plugin work, BLE-MIDI on board,
-and widely available. The Pi 5 is the right answer if the rig is
-heavy on plugins (multiple Trackers, drop-button-heavy controllers)
-or BLE-MIDI is in the critical path. The Pi 3B+ and Pi Zero 2 W
-work but constrain the device count.
-
-The Pi 1, Pi 2, and original Pi Zero are **not** supported: the
-read-only filesystem and the isolated-core reservation assume a
-multi-core ARMv8 system.
+The Pi 4B suits most users; choose a Pi 5 for plugin-heavy rigs or
+BLE-MIDI in the critical path. The Pi 1, Pi 2, and original Pi Zero
+are **not** supported: the read-only filesystem and isolated-core
+reservation require a multi-core ARMv8 system.
 
 ## Storage
 
-The Pi boots from a microSD card. Requirements:
+The Pi boots from a microSD card:
 
-- **Capacity** -- 4 GB minimum, 8 GB or 16 GB recommended.
-- **Class** -- A1 or better. The endurance class (A2) is *not*
-  required; the read-only filesystem means the card is rarely
-  written.
-- **Brand** -- any reputable brand. Counterfeit cards are the
-  most common source of "the Pi doesn't boot" reports; buy from
-  a known vendor.
-
-A 4 GB card is enough; software updates store the latest three
-debs (chapter 17.6) which fit in well under 100 MB.
+- **Capacity** -- 4 GB minimum (enough -- updates keep only the
+  latest three debs, chapter 17.6); 8 or 16 GB recommended.
+- **Class** -- A1 or better; endurance class A2 is unnecessary on
+  the read-only filesystem.
+- **Brand** -- reputable vendors; counterfeit cards are the top
+  cause of "the Pi doesn't boot".
 
 ## USB-A Ports -- MIDI Devices
 
-The Pi 4B and Pi 5 expose four USB-A ports, two of which are USB
-3.0 (blue) and two USB 2.0 (black). MIDI devices work equally well
-on either; USB 3.0 ports are sometimes preferable for class-
-compliant audio interfaces that *also* expose MIDI ports, but for
-MIDI-only devices the speed difference is irrelevant.
+Pi 4B and Pi 5: two USB 3.0 (blue) and two USB 2.0 (black) ports;
+MIDI works equally well on either (USB 3.0 only matters for audio
+interfaces that also expose MIDI ports). Pi 3B+: four USB 2.0 ports
+on one bus shared with Ethernet. Pi Zero 2 W: one micro-USB OTG
+port; use a powered USB hub for multiple devices.
 
-The Pi 3B+ exposes four USB 2.0 ports sharing a single bus with
-the Ethernet adapter. The Pi Zero 2 W has a single micro-USB OTG
-port; a powered USB hub is required to attach multiple MIDI
-devices.
-
-Hot-plug is supported (chapter 18.6.3). Plugging or unplugging a
-device during operation updates the matrix within a second or
-two.
+Hot-plug is supported (chapter 18.7.3); the matrix updates within
+seconds.
 
 ## USB-A Ports -- Tethered Phone
 
-Any USB-A port doubles as a tethered-phone input (chapter 17.4).
-Plug a phone with Personal Hotspot / USB Tethering enabled and
-the Pi acquires internet over the USB-CDC interface. The phone
-keeps the AP running; the Pi keeps the AP up alongside the
-tethered link.
+Any USB-A port accepts a tethered phone (chapter 17.4): enable
+Personal Hotspot / USB Tethering and the Pi gets internet over USB
+while its AP stays up.
 
 ## Power
 
 - **Pi 4B / Pi 5** -- USB-C, official 5V/3A (Pi 4) or 5V/5A (Pi 5)
-  power supply. Underpowered supplies cause undervolt warnings in
-  the logs and possible USB device drop-outs.
-- **Pi 3B+** -- micro-USB, 5V/2.5A.
-- **Pi Zero 2 W** -- micro-USB OTG, 5V/2.5A.
+  supply.
+- **Pi 3B+ / Pi Zero 2 W** -- micro-USB, 5V/2.5A.
 
-The included Raspberry Pi Foundation power adapter is the
-reference; phone chargers and laptop USB-C ports are not always
-adequate, particularly when the Pi powers bus-powered MIDI
-devices.
+Use the official adapter: phone chargers and laptop USB-C ports can
+be inadequate with bus-powered MIDI devices attached, causing
+undervolt warnings and USB drop-outs.
 
 ## Ethernet (RJ45)
 
-The Pi 4B and Pi 5 expose a Gigabit Ethernet port; the Pi 3B+
-exposes Fast Ethernet. The Pi Zero 2 W has no built-in Ethernet
-(a USB-Ethernet dongle is supported on any of the USB-A ports).
-
-Ethernet on RaspiMIDIHub carries IP only -- never raw 5-pin / USB
-MIDI signalling. It is used for software updates (chapter 17.3) and,
-since the addition of **Network MIDI**, for **RTP-MIDI (AppleMIDI)**
-sessions -- MIDI tunnelled inside IP packets to Macs, iPads, and other
-hubs over the LAN. So MIDI *does* travel over the wire, as RTP-MIDI
-rather than a direct MIDI cable. See **Settings → Ethernet**
-(chapter 16.2) for the IP configuration and **Settings → Network MIDI**
-for sessions.
+Gigabit on Pi 4B and Pi 5, Fast Ethernet on Pi 3B+, none on the
+Pi Zero 2 W (a USB-Ethernet dongle works). Ethernet carries IP
+only, never raw MIDI signalling: software updates (chapter 17.3)
+and **Network MIDI** -- RTP-MIDI (AppleMIDI) sessions to Macs,
+iPads, and other hubs. Configure under **Settings → Ethernet**
+(chapter 16.2) and **Settings → Network MIDI**.
 
 ## Bluetooth
 
-The Pi 4B, Pi 5, and Pi Zero 2 W have on-board Bluetooth and use
-it for BLE-MIDI peripherals (chapter 14). The Pi 3B and 3B+ also
-have on-board Bluetooth and work for BLE-MIDI, though the radio is
-older and connection ranges are shorter.
+All supported models have on-board Bluetooth for BLE-MIDI
+peripherals (chapter 14); the Pi 3B / 3B+ radio has shorter range.
 
-On the Pi 3B, Pi 3B+, and Pi Zero 2 W, Bluetooth and WiFi share a
-single combo chip and antenna. Running the access point (the
-normal mode) loads the 2.4 GHz band continuously, and on some of
-these boards that stops BLE-MIDI peripherals from connecting at
-all -- the link is aborted the instant it forms. It is unit-
-dependent: some Pi 3 boards are fine, others fail every time. For
-a rig that depends on BLE-MIDI, use a Pi 4 or Pi 5, whose separate
-radios coexist cleanly. Chapter 14's *Limits* and *Troubleshooting*
-cover how to confirm and work around it.
+On the Pi 3B, 3B+, and Pi Zero 2 W, Bluetooth and WiFi share one
+chip and antenna; the AP's continuous 2.4 GHz load can abort
+BLE-MIDI connections the instant they form (unit-dependent). For a
+BLE-dependent rig use a Pi 4 or Pi 5, whose separate radios coexist
+cleanly; chapter 14's *Limits* and *Troubleshooting* cover
+confirmation and workarounds.
 
 External Bluetooth USB dongles are not supported -- the bridge
 binds to the on-board adapter only.
 
 ## WiFi
 
-The Pi 4B, Pi 5, Pi Zero 2 W, Pi 3B+, and Pi 3B all have on-board
-WiFi. The Pi 4B, Pi 5, and Pi 3B+ are dual-band (2.4 GHz and
-5 GHz); the Pi 3B and Pi Zero 2 W are 2.4 GHz only.
+All supported models have on-board WiFi; the Pi 4B, Pi 5, and
+Pi 3B+ are dual-band (2.4 and 5 GHz), the Pi 3B and Pi Zero 2 W
+2.4 GHz only.
 
-The access point runs on 2.4 GHz by default, and can be switched to
-5 GHz on a dual-band Pi (Settings → Network → *AP radio*, chapter
-16). Running the AP on 5 GHz keeps it off the 2.4 GHz band that
-Bluetooth shares, which is the fix for the BLE-MIDI coexistence
-trouble on the combo-chip boards (see *Bluetooth* above and chapter
-14, *Limits*).
-
-The on-board radio is used both for the access point and for
-client mode (chapter 17.1). It is one radio shared between two
-modes, which is the reason the **WiFi for updates** mode briefly
-drops the AP while in client mode.
+The AP defaults to 2.4 GHz; a dual-band Pi can switch it to 5 GHz
+(Settings → Network → *AP radio*, chapter 16), freeing the band
+Bluetooth shares -- the fix for the coexistence trouble above. One
+radio serves both AP and client mode (chapter 17.1), which is why
+**WiFi for updates** briefly drops the AP.
 
 ## Audio Output
 
-RaspiMIDIHub does not currently use the Pi's analog audio output
-or HDMI audio. The appliance is MIDI-only: it routes events; the
-audio is generated by the connected synths and the receiving
-gear.
-
-(USB audio interfaces with class-compliant audio support are
-*present* on the system but unused by RaspiMIDIHub -- there is
-no plugin or feature that emits audio at this time.)
+Not used -- the appliance is MIDI-only. USB audio interfaces are
+recognised for their MIDI ports only.
 
 ## On-Board LEDs
 
-The Pi exposes two LEDs, repurposed by the routing service for
-appliance status (chapter 18.5):
+The routing service repurposes the Pi's two LEDs for status
+(chapter 18.5):
 
 | Green ACT | Red PWR | Meaning |
 |-----------|---------|---------|
@@ -160,53 +112,38 @@ appliance status (chapter 18.5):
 | Fast blink | On | Config fallback (error) |
 | Off | Default | Service stopped |
 
-The "fast blink, PWR on" pattern is the visual cue that the
-routing service started but could not parse its config and fell
-back to a clean state. Look at `journalctl -u raspimidihub -e`
-over SSH to see why.
+"Fast blink, PWR on" means the service could not parse its config
+and fell back to a clean state; check
+`journalctl -u raspimidihub -e` over SSH.
 
 ## First-Time Setup
 
-The recommended path is to flash the **RaspiMIDIHub bootstrap
-image** with **Raspberry Pi Imager**. The image is a fresh
-Raspberry Pi OS Lite (64-bit, Trixie) with a oneshot that
-downloads and installs the latest RaspiMIDIHub release on first
-boot. Re-flashing the same image at any later time installs the
-newest RaspiMIDIHub release automatically -- the image stays
-valid across many software releases.
+Flash the **RaspiMIDIHub bootstrap image** with **Raspberry Pi
+Imager**: Raspberry Pi OS Lite (64-bit, Trixie) plus a first-boot
+installer that always fetches the latest release, so the same image
+stays valid across releases.
 
-Step by step, from a sealed Pi to a running unit:
-
-1. **Install Raspberry Pi Imager** from
+1. **Install Raspberry Pi Imager** (free) from
    [raspberrypi.com/software](https://www.raspberrypi.com/software/).
-   Pi Imager is free, official, and runs on macOS, Windows, and
-   Linux.
-2. **Download the RaspiMIDIHub OS image** -- the file
+2. **Download the image** --
    `raspimidihub-bootstrap-YYYY-MM-DD.img.xz` (~535 MB) -- from
    the [Image release page](https://github.com/wamdam/raspimidihub/releases/tag/image-2026-04-21).
-3. **Open Pi Imager.** Click **CHOOSE OS** → scroll to the
-   bottom → **Use custom**, and select the downloaded `.img.xz`.
-   Click **CHOOSE STORAGE** and pick the SD card. Click **NEXT**.
-   Pi Imager asks "would you like to apply OS customisation
-   settings?" -- click **EDIT SETTINGS**. The first-boot install
-   needs internet, so set at least one network path here:
-    - **WiFi SSID + password** -- the cleanest option; sets the
-      regulatory country at the same time. The image works around
-      a known Pi Imager / Trixie bug that otherwise leaves the
-      WiFi radio rfkilled (see chapter 17.5).
-    - **Or plug in ethernet** when you boot the Pi -- in that
-      case the WiFi field can be left empty.
+3. In Pi Imager: **CHOOSE OS** → **Use custom** → the downloaded
+   `.img.xz`; **CHOOSE STORAGE** → the SD card → **NEXT** →
+   **EDIT SETTINGS**. The install needs internet, so set one path:
+    - **WiFi SSID + password** -- cleanest; also sets the
+      regulatory country and works around a Pi Imager / Trixie bug
+      that otherwise leaves WiFi rfkilled (chapter 17.5).
+    - **Or plug in ethernet** at boot; the WiFi field can stay
+      empty.
 
-   Also set in the wizard:
-    - **Username and password** (or an SSH public key under
-      "Use password authentication / Allow public key
-      authentication").
-    - **Keyboard layout** and region.
+   Also set a **username and password** (or an SSH public key),
+   keyboard layout, and region.
 
-4. **Save** the settings → **YES** → **YES** to write. Eject the
-   card, insert into the Pi, power on.
+4. **Save** → **YES** → **YES** to write. Insert the card, power
+   on.
 5. **Wait roughly 5 minutes.** The green ACT LED progresses
-   through five distinct patterns:
+   through five patterns:
 
    +------+-------------------+------------------------+
    | Step | LED pattern       | Stage                  |
@@ -227,54 +164,42 @@ Step by step, from a sealed Pi to a running unit:
    |      | reboot)           | running, AP up         |
    +------+-------------------+------------------------+
 
-   If you instead see **one short flash per second with a long
-   dark gap**, the install failed. SSH in (the wizard's user
-   account still works) and run
-   `journalctl -u raspimidihub-bootstrap` to see why.
+   **One short flash per second with a long dark gap** means the
+   install failed: SSH in with the wizard's account and run
+   `journalctl -u raspimidihub-bootstrap`.
 
-6. **Join the AP** `RaspiMIDIHub-XXXX` from a phone or laptop
-   with the default password `midihub1`. The captive portal
-   opens the UI.
+6. **Join the AP** `RaspiMIDIHub-XXXX` (default password
+   `midihub1`); the captive portal opens the UI.
 7. **Plug in MIDI devices** and continue with chapter 7 (Quick
-   Start) or chapter 16 (Settings) to change the AP password
-   first.
+   Start), or change the AP password first (chapter 16).
 
 ::: tip
-The customization wizard's user, SSH key, locale, and timezone
-flow through cloud-init on the first boot. They survive the
-RaspiMIDIHub install -- the wizard's user account is the one you
-will SSH in with later for maintenance (chapter 17).
+The wizard's user, SSH key, locale, and timezone survive the
+install; use that account for later SSH maintenance (chapter 17).
 :::
 
 ::: tip
-Pi Imager 2.0 and newer also support a "custom repository" URL
-under **⚙ Settings**. Pointing it at
+Pi Imager 2.0+ accepts a "custom repository" URL under
+**⚙ Settings**: point it at
 `https://raw.githubusercontent.com/wamdam/raspimidihub/main/image/os-list.json`
-makes **RaspiMIDIHub OS** show up directly in the OS picker --
-no need to download the file manually. The option is hidden on
-Pi Imager 1.x, which is why the steps above use the direct-
-download path: it works on every Pi Imager version.
+and **RaspiMIDIHub OS** appears in the OS picker. Pi Imager 1.x
+hides the option, hence the direct download above.
 :::
 
 ### Alternative: manual installation on existing Raspberry Pi OS Lite
 
-If you already have a fresh Raspberry Pi OS Lite system running
-(installed via Pi Imager *without* the RaspiMIDIHub repository),
-you can install RaspiMIDIHub from the shell:
+On a fresh Raspberry Pi OS Lite system:
 
 ```
 curl -sL https://github.com/wamdam/raspimidihub/releases/latest/download/install.sh | bash
 sudo reboot
 ```
 
-This is exactly what the bootstrap image runs on first boot --
-the two paths converge on the same packages and the same
-post-install state.
+This is exactly what the bootstrap image runs on first boot.
 
 ::: warning
 Install on a **fresh** Raspberry Pi OS Lite image only. The
-`raspimidihub-rosetup` package converts the filesystem to
-read-only and may conflict with other software. Do not install
-on a Pi you use for other purposes.
+`raspimidihub-rosetup` package converts the filesystem to read-only
+and may conflict with other software; do not install on a Pi used
+for other purposes.
 :::
-

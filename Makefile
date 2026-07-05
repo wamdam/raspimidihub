@@ -338,7 +338,8 @@ MANUAL_VERSION_TEX = $(MANUAL_DIR)/templates/version.tex
 # entry in CHANGELOG.txt — that's "the date this release went out"
 # without needing a second hand-maintained constant.
 MANUAL_DATE    = $(shell awk '/^[0-9]{4}-[0-9]{2}-[0-9]{2}/{print $$1; exit}' CHANGELOG.txt 2>/dev/null)
-MANUAL_SOURCES = $(wildcard $(MANUAL_DIR)/[0-9A-E]*.md) \
+MANUAL_SOURCES = $(wildcard $(MANUAL_DIR)/[0-9]*.md) \
+                 $(wildcard $(MANUAL_DIR)/[A-Z]-appendix*.md) \
                  $(MANUAL_DIR)/metadata.yaml \
                  $(MANUAL_DIR)/templates/header.tex \
                  $(wildcard docs/screenshots/*.png) \
@@ -376,7 +377,7 @@ $(MANUAL_PDF): $(MANUAL_SOURCES)
 	@echo "  PANDOC $(MANUAL_PDF)  (version $(VERSION), date $(MANUAL_DATE))"
 	@cd $(MANUAL_DIR) && pandoc \
 		metadata.yaml \
-		$$(ls [0-9A-D]*.md | sort) \
+		$$(ls [0-9]*.md [A-Z]-appendix*.md | sort) \
 		--pdf-engine=xelatex \
 		--include-in-header=templates/version.tex \
 		--include-in-header=templates/header.tex \

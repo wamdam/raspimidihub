@@ -1,12 +1,9 @@
 # Settings
 
-The **Settings** tab is a hub of sub-pages. The hub shows a card
-per sub-page; tapping a card opens it under a `< Settings / <title>`
-back-bar. The active sub-page is part of the URL
-(`/settings/<section>`) and the bottom-nav remembers your last
-sub-page across tab switches, same as Routing / Controller / Play.
-
-The sub-pages:
+The **Settings** tab is a hub of sub-pages: one card each, opening
+under a `< Settings / <title>` back-bar. The active sub-page is part
+of the URL (`/settings/<section>`); the bottom-nav remembers your
+last sub-page across tab switches.
 
 | Sub-page | What lives there |
 |---|---|
@@ -19,523 +16,384 @@ The sub-pages:
 | **Backup** | Restore or download a rolling save checkpoint (see **Backup** below) |
 | **Network MIDI** | Export local devices as RTP-MIDI sessions for a second hub, Macs, iPads (see **Network MIDI** below) |
 
-(plus **Spectator mirroring**, documented in its own section below.)
+(plus **Spectator mirroring**, documented below.)
 
-The dirty-state asterisk (chapter 6.4) does **not** track most
-Settings changes. WiFi credentials, ethernet config, and the AP
-password apply the moment you save them. The handful that *do* feed
-the dirty-state model (the default-routing choice; the activity-bar
-toggle) are called out in the relevant subsection.
+Most Settings changes bypass the dirty-state asterisk (chapter 6.4)
+and apply the moment you save them. The exceptions (default routing;
+the activity-bar toggle) are noted in their subsections.
 
 ## Spectator mirroring
 
 ![Settings → Spectator mirroring. The top card sets this device's name and copies its spectator URL; the bottom card lists other connected clients with one-tap mirror links.](../screenshots/36-settings-spectator.png){width=48%}
 
-A way to stream a device's UI into OBS (or another browser tab) with
-effectively zero latency, without screen-capture or `scrcpy`. Useful
-for showcase videos where you want viewers to see what the phone is
-doing -- including ripples where you tap -- but with crisp text and
-correct resolution regardless of the recording setup.
-
-The mechanism: every browser tab running RaspiMIDIHub already
-maintains an SSE connection. Spectator mode adds a *mirror* URL --
-`/?spectate=<conn_id>` -- that re-renders the same view as the
-target connection, driven by a small "current UI state" channel
-the source publishes (route, viewport, scroll, density, theme, all
-overlay state, the toast, touch points). OBS Browser Source loads
-that URL and CEF renders the app natively at any resolution -- no
-video encoding on the phone, no encode latency.
+Streams a device's UI into OBS (or another browser tab) with
+effectively zero latency — no screen-capture, no `scrcpy`. The
+mirror URL `/?spectate=<conn_id>` re-renders the target device's
+view, including touch ripples where it is tapped; OBS Browser
+Source renders it natively at any resolution.
 
 ### This device
 
-- **Name shown to spectators** -- a human-readable label that other
-  devices see in their list. Without a label they see only a short
-  UUID; with one they see "Living-room phone". Per-device,
-  persisted to localStorage. Empty is allowed.
-- **Spectator URL** -- the URL another tab or OBS should open to
-  mirror *this* device. Copy it via the button, or tap **Open
-  mirror →** to test it in a new tab. The copied URL already
-  includes the touch-ripple param `&touches=1`; remove it if you
-  prefer a feed without the pointer trail.
+- **Name shown to spectators** — the label others see instead of a
+  short UUID. Per-device, persisted to localStorage; empty allowed.
+- **Spectator URL** — what a tab or OBS opens to mirror *this*
+  device. Copy it, or tap **Open mirror →** to test. The copied URL
+  includes `&touches=1` (touch ripples); remove it for a feed
+  without the pointer trail.
 
-The source device doesn't broadcast anything until a spectator
-opens the URL. The server tells the source the moment the watcher
-count goes from 0 to 1, the broadcaster attaches its DOM listeners,
-and the source starts publishing ~30 Hz updates of viewport / scroll
-/ touch / overlay state. When the spectator closes, the server tells
-the source again and the listeners detach. Result: zero CPU and zero
-bandwidth on phones nobody is mirroring.
+Mirroring costs the source nothing until a spectator opens the URL,
+and stops when the last one closes — zero CPU and bandwidth on
+phones nobody is watching.
 
 ### Spectate another device
 
-A live list of every other RaspiMIDIHub tab currently connected to
-the Pi. Each row shows the device's label (or short UUID), its last
-known viewport size, and how recently it published state. Tapping
-opens the mirror URL in a new tab.
+A live list of every other RaspiMIDIHub tab on the Pi: label (or
+short UUID), viewport size, how recently it published state.
+Tapping opens the mirror in a new tab.
 
-The mirror tab opens at the source's viewport size, applies its
-density and theme, mirrors every popup (context menu, CC-binding
-popup with live wheel values, Cell-binding popup, Plugin Control
-Mappings), the matrix horizontal scroll, the bottom-bar toast, and
-the Save/Load/Panic button state. In the rack view it also mirrors
-the cable highlight (the peek/spread fan when the source selects a
-jack) and the live patch cable while the source is dragging one. A
-touch overlay paints fading
-ripples where the source is being touched (`?touches=1`, on by
-default). If the source disconnects, the mirror shows a "Source
-disconnected" notice and waits for it to come back.
+The mirror adopts the source's viewport size, density and theme and
+mirrors every popup (context menu, CC-binding with live wheel
+values, Cell-binding, Plugin Control Mappings), the matrix
+horizontal scroll, the bottom-bar toast, the Save/Load/Panic button
+state, and — in the rack view — the cable highlight and a live
+patch cable being dragged. Touch ripples paint where the source is
+touched (`?touches=1`, default on). If the source disconnects, the
+mirror shows "Source disconnected" and waits.
 
 ### Presentation knobs
 
-The mirror URL accepts four optional query params that control how
-the mirror is *presented* (independent of what the source is showing):
+Four optional query params control the mirror's presentation:
 
-- **`frame=1`** -- wrap the mirrored screen in a stylised phone
-  bezel (rounded corners, speaker slot, home indicator). Default
-  off, so the unconfigured URL looks like a naked feed.
-- **`chroma=<color>`** -- paints the full-window backdrop *around*
-  the mirror in the given colour (`#ff00ff`, `magenta`, `#00ff00`,
-  any CSS colour). The frame and the mirror itself stay opaque, so
-  an OBS Chroma Key filter on this colour leaves the device cleanly
-  cut out. Default is the regular dark UI background -- chroma-key
-  not requested.
-- **`tilt-x=<deg>` / `tilt-y=<deg>`** -- rotate the framed device
-  in 3D. Useful for a perspective shot that doesn't look like a flat
-  webpage capture. Clamps at ±35°.
+- **`frame=1`** — a stylised phone bezel (rounded corners, speaker
+  slot, home indicator). Default off.
+- **`chroma=<color>`** — paints the backdrop *around* the mirror
+  (`#ff00ff`, `magenta`, any CSS colour); frame and mirror stay
+  opaque, so an OBS Chroma Key filter on that colour cuts the device
+  out cleanly. Default: the regular dark UI background.
+- **`tilt-x=<deg>` / `tilt-y=<deg>`** — 3D rotation for a
+  perspective shot. Clamps at ±35°.
 
-These are wired to a floating control panel that appears in the
-top-right of the spectator URL: a frame on/off toggle, two tilt
-sliders, a chroma colour picker with magenta / green / black /
-default chips, **Reset tilt**, and **Copy URL**. The panel
-auto-fades after 2.5 s of pointer inactivity; OBS Browser Source
-doesn't deliver pointer events, so once the panel fades it stays
-invisible in the recorded feed.
-
-A faster way to set the tilt: just drag anywhere on the
-backdrop. The URL rewrites live (via `replaceState`) so the final
-adjusted view is shareable -- copy the URL after dragging and
-paste it into OBS.
+A floating panel top-right wires these up: frame toggle, tilt
+sliders, chroma picker with magenta / green / black / default
+chips, **Reset tilt**, **Copy URL**. It fades after 2.5 s of
+pointer inactivity — and since OBS sends no pointer events, it
+stays invisible in the feed. Faster tilt: drag anywhere on the
+backdrop; the URL rewrites live, so the adjusted view is shareable.
 
 ### Use in OBS
 
 ![Spectator mirror with `frame=1`, magenta chroma backdrop, and a moderate tilt. OBS's Chroma Key filter on the same colour leaves the framed device floating free of the background.](../screenshots/37-spectator-mirror.png){width=42%}
 
-1. Open the spectator URL in a regular browser tab. Adjust the
-   frame, tilt, and chroma until it looks the way you want.
-2. Click **Copy URL** (or just copy from the address bar).
-3. In OBS: **Sources → + → Browser**. Paste the URL. Set the
-   width and height to match your scene region (e.g. 1080×1920 for
-   a vertical phone capture).
-4. If you set a chroma colour, add a **Chroma Key** filter on the
-   Browser Source with the same colour and adjust similarity to
-   taste -- the device floats free of any background.
+1. Open the spectator URL in a browser tab; adjust frame, tilt,
+   chroma.
+2. Click **Copy URL**.
+3. In OBS: **Sources → + → Browser**. Paste the URL; set width and
+   height to your scene region (e.g. 1080×1920 for a vertical phone
+   capture).
+4. For chroma, add a **Chroma Key** filter on the Browser Source
+   with the same colour and adjust similarity.
 
-Scrollbars are explicitly hidden across the whole spectator
-document so OBS's CEF doesn't paint them onto the captured feed.
+Scrollbars are hidden across the spectator document so OBS never
+paints them onto the feed.
 
 ## Plugin Control Mappings
 
 ![Plugin Control Mappings sub-page: every CC binding across every plugin instance and every controller cell, one row each. Plugin params (Arpeggiator) and controller cells (Mixer 8) interleave; tap any row to open the matching popup.](../screenshots/31-settings-cc-bindings.png){width=48%}
 
-A scroll of rows, one per CC binding across every plugin instance
-on the Pi. Columns:
+One row per CC binding across every plugin instance. Columns:
 
-- **Plugin** -- the instance's display name (the one you set via
-  the matrix row header, or the spawn-time default).
-- **Param** -- the control's label. For controller cells: the
-  cell label as edited in the device-detail panel; XY pads expand
-  to two rows with `(X)` and `(Y)` suffixes.
-- **Ch** -- channel (`Any` or 1..16).
-- **CC** -- the CC number (or `—` for a cleared binding).
+- **Plugin** — the instance's display name.
+- **Param** — the control's label; controller cells use the cell
+  label, XY pads expand to two rows with `(X)` / `(Y)` suffixes.
+- **Ch** — channel (`Any` or 1..16).
+- **CC** — the CC number (`—`, dimmed, for a cleared binding).
 
-Tap any row to open the same long-press popup you'd get on the
-control itself -- CcBinding for plugin params (chapter 11.7),
-CellBinding for controller cells (chapter 12). Edit, MIDI Learn,
-Reset to factory, Clear, Save. Cleared bindings render dimmed
-with `—` in the CC column.
+Tap a row to open the same long-press popup as on the control —
+CcBinding for plugin params (chapter 11.7), CellBinding for
+controller cells (chapter 12): Edit, MIDI Learn, Reset to factory,
+Clear, Save. The table is live — edits from anywhere and instance
+renames appear within milliseconds.
 
-The table is live: any binding edit made from this page, from a
-long-press popup, or via the REST API broadcasts `cc_map_changed`
-SSE and the table refreshes within milliseconds. Renaming an
-instance also reflects immediately via `plugin-changed`.
-
-When there are no plugin instances yet, the page shows a
-placeholder pointing at the Routing tab's **Add** button. There's
-no "create" affordance here -- this is a viewer / editor over
-existing instances, not a way to spawn new ones.
+With no plugin instances, a placeholder points at the Routing tab's
+**Add** button — this page edits existing bindings only.
 
 ## Backup
 
-A list of **rolling save checkpoints**. Every time you tap **Save
-Config** (chapter 15.2) the unit writes a compressed copy of the
-whole project state here, newest first; the last 50 are kept and
-the oldest are pruned automatically. These are distinct from the
-background **autosave** (chapter 15.6) -- backups are deliberate,
-labelled checkpoints you can step back to.
+Rolling save checkpoints: every **Save Config** (chapter 15.2)
+writes a compressed copy of the whole project state here, newest
+first; the last 50 are kept. Distinct from the background
+**autosave** (chapter 15.6).
 
-At the top, a **Last autosave** line shows how long ago the
-background resume-snapshot was last written (`30s ago`, `2 min
-ago`, …) -- the same uptime-relative "n ago" the checkpoints use,
-so it reads **before last reboot** for an autosave carried over
-from a previous boot and **no autosave yet** before the first one
-this session. It is a snapshot as of when the page loaded; the
-**↻** button next to the heading re-reads it (and the list).
+A **Last autosave** line at the top shows how long ago the
+resume-snapshot was written (`30s ago`, `2 min ago`, …), **before
+last reboot** if from a previous boot, or **no autosave yet**. It
+reflects page-load time; **↻** re-reads it and the list.
 
-![Settings → Backup: the **Last autosave** line at the top (uptime-relative), then the rolling Save checkpoints newest-first — each with its `#number`, relative age, a one-line summary ("settings changed", "+1 connection", "(no changes)", "(initial)"), size, and Restore / Download.](../screenshots/32-settings-backup.png){width=42%}
+![Settings → Backup: the **Last autosave** line at the top (uptime-relative), then the rolling Save checkpoints newest-first — each with its `#number`, relative age, a one-line summary, size, and Restore / Download.](../screenshots/32-settings-backup.png){width=42%}
 
 Each row shows:
 
-- **#number** -- a monotonic sequence number. It only ever
-  increases, so it orders checkpoints even across reboots.
-- **When** -- a relative "n ago" (`125s ago`, `3 min ago`, `2 h
-  ago`). The appliance has no real-time clock, so this is measured
-  against uptime, not a wall-clock date, and is only honest within
-  the current boot. A checkpoint written before the last reboot
-  shows **before last reboot** -- its `#number` is the only
-  ordering you get.
-- **Summary** -- a coarse one-line diff against the *previous*
-  checkpoint. It counts only the four big categories (instruments,
-  connections, mappings, device names), e.g. "+1 instrument · −18
-  mappings". When none of those moved it reads **"settings
-  changed"** if anything else differs (a renamed cell, a re-bound
-  CC, a drop-button or theme tweak, an edited plugin parameter --
-  things the counts don't track), or **"(no changes)"** if the
-  snapshot is identical to the previous one; **"(initial)"** for
-  the first checkpoint. The summary tells you roughly what a
-  checkpoint captured, not which exact knob moved -- but the stored
-  copy always holds the *full* state, so a Restore is faithful
-  regardless of what the summary says.
-- **Size** -- the compressed size of the stored copy.
+- **#number** — monotonic; orders checkpoints even across reboots.
+- **When** — a relative "n ago". No real-time clock, so age is
+  uptime-based and only honest within the current boot; older
+  checkpoints show **before last reboot**, ordered by `#number`
+  alone.
+- **Summary** — a coarse diff vs. the previous checkpoint, counting
+  instruments, connections, mappings, device names ("+1 instrument ·
+  −18 mappings"). If none moved: **"settings changed"** when
+  anything else differs (renamed cell, re-bound CC, edited plugin
+  parameter…), **"(no changes)"** when identical, **"(initial)"**
+  for the first. The stored copy always holds the *full* state — a
+  Restore is faithful regardless of the summary.
+- **Size** — compressed size.
 
-Two actions per row:
+Per-row actions:
 
-- **Restore** replaces the live config with that checkpoint
-  (plugins are stopped and recreated, routing is re-diffed onto
-  the matrix). After confirming, the restored state is running but
-  the dirty-state asterisk lights: tap **Save Config** to commit it
-  as the new boot default, or **Load Config** to go back to your
-  last Save. A Restore is autosaved immediately, so it survives a
-  power cut even before you Save.
-- **Download** saves that checkpoint to the browser as a plain
-  JSON file (`raspimidihub-backup-NNNNN.json`) -- the same format
-  **Export Config** produces, so it can be re-imported anywhere.
+- **Restore** replaces the live config with the checkpoint (plugins
+  stopped and recreated, routing re-diffed) and lights the dirty
+  asterisk: **Save Config** commits it as the new boot default,
+  **Load Config** returns to your last Save. A Restore is autosaved
+  immediately, so it survives a power cut before you Save.
+- **Download** saves the checkpoint as plain JSON
+  (`raspimidihub-backup-NNNNN.json`) — the same format **Export
+  Config** produces, re-importable anywhere.
 
-When no checkpoints exist yet (a fresh unit that has never been
-Saved), the page shows a short placeholder.
+A never-Saved fresh unit shows a placeholder.
 
 ## WiFi
 
-A single card with the WiFi status badge plus rows for credentials
-and mode.
+A single card: WiFi status badge plus rows for credentials and mode.
 
 ### Status badge
 
-Shows the current WiFi state in one line: AP mode SSID, client
-mode SSID + IP, or "Bringing up..." during a transition. The badge
-colour mirrors the operational state.
+One line: AP mode SSID, client mode SSID + IP, or "Bringing up..."
+during a transition. Colour mirrors the state.
 
 ### Home WiFi
 
-Two fields: **SSID** and **Password**. Saving the form provisions
-the home network for the **WiFi for updates** and **WiFi always**
-modes. The credentials are stored on the Pi as part of the saved
-project state and *are* therefore included in **Export Config**
-JSON files -- edit the WiFi section out before sharing an export
-externally (chapter 15.8).
+**SSID** and **Password**; saving provisions the home network for
+the **WiFi for updates** and **WiFi always** modes. These
+credentials are part of the saved project state and appear in
+**Export Config** JSON — edit the WiFi section out before sharing
+an export (chapter 15.8).
 
 ### AP Password
 
-Sets the password for the RaspiMIDIHub access point. Minimum 8
-characters (WPA2 requirement). Saving prompts a brief AP restart
--- the phone or laptop drops momentarily and reconnects with the
+Sets the access-point password; minimum 8 characters (WPA2). Saving
+restarts the AP briefly — the phone drops and reconnects with the
 new password.
 
 ::: warning
 The default AP password is `midihub1` and is published. Change it
-the first time the unit is used in any environment outside a
-personal home.
+the first time the unit is used outside a personal home.
 :::
 
 ### AP radio
 
-Sets the band the access point runs on and the regulatory country.
+- **Band** — **2.4 GHz** (default) works on every supported Pi with
+  the longest range, but shares the combo-chip radio with Bluetooth
+  and can disrupt BLE-MIDI on Pi 3-class boards (chapter 14,
+  *Limits*). **5 GHz** stops that competition — the fix for flaky
+  BLE-MIDI on a 5 GHz-capable Pi (3B+, 4, 5) — but has shorter
+  range and needs a 5 GHz-capable phone. Greyed out on radios that
+  can't do it (Pi 3B, Zero 2 W).
+- **Country** — the regulatory domain. **Auto-detect** uses the
+  Pi's kernel regdomain (fallback DE). Must match where the Pi is
+  used; **required for 5 GHz**.
 
-- **Band** -- **2.4 GHz** (default) works on every supported Pi and
-  has the longest range, but shares the one combo-chip radio with
-  Bluetooth, which can disrupt BLE-MIDI on the Pi 3-class boards
-  (chapter 14, *Limits*). **5 GHz** moves the AP off the 2.4 GHz
-  band so it stops competing with Bluetooth -- the fix when BLE-MIDI
-  is flaky on a 5 GHz-capable Pi (3B+, 4, 5). 5 GHz has shorter
-  range and needs a 5 GHz-capable phone; the option is greyed out on
-  radios that can't do it (Pi 3B, Zero 2 W).
-- **Country** -- the regulatory domain. Leave on **Auto-detect** to
-  use the Pi's kernel regdomain (falling back to DE), or pick a
-  country. It must match where the Pi is physically used, and is
-  **required for 5 GHz** -- without it the 5 GHz channels are not
-  permitted.
-
-Saving restarts the AP, so phones drop for a few seconds and
-reconnect. 5 GHz is brought up on a non-DFS channel (36/40/44/48) so
-there is no radar-detection wait. If a 5 GHz bring-up fails for any
-reason, the Pi falls back to 2.4 GHz automatically -- the AP is the
-only path to the UI, so it always comes back up.
+Saving restarts the AP (phones drop a few seconds). 5 GHz uses a
+non-DFS channel (36/40/44/48), so no radar-detection wait; if
+bring-up fails, the Pi falls back to 2.4 GHz automatically — the AP
+always comes back up.
 
 ### WiFi mode
 
-Three radio buttons:
-
-- **AP only** -- the default. The Pi broadcasts the AP and never
-  associates as a client. No internet on the Pi.
-- **WiFi for updates** -- the AP stays up at idle; when a software
-  update is requested the Pi briefly flips `wlan0` from AP to
-  client to fetch the deb, then flips back. The phone/laptop AP
-  connection drops for ~30 seconds during the round-trip.
-- **WiFi always** -- the AP is off. The Pi acts as a normal WiFi
-  client. Use this when the Pi is on the home or venue network
-  permanently.
+- **AP only** — the default. AP broadcast, never a client, no
+  internet on the Pi.
+- **WiFi for updates** — AP stays up at idle; an update briefly
+  flips `wlan0` to client to fetch the deb, then back. The AP drops
+  for ~30 seconds.
+- **WiFi always** — AP off; the Pi is a normal WiFi client. For
+  units permanently on a home or venue network.
 
 ### USB-tethered phone link
 
-When a phone is USB-tethered to the Pi (chapter 17.4), the card
-surfaces the tethered URL as a clickable "Open
-http://x.y.z.w/ on your phone" row -- handy for switching the
-browser to the faster link without leaving the AP.
+With a phone USB-tethered (chapter 17.4), the card shows the
+tethered URL as a clickable "Open http://x.y.z.w/ on your phone"
+row — a quick switch to the faster link.
 
 ## Ethernet (eth0)
 
-Configures the wired interface. Two modes:
+- **DHCP** — the default; right for most home routers.
+- **Static** — Address, Netmask, Gateway, DNS.
 
-- **DHCP** -- the Pi accepts an address from the network's DHCP
-  server. This is the default and the right answer for most home
-  routers.
-- **Static** -- four fields (Address, Netmask, Gateway, DNS) for
-  manual configuration.
-
-When `eth0` is connected, the card lists **every** IPv4 address the
-interface currently holds, just above the Mode pulldown. An
-interface often has more than one: a DHCP lease (or static
-address) *and* the `169.254.x.y` link-local address the hub keeps
-on `eth0`, the latter tagged *(link-local)*. The link-local one is
-always present whenever `eth0` is up -- independent of the Network
-MIDI toggle (see chapter 17's *direct cable* note); if it is the
-*only* address shown, no DHCP server answered and nothing static is
-set -- two hubs on a back-to-back cable still reach each other over
-it. (The same addresses appear, one row per address, on the **Sys
-Info** sub-page.)
+When `eth0` is connected, the card lists **every** IPv4 address it
+holds — often a DHCP lease (or static address) *and* the
+`169.254.x.y` address tagged *(link-local)*, which is always
+present while `eth0` is up, independent of the Network MIDI toggle
+(chapter 17, *direct cable*). If it is the *only* address, no DHCP
+answered and nothing static is set — two hubs on a back-to-back
+cable still reach each other over it. The same addresses appear on
+**Sys Info**.
 
 ## Network MIDI
 
-Shares local MIDI devices over the network as standard RTP-MIDI
-(AppleMIDI) sessions -- the concept, the clients that can connect
-and the wire details live in chapter 17's *Network MIDI* section.
-This page is the control surface:
+Shares local MIDI devices as standard RTP-MIDI (AppleMIDI)
+sessions — concept, compatible clients, and wire details in chapter
+17's *Network MIDI* section. The controls:
 
-- **Share devices over the network** -- the master toggle.
-  Advertising (and, with a peer hub, discovery) runs only while
-  this is on.
-- **Exported devices** -- one checkbox per local device that is
-  currently online. Ticking it advertises the device as
-  `"<name> @<hostname>"`; the sub-line below an exported device
-  shows the advertised session name and how many network clients
-  are connected to it right now.
-- **Remote hubs** -- everything discovered on the network, grouped
-  per hub. Peer-hub sessions mirror into the matrix automatically;
-  each row shows a state dot (green connected / amber connecting /
-  grey discovered), the measured link latency, and the peer's
-  **IP address and port** (`169.254.16.8:5004`) -- when mirrored
-  this is the address actually in use, which makes diagnosing a
-  reachability problem straightforward. Each row also has a
-  Mirror / Unmirror button. Sessions from Macs, iPads or DAWs are
-  listed under *Other sessions* and only mirror when you add them.
-- **Manual peers** -- an IP/hostname list for networks where mDNS
+- **Share devices over the network** — master toggle; advertising
+  and discovery run only while on.
+- **Exported devices** — one checkbox per online local device.
+  Ticking advertises it as `"<name> @<hostname>"`; the sub-line
+  shows the session name and connected client count.
+- **Remote hubs** — everything discovered, grouped per hub.
+  Peer-hub sessions mirror into the matrix automatically; each row
+  shows a state dot (green connected / amber connecting / grey
+  discovered), the link latency, the peer's **IP address and port**
+  (`169.254.16.8:5004` — the address in use, for diagnosing
+  reachability), and Mirror / Unmirror. Sessions from Macs, iPads
+  or DAWs list under *Other sessions* and mirror only when added.
+- **Manual peers** — an IP/hostname list for networks where mDNS
   multicast doesn't get through (routed LANs, some managed
-  switches). The hub polls each entry directly for its exported
-  devices; everything else behaves exactly as with discovery.
+  switches). The hub polls each entry directly; all else behaves as
+  with discovery.
 
-Like the WiFi settings, everything here applies immediately and
-does **not** feed the dirty-state asterisk -- the export list is
-an appliance setting, saved the moment you change it, and it
-survives reboots on its own.
-
-On systems without the `python3-zeroconf` package the page shows
-an "unavailable" hint instead of the toggles.
+Everything applies immediately, bypasses the dirty-state asterisk,
+and survives reboots on its own. Without the `python3-zeroconf`
+package the page shows an "unavailable" hint instead.
 
 Screenshots needed:
 
-- `16-settings-network-midi.png` -- the Network MIDI sub-page with
+- `16-settings-network-midi.png` — the Network MIDI sub-page with
   the master toggle on, two devices exported and one showing a
   connected participant. Needs real hardware (a connected RTP-MIDI
   client); not yet covered by the scripted screenshot scenes.
 
 ## MIDI Routing
 
-A single radio with two options:
+One radio, two options:
 
-- **None** -- new USB devices appear in the matrix but with no
-  connections. The user wires them up by hand. **The default** --
-  a freshly-plugged device never injects unexpected MIDI until you
-  route it.
-- **Connect all** -- new USB devices are auto-routed to and from
-  every existing device. Plug-and-play; flip to this if you want
-  the old auto-connect-everything behaviour.
+- **None** — the default. New USB devices appear in the matrix
+  unconnected; nothing injects unexpected MIDI until you route it.
+- **Connect all** — new USB devices auto-route to and from every
+  existing device.
 
-This choice **does** participate in the dirty-state model -- it
-is part of the project state and survives **Save Config**.
-
-The plugin "starts unconnected" rule (chapter 11.3) is
-independent of this setting; plugins always start with no
-connections regardless of the **MIDI Routing** choice.
+This choice **does** feed the dirty-state model and survives **Save
+Config**. Plugins always start unconnected regardless (chapter
+11.3).
 
 ## Display
 
-Three toggles, a layout selector and a theme picker, all marked
-**(this device only)** in the heading -- every Display preference
-is browser-local; nothing on this card travels with **Save /
-Export Config**.
+Three toggles, a layout selector and a theme picker, all **(this
+device only)** — browser-local, never part of **Save / Export
+Config**.
 
-- **MIDI activity bar** -- shows or hides the persistent
-  two-source activity bar above the bottom navigation.
-- **Knob / wheel tick sounds** -- enables a small click on each
-  integer step of a wheel or fader drag.
-- **Scroll-assist buttons** -- shows round accent-coloured
-  floating buttons in the top-right (▲) and bottom-right (▼) of
-  any overflowing page. Each tap scrolls roughly 200 px in that
-  direction; the buttons only appear when content actually runs
-  past the viewport edge. Default on.
-- **Layout density** -- a dropdown with **Default** and **Small
-  screen (tighter)**. Small mode shrinks the header, bottom
-  navigation, page padding, and the per-plugin controller bar so
-  more content fits on a 360-px-wide phone. The same hub can
-  render in Default on a tablet and Small on a phone without one
-  overriding the other.
-- **Theme** -- a dropdown listing every theme present in
-  `themes/manifest.json`. **Light** is the daytime default
-  (every screenshot in this manual is captured in Light); **Dark**
-  is the night-rig alternative. The choice is browser-local,
-  persists across reloads, and seeds the PWA status-bar colour
-  so the mobile chrome matches the theme on the next page load.
-  First-time visitors with no saved preference inherit their
-  OS's `prefers-color-scheme` setting. The picker hides itself
-  if only one theme is installed. See chapter 4 §"Themes" for a
-  side-by-side comparison of how the matrix looks in each mode.
+- **MIDI activity bar** — show/hide the two-source activity bar
+  above the bottom navigation.
+- **Knob / wheel tick sounds** — a click on each integer step of a
+  wheel or fader drag.
+- **Scroll-assist buttons** — floating ▲ / ▼ buttons on overflowing
+  pages; each tap scrolls ~200 px. They appear only when content
+  runs past the viewport. Default on.
+- **Layout density** — **Default** or **Small screen (tighter)**;
+  Small shrinks header, bottom navigation, padding, and the
+  per-plugin controller bar for 360-px-wide phones. Per-browser, so
+  a tablet and phone on the same hub can differ.
+- **Theme** — every theme in `themes/manifest.json`. **Light** is
+  the daytime default (all manual screenshots use it), **Dark** the
+  night-rig alternative. Persists across reloads and seeds the PWA
+  status-bar colour; first-time visitors inherit the OS
+  `prefers-color-scheme`. Hidden with only one theme installed. See
+  chapter 4 §"Themes" for a comparison.
 
 ## Stats
 
-A pocket-sized health dashboard. Live readouts:
+A pocket health dashboard — the first stop when the unit feels
+sluggish. Chapter 20 explains out-of-range values.
 
-- **Loop lag** -- how long the asyncio loop took to run its last
-  cycle on the reserved CPU 3. Around 2 ms is the normal state and
-  anything under 5 ms is fine; sustained values above 5 ms
-  indicate something is starving the loop.
-- **MIDI in → out latency** -- the time from a USB MIDI input
-  event arriving to its corresponding output event leaving. Probed
-  with a synthetic round-trip; the typical value is under 2 ms
-  for filtered/mapped connections.
-- **Control in → MIDI out latency** -- the round-trip from a UI
-  control change to the resulting MIDI event leaving on a routed
-  port. Useful for understanding controller responsiveness.
-- **Process CPU %** -- the routing service's own CPU usage,
-  summed across its threads.
-- **Per-core CPU** -- the system busy% of each CPU core, labelled by
-  role: **CPU3 · loop** (the routing/MIDI loop's reserved core),
-  **CPU2 · plugins** (the plugin engines' reserved core) and **CPU0 /
-  CPU1** (housekeeping). A value turning red (≥ 85%) on the loop or
-  plugin core warns that core is near saturation -- the cause of loop
-  lag or note jitter respectively.
-- **ALSA ports** -- sequencer ports held by the hub's own ALSA
-  client, against the kernel's per-client cap of 254. Every
-  filtered or mapped connection holds two. The value turns red at
-  80% of the cap; at the cap, new filters can no longer be
-  created. A steadily climbing count with a stable setup would
-  indicate a port leak -- worth a reboot and a bug report.
-- **SSE rate / backlog** -- events per second going out over the
-  SSE channel, and the backlog if the browser has fallen behind.
-
-The Stats card is the first place to look when the unit feels
-sluggish. Chapter 20 lists what each metric means when it is out
-of the normal range.
+- **Loop lag** — the asyncio loop's last cycle time on reserved
+  CPU 3. ~2 ms normal, under 5 ms fine; sustained above 5 ms means
+  something is starving the loop.
+- **MIDI in → out latency** — USB input event to corresponding
+  output event, probed with a synthetic round-trip; typically under
+  2 ms for filtered/mapped connections.
+- **Control in → MIDI out latency** — UI control change to the
+  resulting MIDI event on a routed port.
+- **Process CPU %** — the routing service's CPU across its threads.
+- **Per-core CPU** — busy% per core by role: **CPU3 · loop**,
+  **CPU2 · plugins**, **CPU0 / CPU1** (housekeeping). Red (≥ 85%)
+  on the loop or plugin core warns of saturation — the cause of
+  loop lag or note jitter respectively.
+- **ALSA ports** — sequencer ports held by the hub's ALSA client,
+  vs. the kernel's per-client cap of 254; every filtered or mapped
+  connection holds two. Red at 80%; at the cap, new filters can't
+  be created. A climbing count with a stable setup is a port leak —
+  reboot and file a bug.
+- **SSE rate / backlog** — events per second to the browser, and
+  the backlog if it has fallen behind.
 
 ## Software Versions
 
-A list of every locally-stored `.deb`, newest first, each with its
-changelog and an **Install** button.
+Every locally-stored `.deb`, newest first, with changelog and an
+**Install** button.
 
 **Check GitHub for newer versions** auto-downloads anything newer
-than the running build, keeps the latest three on disk, and lets
-you install offline with one tap. A live progress bar plus a
-hopping "we're alive" dot reassures during the install. The
-180-second service watchdog forces the Pi back to AP mode if the
-orchestrator hangs.
+than the running build and keeps the latest three on disk, so
+re-installs work fully offline. A progress bar plus a hopping
+"we're alive" dot shows install liveness; a 180-second watchdog
+forces the Pi back to AP mode if the install hangs.
 
-The retention policy (latest three) means once anything has been
-fetched, re-installs work fully offline -- no internet path needed.
-
-The version installer also handles the
-`raspimidihub-rosetup` package alongside the main
-`raspimidihub` package. Both are kept on disk and offered
-together.
-
-See chapter 17 for the three internet paths the install can use
-(ethernet, USB tethering, WiFi for updates) and the trade-offs of
-each.
+The installer also manages the `raspimidihub-rosetup` package
+alongside `raspimidihub`; both are kept and offered together. See
+chapter 17 for the three internet paths an install can use
+(ethernet, USB tethering, WiFi for updates).
 
 ## PWA Install
 
-A single **Install App** button. Tapping it triggers the
-operating system's "Add to Home Screen" flow:
-
-- **iOS Safari** -- the OS dialog appears; confirm to install.
-- **Chrome on Android** -- the install prompt appears at the
-  bottom of the screen.
-
-After install, RaspiMIDIHub launches from a home-screen icon and
-runs fullscreen, with no URL bar and no browser chrome. The PWA
-state survives reboots and software updates.
+An **Install App** button triggering the OS "Add to Home Screen"
+flow — iOS Safari shows the OS dialog, Chrome on Android the
+bottom prompt. After install, RaspiMIDIHub launches fullscreen from
+a home-screen icon, no browser chrome. The PWA survives reboots and
+software updates.
 
 ## Reload App
 
-A single **Reload App** button. Force-reloads the SPA bundle,
-bypassing the browser cache. Use this when the header version
-badge shows the "stale, reload" hint, or when troubleshooting a
-UI quirk that smells like a stale bundle. The button busts mobile
-Safari's bf-cache reliably -- a regular pull-to-refresh does not.
+Force-reloads the SPA bundle, bypassing the browser cache. Use it
+when the header version badge shows the "stale, reload" hint or a
+UI quirk smells like a stale bundle. It busts mobile Safari's
+bf-cache reliably — a pull-to-refresh does not.
 
 ## System
 
-A **Reboot** button. Triggers a clean shutdown and reboot
-of the Pi. The web UI shows a "Rebooting..." screen and reconnects
-automatically when the unit is back up.
+**Reboot** cleanly reboots the Pi; the UI shows "Rebooting..." and
+reconnects automatically.
 
-Below it, a **Factory Reset** button. After a double confirmation it
-erases all routing, plugins, filters and settings, then reboots the
-Pi factory-fresh. Two things are deliberately **kept**:
+**Factory Reset**, after a double confirmation, erases all routing,
+plugins, filters and settings, then reboots factory-fresh. Kept
+deliberately:
 
-- **Your WiFi / access-point settings** -- the AP password and any
-  saved home-WiFi credentials -- so the hub stays reachable on the
-  same network after the reboot.
-- **Your rolling backups** -- a reset is recoverable: if you reset
-  by mistake, restore the last checkpoint from **Settings → Backup**.
+- **WiFi / AP settings** (AP password, home-WiFi credentials) — the
+  hub stays reachable after the reboot.
+- **Rolling backups** — a mistaken reset is recoverable from
+  **Settings → Backup**.
 
-The reset clears the resume snapshot too, so the unit will not come
-back resuming the pre-reset state. After the reboot, newly-plugged
-devices arrive disconnected (the factory default for *Default
-routing*; see the **MIDI** sub-page).
+The reset clears the resume snapshot, so the unit does not resume
+the pre-reset state. Newly-plugged devices then arrive disconnected
+(the factory default; see **MIDI Routing** above).
 
 ## The Safety Net
 
 If the Pi is in WiFi-client mode and the configured network goes
-away (router rebooted, taken out of range, password changed
-elsewhere), the service falls back to AP mode within roughly 90
-seconds. The fallback is automatic; no user action is required.
+away, the service falls back to AP mode within roughly 90 seconds,
+automatically.
 
-For a hard reset of the WiFi state from a console (USB keyboard
-+ HDMI display, or SSH from another network):
+For a hard reset of the WiFi state from a console (USB keyboard +
+HDMI, or SSH from another network):
 
 ```
 sudo reset-wifi
 ```
 
-This forces the Pi to AP mode with default credentials. Use it
-when even the fallback has failed or when access to the unit has
-been locked out.
-
+This forces AP mode with default credentials — for when even the
+fallback has failed or access is locked out.
