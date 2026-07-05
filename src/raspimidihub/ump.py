@@ -467,6 +467,24 @@ class ShimEvent:
         return self.data.note.channel
 
 
+def _units32(value32: int) -> float:
+    """32-bit value → MIDI units, snapping 7-bit-lattice values to the
+    exact integer (a kernel-upscaled 1.0 value 70 reads as 70.0, not
+    69.999 — keeps hi-res consumers byte-compatible for 1.0 inputs)."""
+    v7 = value32 >> 25
+    if _scale.scale_up(v7, 7, 32) == value32:
+        return float(v7)
+    return round(_scale.to_midi_units(value32, 32), 3)
+
+
+def _units_vel16(vel16: int) -> float:
+    """16-bit velocity → MIDI units with the same lattice snap."""
+    v7 = vel16 >> 9
+    if _scale.scale_up(v7, 7, 16) == vel16:
+        return float(v7)
+    return round(_scale.to_midi_units(vel16, 16), 3)
+
+
 def to_monitor_shim(m: UmpMessage, src_client: int, src_port: int,
                     dest_client: int, dest_port: int,
                     hires: bool) -> ShimEvent | None:
@@ -490,7 +508,7 @@ def to_monitor_shim(m: UmpMessage, src_client: int, src_port: int,
                 else _scale.scale_down(m.velocity, 16, 7))
         ev.data.note = _ShimNote(channel=m.channel, note=m.note, velocity=vel7)
         if hires:
-            ev.hires = {"velocity_f": round(_scale.to_midi_units(m.velocity, 16), 3)}
+            ev.hires = {"velocity_f": _units_vel16(m.velocity)}
         return ev
     if k == "cc":
         ev = ShimEvent(_T_CONTROLLER, src, dst)
@@ -500,8 +518,7 @@ def to_monitor_shim(m: UmpMessage, src_client: int, src_port: int,
         if hires:
             # value32 lets consumers (CC→param binding) distinguish
             # 7-bit-lattice values from genuine hi-res ones.
-            ev.hires = {"value_f": round(_scale.to_midi_units(m.value, 32), 3),
-                        "value32": m.value}
+            ev.hires = {"value_f": _units32(m.value), "value32": m.value}
         return ev
     if k == "pitch_bend":
         ev = ShimEvent(_T_PITCHBEND, src, dst)
@@ -516,7 +533,7 @@ def to_monitor_shim(m: UmpMessage, src_client: int, src_port: int,
         ev.data.note = _ShimNote(channel=m.channel, note=m.note,
                                  velocity=_scale.scale_down(m.value, 32, 7))
         if hires:
-            ev.hires = {"value_f": round(_scale.to_midi_units(m.value, 32), 3)}
+            ev.hires = {"value_f": _units32(m.value)}
         return ev
     if k == "chan_pressure":
         ev = ShimEvent(_T_CHANPRESS, src, dst)
@@ -524,7 +541,7 @@ def to_monitor_shim(m: UmpMessage, src_client: int, src_port: int,
                                     value=_scale.scale_down(m.value, 32, 7))
         ev.data.note.channel = m.channel
         if hires:
-            ev.hires = {"value_f": round(_scale.to_midi_units(m.value, 32), 3)}
+            ev.hires = {"value_f": _units32(m.value)}
         return ev
     if k == "program":
         ev = ShimEvent(_T_PGMCHANGE, src, dst)

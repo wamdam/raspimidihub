@@ -747,6 +747,14 @@ class PluginBase:
     # system's tempo perception with their own divided output.
     feeds_clock_bus: bool = False
 
+    # --- Hi-res input (FSD-09) ---
+    # Opt-in: when True (and the system is MIDI 2.0 capable), on_note_on
+    # velocity and on_cc value arrive as FLOAT MIDI units (0.0-127.0)
+    # carrying the full controller resolution. 7-bit sources still
+    # deliver exact integers (as floats), so int-based math keeps
+    # working; plugins that never opt in keep plain ints forever (D3).
+    wants_hires_input: bool = False
+
     # --- Surface kind ---
     # Which top-level UI panel this plugin's instances appear in:
     #   None         — matrix-only plugin (default)

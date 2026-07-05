@@ -514,7 +514,14 @@ class PluginHost:
         try:
             if ev.type == MidiEventType.NOTEON:
                 if ev.data.note.velocity > 0:
-                    plugin.on_note_on(ev.data.note.channel, ev.data.note.note, ev.data.note.velocity)
+                    vel = ev.data.note.velocity
+                    hires = getattr(ev, "hires", None)
+                    if hires and plugin.wants_hires_input \
+                            and "velocity_f" in hires:
+                        # Float MIDI units; exact ints for 7-bit sources
+                        # (lattice snap in the shim).
+                        vel = hires["velocity_f"]
+                    plugin.on_note_on(ev.data.note.channel, ev.data.note.note, vel)
                 else:
                     plugin.on_note_off(ev.data.note.channel, ev.data.note.note)
             elif ev.type == MidiEventType.NOTEOFF:
@@ -527,6 +534,13 @@ class PluginHost:
                 # legacy clients / plain 7-bit sources).
                 hires = getattr(ev, "hires", None)
                 cc_val32 = hires.get("value32") if hires else None
+                # Opted-in plugins get float MIDI units in on_cc (exact
+                # ints for 7-bit sources); the binding walk always uses
+                # the int + value32 pair.
+                on_cc_val = cc_val
+                if hires and plugin.wants_hires_input \
+                        and "value_f" in hires:
+                    on_cc_val = hires["value_f"]
                 # Walk the per-instance cc_map. Multiple params may bind
                 # to the same CC (collisions are intentional — one CC
                 # can drive several controls); each matching entry fires
@@ -543,7 +557,7 @@ class PluginHost:
                     self._cc_to_param(instance, param_name, cc_val, cc_val32)
                     matched = True
                 if not matched:
-                    plugin.on_cc(cc_ch, cc_num, cc_val)
+                    plugin.on_cc(cc_ch, cc_num, on_cc_val)
             elif ev.type == MidiEventType.PITCHBEND:
                 plugin.on_pitchbend(ev.data.control.channel, ev.data.control.value)
             elif ev.type == MidiEventType.CHANPRESS:

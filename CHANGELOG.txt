@@ -18,6 +18,7 @@ Unreleased
 - Added: CC LFO emits its waveform at full 32-bit resolution to MIDI 2.0 destinations (stepless sweeps); MIDI 1.0 destinations receive the identical stepped values as before
 - Added: MIDI-CI discovery — the hub asks connected devices who they are (manufacturer/model/version + capabilities, incl. Property-Exchange friendly names) and shows it in device detail; works over MIDI 1.0/DIN links too; Identify button + midi2.ci_enabled/ci_disabled opt-outs
 - Fix: SysEx transmission was broken (wrong ALSA variable-length flag since the beginning) — affected the SysEx Sender plugin; found and fixed by the MIDI-CI work
+- Added: CC Smoother, Velocity Curve, Velocity Equalizer and Pitch CC handle MIDI 2.0 resolution end to end (stepless glides, interpolated curves, preserved velocity gradations); MIDI 1.0 output stays byte-identical
 
 
 2026-07-01 — Version 5.2.0

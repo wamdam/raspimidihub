@@ -146,6 +146,24 @@ def lattice_interp(units: float, src_bits: int = 7, dst_bits: int = 32) -> int:
     return lo + int((units - b) * (end - lo))
 
 
+def units_in_bucket(anchor: int, value: float) -> float:
+    """Position a float MIDI-unit trajectory inside `anchor`'s
+    truncation bucket.
+
+    For hub generators whose legacy code projected with something
+    other than floor (cc_smoother / velocity plugins use round()):
+    compute the legacy integer exactly as before, pass it as `anchor`
+    together with the smooth float `value` — the result, sent as a
+    float, projects to exactly `anchor` for MIDI 1.0 receivers
+    (byte-identical by construction, whatever the rounding scheme)
+    while 2.0 receivers still see a monotonic fractional trajectory
+    (repositioned by at most half a 7-bit step).
+    """
+    anchor = max(0, min(127, int(anchor)))
+    pos = min(0.9995, max(0.0, value - anchor + 0.5))
+    return anchor + pos
+
+
 def from_midi_units(units: float, bits: int = 32) -> int:
     units = min(127.0, max(0.0, units))
     center = 1 << (bits - 1)

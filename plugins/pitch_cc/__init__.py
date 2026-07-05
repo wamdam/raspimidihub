@@ -64,6 +64,10 @@ just clamped to the floor/ceiling."""
     def on_note_off(self, channel, note):
         self.send_note_off(channel, note)
 
+    # Pass-through stays lossless for hi-res sources (float MIDI
+    # units in on_cc / note velocity; ints from 7-bit sources).
+    wants_hires_input = True
+
     def on_cc(self, channel, cc, value):
         self.send_cc(channel, cc, value)
 

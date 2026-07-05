@@ -3,6 +3,7 @@
 import threading
 import time
 
+from raspimidihub import midi_scale
 from raspimidihub.plugin_api import (
     Display,
     Fader,
@@ -14,6 +15,11 @@ from raspimidihub.plugin_api import (
 
 class CcSmoother(PluginBase):
     """Smooths CC values to remove jitter from noisy controllers."""
+
+    # Receive CC values at full MIDI 2.0 resolution (float MIDI units;
+    # 7-bit sources still deliver exact integers) so the smoothed
+    # trajectory tracks hi-res controllers without quantizing first.
+    wants_hires_input = True
 
     NAME = "CC Smoother"
     DESCRIPTION = "Smooth incoming CC values to remove jitter"
@@ -94,7 +100,12 @@ of audible zipper noise."""
 
                 rounded = int(round(new_val))
                 rounded = max(0, min(127, rounded))
-                self.send_cc(channel, cc_out, rounded)
+                # Emit the smooth float trajectory positioned inside the
+                # legacy round() bucket: MIDI 1.0 receivers get exactly
+                # `rounded` as before, MIDI 2.0 receivers get the
+                # stepless glide.
+                self.send_cc(channel, cc_out,
+                             midi_scale.units_in_bucket(rounded, new_val))
                 self.set_display("output", rounded)
 
             time.sleep(0.01)  # 100 Hz update rate

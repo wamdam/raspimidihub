@@ -58,6 +58,33 @@ The jokes source:
 - Proper state tracking works correctly
 - 100 jokes = ~375 days of content at 1 per 9 hours
 
+## Target Audience
+
+**Hardware enthusiasts, not DAW/software users.**
+
+The RaspiMIDIHub audience consists of:
+- Musicians who build and tinker with their own gear
+- Hardware synth owners and enthusiasts
+- People who value physical MIDI connections (5-pin DIN, TRS, USB)
+- Electronics hobbyists working with Raspberry Pi, GPIO, opto-isolators
+- Users of THRU boxes, patch bays, and hardware routing
+- People who appreciate the tactile nature of hardware music gear
+
+**What resonates:**
+- Physical cables, connectors, and adapters
+- Hardware routing and signal flow
+- Raspberry Pi and electronics tinkering
+- Classic MIDI concepts (16 channels, baud rate, cable length limits)
+- The joy of connecting physical gear together
+
+**What to avoid:**
+- DAW references (Pro Tools, Logic, Ableton, etc.)
+- Software plugins, VSTs, virtual instruments
+- Computer-centric music production workflows
+- Purely digital/synthetic content
+
+This audience values the hands-on, physical aspect of music technology.
+
 ## Overview
 
 The system autonomously posts to Mastodon and Discord using a modular, source-based architecture. Each source knows how to find content, render it with an LLM, and post to configured publishers.

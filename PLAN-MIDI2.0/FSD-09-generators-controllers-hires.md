@@ -13,13 +13,20 @@
 - cc_lfo emits float (dedup quantized to 0.01): live dual-tap on A6DC
   shows identical 7-bit ints on a legacy reader and off-lattice 32-bit
   on a UMP reader.
-- **Deferred with rationale:** cc_smoother (its legacy projection is
-  round(), not floor — emitting floats would shift 1.0 output by ±1;
-  needs a round-compatible interp variant), velocity_curve /
-  velocity_equalizer (need a hi-res *inbound* velocity API first —
-  plugins only see 7-bit velocity per D3), pitch_cc (same, for bend),
-  controller templates (cells intentionally stay 7-bit for hardware-
-  mirror byte-stability; receiving side already rounds consistently).
+- **Deferred adoptions completed 2026-07-05:**
+  `midi_scale.units_in_bucket(anchor, value)` positions a float
+  trajectory inside a legacy-computed integer's truncation bucket —
+  byte-compat by construction for ANY legacy rounding scheme. The
+  shim's value_f/velocity_f snap 7-bit-lattice values to exact
+  integers, and `PluginBase.wants_hires_input` (opt-in, D3) delivers
+  float MIDI units to on_note_on / on_cc. Adopted: cc_smoother
+  (stepless glide, legacy round() projection preserved),
+  velocity_curve (curve interpolation between points),
+  velocity_equalizer (compress/expand in float), pitch_cc
+  (lossless pass-through). Live-verified: smoother glide off-lattice
+  on a UMP tap, clean legacy ints on a 1.0 tap. Still 7-bit by
+  design: controller templates (hardware-mirror byte-stability),
+  sequencer pattern data.
 
 ## Goal
 

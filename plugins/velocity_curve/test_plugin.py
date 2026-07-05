@@ -9,7 +9,9 @@ class TestVelocityCurve:
     def test_linear_passthrough(self):
         p, h = make_plugin(VelocityCurve)
         p.on_note_on(0, 60, 100)
-        assert h.note_ons == [(0, 60, 100)]
+        # velocity is emitted as a float trajectory; the wire-visible
+        # value for MIDI 1.0 receivers is its floor projection
+        assert [(c, n, int(v)) for c, n, v in h.note_ons] == [(0, 60, 100)]
 
     def test_custom_curve(self):
         p, h = make_plugin(VelocityCurve)
@@ -17,7 +19,7 @@ class TestVelocityCurve:
         curve[100] = 50
         p._param_values["curve"] = curve
         p.on_note_on(0, 60, 100)
-        assert h.note_ons == [(0, 60, 50)]
+        assert [(c, n, int(v)) for c, n, v in h.note_ons] == [(0, 60, 50)]
 
     def test_minimum_velocity_1(self):
         p, h = make_plugin(VelocityCurve)

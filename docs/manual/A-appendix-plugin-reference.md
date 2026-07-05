@@ -170,7 +170,10 @@ the **Frequency** when off.
 
 Smooths jitter on a noisy CC input by interpolating between
 incoming values over a configurable window. Dual scope -- input
-and output side by side -- makes the smoothing visible.
+and output side by side -- makes the smoothing visible. On a MIDI
+2.0-capable hub the smoother reads and emits full resolution: the
+glide is stepless into 2.0 destinations while MIDI 1.0 destinations
+receive exactly the classic smoothed integers.
 
 | Parameter | Type | Range | Default |
 |-----------|------|-------|---------|
@@ -623,7 +626,9 @@ Trnsp.** is on).
 
 Remaps velocity through a drawable 128-point curve. Shape presets
 (linear, ease-in, ease-out, S-curve) are available along the
-canvas edge.
+canvas edge. On a MIDI 2.0-capable hub, fractional velocity from a
+2.0 keyboard is interpolated *between* curve points and re-emitted
+at full resolution; integer velocity behaves exactly as before.
 
 | Parameter | Type | Range | Default |
 |-----------|------|-------|---------|
@@ -638,7 +643,9 @@ canvas edge.
 ## Velocity Equalizer
 
 Normalises incoming velocity, either to a fixed value or by
-compressing / expanding the range.
+compressing / expanding the range. Compress / expand preserve a
+MIDI 2.0 keyboard's fine velocity gradations end to end; MIDI 1.0
+devices see the classic integer results.
 
 | Group | Parameter | Type | Range | Default |
 |-------|-----------|------|-------|---------|
