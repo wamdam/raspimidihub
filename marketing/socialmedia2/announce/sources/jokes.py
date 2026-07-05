@@ -1,8 +1,12 @@
 """Jokes source — posts from a curated list of 100 MIDI-themed jokes.
 
-This bot uses a pre-generated list of 100 original MIDI/music-themed jokes
+This bot uses a pre-generated list of 100 original MIDI/hardware-themed jokes
 for Mastodon. Each joke is posted once per cycle, then the cycle restarts.
 The LLM can optionally polish each joke before posting.
+
+Target audience: Hardware enthusiasts, synth owners, electronics hobbyists.
+Avoids DAW/software references; focuses on physical connections, cables,
+Raspberry Pi, patch bays, THRU boxes, and hardware tinkerers.
 """
 import hashlib
 
@@ -11,19 +15,21 @@ from ..text import append_link, llm_or_template
 from .base import Source
 
 _SYSTEM = (
-    "You are a witty music technology comedian. Polish this MIDI/music-themed "
+    "You are a witty music technology comedian. Polish this MIDI/hardware-themed "
     "joke for social media. Keep it under 280 characters. No hashtags, no URLs. "
-    "At most one emoji if it fits naturally."
+    "At most one emoji if it fits naturally. Audience: hardware enthusiasts, "
+    "not DAW users."
 )
 
-# A curated list of 100 original MIDI-themed jokes
+# A curated list of 100 original MIDI/hardware-themed jokes
+# Focused on physical connections, cables, Raspberry Pi, patch bays, THRU boxes
+# Avoids DAW/software references
 _JOKES = [
     "Why don't MIDI cables ever get lost? They always know their channel.",
     "What's a MIDI cable's favorite type of music? Anything with good connections.",
     "Why did the synthesizer bring a ladder to the concert? To reach the high notes.",
-    "What do you call a MIDI hub that tells jokes? A stand-up hub-comedian.",
+    "What do you call a MIDI hub that tells jokes? A stand-hub comedian.",
     "Why was the MIDI note so good at math? It could count to 127.",
-    "What's a music producer's favorite type of tree? A sampling oak.",
     "Why did the MIDI controller go to therapy? It had too many knobs to turn.",
     "What do you call a MIDI message that's always late? A delayed packet.",
     "Why was the MIDI hub so good at parties? It knew how to route the fun.",
@@ -31,31 +37,24 @@ _JOKES = [
     "Why did the MIDI cable become a therapist? It helped people work through their issues.",
     "What do you call a MIDI channel that's always positive? An upbeat channel.",
     "Why was the MIDI note so good at sports? It had great pitch control.",
-    "What's a music producer's favorite type of car? A sound system with good bass.",
     "Why did the MIDI controller become a chef? It knew how to mix the right ingredients.",
     "What do you call a MIDI message that's always calm? A steady byte.",
     "Why was the MIDI hub so good at meditation? It found its inner frequency.",
-    "What's a synthesizer's favorite type of book? A sound byte novel.",
     "Why did the MIDI cable become a detective? It could trace any connection.",
     "What do you call a MIDI controller that's always honest? A true knob.",
     "Why was the MIDI note so good at school? It always hit the right notes.",
-    "What's a music producer's favorite type of phone? A ringtone maker.",
     "Why did the MIDI controller become a therapist? It helped people find their rhythm.",
     "What do you call a MIDI message that's always ready? A prepared packet.",
     "Why was the MIDI hub so good at teamwork? It connected everyone.",
-    "What's a synthesizer's favorite type of movie? A sound track thriller.",
     "Why did the MIDI cable become a philosopher? It questioned the nature of sound.",
     "What do you call a MIDI channel that's always curious? An inquisitive channel.",
     "Why was the MIDI note so good at dancing? It had perfect timing.",
-    "What's a music producer's favorite type of art? Sound sculpture.",
     "Why did the MIDI controller become a writer? It had a lot to express.",
     "What do you call a MIDI message that's always kind? A gentle byte.",
     "Why was the MIDI hub so good at problem-solving? It found the right path.",
-    "What's a synthesizer's favorite type of game? Frequency matching.",
     "Why did the MIDI cable become a musician? It knew how to connect the dots.",
     "What do you call a MIDI controller that's always brave? A fearless knob.",
     "Why was the MIDI note so good at leadership? It knew how to guide the melody.",
-    "What's a music producer's favorite type of sport? Beat boxing championships.",
     "Why did the MIDI controller become a teacher? It knew how to tune students in.",
     "What do you call a MIDI message that's always creative? An imaginative byte.",
     "Why was the MIDI hub so good at friendship? It brought people together.",
@@ -63,7 +62,6 @@ _JOKES = [
     "Why did the MIDI cable become a counselor? It helped resolve conflicts.",
     "What do you call a MIDI channel that's always reliable? A steady channel.",
     "Why was the MIDI note so good at motivation? It inspired others to perform.",
-    "What's a music producer's favorite type of vacation? A sound sanctuary.",
     "Why did the MIDI controller become a guide? It showed the way to great sound.",
     "What do you call a MIDI message that's always wise? A knowledgeable byte.",
     "Why was the MIDI hub so good at wisdom? It understood every connection.",
@@ -118,6 +116,16 @@ _JOKES = [
     "Why don't hardware enthusiasts ever argue about tone? They just adjust their potentiometers.",
     "My MIDI interface has a great sense of direction. It always knows which pin is pin 1.",
     "What do you call a Raspberry Pi that loves to jam? A hardware tinkerer.",
+    "What do you call a 5-pin DIN connector that tells tall tales? A stretch cable.",
+    "My THRU box never keeps secrets. It shares everything with all its friends.",
+    "Why did the opto-isolator become a philosopher? It understood the light between worlds.",
+    "What's a hardware synth's favorite social media? Patch-ter.",
+    "I asked my MIDI cable about its relationship status. It said, 'It's complicated - I'm connected to everything.'",
+    "Why don't patch bays ever play hide and seek? They're always found in the rack.",
+    "What do you call a Raspberry Pi that loves to tell stories? A tale-bearer.",
+    "My hardware synth has great boundaries. It knows where its signal ends and yours begins.",
+    "Why did the MIDI enthusiast bring a map to the studio? To find the best signal path.",
+    "What's a THRU box's favorite type of story? A pass-through tale.",
 ]
 
 

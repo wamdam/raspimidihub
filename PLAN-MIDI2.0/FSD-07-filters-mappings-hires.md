@@ -22,9 +22,15 @@
   UMP reader simultaneously.
 - **Open:** fractional *entry* widgets in the mapping form (values
   render + persist; typing fractions rides with FSD-08's fine-value
-  widgets). Perf guardrail: no regression observed at LFO rates;
-  proper jitter measurement with the latency suite still owed before
-  the Step 3 gate closes. Hi-res *source* verification needs 2.0
+  widgets). Perf guardrail **measured and passed 2026-07-05**: CC LFO through
+  a filtered edge, 90 s windows, A6DC (UMP path) vs the untouched
+  5A5D reference (5.2.0b1 legacy path): midi_in_midi_out windowed
+  max 0.5-0.7 ms vs 0.2-0.6 ms (~+0.3 ms UMP decode cost, well
+  inside the documented 1-3 ms envelope); loop_lag p50/p95/p99
+  statistically identical (0.86/1.99/2.83 vs 0.95/1.99/2.79 ms).
+  Observation from the measurement: live UNSAVED plugin edges are
+  torn down by hotplug rescans on the stock build too (pre-existing
+  semantics, not a branch regression — verified on 5A5D). Hi-res *source* verification needs 2.0
   hardware, as everywhere.
 
 ## Goal
