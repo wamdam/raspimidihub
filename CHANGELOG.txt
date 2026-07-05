@@ -4,7 +4,7 @@ User-visible changes. Short tagged one-liners, no code or commit
 hashes. Tags: Added, Improved, Fix, Changed, Removed.
 
 
-Unreleased
+2026-07-05 — Version 6.0.0a1 (pre-release)
 
 - Fix: pitch bend over Network MIDI and Bluetooth MIDI was shifted by half its range (center played as minimum bend) — ALSA's signed convention was never converted to the unsigned wire form
 - Added: MIDI 2.0 groundwork — the hub now detects at startup whether the kernel and ALSA support UMP/MIDI 2.0 and reports it in /api/system (all current Raspberry Pi OS kernels: not yet)
