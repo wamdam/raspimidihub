@@ -141,9 +141,6 @@ instantly.
 | Sienna | Burnt orange |
 | Slate | Cool grey |
 
-**Screenshot needed.** `controller-themes-grid.png` -- one controller
-in all eight themes, side by side.
-
 ## Saved State
 
 Part of the project state:
