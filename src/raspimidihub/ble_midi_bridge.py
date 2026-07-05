@@ -564,7 +564,9 @@ class _BleDevice:
             elif status_type == _STATUS_PITCH_BEND and len(midi_bytes) >= 3:
                 ev.type = MidiEventType.PITCHBEND
                 ev.data.control.channel = channel
-                ev.data.control.value = (midi_bytes[2] << 7) | midi_bytes[1]
+                # wire unsigned (center 0x2000) → ALSA signed (center 0)
+                ev.data.control.value = \
+                    ((midi_bytes[2] << 7) | midi_bytes[1]) - 0x2000
             elif status_type == _STATUS_CHAN_PRESSURE and len(midi_bytes) >= 2:
                 ev.type = MidiEventType.CHANPRESS
                 ev.data.control.channel = channel
@@ -659,7 +661,8 @@ class _BleDevice:
         elif ev_type == MidiEventType.PGMCHANGE:
             return [_STATUS_PROGRAM | ch, ev.data.control.value & 0x7F]
         elif ev_type == MidiEventType.PITCHBEND:
-            val = ev.data.control.value
+            # ALSA signed (center 0) → wire unsigned (center 0x2000)
+            val = max(0, min(0x3FFF, ev.data.control.value + 0x2000))
             return [_STATUS_PITCH_BEND | ch, val & 0x7F, (val >> 7) & 0x7F]
         elif ev_type == MidiEventType.CHANPRESS:
             return [_STATUS_CHAN_PRESSURE | ch, ev.data.control.value & 0x7F]

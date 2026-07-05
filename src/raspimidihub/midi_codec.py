@@ -63,7 +63,10 @@ def event_to_midi(ev) -> bytes | None:
         return bytes([_STATUS_CHAN_PRESSURE | ch,
                       ev.data.control.value & 0x7F])
     if ev_type == MidiEventType.PITCHBEND:
-        val = ev.data.control.value
+        # ALSA carries bend SIGNED (−8192..+8191); the wire is unsigned
+        # 14-bit with center 0x2000. Without the offset, center played
+        # as minimum bend (found during the MIDI 2.0 work).
+        val = max(0, min(0x3FFF, ev.data.control.value + 0x2000))
         return bytes([_STATUS_PITCH_BEND | ch, val & 0x7F, (val >> 7) & 0x7F])
     if ev_type == MidiEventType.CLOCK:
         return b"\xf8"
@@ -139,7 +142,8 @@ def midi_to_event(msg: bytes) -> SndSeqEvent | None:
     elif status_type == _STATUS_PITCH_BEND and len(msg) >= 3:
         ev.type = MidiEventType.PITCHBEND
         ev.data.control.channel = channel
-        ev.data.control.value = (msg[2] << 7) | msg[1]
+        # wire unsigned (center 0x2000) → ALSA signed (center 0)
+        ev.data.control.value = ((msg[2] << 7) | msg[1]) - 0x2000
     elif status == 0xF8:
         ev.type = MidiEventType.CLOCK
     elif status == 0xFA:

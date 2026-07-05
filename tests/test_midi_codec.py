@@ -63,8 +63,23 @@ class TestMidiToEvent:
         assert ev.data.note.channel == 0x0A
 
     def test_pitch_bend_value(self):
+        # ALSA convention is SIGNED bend: wire max 0x3FFF → +8191,
+        # wire center 0x2000 → 0, wire min 0 → −8192.
         ev = midi_to_event(bytes([0xE0, 0x7F, 0x7F]))
-        assert ev.data.control.value == 0x3FFF
+        assert ev.data.control.value == 8191
+        ev = midi_to_event(bytes([0xE0, 0x00, 0x40]))
+        assert ev.data.control.value == 0
+        ev = midi_to_event(bytes([0xE0, 0x00, 0x00]))
+        assert ev.data.control.value == -8192
+
+    def test_pitch_bend_encode_signed(self):
+        from helpers import make_event
+        ev = make_event(MidiEventType.PITCHBEND)
+        for signed, wire in ((0, (0x00, 0x40)), (-8192, (0x00, 0x00)),
+                             (8191, (0x7F, 0x7F)), (4096, (0x00, 0x60))):
+            ev.data.control.value = signed
+            out = event_to_midi(ev)
+            assert (out[1], out[2]) == wire, signed
 
     def test_incomplete_sysex_rejected(self):
         assert midi_to_event(bytes([0xF0, 1, 2])) is None
