@@ -210,6 +210,13 @@
 \floatplacement{figure}{tp}
 \renewcommand{\topfraction}{0.9}
 \renewcommand{\floatpagefraction}{0.5}
+% Keep figures inside the section that references them: [section]
+% inserts a \FloatBarrier before every \section, so a deferred
+% screenshot cannot drift past the next section heading (it used to
+% land under the following plugin's heading in the play-surfaces
+% chapter and Appendix A). metadata.yaml's fig-pos comment always
+% assumed this barrier; it was missing until now.
+\usepackage[section]{placeins}
 \usepackage[font=small,labelfont={sf,bf,color=accentColour},
             textfont=sf, justification=centering]{caption}
 

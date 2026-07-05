@@ -13,6 +13,7 @@ Unreleased
 - Fix: the cc_map_changed / cc_learn_result / cc_learn_timeout SSE events were missing from the /docs event registry (each emit warn-logged)
 - Fix: the manual PDF silently dropped Appendix E (REST & SSE API) — the build's file glob was never widened past appendix D
 - Improved: manual PDF no longer starts a section heading in the last centimetres of a page (orphaned-heading protection)
+- Fix: manual PDF screenshots could drift past the next section heading and appear under the wrong plugin (the intended per-section float barrier was never actually loaded)
 - Improved: architecture diagram (figure 4.1) caught up with the software — Network MIDI source/exports, MIDI 2.0 (UMP) in the ALSA tier, the full persistence tiers (autosave ping-pong, rolling backups, boot preference), and the per-hub mDNS name
 
 
