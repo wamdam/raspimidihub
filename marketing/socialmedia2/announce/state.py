@@ -2,6 +2,8 @@
 
 Runs on a workstation/server with a real clock, so plain wall-clock time is
 fine (unlike the appliance, which has no RTC).
+
+Extended with category tracking and performance metrics for smart scheduling.
 """
 import json
 import time
@@ -72,3 +74,61 @@ class State:
 
     def touch(self, name: str):
         self.src(name)['last_run'] = time.time()
+
+    # === Smart Scheduling Extensions ===
+
+    def get_category_history(self, source: str) -> list:
+        """Get the category history for a source."""
+        return self.src(source).get('category_history', [])
+
+    def log_post(self, source: str, category: str, performance: dict = None):
+        """Log a post for performance tracking."""
+        s = self.src(source)
+        
+        if 'category_history' not in s:
+            s['category_history'] = []
+        
+        s['category_history'].append({
+            'category': category,
+            'timestamp': time.time(),
+            'performance': performance or {},
+        })
+        
+        # Keep last 100 posts
+        s['category_history'] = s['category_history'][-100:]
+
+    def get_category_stats(self, category: str) -> dict:
+        """Get performance statistics for a category."""
+        cat_key = f'{category}_stats'
+        stats = self.data.get(cat_key, {'total_posts': 0, 'total_engagement': 0})
+        
+        if stats['total_posts'] > 0:
+            stats['avg_engagement'] = stats['total_engagement'] / stats['total_posts']
+        else:
+            stats['avg_engagement'] = 0
+        
+        return stats
+
+    def adjust_weights(self, category: str, hour: int, performance: dict):
+        """Adjust category weights based on performance."""
+        engagement = performance.get('likes', 0) + performance.get('reblogs', 0)
+        
+        stats = self.get_category_stats(category)
+        if stats['avg_engagement'] > 0:
+            multiplier = min(2.0, max(0.5, engagement / stats['avg_engagement']))
+        else:
+            multiplier = 1.0
+        
+        # Store adjusted weight
+        if 'adjusted_weights' not in self.data:
+            self.data['adjusted_weights'] = {}
+        
+        adj_key = f'{category}_{hour}'
+        base_weight = 0.25  # Default base weight
+        adjustment = (multiplier - 1.0) * 0.1
+        self.data['adjusted_weights'][adj_key] = max(0.05, min(0.8, base_weight + adjustment))
+
+    def get_adjusted_weight(self, category: str, hour: int) -> float:
+        """Get adjusted weight for a category at a given hour."""
+        adj_key = f'{category}_{hour}'
+        return self.data.get('adjusted_weights', {}).get(adj_key, 0.25)

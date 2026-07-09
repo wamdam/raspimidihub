@@ -69,12 +69,16 @@ STATE_FILE = STATE_DIR / 'state.json'
 # Which publishers each source posts to. A source NOT listed here goes to every
 # configured publisher. 'features' (the public feature/improvement ads) is
 # Mastodon-only — those would be noise in the Discord community channel.
-# 'jokes' and 'midi_facts' are also Mastodon-only for the same reason.
+# 'jokes', 'midi_facts', 'midi_history', 'quick_tips', 'behind_the_code' are
+# also Mastodon-only for the same reason.
 SOURCE_TARGETS = {
     'features': ['mastodon'],
     'jokes': ['mastodon'],
     'midi_facts': ['mastodon'],
     'creative_uses': ['mastodon'],  # Educational content, Mastodon only
+    'midi_history': ['mastodon'],   # Educational content, Mastodon only
+    'quick_tips': ['mastodon'],     # Educational content, Mastodon only
+    'behind_the_code': ['mastodon'],  # Developer stories, Mastodon only
     # 'youtube' / 'github' omitted -> all configured publishers
 }
 
@@ -82,10 +86,13 @@ SOURCE_TARGETS = {
 SCHEDULE = {
     'youtube': int(_env('SOCIAL_INTERVAL_YOUTUBE', 3600)),     # 1h
     'github': int(_env('SOCIAL_INTERVAL_GITHUB', 3600)),       # 1h
-    'features': int(_env('SOCIAL_INTERVAL_FEATURES', 14400)),  # 4h
-    'jokes': int(_env('SOCIAL_INTERVAL_JOKES', 32400)),        # 9h
+    'features': int(_env('SOCIAL_INTERVAL_FEATURES', 21600)),  # 6h (reduced frequency)
+    'jokes': int(_env('SOCIAL_INTERVAL_JOKES', 43200)),        # 12h (reduced frequency)
     'midi_facts': int(_env('SOCIAL_INTERVAL_MIDI_FACTS', 43200)),  # 12h
     'creative_uses': int(_env('SOCIAL_INTERVAL_CREATIVE_USES', 86400)),  # 24h
+    'midi_history': int(_env('SOCIAL_INTERVAL_MIDI_HISTORY', 86400)),  # 24h
+    'quick_tips': int(_env('SOCIAL_INTERVAL_QUICK_TIPS', 43200)),  # 12h
+    'behind_the_code': int(_env('SOCIAL_INTERVAL_BEHIND_CODE', 172800)),  # 48h
 }
 
 SITE_URL = _env('SOCIAL_SITE_URL', 'https://raspimidihub.com')
