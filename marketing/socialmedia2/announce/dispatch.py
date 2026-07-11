@@ -11,17 +11,19 @@ from .__main__ import SOURCES, build_publishers, run_source
 from .llm import LLMClient
 from .scheduler import get_scheduled_sources, SOURCE_TO_CATEGORY
 from .state import State
+from .topic_tracker import TopicTracker
 
 
 def main():
     state = State()
+    topic_tracker = TopicTracker()
     llm = LLMClient()
     publishers = build_publishers()
     print(f"dispatch tick | content: {content.source_label()} | "
           f"publishers: {', '.join(p.name for p in publishers) or 'NONE'}")
     
     # Get sources scheduled for this tick using smart scheduling
-    scheduled = get_scheduled_sources(state)
+    scheduled = get_scheduled_sources(state, topic_tracker)
     
     ran = []
     for name in scheduled:
@@ -41,6 +43,7 @@ def main():
         state.touch(name)
         ran.append(name)
     
+    topic_tracker.save()
     state.save()
     print(f"ran: {', '.join(ran) if ran else 'none'}")
 

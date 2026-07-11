@@ -28,6 +28,7 @@ from .sources.midi_history import MidiHistorySource
 from .sources.quick_tips import QuickTipsSource
 from .sources.youtube import YouTubeSource
 from .state import State
+from .topic_tracker import TopicTracker
 
 SOURCES = {s.name: s for s in (
     YouTubeSource(), GithubSource(), FeaturesSource(), JokesSource(),
@@ -105,7 +106,7 @@ def run_source(name, *, do_post, force, state, llm, publishers) -> int:
     return rc
 
 
-def test_scheduler(state: State, llm: LLMClient, dry_run: bool = True):
+def test_scheduler(state: State, llm: LLMClient, topic_tracker: TopicTracker, dry_run: bool = True):
     """Test the smart scheduler - show what would run in the next tick."""
     from datetime import datetime
     
@@ -118,7 +119,7 @@ def test_scheduler(state: State, llm: LLMClient, dry_run: bool = True):
     print()
     
     # Get scheduled sources
-    scheduled = get_scheduled_sources(state)
+    scheduled = get_scheduled_sources(state, topic_tracker)
     
     if not scheduled:
         print("No sources scheduled for this tick.")
@@ -178,7 +179,8 @@ def main():
 
     # Test mode: simulate scheduler without posting
     if args.test:
-        test_scheduler(state, llm, dry_run=True)
+        topic_tracker = TopicTracker()
+        test_scheduler(state, llm, topic_tracker, dry_run=True)
         return 0
 
     names = list(SOURCES) if args.source == 'all' else ([args.source] if args.source else [])

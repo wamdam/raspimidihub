@@ -4,6 +4,7 @@ This module replaces the simple interval-based scheduling with a smarter system 
 - Groups sources into content categories (educational, product, entertainment, community)
 - Uses time-of-day weights to vary content mix
 - Enforces anti-repetition constraints (min gaps between same-category posts)
+- Tracks specific topics to prevent repetition (e.g., MIDI 2.0, link-local)
 - Tracks performance metrics for future optimization
 """
 import time
@@ -12,6 +13,10 @@ from typing import Optional
 
 from . import config
 from .state import State
+from .topic_tracker import TopicTracker, extract_topic
+
+# Lazy import to avoid circular dependency
+SOURCES = None
 
 
 # Content categories and their sources
@@ -137,18 +142,19 @@ def select_category(state: State, hour: Optional[int] = None) -> Optional[str]:
     return available[-1][0]
 
 
-def select_source_from_category(state: State, category: str) -> Optional[str]:
+def select_source_from_category(state: State, category: str, topic_tracker: TopicTracker = None) -> Optional[str]:
     """Select a source from a category, preferring least-recently-posted that is due.
     
-    Only returns sources that are due by their own interval.
+    Only returns sources that are due by their own interval and don't have
+    recently posted topics.
     """
     sources = CATEGORIES.get(category, [])
     if not sources:
         return None
     
     # Find the source with the oldest last_run time that is also due
-    oldest_source = None
-    oldest_time = float('inf')
+    # and doesn't have a recent topic
+    candidates = []
     
     for source in sources:
         if source not in config.SCHEDULE:
@@ -160,11 +166,39 @@ def select_source_from_category(state: State, category: str) -> Optional[str]:
         
         src_data = state.src(source)
         last_run = src_data.get('last_run', 0)
-        if last_run < oldest_time:
-            oldest_time = last_run
-            oldest_source = source
+        candidates.append((source, last_run))
     
-    return oldest_source
+    if not candidates:
+        return None
+    
+    # Sort by last_run (oldest first)
+    candidates.sort(key=lambda x: x[1])
+    
+    # Check topic tracking for each candidate
+    for source, _ in candidates:
+        # Get the latest item to check its topic
+        if SOURCES is None or source not in SOURCES:
+            continue
+        
+        try:
+            src = SOURCES[source]
+            items = src.latest()
+            if items:
+                item_text = items[0].get('text', '')
+                topic = extract_topic(item_text, source)
+                
+                # Check if this topic was recently posted
+                if topic_tracker and topic_tracker.is_topic_recent(source, topic):
+                    continue  # Skip this source, topic is too recent
+                
+                # Good candidate
+                return source
+        except Exception:
+            # If we can't check topic, use the source anyway
+            return source
+    
+    # If all topics are recent, return the oldest anyway
+    return candidates[0][0]
 
 
 def should_run_source(state: State, source: str) -> bool:
@@ -191,10 +225,11 @@ def should_run_source(state: State, source: str) -> bool:
     return state.due(source, config.SCHEDULE[source])
 
 
-def get_scheduled_sources(state: State) -> list:
+def get_scheduled_sources(state: State, topic_tracker: TopicTracker = None) -> list:
     """Get list of sources that should run in this tick.
     
     Returns sources in priority order based on category weights and recency.
+    Uses topic_tracker to avoid repeating similar topics.
     """
     hour = get_current_hour()
     weights = get_category_weights(hour)
@@ -206,7 +241,7 @@ def get_scheduled_sources(state: State) -> list:
         if not category_due(state, category):
             continue
         
-        source = select_source_from_category(state, category)
+        source = select_source_from_category(state, category, topic_tracker)
         if source and should_run_source(state, source):
             scheduled.append(source)
     
