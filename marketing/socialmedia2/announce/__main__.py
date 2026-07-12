@@ -20,6 +20,7 @@ from .mastodon_client import MastodonPoster
 from .scheduler import get_scheduled_sources, SOURCE_TO_CATEGORY
 from .sources.behind_the_code import BehindTheCodeSource
 from .sources.creative_uses import CreativeUsesSource
+from .sources.evergreen import EvergreenSource
 from .sources.features import FeaturesSource
 from .sources.github import GithubSource
 from .sources.jokes import JokesSource
@@ -31,8 +32,8 @@ from .state import State
 from .topic_tracker import TopicTracker
 
 SOURCES = {s.name: s for s in (
-    YouTubeSource(), GithubSource(), FeaturesSource(), JokesSource(),
-    MidiFactsSource(), CreativeUsesSource(), MidiHistorySource(),
+    YouTubeSource(), GithubSource(), FeaturesSource(), EvergreenSource(),
+    JokesSource(), MidiFactsSource(), CreativeUsesSource(), MidiHistorySource(),
     QuickTipsSource(), BehindTheCodeSource()
 )}
 
@@ -51,9 +52,13 @@ def run_source(name, *, do_post, force, state, llm, publishers) -> int:
     # One source's fetch/render blowing up (e.g. YouTube's RSS endpoint
     # intermittently 404ing — a known YouTube-side issue) must never abort a
     # multi-source run. Isolate the failure here, report it, and let the other
-    # sources proceed; this source retries on the next tick.
+    # sources proceed; this source retries on the next run.
     try:
-        items = src.latest() if force else src.find_new(state)
+        # FeaturesSource needs llm for topic clustering
+        if name == 'features' and not force:
+            items = src.find_new(state, llm)
+        else:
+            items = src.latest() if force else src.find_new(state)
     except Exception as e:  # noqa: BLE001 — deliberately broad: keep the tick alive
         print(f"⚠️  [{name}] fetch failed: {e.__class__.__name__}: {e} "
               f"— skipping this source, will retry next run.")
@@ -119,7 +124,7 @@ def test_scheduler(state: State, llm: LLMClient, topic_tracker: TopicTracker, dr
     print()
     
     # Get scheduled sources
-    scheduled = get_scheduled_sources(state, topic_tracker)
+    scheduled = get_scheduled_sources(state, topic_tracker, llm)
     
     if not scheduled:
         print("No sources scheduled for this tick.")
@@ -137,7 +142,12 @@ def test_scheduler(state: State, llm: LLMClient, topic_tracker: TopicTracker, dr
         print(f"--- {source_name} ({category}) ---")
         
         try:
-            items = src.find_new(state)
+            # FeaturesSource needs llm for topic clustering
+            if source_name == 'features':
+                items = src.find_new(state, llm)
+            else:
+                items = src.find_new(state)
+            
             if items:
                 item = items[0]
                 post = src.render(item, llm)
@@ -168,6 +178,10 @@ def main():
                    help='ignore state; render the latest item (no state change)')
     p.add_argument('--test', action='store_true',
                    help='test the smart scheduler (simulate next tick)')
+    p.add_argument('--fetch-mastodon', type=int, metavar='N',
+                   help='fetch last N Mastodon posts from the configured account')
+    p.add_argument('--analyze', action='store_true',
+                   help='analyze engagement patterns from fetched posts')
     args = p.parse_args()
 
     state = State()
@@ -181,6 +195,45 @@ def main():
     if args.test:
         topic_tracker = TopicTracker()
         test_scheduler(state, llm, topic_tracker, dry_run=True)
+        return 0
+
+    # Fetch Mastodon posts mode
+    if args.fetch_mastodon:
+        mastodon = MastodonPoster()
+        if not mastodon.configured():
+            print("⚠️  Mastodon not configured (need MASTODON_ACCESS_TOKEN).")
+            return 1
+        
+        statuses = mastodon.fetch_statuses(count=args.fetch_mastodon, exclude_replies=True)
+        
+        if not statuses:
+            print("No posts found or failed to fetch.")
+            return 1
+        
+        if args.analyze:
+            # Run analysis
+            from .mastodon_analyzer import analyze_posts
+            analyze_posts(statuses)
+        else:
+            # Just display posts
+            print(f"Found {len(statuses)} posts:")
+            print("=" * 64)
+            
+            for i, status in enumerate(statuses, 1):
+                # Strip HTML from content
+                import re
+                text = re.sub(r'<[^>]+>', '', status['content'])
+                # Truncate long posts
+                if len(text) > 300:
+                    text = text[:297] + "..."
+                
+                print(f"\n{i}. {status['created_at']}")
+                print(f"   👁 {status['reblogs_count']} 🔁 | ❤ {status['favourites_count']} 💬 {status['replies_count']}")
+                print(f"   {text}")
+                if status['media_attachments']:
+                    print(f"   📎 {len(status['media_attachments'])} attachment(s)")
+                print("-" * 64)
+        
         return 0
 
     names = list(SOURCES) if args.source == 'all' else ([args.source] if args.source else [])

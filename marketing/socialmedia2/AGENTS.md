@@ -13,33 +13,64 @@ The dedupe key is computed on the raw source material (CHANGELOG entry, fact tex
 - LLM can vary the wording without breaking deduplication
 - Cycle rotation works correctly
 
-### Features Source: Full CHANGELOG Coverage
+### Features Source: LLM-Driven Topic Consolidation
 
-**Parse ALL versions, not just recent ones.**
+**Group related changelog entries into topics, not individual posts.**
 
-The features source parses all 67 versions from v5.2.0 to v1.0.0 (375 candidates):
-- Includes "Added", "Improved", AND "Fix" entries
-- Handles both CHANGELOG formats:
-  - New: `2026-07-01 — Version 5.2.0` (em-dash)
-  - Old: `2026-04-25 - Version 2.0.9` (single dash)
-- Regex: `r'(\d{4}-\d{2}-\d{2}) —?-? Version ([\d.a-z]+)'`
+The features source uses LLM clustering to prevent repetition:
+- Parses the 50 most recent CHANGELOG entries (not all 375+)
+- Asks the LLM to group entries into coherent topics (e.g., "Link-local IP", "MIDI 2.0", "Network MIDI")
+- Each topic contains 3-5 related entries spanning multiple versions
+- Tracks **topics** in state, not individual entries
+- Renders ONE consolidated post per topic that tells the complete story
 
-**Why include fixes?**
-Many fixes are user-visible improvements worth announcing:
-- "Network MIDI mirroring over a direct cable"
-- "WiFi always survives a reboot"
-- "Bluetooth MIDI section no longer disappears"
+**Why topic consolidation?**
 
-**Why include old versions?**
-Major features from early releases:
-- Spectator mirroring (v4.3.0)
-- Light/Dark theme (v4.2.0)
-- User-bindable MIDI CC (v4.1.0)
-- Euclidean plugin (v4.0.0)
-- Autosave/Backup (v4.7.0)
-- First stable release features (v1.0.0)
+Without consolidation, the same bug fix story gets posted multiple times:
+- v5.0.0: "link-local fallback self-assigns"
+- v5.0.2: "Network MIDI didn't set up link-local"
+- v5.0.3: "direct cable still didn't come up"
+- v5.1.0: "removed leftover link-local setting"
+- v5.1.2: "link-local kept at all times"
+- v5.1.5: "direct cable keeps link-local indefinitely"
 
-At 1 post per 4 hours, this gives ~62 days of unique content before cycling.
+With consolidation, this becomes ONE topic:
+> "Direct Ethernet cables now work reliably. The link-local IP fallback (169.254.x.x) on eth0 has been stabilized across multiple releases—survives reboots, coexists with DHCP, and is advertised correctly for mirroring."
+
+**LLM clustering prompt:**
+- Temperature: 0.2 (deterministic, consistent grouping)
+- Output format: JSON object `{topic_title: description}`
+- Keyword matching assigns entries to topics
+- Fallback: each entry becomes its own topic if LLM fails
+
+**Rendering consolidated topics:**
+- The LLM writes ONE post that tells the RESOLVED state, not the journey
+- For bug fixes: "Direct cables now work" not "We fixed this 5 times"
+- For features: Highlights the final capability, not incremental changes
+
+### Evergreen Features Source: Core Feature Spotlights
+
+**Rotate through documented features, not just changelog entries.**
+
+The evergreen source ensures the channel talks about what the software DOES, not just what changed:
+- 12 curated features from the user manual
+- Each feature has a screenshot and manual context
+- Rotates through all features before cycling
+- LLM renders each feature with grounding in the manual
+
+**Evergreen feature list:**
+1. Routing Matrix
+2. Network MIDI Mirroring
+3. Rack View
+4. Play Surfaces (Cartesian, Euclidean, Arpeggiator)
+5. Tracker
+6. Filters & Mappings
+7. Plugins (CC LFO, Smoother, Velocity Curve, etc.)
+8. Autosave & Backup
+9. Spectator Mirroring
+10. MIDI Learn
+11. Bluetooth MIDI
+12. Light/Dark Themes
 
 ### Jokes Source: Curated List Pattern
 
@@ -96,19 +127,27 @@ announce/
 ├── config.py           # .env loading, schedules, publisher routing
 ├── state.py            # JSON store: announced keys, last-run timestamps
 ├── llm.py              # LLMClient - OpenAI-compatible API wrapper
-├── mastodon_client.py  # Mastodon publisher
+├── mastodon_client.py  # Mastodon publisher + fetch
+├── mastodon_analyzer.py # Post engagement analyzer
 ├── discord_client.py   # Discord publisher
 ├── post.py             # Post dataclass (text, media, dedupe_key)
 ├── text.py             # Markdown strip, length trim, llm_or_template
 ├── dispatch.py         # The "tick" - runs due sources
+├── scheduler.py        # Smart scheduling with categories
+├── topic_tracker.py    # Topic-level anti-repetition
 ├── __main__.py         # CLI for manual testing
 └── sources/
     ├── base.py         # Source contract (find_new, latest, render)
-    ├── features.py     # Feature spotlights from CHANGELOG
+    ├── features.py     # LLM-clustered CHANGELOG topics
+    ├── evergreen.py    # Core feature spotlights from manual
     ├── youtube.py      # YouTube playlist updates
     ├── github.py       # GitHub release announcements
     ├── jokes.py        # MIDI-themed jokes (Mastodon only)
-    └── midi_facts.py   # "Did you know?" MIDI facts (Mastodon only)
+    ├── midi_facts.py   # "Did you know?" MIDI facts (Mastodon only)
+    ├── midi_history.py # MIDI history facts (Mastodon only)
+    ├── quick_tips.py   # Practical MIDI tips (Mastodon only)
+    ├── creative_uses.py # Creative application ideas (Mastodon only)
+    └── behind_the_code.py # Development stories (Mastodon only)
 ```
 
 ## Core Abstractions
@@ -117,12 +156,15 @@ announce/
 
 Every source implements:
 
-```python
+```./.venv/bin/python3
 class Source(ABC):
     name: str = ''  # Unique identifier, used in state and routing
 
-    def find_new(self, state) -> list:
-        """Return items to announce now (may mutate/seed state). [] if nothing."""
+    def find_new(self, state, llm=None) -> list:
+        """Return items to announce now (may mutate/seed state). [] if nothing.
+        
+        Note: features.py requires llm for topic clustering.
+        """
 
     def latest(self) -> list:
         """Return the most recent item(s) ignoring state (for --force testing)."""
@@ -135,10 +177,11 @@ class Source(ABC):
 - `find_new()` handles deduplication and state seeding
 - `latest()` enables `--force` testing without state changes
 - `render()` transforms raw content into a `Post` with LLM assistance
+- **features.py**: `find_new(state, llm)` clusters topics before returning
 
 ### 2. Post Value Object
 
-```python
+```./.venv/bin/python3
 @dataclass
 class Post:
     text: str              # The post content (≤280 chars for Mastodon)
@@ -159,9 +202,13 @@ State is stored in `~/.raspimidihub/socialmedia2/state.json`:
     "announced": ["hash1", "hash2"],
     "last_run": 1234567890.0
   },
-  "midi_facts": {
-    "announced": ["hash3"],
+  "features": {
+    "announced": ["topic_hash_1", "topic_hash_2"],
     "last_run": 1234567900.0
+  },
+  "evergreen": {
+    "announced": ["feature_hash_1"],
+    "last_run": 1234567910.0
   }
 }
 ```
@@ -173,16 +220,19 @@ State is stored in `~/.raspimidihub/socialmedia2/state.json`:
 - `reset(source)` - Reset state (cycle exhausted)
 - `due(source, interval)` - Check if source is due to run
 
+**Note:** For `features`, the key is a topic hash, not an individual entry hash.
+
 ### 4. Scheduling
 
 Scheduling is a **stateless tick** - no long-running process:
 
-```python
+```./.venv/bin/python3
 # config.py
 SCHEDULE = {
     'jokes': 32400,        # 9 hours
     'midi_facts': 43200,   # 12 hours
     'features': 14400,     # 4 hours
+    'evergreen': 14400,    # 4 hours (product category)
     'youtube': 3600,       # 1 hour
     'github': 3600,        # 1 hour
 }
@@ -196,10 +246,11 @@ The `dispatch.py` tick:
 
 ### 5. Publisher Routing
 
-```python
+```./.venv/bin/python3
 # config.py
 SOURCE_TARGETS = {
     'features': ['mastodon'],
+    'evergreen': ['mastodon'],
     'jokes': ['mastodon'],
     'midi_facts': ['mastodon'],
     # 'youtube' / 'github' omitted -> all publishers
@@ -210,11 +261,35 @@ SOURCE_TARGETS = {
 - Sources **listed** post only to specified publishers
 - Add a new publisher class to `build_publishers()` in `__main__.py`
 
+### 6. Smart Scheduling
+
+The scheduler uses content categories and time-of-day weights:
+
+```./.venv/bin/python3
+# scheduler.py
+CATEGORIES = {
+    'educational': ['midi_facts', 'creative_uses', 'midi_history', 'quick_tips'],
+    'product': ['features', 'evergreen', 'github'],
+    'entertainment': ['jokes', 'behind_the_code'],
+    'community': ['youtube'],
+}
+```
+
+**Time-based weights:**
+- Morning (8-11): Educational focus
+- Afternoon (12-17): Product focus
+- Evening (18-22): Entertainment focus
+- Night (23-7): Minimal, mostly entertainment
+
+**Anti-repetition:**
+- Minimum gap between same-category posts (3-6 hours)
+- Topic tracking prevents similar content within categories
+
 ## Creating a New Source
 
 ### Step 1: Create the source file
 
-```python
+```./.venv/bin/python3
 # announce/sources/my_source.py
 from ..post import Post
 from ..text import append_link, llm_or_template
@@ -225,11 +300,13 @@ _SYSTEM = "Your system prompt for the LLM..."
 class MySource(Source):
     name = 'my_source'
 
-    def find_new(self, state) -> list:
+    def find_new(self, state, llm=None) -> list:
         # 1. Fetch/collect candidate items
         # 2. Filter out already announced (state.is_announced)
         # 3. Return up to N items (usually 1)
         # 4. If none left, state.reset(self.name) and start over
+        #
+        # Note: If using LLM for clustering/selection, accept llm parameter
         pass
 
     def latest(self) -> list:
@@ -248,18 +325,19 @@ class MySource(Source):
 
 ### Step 2: Register the source
 
-```python
+```./.venv/bin/python3
 # announce/__main__.py
 from .sources.my_source import MySource
 
 SOURCES = {s.name: s for s in (
-    YouTubeSource(), GithubSource(), FeaturesSource(), MySource()
+    YouTubeSource(), GithubSource(), FeaturesSource(), EvergreenSource(),
+    JokesSource(), MidiFactsSource(), MySource()
 )}
 ```
 
 ### Step 3: Add to schedule
 
-```python
+```./.venv/bin/python3
 # announce/config.py
 SCHEDULE = {
     # ... existing ...
@@ -269,7 +347,7 @@ SCHEDULE = {
 
 ### Step 4: Configure routing (optional)
 
-```python
+```./.venv/bin/python3
 # announce/config.py
 SOURCE_TARGETS = {
     # ... existing ...
@@ -281,16 +359,16 @@ SOURCE_TARGETS = {
 
 ```bash
 # Dry-run (preview)
-python -m announce my_source
+./.venv/bin/python3 -m announce my_source
 
 # Publish
-python -m announce my_source --post
+./.venv/bin/python3 -m announce my_source --post
 
 # Force render latest (no state change)
-python -m announce my_source --force
+./.venv/bin/python3 -m announce my_source --force
 
 # Run dispatch tick
-python -m announce.dispatch
+./.venv/bin/python3 -m announce.dispatch
 ```
 
 ## LLM Integration
@@ -299,7 +377,7 @@ python -m announce.dispatch
 
 Keep system prompts concise and specific:
 
-```python
+```./.venv/bin/python3
 _SYSTEM = (
     "You write engaging 'Did you know?' facts about MIDI for musicians and "
     "tech enthusiasts. One or two short sentences, conversational tone. "
@@ -312,7 +390,7 @@ _SYSTEM = (
 
 Always provide a fallback for when the LLM is unavailable:
 
-```python
+```./.venv/bin/python3
 text = llm_or_template(
     llm, _SYSTEM, user,
     fallback="Default text if LLM unavailable",
@@ -323,15 +401,40 @@ text = llm_or_template(
 
 ### Temperature Settings
 
-- **0.0-0.3**: Deterministic, consistent (facts, specs)
-- **0.5-0.7**: Balanced creativity (feature descriptions)
+- **0.0-0.3**: Deterministic, consistent (topic clustering, facts, specs)
+- **0.5-0.7**: Balanced creativity (feature descriptions, renderings)
 - **0.7-0.9**: High creativity (jokes, creative content)
+
+### LLM-Driven Topic Clustering (features.py)
+
+```./.venv/bin/python3
+# Cluster system prompt
+_CLUSTER_SYSTEM = (
+    "You are a technical content curator. Your job is to GROUP changelog entries "
+    "into coherent announcement topics.\n\n"
+    "CRITICAL: Multiple entries about the SAME topic must be grouped together.\n"
+    "Examples:\n"
+    "- All entries about 'link-local IP' or '169.254' = ONE topic\n"
+    "- All entries about 'Network MIDI' = ONE topic\n"
+    "- All entries about 'MIDI 2.0' = ONE topic\n\n"
+    "Output format: A JSON object where keys are topic titles and values are "
+    "brief descriptions."
+)
+
+# Usage
+def _cluster_topics(self, llm) -> list:
+    entries = self._candidates()[:50]  # Limit to recent entries
+    # Format entries by version
+    # Call llm.generate(_CLUSTER_SYSTEM, _CLUSTER_USER, temperature=0.2)
+    # Parse JSON, match entries to topics by keyword
+    # Return list of {id, title, description, entries}
+```
 
 ## Caching
 
 For web scraping, cache content to avoid rate limits:
 
-```python
+```./.venv/bin/python3
 _CACHE_DIR = Path(config.STATE_DIR) / 'my_source_cache'
 _CACHE_DURATION = 24 * 3600  # 24 hours
 
@@ -346,12 +449,13 @@ def _cached_fetch(url: str, cache_key: str, duration: int = _CACHE_DURATION):
 
 Use SHA1 hashing for deduplication keys:
 
-```python
+```./.venv/bin/python3
 def _key(text: str) -> str:
     return hashlib.sha1(text.encode()).hexdigest()[:12]
 ```
 
 - Hash the **raw source text**, not the LLM output
+- For `features`: hash the **topic title**, not individual entries
 - This prevents reposting the same fact even if rewritten differently
 - Reset state when cycle is exhausted (rotate through all items)
 
@@ -366,6 +470,8 @@ def _key(text: str) -> str:
 - **Score and rank**: If multiple candidates, pick the best one
 - **Test with --force**: Verify rendering without state changes
 - **Handle errors gracefully**: One source failing shouldn't break the tick
+- **Use LLM for clustering**: Group related entries to prevent repetition
+- **Tell the resolved state**: For bug fixes, describe the solution, not the journey
 
 ### Don't
 
@@ -374,12 +480,14 @@ def _key(text: str) -> str:
 - **Don't make sources time-sensitive**: Use state intervals, not wall-clock time
 - **Don't forget to register**: Add source to `SOURCES` dict in `__main__.py`
 - **Don't ignore errors**: Log failures but keep the tick running
+- **Don't post incremental fixes**: Consolidate related bug fixes into one story
+- **Don't rely on keyword extraction**: Use LLM for topic detection
 
 ## Adding a New Publisher
 
 1. Create `announce/my_publisher.py`:
 
-```python
+```./.venv/bin/python3
 class MyPublisher:
     name = 'my_publisher'
 
@@ -396,7 +504,7 @@ class MyPublisher:
 
 2. Add to `build_publishers()` in `__main__.py`:
 
-```python
+```./.venv/bin/python3
 def build_publishers() -> list:
     return [p for p in (MastodonPoster(), DiscordPoster(), MyPublisher()) if p.configured()]
 ```
@@ -426,6 +534,7 @@ SOCIAL_YOUTUBE_PLAYLIST_ID=PL...
 SOCIAL_INTERVAL_YOUTUBE=3600
 SOCIAL_INTERVAL_GITHUB=3600
 SOCIAL_INTERVAL_FEATURES=14400
+SOCIAL_INTERVAL_EVERGREEN=14400
 SOCIAL_INTERVAL_JOKES=32400
 SOCIAL_INTERVAL_MIDI_FACTS=43200
 
@@ -461,23 +570,33 @@ Type=oneshot
 User=<user>
 WorkingDirectory=<install_dir>/marketing/socialmedia2
 Environment=PATH=<install_dir>/marketing/socialmedia2/.venv/bin
-ExecStart=<install_dir>/marketing/socialmedia2/.venv/bin/python -m announce.dispatch
+ExecStart=<install_dir>/marketing/socialmedia2/.venv/bin/./.venv/bin/python3 -m announce.dispatch
 ```
 
 ### Manual Testing
 
 ```bash
 # Preview a source
-python -m announce jokes
+./.venv/bin/python3 -m announce jokes
 
 # Publish a source
-python -m announce jokes --post
+./.venv/bin/python3 -m announce jokes --post
 
 # Force render (no state change)
-python -m announce midi_facts --force
+./.venv/bin/python3 -m announce features --force
+./.venv/bin/python3 -m announce evergreen --force
 
 # Run full dispatch tick
-python -m announce.dispatch
+./.venv/bin/python3 -m announce.dispatch
+
+# Fetch last N Mastodon posts
+./.venv/bin/python3 -m announce --fetch-mastodon 50
+
+# Fetch and analyze engagement patterns
+./.venv/bin/python3 -m announce --fetch-mastodon 50 --analyze
+
+# Test smart scheduler
+./.venv/bin/python3 -m announce --test
 ```
 
 ## Current Sources
@@ -486,9 +605,14 @@ python -m announce.dispatch
 |--------|----------|--------|---------|
 | jokes | 9h | Mastodon | MIDI-themed jokes (curated list of 100) |
 | midi_facts | 12h | Mastodon | "Did you know?" facts from Wikipedia/midi.guide |
-| features | 4h | Mastodon | Feature spotlights from CHANGELOG (all 375 entries) |
+| features | 4h | Mastodon | LLM-clustered CHANGELOG topics (prevents repetition) |
+| evergreen | 4h | Mastodon | Core feature spotlights from manual |
 | youtube | 1h | Mastodon + Discord | New YouTube uploads |
 | github | 1h | Mastodon + Discord | GitHub releases |
+| midi_history | 8h | Mastodon | MIDI history facts |
+| quick_tips | 8h | Mastodon | Practical MIDI tips |
+| creative_uses | 12h | Mastodon | Creative application ideas |
+| behind_the_code | 24h | Mastodon | Development stories |
 
 ## Troubleshooting
 
@@ -498,12 +622,21 @@ python -m announce.dispatch
 2. Run with `--force` to test rendering
 3. Check logs for fetch/render errors
 4. Verify source is registered in `SOURCES` dict
+5. For `features`: ensure LLM is available for clustering
 
 ### LLM not responding
 
 1. Check `SOCIAL_LLM_ENABLED` and `SOCIAL_LLM_BASE_URL`
 2. Test connectivity: `curl <LLM_URL>`
 3. Verify fallback text is reasonable
+4. Check LLM server logs for 500 errors
+
+### Topic clustering failing
+
+1. Check LLM response format (should be JSON object)
+2. Verify entries are limited to 50 (larger payloads fail)
+3. Fallback: each entry becomes its own topic
+4. Check temperature setting (should be 0.2 for consistency)
 
 ### Rate limiting
 
@@ -515,3 +648,4 @@ python -m announce.dispatch
 
 1. Delete `state.json` (will re-seed on next run)
 2. Or reset specific source: `state.reset(source_name)`
+3. For `features`: old entry-based state won't match new topic-based keys

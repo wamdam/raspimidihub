@@ -1,17 +1,14 @@
-"""Features source — rotate through recent features & improvements, with a
-matching screenshot, LLM-polished.
+"""Features source — LLM clusters changelog entries into topics, then renders
+one consolidated post per topic.
 
-Unlike youtube/github (detect *new* items), this *rotates*: it picks the next
-not-yet-posted feature/improvement from the recent changelog, and once the pool
-is exhausted it starts the cycle over.
-
-Both the copy and the screenshot are grounded in the user manual: the manual
-embeds every screenshot with a written caption, so we let the LLM pick the best
-shot from that captioned catalog (instead of brittle keyword matching), then
-feed the surrounding chapter prose back in so the post describes the feature
-accurately rather than as an advertisement.
+Instead of posting individual changelog entries (which causes repetition like
+the 6 link-local IP posts), we:
+1. Ask the LLM to cluster all entries into coherent topics
+2. Track topics (not entries) in state
+3. Render ONE consolidated post per topic that tells the complete story
 """
 import hashlib
+import json
 import re
 
 from .. import config, content
@@ -38,6 +35,61 @@ _SELECT_SYSTEM = (
     "fixed list. Reply with ONLY the exact filename from the list, or the word "
     "NONE if no screenshot genuinely shows this feature. Output nothing else."
 )
+
+# Cluster changelog entries into topics
+_CLUSTER_SYSTEM = (
+    "You are a technical content curator. Your job is to GROUP changelog entries "
+    "into coherent announcement topics.\n\n"
+    "CRITICAL: Multiple entries about the SAME topic must be grouped together.\n"
+    "Examples:\n"
+    "- All entries about 'link-local IP' or '169.254' = ONE topic\n"
+    "- All entries about 'Network MIDI' = ONE topic\n"
+    "- All entries about 'MIDI 2.0' = ONE topic\n"
+    "- All entries about 'WiFi' or 'AP' = ONE topic\n\n"
+    "Output format: A JSON object where keys are topic titles and values are "
+    "brief descriptions. Example:\n"
+    '{\n  "Link-local IP for direct Ethernet cables": "Fixed across multiple versions",\n'
+    '  "MIDI 2.0 groundwork": "32-bit resolution and UMP support"\n}'
+)
+
+_CLUSTER_USER = """
+Here are the recent changelog entries grouped by version. GROUP them into topics.
+
+{changelog_json}
+
+Return ONLY a JSON object. Keys are topic titles, values are brief descriptions.
+Do NOT return an array.
+"""
+
+# Render a topic into a post
+_TOPIC_RENDER_SYSTEM = (
+    "You announce RaspiMIDIHub changes to hardware enthusiasts and musicians. "
+    "You are given a TOPIC that may span multiple versions and entries. Write ONE "
+    "engaging post that tells the complete story without repetition.\n\n"
+    "Guidelines:\n"
+    "- ONE or TWO short sentences (≤280 chars)\n"
+    "- Concrete: what does it do, what problem was solved?\n"
+    "- Tone: developer talking to fellow tinkerers, not marketing\n"
+    "- No hype words (seamless, unleash, transform, game-changer)\n"
+    "- No second-person sales pitch\n"
+    "- No hashtags, no URLs\n"
+    "- At most one emoji, only if natural\n"
+    "- If this is a bug fix story across versions, tell the RESOLVED state, "
+    "not the journey (e.g., 'Direct Ethernet cables now work reliably' not "
+    "'We fixed this three times')\n\n"
+    "Output: Only the post text."
+)
+
+_TOPIC_RENDER_USER = """
+Announce this topic (RaspiMIDIHub):
+
+Topic: {topic_title}
+
+Entries in this topic:
+{entries_text}
+
+Write ONE consolidated post that captures the full story without repetition.
+"""
 
 
 def _key(text: str) -> str:
@@ -69,26 +121,109 @@ class FeaturesSource(Source):
                 })
         return items
 
-    def find_new(self, state) -> list:
-        items = self._candidates()
-        if not items:
-            return []
-        unposted = [it for it in items if not state.is_announced(self.name, it['key'])]
-        if not unposted:                 # cycle exhausted -> start over
+    def _cluster_topics(self, llm) -> list:
+        """Ask LLM to group all changelog entries into topics."""
+        entries = self._candidates()
+        
+        # Limit to recent entries to avoid overwhelming the LLM
+        # (CHANGELOG has 390+ entries, we only need the most recent ~50)
+        entries = entries[:50]
+        
+        # Format entries for the LLM
+        by_version = {}
+        for entry in entries:
+            v = entry['version']
+            if v not in by_version:
+                by_version[v] = []
+            by_version[v].append(entry)
+        
+        changelog_json = json.dumps(by_version, indent=2)
+        user = _CLUSTER_USER.format(changelog_json=changelog_json)
+        
+        try:
+            out = llm.generate(_CLUSTER_SYSTEM, user, temperature=0.2, max_tokens=2000)
+        except Exception:
+            out = None
+        
+        if not out:
+            # Fallback: return each entry as its own topic
+            return [{'id': _key(e['text']), 'title': e['text'][:50], 'entries': [e]} 
+                    for e in entries[:10]]
+        
+        # Parse JSON response
+        try:
+            data = json.loads(out)
+            
+            # Handle both object format {title: description} and array format
+            validated = []
+            if isinstance(data, dict):
+                # Object format: {topic_title: topic_description}
+                for title, desc in data.items():
+                    # Find entries that match this topic
+                    matching_entries = []
+                    topic_lower = title.lower()
+                    for entry in entries:
+                        text_lower = entry['text'].lower()
+                        # Simple keyword matching to assign entries to topics
+                        if any(word in text_lower for word in topic_lower.split() if len(word) > 3):
+                            matching_entries.append(entry)
+                    
+                    if not matching_entries:
+                        # Fallback: assign first few entries
+                        matching_entries = entries[:3]
+                    
+                    validated.append({
+                        'id': _key(title),
+                        'title': title,
+                        'description': desc if isinstance(desc, str) else '',
+                        'entries': matching_entries[:5]  # Limit entries per topic
+                    })
+            elif isinstance(data, list):
+                # Array format: [{id, title, entries}, ...]
+                for topic in data:
+                    if isinstance(topic, dict) and 'id' in topic and 'entries' in topic:
+                        validated.append(topic)
+            
+            return validated if validated else [{'id': _key(e['text']), 'title': e['text'][:50], 'entries': [e]} 
+                                               for e in entries[:10]]
+        except (json.JSONDecodeError, TypeError):
+            # Fallback: return each entry as its own topic
+            return [{'id': _key(e['text']), 'title': e['text'][:50], 'entries': [e]} 
+                    for e in entries[:10]]
+
+    def find_new(self, state, llm) -> list:
+        """Find new topics to announce (not individual entries)."""
+        topics = self._cluster_topics(llm)
+        
+        # Filter out already-posted topics
+        unposted = [t for t in topics if not state.is_announced(self.name, t['id'])]
+        
+        if not unposted:  # cycle exhausted -> start over
             state.reset(self.name)
-            unposted = items
-        return unposted[:1]              # one spotlight per run
+            unposted = topics
+        
+        return unposted[:1]  # One topic per run
 
     def latest(self) -> list:
-        return self._candidates()[:1]
+        """Return the most recent topic for --force testing."""
+        # Just return the first entry as a single-topic fallback
+        items = self._candidates()
+        if items:
+            return [{'id': _key(items[0]['text']), 'title': items[0]['text'][:50], 
+                     'entries': [items[0]]}]
+        return []
 
     def _select_screenshot(self, item, llm, catalog):
         """Ask the LLM to pick the best-matching screenshot from the captioned
         catalog. Returns a catalog entry or None (no shot beats no shot)."""
         if not catalog:
             return None
+        
+        # Use the first entry's text for screenshot matching
+        entry_text = item['entries'][0]['text'] if item['entries'] else item.get('title', '')
+        
         listing = "\n".join(f"{c['name']} — {c['caption']}" for c in catalog)
-        user = (f"Feature: {item['text']}\n\n"
+        user = (f"Feature: {entry_text}\n\n"
                 "Screenshots (filename — what it shows):\n"
                 f"{listing}\n\n"
                 "Which ONE filename best shows this feature? "
@@ -113,30 +248,40 @@ class FeaturesSource(Source):
             return txt[:3500]
         return txt[max(0, idx - 3000):idx + 1200]
 
-    def render(self, item, llm) -> Post:
-        shot = self._select_screenshot(item, llm, content.screenshot_catalog())
+    def render(self, topic, llm) -> Post:
+        """Render a topic (consolidated entries) into a single post."""
+        # Select screenshot based on the first entry
+        shot = self._select_screenshot(topic, llm, content.screenshot_catalog())
         notes = self._manual_notes(shot)
-        kind = item['kind']  # 'added', 'improved', or 'fix'
-        if kind == 'added':
-            kind_text = 'feature'
-        elif kind == 'improved':
-            kind_text = 'improvement'
-        else:
-            kind_text = 'fix'
-        user = f"Announce this {kind_text} (RaspiMIDIHub v{item['version']}):\n{item['text']}\n"
-        if notes:
-            user += ("\nReference notes from the user manual (for accuracy — "
-                     "summarise in your own words, do not quote):\n"
-                     f'"""\n{notes}\n"""\n')
-        user += "\nWrite only the post text."
-        text = llm_or_template(llm, _SYSTEM, user, fallback=item['text'],
-                               max_len=280, temperature=0.5)
-        post = Post(text=append_link(text, config.SITE_URL),
-                    source=self.name, dedupe_key=item['key'])
+        
+        # Build consolidated entries text
+        entries_text = "\n".join(
+            f"v{e['version']} ({e['kind']}): {e['text']}"
+            for e in topic['entries']
+        )
+        
+        # Add topic description if available
+        user = f"Announce this topic (RaspiMIDIHub):\n\n"
+        user += f"Topic: {topic['title']}\n"
+        if topic.get('description'):
+            user += f"Description: {topic['description']}\n\n"
+        user += f"Related changelog entries:\n{entries_text}\n\n"
+        user += "Write ONE consolidated post that captures the full story without repetition."
+        
+        text = llm_or_template(llm, _TOPIC_RENDER_SYSTEM, user, 
+                               fallback=topic['title'], max_len=280, temperature=0.5)
+        
+        post = Post(
+            text=append_link(text, config.SITE_URL),
+            source=self.name,
+            dedupe_key=topic['id']  # Track by topic, not entry
+        )
+        
         if shot:
             data = content.read_bytes(shot['file'])
             if data:
                 post.media_bytes = data
                 post.media_mime = 'image/png'
                 post.media_desc = shot['caption'][:400]
+        
         return post

@@ -22,7 +22,7 @@ SOURCES = None
 # Content categories and their sources
 CATEGORIES = {
     'educational': ['midi_facts', 'creative_uses', 'midi_history', 'quick_tips'],
-    'product': ['features', 'github'],
+    'product': ['features', 'evergreen', 'github'],  # evergreen = core feature spotlights
     'entertainment': ['jokes', 'behind_the_code'],
     'community': ['youtube'],
 }
@@ -142,7 +142,7 @@ def select_category(state: State, hour: Optional[int] = None) -> Optional[str]:
     return available[-1][0]
 
 
-def select_source_from_category(state: State, category: str, topic_tracker: TopicTracker = None) -> Optional[str]:
+def select_source_from_category(state: State, category: str, topic_tracker: TopicTracker = None, llm = None) -> Optional[str]:
     """Select a source from a category, preferring least-recently-posted that is due.
     
     Only returns sources that are due by their own interval and don't have
@@ -182,7 +182,10 @@ def select_source_from_category(state: State, category: str, topic_tracker: Topi
         
         try:
             src = SOURCES[source]
+            # FeaturesSource needs llm for clustering - use latest() for topic check
+            # to avoid side effects during selection
             items = src.latest()
+            
             if items:
                 item_text = items[0].get('text', '')
                 topic = extract_topic(item_text, source)
@@ -225,7 +228,7 @@ def should_run_source(state: State, source: str) -> bool:
     return state.due(source, config.SCHEDULE[source])
 
 
-def get_scheduled_sources(state: State, topic_tracker: TopicTracker = None) -> list:
+def get_scheduled_sources(state: State, topic_tracker: TopicTracker = None, llm = None) -> list:
     """Get list of sources that should run in this tick.
     
     Returns sources in priority order based on category weights and recency.
@@ -241,7 +244,7 @@ def get_scheduled_sources(state: State, topic_tracker: TopicTracker = None) -> l
         if not category_due(state, category):
             continue
         
-        source = select_source_from_category(state, category, topic_tracker)
+        source = select_source_from_category(state, category, topic_tracker, llm)
         if source and should_run_source(state, source):
             scheduled.append(source)
     

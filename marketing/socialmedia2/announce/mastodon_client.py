@@ -27,6 +27,67 @@ class MastodonPoster:
     def configured(self) -> bool:
         return _AVAILABLE and bool(self.token)
 
+    def get_account_id(self) -> str | None:
+        """Get the account ID (numeric) for the authenticated user."""
+        client = self._client_or_none()
+        if client is None:
+            return None
+        try:
+            # Verify the token works and get account info
+            account = client.account_verify_credentials()
+            return str(account['id'])
+        except Exception as e:
+            print(f"❌ Failed to get account info: {e}")
+            return None
+
+    def fetch_statuses(self, count: int = 50, exclude_replies: bool = True) -> list:
+        """Fetch the last N statuses from the authenticated account.
+
+        Args:
+            count: Number of statuses to fetch (default 50)
+            exclude_replies: If True, exclude replies from the results
+
+        Returns:
+            List of status dicts with keys: id, created_at, content, visibility,
+            reblogs_count, favorites_count, replies_count, media_attachments
+        """
+        client = self._client_or_none()
+        if client is None:
+            print("⚠️  Mastodon not configured "
+                  "(need Mastodon.py installed + MASTODON_ACCESS_TOKEN).")
+            return []
+
+        try:
+            account_id = self.get_account_id()
+            if account_id is None:
+                return []
+
+            statuses = client.account_statuses(
+                account_id,
+                limit=count,
+                exclude_replies=exclude_replies,
+                only_media=False
+            )
+
+            # Return simplified status dicts
+            result = []
+            for status in statuses:
+                result.append({
+                    'id': status['id'],
+                    'created_at': status['created_at'],
+                    'content': status['content'],
+                    'visibility': status['visibility'],
+                    'reblogs_count': status.get('reblogs_count', 0),
+                    'favourites_count': status.get('favourites_count', 0),  # Mastodon uses British spelling
+                    'replies_count': status.get('replies_count', 0),
+                    'media_attachments': status.get('media_attachments', []),
+                })
+            return result
+
+        except Exception as e:
+            print(f"❌ Failed to fetch statuses: {e}")
+            return []
+
     def _client_or_none(self):
         if not self.configured():
             return None
