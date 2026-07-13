@@ -24,6 +24,7 @@ from .sources.evergreen import EvergreenSource
 from .sources.features import FeaturesSource
 from .sources.github import GithubSource
 from .sources.jokes import JokesSource
+from .sources.manual_features import ManualFeaturesSource
 from .sources.midi_facts import MidiFactsSource
 from .sources.midi_history import MidiHistorySource
 from .sources.quick_tips import QuickTipsSource
@@ -32,7 +33,8 @@ from .state import State
 from .topic_tracker import TopicTracker
 
 SOURCES = {s.name: s for s in (
-    YouTubeSource(), GithubSource(), FeaturesSource(), EvergreenSource(),
+    YouTubeSource(), GithubSource(), FeaturesSource(), 
+    ManualFeaturesSource(),  # New: 87 features from manual, random order
     JokesSource(), MidiFactsSource(), CreativeUsesSource(), MidiHistorySource(),
     QuickTipsSource(), BehindTheCodeSource()
 )}

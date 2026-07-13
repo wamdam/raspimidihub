@@ -1,0 +1,750 @@
+{
+  "meta": {
+    "title": "RaspiMIDIHub Feature Database",
+    "source": "User Manual",
+    "total_features": 87,
+    "categories": ["routing", "plugins", "controllers", "play-surfaces", "connectivity", "system", "settings", "workflow"]
+  },
+  "features": [
+    {
+      "id": "routing-matrix",
+      "title": "Routing Matrix",
+      "category": "routing",
+      "description": "A tap-to-edit grid of connections between MIDI devices with per-cell filters and mappings.",
+      "detailed_text": "The routing matrix is the core of RaspiMIDIHub - a visual grid where rows represent MIDI sources and columns represent destinations. Each cell represents a connection that can be enabled/disabled with a single tap. Connected cells show live rate-meter feedback when MIDI flows. The matrix supports multiple views: Matrix view (grid) and Rack view (19\" rack units with patch cables). Connections can be filtered by MIDI channels (1-16) and message types (Notes, CCs, PC, Pitch Bend, Aftertouch, SysEx, Clock, MIDI 2.0). Four mapping types reshape the flow: Note→CC, Note→CC toggle, CC→CC, and Channel Remap. Unfiltered connections use the direct kernel path for sub-microsecond latency; filtered/mapped connections add 1-3ms. The matrix automatically discovers USB devices, Bluetooth peripherals, plugins, and network-mirrored devices.",
+      "chapter": "05-routing-matrix.md",
+      "keywords": ["matrix", "routing", "grid", "connections", "MIDI", "filter", "mapping", "rack-view", "direct-path"],
+      "screenshot": "01-routing.png"
+    },
+    {
+      "id": "rack-view",
+      "title": "Rack View",
+      "category": "routing",
+      "description": "Alternative 19\" rack-style visualization with patch cables between device IN/OUT jacks.",
+      "detailed_text": "The Rack view presents the same routing data as the Matrix but in a signal-flow oriented layout. Each device appears as a rack unit with its name and icon at the top-left, input jacks on the left side, and output jacks on the right. Connections appear as colored patch cables - each cable color matches its source port. A funnel badge marks cables with active filters or mappings. Jacks glow on MIDI activity, and clock-sending jacks get a green ring. Patching is done by tapping a jack then its counterpart, or by dragging jack-to-jack. The view supports multi-touch: drag with one finger while scrolling the rack with another. Hover (desktop) or press-and-hold (touch) on a jack spotlights its cables, fanning them apart for clarity. The rack view includes a collapsible sub-rack for remote hub groups.",
+      "chapter": "05-routing-matrix.md",
+      "keywords": ["rack", "view", "patching", "cables", "signal-flow", "jacks", "visualization"],
+      "screenshot": "01-routing-rack.png"
+    },
+    {
+      "id": "cell-clipboard",
+      "title": "Cell Clipboard",
+      "category": "routing",
+      "description": "Copy and paste filter + mapping configurations between matrix cells.",
+      "detailed_text": "The cell clipboard holds one complete filter and mapping configuration. Use the cell context menu to Copy (captures the cell's filter and all mappings) or Paste (overwrites the destination cell's filter and mappings wholesale). When pasting a mapping specifically (via the + Paste Mapping button in the filter panel), duplicate CC numbers are automatically bumped to the next free slot to avoid conflicts. The clipboard is essential for rapidly replicating complex routing configurations across multiple connections. There are actually three clipboards in the system: cell clipboard (filter+mappings), plugin clipboard (entire plugin instance), and mapping clipboard (single mapping).",
+      "chapter": "05-routing-matrix.md",
+      "keywords": ["clipboard", "copy", "paste", "filter", "mapping", "routing"],
+      "screenshot": null
+    },
+    {
+      "id": "device-renaming",
+      "title": "Device Renaming",
+      "category": "routing",
+      "description": "Rename USB devices and ports with persistent identity that survives replugging.",
+      "detailed_text": "Every device in the matrix can be renamed by tapping its row or column header and selecting Edit. Custom names follow the device across reboots and replugging. USB devices with serial numbers are matched by serial regardless of which port they're plugged into. Serial-less devices are matched by vendor/product ID when only one of that model is connected. Multi-port devices (like an Octatrack with multiple DIN outputs) get one row/column per port, and each port can be renamed independently - name the specific output rather than '<Device> Port 2'. The original ALSA name shows in grey for reference. Renamed devices maintain their routing and filter configurations even when moved to different ports.",
+      "chapter": "05-routing-matrix.md",
+      "keywords": ["rename", "device", "identity", "USB", "port", "persistence"],
+      "screenshot": null
+    },
+    {
+      "id": "offline-devices",
+      "title": "Offline Device Handling",
+      "category": "routing",
+      "description": "Unplugged devices remain in the matrix with dimmed connections that auto-restore when reconnected.",
+      "detailed_text": "When a saved device is unplugged, its row and column remain in the matrix but appear dimmed. All saved connections are shown in their last state - this allows building routing in advance before devices are connected. Dimmed cells can still be toggled; changes apply the moment the device returns. Purple (filtered/mapped) cells keep their filter and mapping state while offline. This feature enables 'plug-and-play' workflows where you prepare your routing ahead of time, and also provides resilience against accidental cable disconnections during performance - the routing automatically restores when the cable is reconnected.",
+      "chapter": "05-routing-matrix.md",
+      "keywords": ["offline", "disconnected", "dimmed", "auto-restore", "resilience"],
+      "screenshot": null
+    },
+    {
+      "id": "dirty-state-asterisk",
+      "title": "Dirty-State Tracking",
+      "category": "workflow",
+      "description": "Visual indicator showing when unsaved changes exist, with autosave protection.",
+      "detailed_text": "A dark-red asterisk next to the Routing icon lights whenever the in-memory state diverges from the saved boot config. Changes that trigger the asterisk include: adding/removing connections, editing filters or mappings, adding/removing plugin instances, changing plugin parameters, adding/removing controller instances, renaming cells or devices, and capturing drop-button snapshots. Crucially, performing does NOT light the asterisk - fader/knob movements, pattern launches, and firing drop buttons are performance actions that don't modify saveable content. The system continuously autosaves the live edited state in the background, so a hard power cut resumes the last edit, not just the last Save. Save Config persists the state and clears the asterisk.",
+      "chapter": "05-routing-matrix.md",
+      "keywords": ["dirty-state", "asterisk", "autosave", "save", "unsaved"],
+      "screenshot": null
+    },
+    {
+      "id": "direct-vs-filtered-path",
+      "title": "Direct vs Filtered Path",
+      "category": "routing",
+      "description": "Unfiltered connections use kernel path (sub-microsecond); filtered connections use userspace (1-3ms).",
+      "detailed_text": "The routing matrix visually distinguishes two latency paths. Red cells indicate direct connections wired in the kernel sequencer - effectively zero added latency. Purple cells indicate connections with active filters or mappings that route through the userspace hub, adding approximately 1-3ms latency. This distinction is important for latency-critical chains: if you need the lowest possible latency, keep connections unfiltered. Toggling a filter off can shave a couple of milliseconds. The color coding provides immediate visual feedback about which connections are on the fast path vs the processed path.",
+      "chapter": "05-routing-matrix.md",
+      "keywords": ["latency", "direct-path", "filtered-path", "kernel", "performance"],
+      "screenshot": null
+    },
+    {
+      "id": "channel-filtering",
+      "title": "Channel Filtering",
+      "category": "routing",
+      "description": "Per-connection 16-channel mask with quick-toggle for all channels.",
+      "detailed_text": "Each connection has a 4×4 grid of MIDI channels 1-16, each with a red/green dot indicator: green passes the channel, red silently drops it. Tap any channel to toggle; tap the MIDI Channels heading to toggle all sixteen at once - flip all, then re-enable one, to invert the mask. Channel filtering runs before mappings, which is important for Channel Remap: a Channel Remap targeting channel 3 still needs channel 3 enabled in the source filter, or the source event never reaches the mapper. Destination-channel filtering belongs to the destination side's own filter. Changes apply instantly and are persisted by Save Config.",
+      "chapter": "06-filters-and-mappings.md",
+      "keywords": ["filter", "channel", "mask", "MIDI-channels", "routing"],
+      "screenshot": "05-filter-panel.png"
+    },
+    {
+      "id": "message-type-filtering",
+      "title": "Message Type Filtering",
+      "category": "routing",
+      "description": "Per-connection toggles for Notes, CCs, PC, Pitch Bend, Aftertouch, SysEx, Clock, and MIDI 2.0.",
+      "detailed_text": "Message-type filters control which categories of MIDI events pass through a connection. Toggles include: Notes (Note On, Note Off, polyphonic pressure), CCs (Control Change including MIDI 2.0 atomic RPN/NRPN), PC (Program Change), Pitch Bend, Aftertouch (channel and polyphonic), SysEx (System Exclusive), Clock (MIDI Clock, Start, Stop, Continue, Song Position), and MIDI 2.0 (per-note messages - only carried between MIDI 2.0 devices). All toggles default to On. Toggles apply instantly with no per-cell Save needed - Save Config persists filter state. On a capable hub, filtered connections between two MIDI 2.0 devices carry full 32-bit resolution end-to-end.",
+      "chapter": "06-filters-and-mappings.md",
+      "keywords": ["filter", "message-type", "Notes", "CCs", "Clock", "SysEx", "MIDI-2.0"],
+      "screenshot": "05-filter-panel.png"
+    },
+    {
+      "id": "note-to-cc-mapping",
+      "title": "Note to CC Mapping",
+      "category": "routing",
+      "description": "Convert Note On/Off events to CC values with fixed or velocity-based output.",
+      "detailed_text": "The Note→CC mapping transforms each Note On into a CC at the On value, and each Note Off into a CC at the Off value. This enables using a footswitch that sends notes to drive a CC (like sustain pedal behavior). The Src Note wheel's 'Any' position triggers on every incoming note, not just one pitch. Value Source has two modes: Fixed (default) sends the literal On value; Velocity sends the live key velocity (0-127), with the Off value still sent on release for a defined idle state. Velocity plus Any turns the whole keyboard into a velocity-to-CC pedal. Fields include: source channel, note number (or Any), output channel, CC#, value source (Fixed/Velocity), on value (Fixed only), and off value.",
+      "chapter": "06-filters-and-mappings.md",
+      "keywords": ["mapping", "Note-to-CC", "footswitch", "velocity", "conversion"],
+      "screenshot": "07-mapping-note-to-cc.png"
+    },
+    {
+      "id": "note-to-cc-toggle",
+      "title": "Note to CC Toggle",
+      "category": "routing",
+      "description": "Alternating CC values on each Note On for latching behavior.",
+      "detailed_text": "The Note→CC (toggle) mapping alternates between Toggle A and Toggle B values on each Note On - Note Off does nothing. This converts a momentary button into a latching mute or toggle switch (127, 0, 127, ...). Unlike the standard Note→CC mapping, there's no velocity mode - just two fixed values that alternate. Fields include: source channel, note number, output channel, CC#, toggle A value, and toggle B value. This is ideal for footswitches or pad controllers that need latching behavior rather than momentary control.",
+      "chapter": "06-filters-and-mappings.md",
+      "keywords": ["mapping", "toggle", "latching", "alternating", "footswitch"],
+      "screenshot": null
+    },
+    {
+      "id": "note-to-note-mapping",
+      "title": "Note to Note Mapping",
+      "category": "routing",
+      "description": "Rewrite note numbers and channels while preserving velocity.",
+      "detailed_text": "The Note→Note mapping transforms notes by rewriting the note number and remapping the channel, while velocity remains unchanged. This enables several use cases: converting an 8-pad controller sending on one channel into eight per-voice triggers on a sampler that wants the same note on different channels per voice (one mapping per pad); two mappings with the same source but different destination channels layer one pad onto two voices; the 'Any' position folds every note on the source channel onto one destination note for triggering a sample slot from any key. Fields include: source channel, source note (or Any), destination channel, and destination note.",
+      "chapter": "06-filters-and-mappings.md",
+      "keywords": ["mapping", "Note-to-Note", "transpose", "remap", "velocity"],
+      "screenshot": null
+    },
+    {
+      "id": "cc-to-cc-mapping",
+      "title": "CC to CC Mapping",
+      "category": "routing",
+      "description": "Remap CC numbers with optional range scaling and inversion.",
+      "detailed_text": "The CC→CC mapping transforms each source CC into a destination CC, with optional number remapping and range scaling. Example: a knob sending CC 16 at 0-127 feeds a synth expecting CC 1 at 0-63. The In Min/In Max and Out Min/Out Max fields enable range scaling - swap Out Min and Out Max to invert the range. This is essential for matching controllers to synths with different CC assignments or value ranges. Fields include: source channel, source CC#, output channel, output CC#, In Min, In Max, Out Min, and Out Max. The mapping preserves the full 32-bit resolution on MIDI 2.0 connections.",
+      "chapter": "06-filters-and-mappings.md",
+      "keywords": ["mapping", "CC-to-CC", "remap", "scaling", "inversion"],
+      "screenshot": "08-mapping-cc-to-cc.png"
+    },
+    {
+      "id": "channel-remap",
+      "title": "Channel Remap",
+      "category": "routing",
+      "description": "Forward all events from one channel to one or multiple destination channels.",
+      "detailed_text": "The Channel Remap mapping forwards every event on the source channel to the destination channel(s), regardless of message type. It supports fan-out: one source to several destinations in a single mapping. Example: a keyboard on channel 1 layered onto channels 5, 6, and 7 simultaneously. This is simpler than a Note Splitter when each keyboard maps cleanly to one channel. Fields include: source channel and destination channels (multi-select). The mapping applies to all message types - Notes, CCs, Pitch Bend, Aftertouch, etc. - making it a comprehensive channel translator.",
+      "chapter": "06-filters-and-mappings.md",
+      "keywords": ["mapping", "channel-remap", "fan-out", "layering", "multi-destination"],
+      "screenshot": null
+    },
+    {
+      "id": "midi-learn",
+      "title": "MIDI Learn",
+      "category": "routing",
+      "description": "Capture MIDI sources by playing notes or moving knobs instead of manual entry.",
+      "detailed_text": "Every source field in mappings has a Learn button. Tap it, then play a note or move a knob - the first recognized event fills the source fields and a pulsing border confirms capture. Learn times out after 10 seconds if nothing arrives. It works when creating new mappings and when editing existing ones, making it easy to follow a changed hardware channel or CC# without retyping. MIDI Learn is also available on plugin parameter bindings and controller cell bindings. The feature eliminates the need to look up CC numbers or note numbers manually - just move the control you want to map.",
+      "chapter": "06-filters-and-mappings.md",
+      "keywords": ["MIDI-Learn", "capture", "mapping", "binding", "automation"],
+      "screenshot": null
+    },
+    {
+      "id": "pass-through-original",
+      "title": "Pass Through Original Event",
+      "category": "routing",
+      "description": "Forward the source event alongside the mapped output for augmentation.",
+      "detailed_text": "Each mapping has a 'Pass through original event' toggle. When on, the source event is forwarded alongside the mapped output; when off, only the mapped output is sent. This enables augmentation instead of replacement - for example, sending the original note plus a sustain CC on every key press. The destination sees the original event first, then the mapped event in the same MIDI tick window. This is useful when you want to add control information to existing events without losing the original data.",
+      "chapter": "06-filters-and-mappings.md",
+      "keywords": ["pass-through", "augment", "original-event", "mapping"],
+      "screenshot": null
+    },
+    {
+      "id": "cc-lfo",
+      "title": "CC LFO",
+      "category": "plugins",
+      "description": "Generate CC waveforms with five shapes, free or clock-synced rate.",
+      "detailed_text": "The CC LFO plugin generates a continuous CC waveform with five wave shapes: sine, triangle, square, saw, and sample-and-hold. The rate can be free-running (0.1-20.0 Hz) or clock-synced up to 8 bars. A live scope display shows the LFO output in real time. On a MIDI 2.0-capable hub, the wave is stepless into 2.0 destinations; MIDI 1.0 destinations get classic 0-127 steps. Parameters include: Wave (shape), Sync to Clock (on/off), Rate (8/4/2/1/1/2/1/4/1/8/1/16 bars), Frequency (0.1-20.0 Hz), Channel, CC #, Depth (0-127, fine resolution), and Center (0-127, fine resolution). The plugin consumes clock when sync is on, free-runs otherwise.",
+      "chapter": "07-plugins.md",
+      "keywords": ["LFO", "CC", "waveform", "automation", "clock-sync"],
+      "screenshot": "10-plugin-cc-lfo.png"
+    },
+    {
+      "id": "cc-smoother",
+      "title": "CC Smoother",
+      "category": "plugins",
+      "description": "Remove jitter from noisy CC inputs with configurable smoothing window.",
+      "detailed_text": "The CC Smoother plugin removes jitter from noisy CC inputs by interpolating between incoming values over a configurable window (1-50). This is essential for cheap or worn-out controllers that produce erratic CC values. A dual scope display shows input and output side by side for real-time comparison. On a MIDI 2.0-capable hub, the glide is stepless into 2.0 destinations; MIDI 1.0 destinations get smoothed integers. Parameters include: Input CC #, Output CC #, and Smoothing (interpolation window). The plugin is clock-naive - it operates purely on incoming events.",
+      "chapter": "07-plugins.md",
+      "keywords": ["smoother", "jitter", "CC", "interpolation", "filter"],
+      "screenshot": "11-plugin-cc-smoother.png"
+    },
+    {
+      "id": "channel-selector",
+      "title": "Channel Selector",
+      "category": "plugins",
+      "description": "Turn momentary CC buttons into a channel picker for displayless controllers.",
+      "detailed_text": "The Channel Selector plugin turns momentary CC buttons into a channel picker, ideal for controllers without displays. Each of 16 slots binds one CC number; a value at or above the trigger threshold makes that channel active. The input channel is ignored - every event is re-stamped onto the active channel, so a downstream channel filter decides where it goes. An 'Active Channel' wheel shows the live selection and doubles as manual override. Each channel slot has a Learn button for capturing the controller button. Selector CCs are swallowed; other CCs pass through. A note held across a switch gets its Note Off on its original channel, preventing stuck notes.",
+      "chapter": "07-plugins.md",
+      "keywords": ["channel", "selector", "button", "routing", "controller"],
+      "screenshot": "35-plugin-channel-selector.png"
+    },
+    {
+      "id": "chord-generator",
+      "title": "Chord Generator",
+      "category": "plugins",
+      "description": "Trigger chords from single notes with selectable type and inversion.",
+      "detailed_text": "The Chord Generator plugin triggers a chord on each incoming Note On, with selectable chord type and inversion. Chord types include: major, minor, 7th, minor 7th, major 7th, sus2, sus4, and custom intervals. Inversions include root, 1st, and 2nd. The Added Note Vel % parameter (10-100%) lets upper voices sound softer than the played root for more natural voicing. The plugin is clock-naive and operates purely on note events. This is ideal for turning a monophonic controller into a chordal instrument, or for adding harmonic richness to single-note lines.",
+      "chapter": "07-plugins.md",
+      "keywords": ["chord", "generator", "harmony", "inversion", "voicing"],
+      "screenshot": "12-plugin-chord-generator.png"
+    },
+    {
+      "id": "clock-divider",
+      "title": "Clock Divider",
+      "category": "plugins",
+      "description": "Emit one MIDI Clock for every N received to drive slower devices.",
+      "detailed_text": "The Clock Divider plugin emits one MIDI Clock for every N received (2-32), enabling you to drive a slow second device from a fast master clock. For example, divide a 1/8 clock to 1/4 for a device that wants half the tempo. The plugin consumes and produces clock, passing Start/Stop/Continue through unchanged. Parameter: Divide by (2-32, default 2, CC 74). This is essential for setups with devices running at different clock rates, or for creating polyrhythmic relationships between sequencers.",
+      "chapter": "07-plugins.md",
+      "keywords": ["clock", "divider", "tempo", "sync", "rhythm"],
+      "screenshot": "21-plugin-clock-divider.png"
+    },
+    {
+      "id": "hold",
+      "title": "Hold",
+      "category": "plugins",
+      "description": "Latch notes without a sustain pedal with chord-latch or per-note toggle modes.",
+      "detailed_text": "The Hold plugin latches notes so they keep sounding after release, eliminating the need for a sustain pedal. It has two modes controlled by 'Toggle notes': off (default, chord-latch) - while any key is down, presses extend the held chord; on full release the chord keeps sounding until the Release Note (default C8) silences it; on (per-note toggle) - each note latches independently, first press holds, next press of the same note releases, keyboard note-offs are ignored. The Release Note can be MIDI-Learned and silences everything. Flipping Toggle notes mid-session releases everything sounding. This is perfect for creating sustained pads from momentary controllers.",
+      "chapter": "07-plugins.md",
+      "keywords": ["hold", "latch", "sustain", "sustained", "pedal"],
+      "screenshot": "22-plugin-hold.png"
+    },
+    {
+      "id": "latency",
+      "title": "Latency Compensation",
+      "category": "plugins",
+      "description": "Add fixed millisecond delay to compensate slow-responding synths.",
+      "detailed_text": "The Latency plugin adds a fixed 1-100ms delay to every event before forwarding, with kernel-timed sub-millisecond jitter. This compensates synths whose MIDI-in processing lands the sound late - route a tight source through Latency before that synth to align the timing. Clock and transport pass through immediately (not delayed) so downstream sequencers aren't shifted. Note-on/off pairs stay matched, so a fader move mid-note cannot reorder them. Parameter: Delay (ms). This is a practical solution for hardware with known MIDI processing latency, eliminating the need for manual timing adjustments.",
+      "chapter": "07-plugins.md",
+      "keywords": ["latency", "delay", "compensation", "timing", "sync"],
+      "screenshot": "31-plugin-latency.png"
+    },
+    {
+      "id": "master-clock",
+      "title": "Master Clock",
+      "category": "plugins",
+      "description": "Internal BPM clock with start/stop/continue, beat meter, and bar counter.",
+      "detailed_text": "The Master Clock plugin generates MIDI Clock from an internal BPM (20-300), with transport buttons (start/stop/continue), a beat meter, and a bar counter. It's the usual clock source in a setup - one per project, routed to every clock consumer and to hardware that wants tempo. A live meter display shows the current beat position. Parameters: BPM (20-300, default 120, CC 74) and Play (on/off). The plugin produces clock and is essential for setups without an external clock source, or when you want to override an existing clock.",
+      "chapter": "07-plugins.md",
+      "keywords": ["clock", "master", "tempo", "BPM", "transport"],
+      "screenshot": "13-plugin-master-clock.png"
+    },
+    {
+      "id": "midi-delay",
+      "title": "MIDI Delay",
+      "category": "plugins",
+      "description": "Pre-scheduled note echoes with feedback repeats and velocity decay.",
+      "detailed_text": "The MIDI Delay plugin creates pre-scheduled echoes with feedback repeats and velocity decay. Delay time can be clock-synced (1/4, 1/4T, 1/8, 1/8T, 1/16, 1/16T) or free-running (10-2000ms). Repeats (0-10) control the number of echoes, and Vel Decay % (0-100%) controls how much each repeat fades. The echoes are kernel-timed with sub-millisecond jitter, making them sample-accurate. This is ideal for creative echo effects, rhythmic duplication, or filling out sparse performances. Parameters: Sync to Clock (on/off), Delay (ms), Rate, Repeats, and Vel Decay %.",
+      "chapter": "07-plugins.md",
+      "keywords": ["delay", "echo", "feedback", "repeats", "creative"],
+      "screenshot": "14-plugin-midi-delay.png"
+    },
+    {
+      "id": "note-splitter",
+      "title": "Note Splitter",
+      "category": "plugins",
+      "description": "Split keyboard at a configurable note into two channels with per-zone transpose.",
+      "detailed_text": "The Note Splitter plugin splits the keyboard at a configurable note into two channels with independent per-zone transpose. The Split Point (0-127, default C4) determines where the split occurs. Each zone has its own Channel (1-16) and Transpose (-48 to +48 semitones). This enables classic split setups: bass on the left, lead on the right, each on different channels and possibly different octaves. A Channel Remap mapping is simpler when each keyboard maps cleanly to one channel, but the Note Splitter is ideal when you're using a single keyboard to drive two different sounds. Parameters: Split Point, Lower Zone Channel, Lower Zone Transpose, Upper Zone Channel, Upper Zone Transpose.",
+      "chapter": "07-plugins.md",
+      "keywords": ["split", "keyboard", "zones", "transpose", "bass"],
+      "screenshot": "15-plugin-note-splitter.png"
+    },
+    {
+      "id": "note-transpose",
+      "title": "Note Transpose",
+      "category": "plugins",
+      "description": "Shift all incoming notes up or down by a fixed number of semitones.",
+      "detailed_text": "The Note Transpose plugin shifts all incoming notes up or down by a fixed number of semitones (-48 to +48, default 0). This is the simplest way to change the key of a controller without reprogramming it. For example, transpose a C-major keyboard to play in E-major. The plugin is clock-naive and operates purely on note events. Parameter: Semitones (-48 to +48, CC 74). This is essential for matching controllers to song keys or for quick key changes during performance.",
+      "chapter": "07-plugins.md",
+      "keywords": ["transpose", "shift", "key", "sematones", "pitch"],
+      "screenshot": "16-plugin-note-transpose.png"
+    },
+    {
+      "id": "panic-button",
+      "title": "Panic Button",
+      "category": "plugins",
+      "description": "Send All Notes Off and All Sound Off on all channels to kill stuck notes.",
+      "detailed_text": "The Panic Button plugin sends All Notes Off (CC 123) and All Sound Off (CC 120) on every MIDI channel on each press - this kills stuck notes everywhere downstream. It also has a Trigger CC # parameter (0-127, default 64) that fires the panic remotely: any value of 64 or higher on that CC# triggers it. This is a safety net for performances - when notes get stuck or the synth misbehaves, hit the panic button to reset everything. The button is momentary and red for visibility. Parameter: Panic! (trigger) and Trigger CC #.",
+      "chapter": "07-plugins.md",
+      "keywords": ["panic", "stuck-notes", "reset", "safety", "All-Notes-Off"],
+      "screenshot": "17-plugin-panic.png"
+    },
+    {
+      "id": "pitch-cc",
+      "title": "Pitch CC",
+      "category": "plugins",
+      "description": "Convert notes to pitch CC for synths that pitch via CC instead of note number.",
+      "detailed_text": "The Pitch CC plugin enables chromatic playback on synths that pitch via CC rather than note number, like the Korg Volca Sample (CC 49 = sample playback rate). Each Note On emits a pitch CC (value = Base CC Value + (played_note - Base Note), clamped to 0-127) before the Note On itself. Note Off forwards without a CC. Parameters: Base Note (0-127, learnable, default 60/C-3), Out CC # (0-127, default 49 for Volca Sample), and Base Val (0-127, default 64). This plugin unlocks chromatic playing on samplers and sound modules that don't respond to standard note numbers.",
+      "chapter": "07-plugins.md",
+      "keywords": ["pitch", "CC", "Volca", "chromatic", "sampling"],
+      "screenshot": "29-plugin-pitch-cc.png"
+    },
+    {
+      "id": "scale-remapper",
+      "title": "Scale Remapper",
+      "category": "plugins",
+      "description": "Quantize incoming notes to a musical scale with selectable root and scale type.",
+      "detailed_text": "The Scale Remapper plugin quantizes incoming notes to a musical scale, ensuring every note played is in-key. Root (0-11, note names, default C) sets the scale root. Scale type includes: major, minor, harmonic minor, melodic minor, pentatonic major, pentatonic minor, blues, chromatic, and more. This is ideal for live performance - play freely and the plugin ensures you never hit a wrong note. Great for improvisation, learning, or ensuring harmonic consistency. Parameters: Root and Scale. The plugin is clock-naive and operates purely on note events.",
+      "chapter": "07-plugins.md",
+      "keywords": ["scale", "quantize", "in-key", "harmony", "improvisation"],
+      "screenshot": "18-plugin-scale-remapper.png"
+    },
+    {
+      "id": "sysex-sender",
+      "title": "SysEx Sender",
+      "category": "plugins",
+      "description": "Upload .syx files to synths with conservative 256-byte chunking.",
+      "detailed_text": "The SysEx Sender plugin uploads a .syx file to a destination synth. The bytes stream in conservatively timed 256-byte chunks with ~5ms gaps, avoiding the buffer overruns that make DAW SysEx uploads flaky. Some legacy synths cannot handle back-to-back SysEx, so this pacing ensures reliable delivery. The uploaded file is not saved - once sent, removing the instance is safe. Use this for patch dumps, factory resets, or bulk data transfers to synths. The plugin has no persistent state and is purely a one-shot utility.",
+      "chapter": "07-plugins.md",
+      "keywords": ["SysEx", "upload", "patch", "dump", "firmware"],
+      "screenshot": "27-plugin-sysex-sender.png"
+    },
+    {
+      "id": "velocity-curve",
+      "title": "Velocity Curve",
+      "category": "plugins",
+      "description": "Drawable 128-point velocity response curve with shape presets.",
+      "detailed_text": "The Velocity Curve plugin remaps velocity through a drawable 128-point curve, with shape presets (linear, ease-in, ease-out, S-curve) along the canvas edge. On a MIDI 2.0-capable hub, fractional velocity is interpolated between curve points and re-emitted at full resolution; integer velocity behaves as before. This enables fine-tuning controller response: make light touches more sensitive, compress the dynamic range, or create custom response curves. The curve editor provides visual feedback as you draw. This is essential for matching controller feel to personal preference or compensating for worn-out velocity sensors.",
+      "chapter": "07-plugins.md",
+      "keywords": ["velocity", "curve", "response", "dynamic", "touch"],
+      "screenshot": "19-plugin-velocity-curve.png"
+    },
+    {
+      "id": "velocity-equalizer",
+      "title": "Velocity Equalizer",
+      "category": "plugins",
+      "description": "Normalize velocity to a fixed value or compress/expand the range.",
+      "detailed_text": "The Velocity Equalizer plugin normalizes incoming velocity to a fixed value or by compressing/expanding the range. Mode has three options: fixed (normalize to a single velocity value 1-127), compress (reduce dynamic range), and expand (increase dynamic range). Compress/expand preserve a MIDI 2.0 keyboard's fine velocity gradations end-to-end; MIDI 1.0 devices see classic integer results. Fixed mode uses Velocity parameter (1-127); range mode uses Min (1-127) and Max (1-127). This is ideal for ensuring consistent velocity across different controllers or for adapting a controller's velocity range to a synth's response.",
+      "chapter": "07-plugins.md",
+      "keywords": ["velocity", "equalizer", "normalize", "compress", "dynamic"],
+      "screenshot": "20-plugin-velocity-equalizer.png"
+    },
+    {
+      "id": "tracker",
+      "title": "Tracker Sequencer",
+      "category": "play-surfaces",
+      "description": "8-voice step sequencer with 16 rows per page, up to 16 pages, and live recording.",
+      "detailed_text": "The Tracker is a classical tracker-style step sequencer with 8 voice columns (T1-T8), 16 hex-numbered rows per page (0-F), and up to 16 pages chained linearly. Each cell contains four mini-fields: Note (pitch, Off, End, or ---), Velocity (hex 00-7F), CC# (hex 00-7F or '.' for none), and CC Val (hex 00-7F). Per-track output channels enable multi-timbral sequencing. Transport includes Play/Stop toggle, Shift+Play for single-page looping, Send Clock (clock master mode), Send Trnsp. (transport forwarding), and Rcv Trnsp. (external transport coupling). Editing features include step-record, live recording with note-off capture, selection with Shift, Cut/Copy/Paste, transpose, keyboard note entry (QWERTY/QWERTZ compatible), and page navigation. The Tracker can store 8 numbered patterns, each a full grid. It's the richest play surface with the most editing capabilities.",
+      "chapter": "09-play-surfaces.md",
+      "keywords": ["tracker", "sequencer", "step", "pattern", "recording", "voices"],
+      "screenshot": "tracker.png"
+    },
+    {
+      "id": "arpeggiator",
+      "title": "Arpeggiator",
+      "category": "play-surfaces",
+      "description": "Play held notes as rhythmic patterns with seven modes and per-step editing.",
+      "detailed_text": "The Arpeggiator plays held notes as a rhythmic pattern with seven pattern modes: up, down, up-down (ping-pong), random, as-played (press order), programmed (live step-sequencer), and chord (every held note each step). The play surface features Pattern and Rate wheels at the top, four shapers (Steps/Accent Vel./Gate %/Octaves) in one row, and a Step Pattern editor at the bottom. The step grid allows per-step on/off cycling, semitone offsets (-24 to +24), and accent. Setup parameters include Sync (free/tempo/transport), Arp Ch (channel filter), and Ctrl Ch + Pattern Notes for slot triggering. The 8-slot pattern bank snapshots all play-surface parameters. CC automation covers CC 70-83 for all controls.",
+      "chapter": "09-play-surfaces.md",
+      "keywords": ["arpeggiator", "pattern", "rhythm", "steps", "held-notes"],
+      "screenshot": "arpeggiator-play.png"
+    },
+    {
+      "id": "euclidean",
+      "title": "Euclidean Rhythms",
+      "category": "play-surfaces",
+      "description": "Bjorklund-distributed step patterns with window wave masking and scale quantization.",
+      "detailed_text": "The Euclidean plugin generates algorithmic rhythms using Bjorklund distribution. It has three layers: (1) Bjorklund distribution with Pulses (0-32), Steps (1-32), and Rotate (-16 to +16); (2) Window wave with Phase (0-31), Cycles (0.5/1/2/3/4), and Open (0-100) for masking; (3) Manual overrides with per-step FORCE_ON, FORCE_ON+accent, and FORCE_OFF. The pitch model uses held notes voiced through Pattern modes (up/down/up-down/random/as-played/chord), quantized to internal Scale + Root (9 scales). Time model includes Rate (15 values), Gate % (10-100), Jitter % (0-100), Fade In (0-16 firing steps), and Fade Out (0-16 firing steps). Retrig governs phrase restart behavior. Polyrhythm is achieved by running two instances on one clock with co-prime pulse/step counts. CC automation covers CC 70-88 (skipping CC 84).",
+      "chapter": "09-play-surfaces.md",
+      "keywords": ["euclidean", "Bjorklund", "rhythm", "algorithmic", "polyrhythm"],
+      "screenshot": "euclidean-play.png"
+    },
+    {
+      "id": "cartesian",
+      "title": "Cartesian Sequencer",
+      "category": "play-surfaces",
+      "description": "2D grid sequencer in René style with two independent clocks and scale-aware voicing.",
+      "detailed_text": "The Cartesian is a 2D sequencer in the spirit of the Make Noise René. It voices a held note (the root), with each cell carrying a semitone offset. Two independent clocks: Rate fires the next cell along the Path; Inv. Rate steps the grid through chord inversions. The Fill Voicing wheel stamps the grid with chord tones: Unison (root only), 5th (power chord), Triad (root+third+fifth), 7th (root+third+fifth+seventh), or Scale (full scale degree by degree). The Root wheel enables chordal (played note = tonic) or diatonic (Root+Scale = key) harmony. Inversion (-4 to +4) re-voices bidirectionally. Autofill toggles live re-stamping vs frozen grid. Two channels: Play Ch (played root) and Fill Ch (recording channel). Paths include Rows→, Cols↓, Diagonal, Knight, Spiral in, Spiral out, and Random. Grid sizes: 2×2, 3×3, 4×4.",
+      "chapter": "09-play-surfaces.md",
+      "keywords": ["cartesian", "2D", "grid", "René", "voicing", "inversion"],
+      "screenshot": "cartesian-play.png"
+    },
+    {
+      "id": "pattern-bank",
+      "title": "Pattern Bank",
+      "category": "play-surfaces",
+      "description": "8-slot pattern bank for quick switching between saved parameter sets.",
+      "detailed_text": "Every play surface (Arpeggiator, Euclidean, Cartesian, Tracker) has an 8-slot pattern bank (P1-P8) at the bottom. Each slot snapshots the play-surface parameters. Tap a slot to switch - on Arpeggiator, Euclidean, and Cartesian, the switch is immediate (can rewrite pattern under a pedal-held chord), held notes/sustain persist, and edits auto-write to the active slot (no Store action needed). On the Tracker, the switch queues to the next page-0 boundary while playing (Shift+Tap forces immediate). Long-press a slot for a menu: Overwrite from current copies the active slot into the long-pressed one; Reset to default wipes it to plugin defaults. Slot triggering from MIDI is possible via Ctrl Ch + learnable NoteSelect notes. Switching patterns is performance (not an edit) - no dirty asterisk, no autosave.",
+      "chapter": "09-play-surfaces.md",
+      "keywords": ["pattern", "bank", "slots", "switching", "presets"],
+      "screenshot": null
+    },
+    {
+      "id": "cc-automation",
+      "title": "CC Automation",
+      "category": "play-surfaces",
+      "description": "Bind incoming MIDI CCs to any play-surface control with MIDI Learn.",
+      "detailed_text": "Every performance-surface control (Pattern, Rate, Gate, Steps, etc.) can be bound to an incoming MIDI CC. Long-press (or right-click) the control to open the binding popup with: Current binding (channel 'Any' or 1-16 + CC 0-127), Reset to factory, MIDI Learn (30-second listen), Save/Cancel. The CC value scales to the parameter's full range; the control animates as CCs arrive. Simultaneous touch + CC input resolves to one value without flicker. Bindings are per-instance and persist in the saved config. There's no per-plugin CC list in the panel - the popup is the discovery surface, but Settings → Plugin Control Mappings lists every binding. If hardware can't send the wanted CC, a CC→CC mapping can rewrite the CC number instead of rebinding every plugin.",
+      "chapter": "07-plugins.md",
+      "keywords": ["CC", "automation", "binding", "MIDI-Learn", "control"],
+      "screenshot": "32-cc-bind-popup.png"
+    },
+    {
+      "id": "mixer-8",
+      "title": "Mixer 8 Controller",
+      "category": "controllers",
+      "description": "24 knobs, 8 faders, 16 buttons controller with default CCs 16-63.",
+      "detailed_text": "Mixer 8 is a 8-wide mixer controller layout with 24 knobs (3 rows of 8 - typically send/send/channel-volume), 8 faders (channel faders), and 16 buttons (2 rows of 8 - typically mute/solo). Every cell sends one CC on one channel with On and Off values. Default CC range is 16-63 on channel 1. Every cell is renameable and MIDI-Learnable. Long-press rebinds a cell with Channel + CC wheels, MIDI Learn, or Reset to factory. The four drop buttons sit above the surface for scene capture and firing. Multiple instances can coexist, switched via the top-bar selector. Themes are per-instance (8 dark themes available). The controller mirrors incoming CCs with matching (channel, CC) - touch emits, hardware mirrors.",
+      "chapter": "08-controllers.md",
+      "keywords": ["mixer", "faders", "knobs", "buttons", "controller"],
+      "screenshot": "controller-mixer-8.png"
+    },
+    {
+      "id": "fx-6",
+      "title": "FX 6 Controller",
+      "category": "controllers",
+      "description": "6-wide FX controller with 18 knobs, 6 faders, 6 buttons.",
+      "detailed_text": "FX 6 is a 6-wide FX controller layout with 18 knobs (3 rows of 6 - e.g., delay time/feedback/mix for six FX channels), 6 faders (per-FX channel level), and 6 buttons (per-FX bypass/enable). Default CC range is 16-45 on channel 1. Every cell is renameable and MIDI-Learnable. Long-press rebinds a cell. The four drop buttons enable scene capture. Multiple instances can coexist. Themes are per-instance. This layout is optimized for controlling multiple FX parameters simultaneously, ideal for live mixing of effects chains.",
+      "chapter": "08-controllers.md",
+      "keywords": ["FX", "effects", "knobs", "faders", "controller"],
+      "screenshot": "controller-fx-6.png"
+    },
+    {
+      "id": "performance-16",
+      "title": "Performance 16 Controller",
+      "category": "controllers",
+      "description": "16 macro knobs plus 4 scene buttons for performance control.",
+      "detailed_text": "Performance 16 is a 4-wide performance controller with 16 macro knobs (4 rows of 4) and 4 scene buttons. Default CC range is 16-35 on channel 1. Each macro knob is intended to be mapped to multiple destination parameters via routing mappings, making it ideal for controlling complex parameter sets across multiple devices. Every cell is renameable and MIDI-Learnable. The four scene buttons work as drop buttons for scene capture and firing. Multiple instances can coexist. Themes are per-instance. This layout is optimized for macro control of entire setups, perfect for live performance where you need to control many parameters with few hands.",
+      "chapter": "08-controllers.md",
+      "keywords": ["performance", "macros", "knobs", "scenes", "controller"],
+      "screenshot": "controller-performance-16.png"
+    },
+    {
+      "id": "xy-4",
+      "title": "XY 4 Controller",
+      "category": "controllers",
+      "description": "2 XY pads, 8 knobs, 4 buttons with per-axis learning and spring return.",
+      "detailed_text": "XY 4 features 2 large XY pads at the top (each sends two CCs, one per axis), 8 knobs (2 rows of 4) in the middle, and 4 buttons along the bottom. Default CC range is 16-31 on channel 1. XY pads learn per axis - the popup grows to two axis sections (X/Y), each with Channel + CC + Learn. Per-cell XY pad spring configuration includes Force (0-127, zero disables) and Home (Bottom-left or Centre). With spring on, the dot returns to Home on release, firing a CC per axis as it travels. Every cell is renameable and MIDI-Learnable. The four drop buttons enable scene capture. Multiple instances can coexist. Themes are per-instance. This layout is ideal for continuous 2D control like filter cutoff/resonance or pitch/modulation.",
+      "chapter": "08-controllers.md",
+      "keywords": ["XY", "pads", "continuous", "spring", "controller"],
+      "screenshot": "controller-xy-4.png"
+    },
+    {
+      "id": "drop-buttons",
+      "title": "Drop Buttons",
+      "category": "controllers",
+      "description": "Four snapshot slots that capture and fire controller states with scheduled firing.",
+      "detailed_text": "Four drop buttons sit above every controller play surface, always visible. Each stores a snapshot of every cell's value. Capturing: long-press ~600ms; the button flashes once and captures every cell's value into the slot. Firing: tap the captured button. Mode = Now, Sync = off: every cell jumps to its captured value immediately. Mode = Bar/2-Bar/4-Bar/8-Bar/16-Bar, Sync = on: the snapshot lands exactly at the next such master-clock boundary, pre-scheduled with sub-millisecond accuracy. Fade on fire = on: each cell sweeps from current to captured value across the bar length; off = one step at the boundary. The progress ring shows scheduled-fire progress (peach-pulsing while pending, frozen if MIDI Stop arrives). Trigger Notes: a learned MIDI note fires (or captures) the button. Dual-slot scheduling: one fade and one hard drop can queue side by side.",
+      "chapter": "08-controllers.md",
+      "keywords": ["drop-buttons", "snapshot", "scene", "capture", "scheduled"],
+      "screenshot": null
+    },
+    {
+      "id": "controller-themes",
+      "title": "Controller Themes",
+      "category": "controllers",
+      "description": "Eight dark themes per controller instance for visual customization.",
+      "detailed_text": "Eight dark themes ship with every controller: Default (cyan/turquoise accent), Navy (deep blue), Forest (green), Wine (burgundy red), Plum (purple), Teal (blue-green), Sienna (burnt orange), and Slate (cool grey). Theme is chosen per controller instance in its plugin config panel and applied instantly. Themes provide visual differentiation between multiple controller instances and enable personalization for different performance contexts or lighting conditions. The theme persists in the saved config.",
+      "chapter": "08-controllers.md",
+      "keywords": ["theme", "visual", "customization", "appearance", "color"],
+      "screenshot": null
+    },
+    {
+      "id": "midi-monitor",
+      "title": "MIDI Monitor",
+      "category": "system",
+      "description": "Real-time event viewer showing every MIDI event on a device's ports.",
+      "detailed_text": "The MIDI Monitor is available in the device-detail panel for USB devices and plugins. It scrolls every event from the device as a readable line (e.g., 'Note On ch1 C3 vel=100'). For MIDI 2.0 sources, it shows real resolution - fractional values (vel=100.53, cc74=63.99) and 2.0-only messages (atomic RPN/NRPN, Per-Note CC, Per-Note Bend) as typed rows; MIDI 1.0 devices show whole numbers. The monitor is essential for debugging - verify that a device is sending, check the exact values being sent, and confirm routing is working. The monitor updates in real time as events flow through the system.",
+      "chapter": "05-routing-matrix.md",
+      "keywords": ["monitor", "debug", "MIDI-events", "visualization", "diagnostic"],
+      "screenshot": null
+    },
+    {
+      "id": "test-sender",
+      "title": "MIDI Test Sender",
+      "category": "system",
+      "description": "Fire test notes or CCs into a device's input for verification.",
+      "detailed_text": "The MIDI Test Sender is available in the device-detail panel alongside the MIDI Monitor. It allows you to fire test notes or CCs into a device's input to verify that the device is responding correctly. This is essential for debugging - confirm that a synth is receiving and responding to MIDI, test routing configurations, and verify that filters and mappings are working as expected. The test sender works on USB devices and plugins, providing a way to inject known-good MIDI into any part of the routing graph.",
+      "chapter": "07-plugins.md",
+      "keywords": ["test", "sender", "debug", "verification", "diagnostic"],
+      "screenshot": null
+    },
+    {
+      "id": "bluetooth-midi",
+      "title": "Bluetooth MIDI",
+      "category": "connectivity",
+      "description": "BLE-MIDI bridge for wireless controllers and peripherals.",
+      "detailed_text": "The built-in BLE-MIDI bridge handles Just-Works pairing and BLE-MIDI framing in both directions. A paired peripheral appears in the routing matrix alongside USB devices and plugins, with the same filtering, mapping, and clipboard behavior. Pairing: power on the peripheral, open Add → Bluetooth MIDI, scan, and connect - pairing is automatic. Pairing state is snapshotted to the boot partition on every change and restored on boot - bonds survive reboots and hard power-offs. Boot reconnects every paired peripheral; offline peripherals show as paired-but-offline and can be reconnected via the header menu. Message coverage includes Notes (On/Off), CC, Program Change, Pitch Bend, Aftertouch (channel and poly), MIDI Clock, Start/Stop/Continue, and Song Position. SysEx is not bridged; Active Sensing and Reset are deliberately dropped. Latency is 7.5-15ms (bound by BLE connection interval).",
+      "chapter": "10-bluetooth-midi.md",
+      "keywords": ["Bluetooth", "BLE", "wireless", "pairing", "peripheral"],
+      "screenshot": null
+    },
+    {
+      "id": "network-midi",
+      "title": "Network MIDI (RTP-MIDI)",
+      "category": "connectivity",
+      "description": "Share local MIDI devices over the network as standard RTP-MIDI sessions.",
+      "detailed_text": "Network MIDI (Settings → Network MIDI) exports local MIDI devices as standard RTP-MIDI (AppleMIDI) sessions, advertised over mDNS as '<device> @<hostname>'. Compatible clients include: a second RaspiMIDIHub (Ethernet cable up to 100m or any shared network), macOS/iOS (Audio MIDI Setup's MIDI Network Setup), and Linux (rtpmidid). Turn on the master toggle, then tick devices to share. Several clients can connect to one exported device simultaneously. Exports are saved in the config; the advert exists only while the device is present. Notes, CCs, clock, and SysEx all cross the wire with wired-LAN latency well under 1ms. When two RaspiMIDIHubs see each other, peer devices mirror automatically into the local matrix as violet network devices. Mirrored devices are full matrix citizens. Sessions from Macs/iPads/DAWs are not mirrored automatically but can be added with one tap. Loops cannot form: a mirrored device cannot be re-exported. The direct cable works without mDNS via link-local addresses (169.254.x.y). Manual peers can be added for networks where multicast is filtered.",
+      "chapter": "13-connectivity-and-updates.md",
+      "keywords": ["Network-MIDI", "RTP-MIDI", "AppleMIDI", "mirroring", "network"],
+      "screenshot": null
+    },
+    {
+      "id": "save-config",
+      "title": "Save Config",
+      "category": "workflow",
+      "description": "Persist the current state as the boot default with rolling backup checkpoints.",
+      "detailed_text": "Save Config persists the entire in-memory state to the boot config file and drops a rolling backup checkpoint. The save writes atomically (temp file, flush, rename - atomic on FAT32) and is double-buffered with gzip-CRC validation, so a cut mid-write cannot corrupt state. The save does not disturb live MIDI - safe mid-set. Save Config persists: every connection in the matrix, every per-cell filter and mapping, every plugin instance and its full parameter state, every controller instance (cell rename, learned CC, captured drop-button snapshot, theme), the Tracker's grid contents, the 8-slot pattern bank on every play-surface plugin, every device and port rename, the default routing for new devices, and the WiFi configuration. The asterisk clears when save completes. A failed write is reported, never claimed as success.",
+      "chapter": "11-saving-and-exporting-configs.md",
+      "keywords": ["save", "persist", "config", "backup", "checkpoint"],
+      "screenshot": null
+    },
+    {
+      "id": "load-config",
+      "title": "Load Config",
+      "category": "workflow",
+      "description": "Reload the last deliberate Save, discarding unsaved edits.",
+      "detailed_text": "Load Config replaces the in-memory state with the boot config - the last deliberate Save, not the autosave. Unsaved edits are discarded; memory-only plugin instances are stopped and discarded. Load is the 'undo my unsaved edits' button - it throws away the work-in-progress that the autosave has been keeping. The loaded state is autosaved immediately, making it the next resume point. This is useful when you've made changes you want to discard and return to the last saved state.",
+      "chapter": "11-saving-and-exporting-configs.md",
+      "keywords": ["load", "reload", "undo", "revert", "config"],
+      "screenshot": null
+    },
+    {
+      "id": "export-config",
+      "title": "Export Config",
+      "category": "workflow",
+      "description": "Download the current state as JSON for backup, sharing, or archiving.",
+      "detailed_text": "Export Config downloads the in-memory state (including unsaved edits) as raspimidihub-config.json. Use it to back up before a risky experiment, share a setup with another RaspiMIDIHub owner, archive a finished rig, or snapshot mid-session. The JSON is human-readable - diffing two exports shows exactly what changed. The file includes the full state: routing, plugins, controllers, renames, WiFi credentials, etc. WARNING: WiFi credentials are part of the exported state - before sharing a config, edit the WiFi section out of the JSON, or change the AP password on the receiving unit after import. The JSON format is the authoritative schema for the config.",
+      "chapter": "11-saving-and-exporting-configs.md",
+      "keywords": ["export", "JSON", "backup", "share", "archive"],
+      "screenshot": null
+    },
+    {
+      "id": "import-config",
+      "title": "Import Config",
+      "category": "workflow",
+      "description": "Upload a JSON file and replace the current state.",
+      "detailed_text": "Import Config uploads a JSON file and replaces the current in-memory state: plugin and controller instances are stopped and recreated, connections re-established, device and port renames applied. The asterisk lights (the boot config is still the previous one); tap Save Config to make the import the boot default. The imported state is autosaved immediately, so it survives a power cut even before you Save. The file is validated first: a malformed file or one from an incompatible major version is rejected with an error and the running state is untouched. This enables transferring setups between units, restoring from backups, or loading shared configurations.",
+      "chapter": "11-saving-and-exporting-configs.md",
+      "keywords": ["import", "JSON", "restore", "load", "transfer"],
+      "screenshot": null
+    },
+    {
+      "id": "autosave",
+      "title": "Autosave",
+      "category": "workflow",
+      "description": "Continuous background autosave enables power-cut recovery to last edit.",
+      "detailed_text": "The unit continuously autosaves the live edited state in the background, so a hard power cut resumes the last thing you were doing - not just the last Save. On boot, it prefers the newest valid autosave, falling back to config.json, then its .bak, then defaults. The autosave is debounced: a few seconds after edits settle, and on clean shutdown/reboot. Purely performing does not autosave (launching Tracker patterns or tapping pattern slots changes no saveable content). After Load, a Restore, or Import, the new state is autosaved at once, making it the resume point. The autosave is double-buffered and integrity-checked, so a cut mid-write never leaves the unit without a good snapshot to resume from. This means no need to Save before pulling the power - the autosave has your edits.",
+      "chapter": "11-saving-and-exporting-configs.md",
+      "keywords": ["autosave", "recovery", "power-cut", "resume", "background"],
+      "screenshot": null
+    },
+    {
+      "id": "backup-checkpoints",
+      "title": "Backup Checkpoints",
+      "category": "workflow",
+      "description": "Rolling save checkpoints with restore and download capabilities.",
+      "detailed_text": "Every Save Config writes a compressed copy of the whole project state to the backup directory, newest first; the last 50 are kept. Settings → Backup shows the checkpoints with: #number (monotonic, orders checkpoints even across reboots), When (relative 'n ago'), Summary (coarse diff vs previous checkpoint), Size (compressed), and per-row actions (Restore/Download). Restore replaces the live config with the checkpoint (plugins stopped and recreated, routing re-diffed) and lights the dirty asterisk; Save Config commits it as the new boot default. A Restore is autosaved immediately, so it survives a power cut before you Save. Download saves the checkpoint as plain JSON (raspimidihub-backup-NNNNN.json) - the same format Export Config produces, re-importable anywhere. This provides versioned recovery points throughout your work session.",
+      "chapter": "11-saving-and-exporting-configs.md",
+      "keywords": ["backup", "checkpoint", "restore", "version", "history"],
+      "screenshot": "32-settings-backup.png"
+    },
+    {
+      "id": "spectator-mirroring",
+      "title": "Spectator Mirroring",
+      "category": "system",
+      "description": "Stream device UI into OBS with zero latency for live presentation.",
+      "detailed_text": "Spectator mirroring streams a device's UI into OBS (or another browser tab) with effectively zero latency - no screen capture, no scrcpy. The mirror URL (/?spectate=<conn_id>) re-renders the target device's view, including touch ripples where it is tapped. OBS Browser Source renders it natively at any resolution. The top card sets the device's name shown to spectators and copies its spectator URL. Mirroring costs the source nothing until a spectator opens the URL, and stops when the last one closes. The mirror adopts the source's viewport size, density, and theme, and mirrors every popup, matrix scroll, bottom-bar toast, Save/Load/Panic button state, and in rack view - cable highlight and live patch cable being dragged. Presentation knobs: frame=1 (stylised phone bezel), chroma=<color> (backdrop for chroma key), tilt-x/y (3D rotation). The floating panel wires these up and fades after 2.5s of pointer inactivity.",
+      "chapter": "12-settings.md",
+      "keywords": ["spectator", "mirroring", "OBS", "stream", "presentation"],
+      "screenshot": "36-settings-spectator.png"
+    },
+    {
+      "id": "plugin-control-mappings",
+      "title": "Plugin Control Mappings",
+      "category": "settings",
+      "description": "Flat editable table of every CC binding across all plugins and controllers.",
+      "detailed_text": "The Plugin Control Mappings sub-page shows every CC binding across every plugin instance and every controller cell in one flat editable table. Columns: Plugin (instance name), Param (control label; controller cells use cell label, XY pads expand to two rows with X/Y suffixes), Ch (channel 'Any' or 1-16), CC (CC number, dimmed for cleared binding). Tap a row to open the same long-press popup as on the control - Edit, MIDI Learn, Reset to factory, Clear, Save. The table is live - edits from anywhere and instance renames appear within milliseconds. With no plugin instances, a placeholder points at the Routing tab's Add button. This provides a comprehensive overview and editing surface for all CC bindings in the system.",
+      "chapter": "12-settings.md",
+      "keywords": ["CC", "bindings", "mappings", "table", "overview"],
+      "screenshot": "31-settings-cc-bindings.png"
+    },
+    {
+      "id": "wifi-config",
+      "title": "WiFi Configuration",
+      "category": "settings",
+      "description": "Configure AP mode, client mode, bands, and credentials.",
+      "detailed_text": "The WiFi card includes: Status badge (AP mode SSID, client mode SSID+IP, or 'Bringing up...'), Home WiFi (SSID and password for updates and WiFi-always modes), AP Password (minimum 8 characters, WPA2), AP radio (Band: 2.4GHz default or 5GHz for Pi 3B+/4/5; Country: auto-detect or manual), and WiFi mode (AP only, WiFi for updates, WiFi always). Saving restarts the AP briefly. 5GHz uses non-DFS channels (36/40/44/48), auto-falls back to 2.4GHz on failure. WiFi credentials are part of the saved project state and appear in Export Config JSON. USB-tethered phone link shows as a clickable row when a phone is tethered. The AP password should be changed from the default 'midihub1' before the unit leaves a trusted environment.",
+      "chapter": "12-settings.md",
+      "keywords": ["WiFi", "AP", "client", "password", "network"],
+      "screenshot": null
+    },
+    {
+      "id": "ethernet-config",
+      "title": "Ethernet Configuration",
+      "category": "settings",
+      "description": "Configure DHCP or static IP for eth0 with link-local fallback.",
+      "detailed_text": "Ethernet (eth0) configuration includes DHCP (default, right for most home routers) and Static (Address, Netmask, Gateway, DNS). When eth0 is connected, the card lists every IPv4 address it holds - often a DHCP lease (or static address) and the 169.254.x.y address tagged (link-local), which is always present while eth0 is up, independent of the Network MIDI toggle. If it's the only address, no DHCP answered and nothing static is set - two hubs on a back-to-back cable still reach each other over it. The same addresses appear on Sys Info. This enables direct cable connections between hubs without any router or DHCP server.",
+      "chapter": "12-settings.md",
+      "keywords": ["ethernet", "DHCP", "static", "IP", "link-local"],
+      "screenshot": null
+    },
+    {
+      "id": "sys-info",
+      "title": "System Information",
+      "category": "system",
+      "description": "Live system stats including version, CPU, RAM, latency, and IPs.",
+      "detailed_text": "The Sys Info sub-page shows live system statistics: version, CPU usage, RAM usage, loop lag, MIDI in→out latency, control in→MIDI out latency, process CPU%, per-core CPU (CPU3·loop, CPU2·plugins, CPU0/CPU1 housekeeping), ALSA ports count, and SSE rate/backlog. It also provides Reload App, Reboot Pi, and Factory Reset actions. The stats card is the first stop when the unit feels sluggish - loop lag ~2ms normal, under 5ms fine; sustained above 5ms means something is starving the loop. Per-core CPU red (≥85%) on the loop or plugin core warns of saturation. ALSA ports show the sequencer ports held by the hub's ALSA client vs. the kernel's per-client cap of 254; red at 80%. This is a comprehensive health dashboard for the system.",
+      "chapter": "12-settings.md",
+      "keywords": ["sys-info", "stats", "CPU", "latency", "health"],
+      "screenshot": null
+    },
+    {
+      "id": "software-update",
+      "title": "Software Updates",
+      "category": "system",
+      "description": "Check GitHub, manage stored versions, and install updates.",
+      "detailed_text": "The Update sub-page enables checking GitHub for newer versions, managing stored .deb files, and installing. Every locally-stored .deb is listed, newest first, with changelog and Install button. Check GitHub for newer versions auto-downloads anything newer than the running build and keeps the latest three .deb files on disk, so re-installs work fully offline. A progress bar plus a hopping 'we're alive' dot shows install liveness; a 180-second watchdog forces the Pi back to AP mode if the install hangs. The installer also manages the raspimidihub-rosetup package alongside raspimidihub; both are kept and offered together. Three internet paths: Ethernet (AP stays up), USB tethering (AP stays up), WiFi for updates (AP drops ~30s twice). Once a .deb is on disk, Install needs no internet at all.",
+      "chapter": "12-settings.md",
+      "keywords": ["update", "install", "GitHub", "version", "deb"],
+      "screenshot": null
+    },
+    {
+      "id": "pwa-install",
+      "title": "PWA Install",
+      "category": "system",
+      "description": "Install RaspiMIDIHub as a Progressive Web App on your phone.",
+      "detailed_text": "An Install App button triggers the OS 'Add to Home Screen' flow - iOS Safari shows the OS dialog, Chrome on Android the bottom prompt. After install, RaspiMIDIHub launches fullscreen from a home-screen icon, no browser chrome. The PWA survives reboots and software updates. This provides an app-like experience with quick access from the home screen, full-screen operation without browser UI, and offline capability through service worker caching.",
+      "chapter": "12-settings.md",
+      "keywords": ["PWA", "install", "app", "home-screen", "fullscreen"],
+      "screenshot": null
+    },
+    {
+      "id": "factory-reset",
+      "title": "Factory Reset",
+      "category": "system",
+      "description": "Erase all routing, plugins, filters and settings, then reboot factory-fresh.",
+      "detailed_text": "Factory Reset, after a double confirmation, erases all routing, plugins, filters, and settings, then reboots factory-fresh. Kept deliberately: WiFi/AP settings (AP password, home-WiFi credentials) - the hub stays reachable after the reboot; rolling backups - a mistaken reset is recoverable from Settings → Backup. The reset clears the resume snapshot, so the unit does not resume the pre-reset state. Newly-plugged devices then arrive disconnected (the factory default). This is the nuclear option for when you want to start completely fresh or prepare the unit for a new user.",
+      "chapter": "12-settings.md",
+      "keywords": ["reset", "factory", "erase", "fresh", "reboot"],
+      "screenshot": null
+    },
+    {
+      "id": "display-settings",
+      "title": "Display Settings",
+      "category": "settings",
+      "description": "Per-device browser preferences for activity bar, tick sounds, and layout.",
+      "detailed_text": "Display settings are per-device (browser-local, never part of Save/Export Config): MIDI activity bar (show/hide the two-source activity bar above bottom navigation), Knob/wheel tick sounds (a click on each integer step of a wheel or fader drag), Scroll-assist buttons (floating ▲/▼ buttons on overflowing pages; each tap scrolls ~200px, appear only when content runs past viewport, default on), Layout density (Default or Small screen (tighter); Small shrinks header, bottom navigation, padding, and per-plugin controller bar for 360px-wide phones), and Theme (every theme in themes/manifest.json; Light is daytime default, Dark is night-rig alternative; persists across reloads and seeds PWA status-bar colour; first-time visitors inherit OS prefers-color-scheme). These settings customize the UI for personal preference and screen size.",
+      "chapter": "12-settings.md",
+      "keywords": ["display", "theme", "layout", "activity-bar", "preferences"],
+      "screenshot": null
+    },
+    {
+      "id": "default-routing",
+      "title": "Default Routing Mode",
+      "category": "settings",
+      "description": "Choose whether new devices auto-connect or start disconnected.",
+      "detailed_text": "The MIDI Routing setting has one radio with two options: None (default) - new USB devices appear in the matrix unconnected; nothing injects unexpected MIDI until you route it; Connect all - new USB devices auto-route to and from every existing device. This choice feeds the dirty-state model and survives Save Config. Plugins always start unconnected regardless. The default 'None' provides safety - new devices never inject unexpected MIDI into your setup. 'Connect all' enables plug-and-play behavior for users who prefer automatic connectivity.",
+      "chapter": "12-settings.md",
+      "keywords": ["routing", "default", "auto-connect", "disconnected", "safety"],
+      "screenshot": null
+    },
+    {
+      "id": "midi-2-support",
+      "title": "MIDI 2.0 Support",
+      "category": "system",
+      "description": "Full MIDI 2.0 (UMP) support with 32-bit resolution and per-note messages.",
+      "detailed_text": "On kernels with MIDI 2.0 support (alsa-lib ≥1.2.10 and kernel with UMP options enabled), the hub speaks Universal MIDI Packet format natively. Devices' function blocks (declared sections like 'Keys' and 'Pads') become their port rows. A 2.0 badge by the name (matrix and rack) marks a capable device; struck through means forced to MIDI 1.0 via the device-detail toggle. Direct-path routing between two MIDI 2.0 devices preserves full 32-bit resolution; mixed 1.0/2.0 wiring needs no special handling. Filtered connections between two MIDI 2.0 devices carry full resolution end-to-end; MIDI 1.0 devices see exactly the values they always did. Mapping value fields accept fractionals like 63.5 - rounded for MIDI 1.0 destinations. MIDI 2.0 controllers drive bound parameters at full 32-bit resolution. MIDI-CI (Capability Inquiry) is sent automatically on connect to bidirectional devices, showing manufacturer/model/version, capability categories, and with Property Exchange the self-reported friendly name and serial number. Disable probing globally (midi2.ci_enabled) or per device (midi2.ci_disabled) for firmware that chokes on universal SysEx.",
+      "chapter": "17-technical-reference.md",
+      "keywords": ["MIDI-2.0", "UMP", "resolution", "per-note", "MIDI-CI"],
+      "screenshot": null
+    },
+    {
+      "id": "multi-port-devices",
+      "title": "Multi-Port Device Handling",
+      "category": "routing",
+      "description": "Multi-port devices appear with one row/column per port, each renamable.",
+      "detailed_text": "Multi-port devices (like an Octatrack with multiple DIN outputs, or USB MIDI interfaces with multiple ports) appear in the matrix with one row and column per port. Each port is renamable independently - name the specific output (e.g., 'Octatrack DIN') rather than '<Device> Port 2'. The original ALSA name shows in grey for reference. This enables precise routing when a device has multiple distinct MIDI ports that need different routing configurations.",
+      "chapter": "05-routing-matrix.md",
+      "keywords": ["multi-port", "ports", "renaming", "routing"],
+      "screenshot": null
+    },
+    {
+      "id": "remote-hub-groups",
+      "title": "Remote Hub Groups",
+      "category": "routing",
+      "description": "Devices from peer hubs appear grouped under collapsible violet headers.",
+      "detailed_text": "Devices mirrored from a peer hub (Network MIDI) sit at the bottom under a violet group row per hub - '@hub2 · 3 devices'. Tap to collapse (hides that hub's rows and columns) or expand - a per-browser preference. Rows show the bare device name; the context-menu title shows the full 'TX-7 @hub2' - twin names across hubs stay unambiguous. An offline peer's devices act like unplugged hardware: dimmed, intact, reconnecting automatically when the peer returns. This provides clear visual grouping of remote devices and enables collapsing to reduce matrix clutter when working with multiple hubs.",
+      "chapter": "05-routing-matrix.md",
+      "keywords": ["remote", "hub", "group", "mirroring", "Network-MIDI"],
+      "screenshot": null
+    },
+    {
+      "id": "user-plugins",
+      "title": "User-Supplied Plugins",
+      "category": "plugins",
+      "description": "Extend the system with custom plugins written in Python.",
+      "detailed_text": "User-supplied plugins appear in the Add overlay alongside the built-ins, with the same instance/save/clipboard semantics. The plugin developer guide in the project repository covers the API and sandbox restrictions. Plugins are virtual MIDI devices in the routing matrix: they consume MIDI from connected sources, transform it, and emit it to connected destinations. User plugins can have custom parameter UIs, play surfaces, or controllers. The plugin model ensures they integrate seamlessly with the existing routing, filtering, and mapping infrastructure. This enables extending the system with custom functionality tailored to specific needs.",
+      "chapter": "07-plugins.md",
+      "keywords": ["plugins", "custom", "Python", "extension", "API"],
+      "screenshot": null
+    },
+    {
+      "id": "sample-accurate-scheduling",
+      "title": "Sample-Accurate Scheduling",
+      "category": "system",
+      "description": "Pre-known events are pre-scheduled in the kernel with sub-millisecond jitter.",
+      "detailed_text": "Pre-known events (a Master Clock tick, a MIDI Delay echo, a bar-quantised drop-button fire) are pre-scheduled in the kernel and leave at the exact target time, with sub-millisecond jitter. Clock-followers (Arpeggiator, Euclidean, Cartesian - which consumes two subdivisions, one per axis - and Tracker) fire when the subdivision arrives, so their timing follows the clock source's quality. Purely event-driven plugins (Scale Remapper, Note Splitter) add well under a millisecond. This ensures tight timing for rhythmic elements and precise synchronization across all clock-driven components.",
+      "chapter": "07-plugins.md",
+      "keywords": ["scheduling", "timing", "kernel", "precision", "jitter"],
+      "screenshot": null
+    },
+    {
+      "id": "read-only-filesystem",
+      "title": "Read-Only Filesystem",
+      "category": "system",
+      "description": "Read-only root with atomic config writes for power-pull-safe operation.",
+      "detailed_text": "The system uses a read-only root filesystem with config writes that are atomic and power-pull-safe. The SD card is read-only in normal operation; config writes briefly remount /boot/firmware rw, write, sync, and remount ro. The runtime copy is on tmpfs (RAM); Save Config writes to the persistent boot partition. BlueZ bonds are snapshotted on every change. Yanking the power loses only unsaved edits (which are autosaved anyway) and nothing else. The read-only setup makes the appliance power-safe - treat it like a guitar pedal: yank the power, plug it back in next week, it boots to the same state. This is enforced by the raspimidihub-rosetup package which also handles CPU isolation.",
+      "chapter": "01-introduction.md",
+      "keywords": ["read-only", "atomic", "power-safe", "filesystem", "reliability"],
+      "screenshot": null
+    },
+    {
+      "id": "isolated-cpu-core",
+      "title": "Isolated CPU Core",
+      "category": "system",
+      "description": "Dedicated CPU core for MIDI path ensures sub-millisecond latency.",
+      "detailed_text": "The routing service's main loop runs on a CPU core isolated from the rest of the OS - no other userland process or kernel timer is scheduled there, so unrelated system activity cannot disturb the MIDI path. This is why the Stats card reads sub-millisecond loop lag even on a busy unit. The kernel is configured with isolcpus=2,3 (core 3 = loop, core 2 = plugins). This isolation is what enables the sub-millisecond latency and jitter-free performance even when the system is under load from other tasks.",
+      "chapter": "17-technical-reference.md",
+      "keywords": ["CPU", "isolation", "latency", "performance", "real-time"],
+      "screenshot": null
+    },
+    {
+      "id": "captive-portal",
+      "title": "Captive Portal",
+      "category": "system",
+      "description": "Automatic UI popup when connecting to the AP for easy first-time setup.",
+      "detailed_text": "The Pi answers the captive-portal probes of Android, iOS, macOS, and Windows, popping the UI in a sandboxed browser when you connect to the AP. If the portal does not fire (probe answer cached as 'no internet', or suppressed by MDM/carrier WiFi policy), enter manually: http://raspimidihub-<id>.local/ (needs mDNS) or the AP gateway IP from the phone's WiFi-info screen. This enables easy first-time setup without needing to know the IP address or hostname - just connect to the WiFi and the UI opens automatically.",
+      "chapter": "13-connectivity-and-updates.md",
+      "keywords": ["captive-portal", "setup", "UI", "automatic", "WiFi"],
+      "screenshot": null
+    },
+    {
+      "id": "mdns-discovery",
+      "title": "mDNS Discovery",
+      "category": "system",
+      "description": "Unique mDNS hostname for easy network discovery.",
+      "detailed_text": "Each hub advertises a unique mDNS name: raspimidihub-<id>.local, where <id> is the four-character hardware code shown in the title bar, WiFi name, and captive-portal page (e.g., raspimidihub-735C.local) - two hubs on one network never collide. Resolution requirements: macOS/iOS (native, no setup), Linux (avahi-daemon must run, default on most distributions), Modern Android (Android 12+ for most apps; some browsers still need the IP), Windows (needs Apple Bonjour). Without mDNS, use the gateway IP (AP mode) or the static/DHCP IP from the router's DHCP table (WiFi-always mode). This enables easy network discovery without needing to look up IP addresses.",
+      "chapter": "13-connectivity-and-updates.md",
+      "keywords": ["mDNS", "discovery", "hostname", "network", "Bonjour"],
+      "screenshot": null
+    }
+  ]
+}

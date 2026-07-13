@@ -71,6 +71,7 @@ STATE_FILE = STATE_DIR / 'state.json'
 # Mastodon-only — those would be noise in the Discord community channel.
 # 'jokes', 'midi_facts', 'midi_history', 'quick_tips', 'behind_the_code' are
 # also Mastodon-only for the same reason.
+# 'manual-features' is Mastodon-only — pure feature spotlights.
 SOURCE_TARGETS = {
     'features': ['mastodon'],
     'jokes': ['mastodon'],
@@ -79,6 +80,7 @@ SOURCE_TARGETS = {
     'midi_history': ['mastodon'],   # Educational content, Mastodon only
     'quick_tips': ['mastodon'],     # Educational content, Mastodon only
     'behind_the_code': ['mastodon'],  # Developer stories, Mastodon only
+    'manual-features': ['mastodon'],  # Manual features only, Mastodon only
     # 'youtube' / 'github' omitted -> all configured publishers
 }
 
@@ -93,6 +95,7 @@ SCHEDULE = {
     'midi_history': int(_env('SOCIAL_INTERVAL_MIDI_HISTORY', 86400)),  # 24h
     'quick_tips': int(_env('SOCIAL_INTERVAL_QUICK_TIPS', 43200)),  # 12h
     'behind_the_code': int(_env('SOCIAL_INTERVAL_BEHIND_CODE', 172800)),  # 48h
+    'manual-features': int(_env('SOCIAL_INTERVAL_MANUAL_FEATURES', 43200)),  # 12h - manual features only
 }
 
 SITE_URL = _env('SOCIAL_SITE_URL', 'https://raspimidihub.com')

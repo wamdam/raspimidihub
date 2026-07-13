@@ -22,7 +22,7 @@ SOURCES = None
 # Content categories and their sources
 CATEGORIES = {
     'educational': ['midi_facts', 'creative_uses', 'midi_history', 'quick_tips'],
-    'product': ['features', 'evergreen', 'github'],  # evergreen = core feature spotlights
+    'product': ['features', 'evergreen', 'github', 'manual-features'],  # manual-features = manual database
     'entertainment': ['jokes', 'behind_the_code'],
     'community': ['youtube'],
 }
