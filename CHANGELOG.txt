@@ -6,15 +6,28 @@ hashes. Tags: Added, Improved, Fix, Changed, Removed.
 
 Unreleased
 
+
+2026-07-13 — Version 6.0.0a2
+
+RaspiMIDIHub runs on any computer now, not just a Raspberry Pi. Plug
+a USB MIDI device into a laptop or desktop and it shows up in the
+routing matrix and routes exactly as it does on the appliance —
+handy for trying the hub, developing, or capturing documentation
+without hardware. The user manual was also reorganised and rewritten
+this cycle: 18 tighter chapters, ~30% shorter, every fact with one
+canonical home.
+
+- Added: runs on any computer now, not just a Raspberry Pi — plug a USB MIDI device into the machine and it shows up in the matrix and routes exactly as on the appliance; off-appliance the config lives under RASPIMIDIHUB_STATE_DIR and the web port is set by RASPIMIDIHUB_PORT (the appliance itself is unchanged)
+- Added: no-hardware local trial — `make demo` runs the full web UI against virtual MIDI ports (snd-virmidi), so routing, plugins and trackers can be explored without a Pi or any gear
 - Changed: the manual was reorganized from 22 to 18 chapters — architecture/config/tech-specs merged into one Technical Reference, UI controls folded into the Web UI chapter, Backup documented alongside Save/Load, and every fact given one canonical home; all cross-references renumbered and machine-validated
-- Fix: Appendix A stated wrong octave names for the play-surface trigger-note defaults (36..43 is C1..G1, not C2..G2)
 - Improved: the user manual was rewritten in a tighter, more precise style — ~30% shorter with no user-facing facts removed (159-page PDF)
+- Improved: architecture diagram (figure 4.1) caught up with the software — Network MIDI source/exports, MIDI 2.0 (UMP) in the ALSA tier, the full persistence tiers (autosave ping-pong, rolling backups, boot preference), and the per-hub mDNS name
+- Improved: manual PDF no longer starts a section heading in the last centimetres of a page (orphaned-heading protection)
+- Fix: Appendix A stated wrong octave names for the play-surface trigger-note defaults (36..43 is C1..G1, not C2..G2)
 - Fix: manual stated wrong MIDI Learn windows (it's 10 s in the filter/mapping panel, 30 s in the CC-binding popups) and carried four stale section cross-references
 - Fix: the cc_map_changed / cc_learn_result / cc_learn_timeout SSE events were missing from the /docs event registry (each emit warn-logged)
 - Fix: the manual PDF silently dropped Appendix E (REST & SSE API) — the build's file glob was never widened past appendix D
-- Improved: manual PDF no longer starts a section heading in the last centimetres of a page (orphaned-heading protection)
 - Fix: manual PDF screenshots could drift past the next section heading and appear under the wrong plugin (the intended per-section float barrier was never actually loaded)
-- Improved: architecture diagram (figure 4.1) caught up with the software — Network MIDI source/exports, MIDI 2.0 (UMP) in the ALSA tier, the full persistence tiers (autosave ping-pong, rolling backups, boot preference), and the per-hub mDNS name
 
 
 2026-07-05 — Version 6.0.0a1
