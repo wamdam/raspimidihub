@@ -3,7 +3,7 @@ PACKAGE = raspimidihub
 # 5.0.0rc1) — NOT a hyphen. The running 4.8.0+ OTA updater parses deb
 # filenames with a regex that only accepts this suffix form; a hyphen
 # (5.0.0-alpha1) makes the downloaded deb invisible to it.
-VERSION = 6.0.0a1
+VERSION = 6.0.0a2
 # Debian Version field: a pre-release suffix MUST be tilde-separated so
 # dpkg/apt sort it BELOW the final release (5.0.0~a1 << 5.0.0). A bare
 # suffix (5.0.0a1) or hyphen sorts the pre-release *above* the final
@@ -326,14 +326,43 @@ restart:
 # Override the target Pi with TARGET=http://<host>; default is
 # http://10.1.1.2 (matches the rest of the Makefile's PI_HOST).
 TARGET ?= http://10.1.1.2
+# Local-demo defaults for `make screenshots` with no TARGET override.
+SHOT_PORT ?= 8080
+VIRMIDI_DEVS ?= 4
 
+# Documentation screenshots (Playwright + headless Chromium).
+# Default (no args): spin up a throwaway local demo on this machine — real
+# ALSA sequencer + snd-virmidi virtual ports so devices appear and the
+# curated cable scenario renders — shoot it, then tear it down. No Pi needed.
+# Override to shoot an already-running instance:  make screenshots TARGET=http://10.1.1.2
 screenshots:
 	@if [ ! -x .venv/bin/playwright ]; then \
 		python3 -m venv .venv && \
 		.venv/bin/pip install playwright && \
 		.venv/bin/playwright install chromium; \
 	fi
+ifeq ($(origin TARGET),command line)
+	@echo "Screenshots against $(TARGET)"
 	.venv/bin/python scripts/screenshots/run.py --target=$(TARGET)
+else
+	@echo "Screenshots against a throwaway local demo (override: TARGET=http://host)"
+	@set -e; \
+	if ! lsmod | grep -q snd_virmidi; then \
+		echo "Loading snd-virmidi ($(VIRMIDI_DEVS) virtual ports; sudo may prompt)..."; \
+		sudo modprobe snd-virmidi midi_devs=$(VIRMIDI_DEVS) || \
+		  echo "WARNING: could not load snd-virmidi; the matrix will be empty."; \
+	fi; \
+	SD=$$(mktemp -d /tmp/rmh-screenshots.XXXXXX); \
+	trap 'kill $$DEMO_PID 2>/dev/null; rm -rf $$SD' EXIT; \
+	RASPIMIDIHUB_STATE_DIR=$$SD RASPIMIDIHUB_PORT=$(SHOT_PORT) PYTHONPATH=src:plugins \
+	  .venv/bin/python -m raspimidihub >$$SD/demo.log 2>&1 & \
+	DEMO_PID=$$!; \
+	echo "Started local demo (pid $$DEMO_PID) on :$(SHOT_PORT)"; \
+	up=0; for i in $$(seq 1 60); do sleep 0.5; \
+	  if curl -sf -o /dev/null http://127.0.0.1:$(SHOT_PORT)/; then up=1; break; fi; done; \
+	if [ $$up -ne 1 ]; then echo "demo did not come up:"; cat $$SD/demo.log; exit 1; fi; \
+	.venv/bin/python scripts/screenshots/run.py --target=http://127.0.0.1:$(SHOT_PORT)
+endif
 
 # --- Latency / jitter perf harness (stdlib only) ---
 # Operations-disturbance sweep (default) or passive soak. NEVER run the

@@ -151,6 +151,144 @@ def create_demo_connection(target: str, src_inst: dict, dst_inst: dict) -> None:
         print(f"  setup: connection create failed ({e}); skipping")
 
 
+def factory_reset_scene(target: str) -> None:
+    """Clean slate via the API — no reboot (that path only exists on the
+    appliance). Delete every plugin instance and clear every connection so
+    the demo scene is always built from the same empty starting point."""
+    instances = json.loads(api_request(target, "GET", "/plugins/instances"))
+    for inst in instances:
+        api_request(target, "DELETE", f"/plugins/instances/{inst['id']}")
+    # DELETE /api/connections/ with no id clears them all (the route is
+    # registered with a trailing slash, exact=False).
+    api_request(target, "DELETE", "/connections/")
+    print(f"  setup: factory reset — cleared {len(instances)} plugin(s) + all cables")
+
+
+# A small, legible live rig wired after the demo plugins exist, so the
+# routing screenshots always show the same cables. Endpoints:
+#   ("v", i)                = i-th virtual MIDI device, port 0
+#   ("p", type, "in"|"out") = plugin IN (port 0) / OUT (port 1)
+# Reads as: keyboard → arp → lead synth, keyboard → chords → pad synth,
+# master clock drives arp + a euclidean pattern → drums, LFO modulates lead.
+# (The virtual devices keep their kernel "Virtual Raw MIDI n-m" names —
+# snd-virmidi is not a USB device, so it has no stable id to rename against;
+# real USB MIDI gear does and can be renamed in the UI.)
+DEMO_CABLES = [
+    (("v", 0), ("p", "arpeggiator", "in")),              # Keys → Arp
+    (("p", "arpeggiator", "out"), ("v", 1)),             # Arp → Lead Synth
+    (("v", 0), ("p", "chord_generator", "in")),          # Keys → Chords
+    (("p", "chord_generator", "out"), ("v", 3)),         # Chords → Pad Synth
+    (("p", "master_clock", "out"), ("p", "arpeggiator", "in")),   # Clock → Arp
+    (("p", "master_clock", "out"), ("p", "euclidean", "in")),     # Clock → Euclid
+    (("p", "euclidean", "out"), ("v", 2)),               # Euclid → Drum Synth
+    (("p", "cc_lfo", "out"), ("v", 1)),                  # LFO → Lead Synth
+]
+
+# Scenes that get a dark-theme variant (<name>-dark.png) alongside the light
+# one. Only the shots the website (light/dark theme switch) and manual
+# actually reference — generating dark for every scene just leaves orphans.
+# Keep in sync with website/index.html's data-dark-src entries.
+DARK_SCENES = {
+    "01-routing", "01-routing-rack", "05-filter-panel", "06-device-detail",
+    "10-plugin-cc-lfo", "12-plugin-chord-generator", "13-plugin-master-clock",
+    "19-plugin-velocity-curve", "cartesian-play", "controller-mixer-8",
+    "controller-xy-4", "euclidean-play", "tracker",
+}
+
+
+def wire_demo_scenario(target: str, instances: dict[str, dict]) -> None:
+    """Create the DEMO_CABLES connections. Endpoints that can't be resolved
+    (a virtual device that isn't there because snd-virmidi wasn't loaded, or
+    a plugin that failed to create) are skipped, so this degrades cleanly."""
+    devices = json.loads(api_request(target, "GET", "/devices"))
+    virmidi = sorted(
+        (d for d in devices
+         if not (d.get("stable_id") or "").startswith("plugin-")
+         and d.get("online", True)),
+        key=lambda d: d["client_id"])
+
+    def resolve(ref):
+        if ref[0] == "v":
+            i = ref[1]
+            return (virmidi[i]["client_id"], 0) if i < len(virmidi) else None
+        _, ptype, direction = ref
+        inst = instances.get(ptype)
+        cid = resolve_client_id(target, inst) if inst else None
+        if cid is None:
+            return None
+        return (cid, 1 if direction == "out" else 0)
+
+    wired = 0
+    for src, dst in DEMO_CABLES:
+        s, d = resolve(src), resolve(dst)
+        if not s or not d:
+            continue
+        try:
+            api_request(target, "POST", "/connections",
+                        {"src_client": s[0], "src_port": s[1],
+                         "dst_client": d[0], "dst_port": d[1]})
+            wired += 1
+        except urllib.error.HTTPError as e:
+            print(f"  setup: cable {src} → {dst} failed ({e}); skipping")
+    print(f"  setup: wired {wired}/{len(DEMO_CABLES)} demo cable(s) "
+          f"({len(virmidi)} virtual MIDI device(s) present)")
+
+
+# Pitch classes for building tracker note strings (see
+# tracker_base.midi_to_note_str): natural pitches render 'C-4', sharps 'C#4'.
+_PITCH_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G",
+                "G#", "A", "A#", "B"]
+
+
+def _tracker_note(midi: int) -> str:
+    n = midi - 12
+    pitch = _PITCH_NAMES[n % 12]
+    return f"{pitch}-{n // 12}" if len(pitch) == 1 else f"{pitch}{n // 12}"
+
+
+# A short musical pattern so the Tracker screenshot shows real content, not
+# an empty grid. Track 0 (T1) = a bass line + a filter-CC sweep; track 1
+# (T2) = a melody. {track: {row: midi}} and {track: {row: (cc_num, cc_val)}}.
+_TRACKER_NOTES = {
+    0: {0: 36, 4: 36, 8: 43, 12: 36},
+    1: {0: 60, 2: 64, 4: 67, 6: 72, 8: 67, 10: 64, 12: 67, 14: 71},
+}
+_TRACKER_CC = {
+    0: {0: (74, 0x20), 4: (74, 0x50), 8: (74, 0x78), 12: (74, 0x40)},
+}
+
+
+def populate_tracker(target: str, instances: dict[str, dict]) -> None:
+    """Write a small pattern into the Tracker's live page so its play-surface
+    and config screenshots show notes + CCs. Mutates the known-good empty
+    `pages` fetched from the instance (rather than reconstructing the grid)
+    and PATCHes it back."""
+    inst = instances.get("tracker")
+    if inst is None:
+        return
+    iid = inst["id"]
+    # strict=False: the instance blob can carry raw control chars in help text.
+    data = json.loads(api_request(target, "GET", f"/plugins/instances/{iid}"),
+                      strict=False)
+    pages = data.get("params", {}).get("pages")
+    if not pages:
+        print("  setup: tracker has no pages param; skipping populate")
+        return
+    rows = pages[0]["rows"]
+    for track, notes in _TRACKER_NOTES.items():
+        for row, midi in notes.items():
+            if row < len(rows) and track < len(rows[row]["voices"]):
+                rows[row]["voices"][track].update(
+                    {"note": _tracker_note(midi), "vel": 100})
+    for track, ccs in _TRACKER_CC.items():
+        for row, (num, val) in ccs.items():
+            if row < len(rows) and track < len(rows[row]["voices"]):
+                rows[row]["voices"][track].update({"cc_num": num, "cc_val": val})
+    api_request(target, "PATCH", f"/plugins/instances/{iid}",
+                {"params": {"pages": pages}})
+    print(f"  setup: populated tracker pattern ({iid})")
+
+
 def _open_filter_panel(page) -> None:
     """Click the first lit cell in the matrix and pick 'Edit' from the
     context menu, leaving the FilterPanel overlay open."""
@@ -300,9 +438,8 @@ def build_scenes(target: str, instances: dict[str, dict]) -> list[dict]:
     """Materialise the scene list. URL paths reference the running
     Pi; client_ids are resolved per-scene from the demo instances we
     just created."""
-    # 01-routing is captured BEFORE the demo set is created — see
-    # main() — so the matrix screenshot shows the user's loaded
-    # config, not the 21-plugin demo population.
+    # 01-routing / 01-routing-rack are prepended in main() (after the demo
+    # set + cable scenario are in place), so they aren't repeated here.
     scenes: list[dict] = [
         {"name": "04-settings", "path": "/settings"},
         # 4.1.0: the Plugin Control Mappings sub-page in Settings.
@@ -533,48 +670,52 @@ def main() -> int:
 
     cfg = VIEWPORT_PRESETS[args.viewport]
 
-    # Phase 1: capture the matrix against whatever's currently loaded
-    # (the user's real config), BEFORE we wipe state for the demo
-    # plugin set. Doing this first means the routing screenshot shows
-    # a realistic instance set instead of the 21-plugin demo
-    # population. Filter applies — if the user is only running a
-    # specific scene this phase is skipped when it doesn't match.
-    pre_setup = [
-        {"name": "01-routing", "path": "/routing"},
-        # Rack view of the same routing — captured second so the matrix
-        # shot above runs while localStorage still defaults to 'matrix'
-        # (the hook flips the toggle, which then persists 'rack').
-        {"name": "01-routing-rack", "path": "/routing", "setup": _open_rack_view},
-    ]
-    if args.filter:
-        pre_setup = [s for s in pre_setup if args.filter in s["name"]]
-    if pre_setup:
-        print(f"taking {len(pre_setup)} pre-setup screenshot(s) "
-              f"(theme={args.theme}, against the loaded config)")
-        screenshot_scenes(target, pre_setup, out_dir,
-                          headless=not args.headed, preset=args.viewport,
-                          theme=args.theme, filename_suffix=args.suffix)
-
+    # Build the scene deterministically: reset to a clean slate (API only —
+    # no reboot; that path exists only on the appliance), recreate the demo
+    # plugin set, and wire the curated cable scenario. Every run then yields
+    # the same populated, wired matrix, so the routing shots are consistent
+    # across machines instead of reflecting whatever config was loaded.
     if args.skip_setup:
-        # Resolve scenes by querying live instances.
         live = json.loads(api_request(target, "GET", "/plugins/instances"))
         instances = {i["type"]: i for i in live}
     else:
+        factory_reset_scene(target)
         instances = setup_demo_plugins(target)
+        wire_demo_scenario(target, instances)
+        populate_tracker(target, instances)
 
-    scenes = build_scenes(target, instances)
+    # Routing matrix first, rack view second: the matrix shot must run while
+    # localStorage still defaults to 'matrix', before _open_rack_view flips
+    # and persists 'rack'.
+    routing = [
+        {"name": "01-routing", "path": "/routing"},
+        {"name": "01-routing-rack", "path": "/routing", "setup": _open_rack_view},
+    ]
+    scenes = routing + build_scenes(target, instances)
     if args.filter:
         scenes = [s for s in scenes if args.filter in s["name"]]
     if not scenes:
         print("error: no scenes matched", file=sys.stderr)
         return 1
 
-    print(f"taking {len(scenes)} demo-set screenshot(s) → {out_dir} "
+    # Default: light for every scene, plus a dark variant for the DARK_SCENES
+    # subset (what the website/manual reference) — one setup, both themes, so
+    # they never drift apart. An explicit --theme/--suffix forces a single
+    # custom pass instead (advanced/manual regeneration).
+    custom = args.theme != "light" or args.suffix
+    print(f"taking {len(scenes)} light screenshot(s) → {out_dir} "
           f"({args.viewport}: {cfg['viewport']['width']}x{cfg['viewport']['height']} "
           f"@ DPR{cfg['dpr']}, theme={args.theme})")
     screenshot_scenes(target, scenes, out_dir, headless=not args.headed,
                       preset=args.viewport, theme=args.theme,
                       filename_suffix=args.suffix)
+    if not custom:
+        dark = [s for s in scenes if s["name"] in DARK_SCENES]
+        if dark:
+            print(f"taking {len(dark)} dark screenshot(s) → {out_dir} (theme=dark)")
+            screenshot_scenes(target, dark, out_dir, headless=not args.headed,
+                              preset=args.viewport, theme="dark",
+                              filename_suffix="-dark")
 
     # Restore the user's saved config so the Pi is in the same
     # state it started in. Best-effort — if there is no saved
