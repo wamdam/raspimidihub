@@ -103,8 +103,12 @@ async def async_main() -> None:
     config.init_runtime_copy()
     config_ok = config.load()
 
-    # Determine web server port (80 requires root, fallback to 8080)
+    # Determine web server port (80 requires root, fallback to 8080).
+    # RASPIMIDIHUB_PORT overrides both — handy off-appliance where 8080 may
+    # already be taken (see docs/DEV-MODE.md); unused on the Pi.
     port = 80 if os.geteuid() == 0 else 8080
+    if os.environ.get("RASPIMIDIHUB_PORT"):
+        port = int(os.environ["RASPIMIDIHUB_PORT"])
     server = WebServer(port=port)
 
     # Bluetooth MIDI: unblock the radio (rfkill may have it blocked
@@ -368,12 +372,19 @@ async def async_main() -> None:
         # DHCP bug). Idempotent: only writes the keyfile when the profile
         # needs it, and also migrates the stale string `link-local=enabled`
         # that older builds wrote (NM rejects it as non-integer).
-        try:
-            from .wifi import ensure_eth0_nm_link_local
-            await asyncio.get_event_loop().run_in_executor(
-                None, ensure_eth0_nm_link_local)
-        except Exception:
-            log.warning("eth0 link-local NM setup skipped", exc_info=True)
+        # Writing /etc/NetworkManager needs root, which the appliance always
+        # has (runs as root on :80). Off-appliance (e.g. the dev demo on
+        # :8080) there is no NM eth0 profile to manage, so skip it rather
+        # than fail loudly. See docs/DEV-MODE.md.
+        if os.geteuid() == 0:
+            try:
+                from .wifi import ensure_eth0_nm_link_local
+                await asyncio.get_event_loop().run_in_executor(
+                    None, ensure_eth0_nm_link_local)
+            except Exception:
+                log.warning("eth0 link-local NM setup skipped", exc_info=True)
+        else:
+            log.info("eth0 link-local NM setup skipped (not root / off-appliance)")
 
         # Start WiFi in the saved mode. The persisted preference is
         # `wifi_mode_pref` (ap_only / wifi_for_updates / wifi_always) —

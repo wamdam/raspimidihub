@@ -24,7 +24,7 @@ ROSETUP_DEB_FILE = dist/$(ROSETUP_DEB_NAME).deb
 
 PI_HOST = user@10.1.1.2
 
-.PHONY: all clean deb deb-rosetup deploy deploy-rosetup install uninstall test test-pi run lint fmt fmt-check screenshots perf manual manual-deps manual-clean image image-release
+.PHONY: all clean deb deb-rosetup deploy deploy-rosetup install uninstall test test-pi run demo lint fmt fmt-check screenshots perf manual manual-deps manual-clean image image-release
 
 all: deb deb-rosetup
 
@@ -283,6 +283,30 @@ test-pi: deploy-src
 
 run: deploy-src
 	ssh $(PI_HOST) 'cd /tmp && PYTHONPATH=/tmp python3 -m raspimidihub'
+
+# --- Local demo run (no Pi) ------------------------------------------
+# Runs the full hub on THIS machine against the real ALSA sequencer, so
+# devices actually appear in the matrix and route (and make sound). The
+# virtual ports come from the kernel's snd-virmidi; without any hardware
+# you still get N routable IN/OUT ports to wire plugins/trackers between
+# and into a software synth. State goes to a throwaway dir. Override
+# PORT / STATE_DIR / VIRMIDI_DEVS:  make demo DEMO_PORT=8090
+# Full notes in docs/DEV-MODE.md.
+DEMO_PORT ?= 8080
+DEMO_STATE_DIR ?= $(HOME)/.raspimidihub-demo
+VIRMIDI_DEVS ?= 4
+
+demo:
+	@if [ ! -x .venv/bin/python ]; then python3 -m venv .venv; fi
+	@if ! lsmod | grep -q snd_virmidi; then \
+		echo "Loading snd-virmidi ($(VIRMIDI_DEVS) virtual ports; sudo may prompt)..."; \
+		sudo modprobe snd-virmidi midi_devs=$(VIRMIDI_DEVS) || \
+		  echo "WARNING: could not load snd-virmidi; the matrix may be empty."; \
+	fi
+	@echo "RaspiMIDIHub demo -> http://localhost:$(DEMO_PORT)   (Ctrl-C to stop)"
+	RASPIMIDIHUB_STATE_DIR=$(DEMO_STATE_DIR) \
+	RASPIMIDIHUB_PORT=$(DEMO_PORT) \
+	PYTHONPATH=src:plugins .venv/bin/python -m raspimidihub
 
 logs:
 	ssh $(PI_HOST) 'sudo journalctl -u raspimidihub -f --no-pager'

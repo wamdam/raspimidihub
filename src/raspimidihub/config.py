@@ -17,9 +17,18 @@ from pathlib import Path
 
 log = logging.getLogger(__name__)
 
-PERSISTENT_DIR = Path("/boot/firmware/raspimidihub")
+# Off-appliance dev/demo: RASPIMIDIHUB_STATE_DIR relocates all persistence
+# to an ordinary writable directory (no read-only boot partition to remount;
+# see _boot_rw). Unset on the appliance, where paths/remount are unchanged.
+_STATE_DIR_ENV = os.environ.get("RASPIMIDIHUB_STATE_DIR")
+if _STATE_DIR_ENV:
+    PERSISTENT_DIR = Path(_STATE_DIR_ENV)
+    RUNTIME_DIR = PERSISTENT_DIR / "run"
+else:
+    PERSISTENT_DIR = Path("/boot/firmware/raspimidihub")
+    RUNTIME_DIR = Path("/run/raspimidihub")
+
 PERSISTENT_CONFIG = PERSISTENT_DIR / "config.json"
-RUNTIME_DIR = Path("/run/raspimidihub")
 RUNTIME_CONFIG = RUNTIME_DIR / "config.json"
 
 # --- Backups + autosave -------------------------------------------------
@@ -53,6 +62,11 @@ def _boot_rw():
     (It blocks only the child/worker doing the write, never the loop.)
     MUST NOT be nested within one process — the second flock would wait
     on the first's open file description forever."""
+    if _STATE_DIR_ENV:
+        # Off-appliance: an ordinary writable dir, nothing to remount.
+        PERSISTENT_DIR.mkdir(parents=True, exist_ok=True)
+        yield
+        return
     RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
     lock_fd = os.open(RUNTIME_DIR / "boot-rw.lock",
                       os.O_CREAT | os.O_WRONLY, 0o600)
