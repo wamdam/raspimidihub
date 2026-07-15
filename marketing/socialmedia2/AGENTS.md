@@ -18,11 +18,34 @@ The dedupe key is computed on the raw source material (CHANGELOG entry, fact tex
 **Group related changelog entries into topics, not individual posts.**
 
 The features source uses LLM clustering to prevent repetition:
-- Parses the 50 most recent CHANGELOG entries (not all 375+)
+- Parses the **entire** CHANGELOG (all entries), so the pool isn't limited to
+  the current dev cycle — the old 50-entry cap made every feature post about
+  link-local / MIDI 2.0 / runs-on-any-computer
 - Asks the LLM to group entries into coherent topics (e.g., "Link-local IP", "MIDI 2.0", "Network MIDI")
 - Each topic contains 3-5 related entries spanning multiple versions
 - Tracks **topics** in state, not individual entries
+- The topic's dedupe key is a hash of its **member entry hashes**
+  (`_topic_id`), NOT the LLM-generated title. Hashing the title regenerated a
+  fresh id every run and defeated dedup — the direct cause of the repeated
+  link-local posts. Hash the source, not the output.
 - Renders ONE consolidated post per topic that tells the complete story
+
+### Topic Tracker: cross-cluster anti-repetition (active)
+
+`topic_tracker.py` is a second line of defense keyed on **stable keywords**
+(`link_local`, `midi_2_0`, `wifi`, `cables`, …), each with a minimum gap
+(`TOPIC_GAPS`). `run_source` calls `is_topic_recent()` before posting and
+`mark_topic()` after — so even if the LLM re-clusters the same subject under a
+new entry set (new dedupe key), the subject is still suppressed for its gap
+window. A suppressed cluster is marked announced so the source advances to a
+different topic instead of re-picking it every tick. Only tracked topics gate;
+`extract_topic()` returns `'general'` for everything else and `'general'` is
+never gated or marked (that would suppress whole sources like jokes).
+
+> Historical note: `mark_topic()` had **zero call sites** for a long time, so
+> the tracker was dead code and `is_topic_recent()` always returned False. It
+> is now wired into `run_source`. Keyword matching is whole-word (`\b`) —
+> substring matching misfired (`'ap'` inside `'shape'`).
 
 **Why topic consolidation?**
 

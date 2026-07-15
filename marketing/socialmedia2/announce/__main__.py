@@ -30,7 +30,7 @@ from .sources.midi_history import MidiHistorySource
 from .sources.quick_tips import QuickTipsSource
 from .sources.youtube import YouTubeSource
 from .state import State
-from .topic_tracker import TopicTracker
+from .topic_tracker import TopicTracker, extract_topic
 
 SOURCES = {s.name: s for s in (
     YouTubeSource(), GithubSource(), FeaturesSource(), 
@@ -45,7 +45,8 @@ def build_publishers() -> list:
     return [p for p in (MastodonPoster(), DiscordPoster()) if p.configured()]
 
 
-def run_source(name, *, do_post, force, state, llm, publishers) -> int:
+def run_source(name, *, do_post, force, state, llm, publishers,
+               topic_tracker=None) -> int:
     src = SOURCES[name]
     # Restrict to the publishers this source is allowed to post to.
     allowed = config.SOURCE_TARGETS.get(name)
@@ -77,6 +78,30 @@ def run_source(name, *, do_post, force, state, llm, publishers) -> int:
                   f"{e.__class__.__name__}: {e} — skipping it.")
             rc = 1
             continue
+        # Stamp the originating source so it's identifiable on the timeline.
+        tag = config.SOURCE_TAGS.get(name)
+        if tag and tag not in post.text:
+            post.text = f"{post.text}\n\n{tag}"
+
+        # Cross-cluster anti-repetition. Even with source-based dedup keys, the
+        # LLM can re-cluster the same subject (e.g. link-local) under a fresh
+        # entry set and slip past. The topic tracker keys on stable keywords, so
+        # it catches the subject regardless of clustering. 'general' means "not a
+        # tracked topic" — never gate or mark those (that would suppress whole
+        # sources like jokes on a shared 'general' bucket).
+        topic = extract_topic(post.text, name)
+        tracked = topic != 'general'
+        if (topic_tracker is not None and tracked and not force
+                and topic_tracker.is_topic_recent(name, topic)):
+            print(f"↷ [{name}] topic '{topic}' posted recently "
+                  f"— skipping to avoid repetition.")
+            if do_post and not force:
+                # Mark announced so the source advances to a different topic
+                # next run instead of re-picking this one every tick. Only when
+                # really running — dry-run must never mutate state.
+                state.mark(name, post.dedupe_key)
+            continue
+
         print("=" * 64)
         print(f"[{name}] {post.dedupe_key}"
               + (f"  (+image {len(post.media_bytes)}B)" if post.media_bytes else ""))
@@ -109,6 +134,11 @@ def run_source(name, *, do_post, force, state, llm, publishers) -> int:
         # Mark announced only once every allowed target has it.
         if not force and all(p.name in state.delivered(name, key) for p in pubs):
             state.mark(name, key)
+            # Record the topic so the same subject is suppressed for its gap
+            # window (topic_tracker.TOPIC_GAPS). Without this the tracker's
+            # is_topic_recent() never fires — the bug that let it go unused.
+            if topic_tracker is not None and tracked:
+                topic_tracker.mark_topic(name, topic)
         print()
     return rc
 
@@ -239,10 +269,14 @@ def main():
         return 0
 
     names = list(SOURCES) if args.source == 'all' else ([args.source] if args.source else [])
+    topic_tracker = TopicTracker()
     rc = 0
     for name in names:
         rc |= run_source(name, do_post=args.post, force=args.force,
-                         state=state, llm=llm, publishers=publishers)
+                         state=state, llm=llm, publishers=publishers,
+                         topic_tracker=topic_tracker)
+    if not args.force:
+        topic_tracker.save()
     state.save()
     sys.exit(rc)
 

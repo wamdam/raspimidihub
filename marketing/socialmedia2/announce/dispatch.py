@@ -39,7 +39,8 @@ def main():
         print(f"-> {name}: due (category: {category}, interval: {interval}s)")
         
         run_source(name, do_post=True, force=False,
-                   state=state, llm=llm, publishers=publishers)
+                   state=state, llm=llm, publishers=publishers,
+                   topic_tracker=topic_tracker)
         state.touch(name)
         ran.append(name)
     

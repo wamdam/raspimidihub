@@ -84,6 +84,27 @@ SOURCE_TARGETS = {
     # 'youtube' / 'github' omitted -> all configured publishers
 }
 
+# --- Per-source hashtag (source marker + discovery) -----------------------
+# A short hashtag appended to every post so the originating source ("which
+# tool made this") is identifiable at a glance on the timeline — this is the
+# only way to tell, after the fact, whether a post came from `features`
+# (changelog) or `manual-features` (the manual DB), which otherwise look
+# identical. Doubles as a Mastodon discovery tag. Keep these 1:1 with source
+# names so they stay debuggable; edit freely. A source not listed gets no tag.
+SOURCE_TAGS = {
+    'features': '#changelog',        # changelog-clustered "what changed"
+    'manual-features': '#feature',   # manual feature spotlight
+    'evergreen': '#feature',
+    'github': '#release',
+    'youtube': '#video',
+    'jokes': '#midijoke',
+    'midi_facts': '#midifact',
+    'midi_history': '#midihistory',
+    'quick_tips': '#miditip',
+    'creative_uses': '#midiidea',
+    'behind_the_code': '#devlog',
+}
+
 # --- Schedule (seconds) for the dispatch tick -----------------------------
 SCHEDULE = {
     'youtube': int(_env('SOCIAL_INTERVAL_YOUTUBE', 3600)),     # 1h

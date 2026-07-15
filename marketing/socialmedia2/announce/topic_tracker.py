@@ -31,6 +31,9 @@ class TopicTracker:
         'network_midi': 7 * 86400,       # 7 days
         'link_local': 10 * 86400,        # 10 days
         'wifi': 7 * 86400,               # 7 days
+        'local_run': 14 * 86400,         # 14 days — "runs on any computer" / make demo
+        'rack_view': 10 * 86400,         # 10 days
+        'mirroring': 10 * 86400,         # 10 days — two-hub mirroring / RTP-MIDI
         'bug_fix': 5 * 86400,            # 5 days
     }
     
@@ -85,38 +88,59 @@ class TopicTracker:
         return stats
 
 
+def _has(text: str, words) -> bool:
+    """Whole-word keyword match. Substring matching would misfire badly once
+    the tracker is live — e.g. 'ap' hits inside 'shape'/'capture', 'din' inside
+    'reading' — silently suppressing unrelated posts. Word boundaries fix that.
+    Keywords are escaped so '169.254' / 'midi 2.0' match literally."""
+    import re
+    return any(re.search(rf'\b{re.escape(w)}\b', text) for w in words)
+
+
 def extract_topic(text: str, source: str) -> str:
     """Extract topic from text based on keywords."""
     text_lower = text.lower()
-    
+
     if source == 'midi_history':
-        if any(w in text_lower for w in ['dave smith', '1981', '1982', 'kakehashi', 'namw']):
+        if _has(text_lower, ['dave smith', 'sequential', 'prophet', 'jupiter',
+                             'roland', '1981', '1982', '1983', 'kakehashi', 'namw']):
             return 'midi_creation'
-        if any(w in text_lower for w in ['midi 2.0', 'midi2', '14-bit', 'per-note']):
+        if _has(text_lower, ['midi 2.0', 'midi2', '14-bit', 'per-note']):
             return 'midi_2_0'
-        if any(w in text_lower for w in ['5-pin', 'din', 'connector', 'opto-isolator']):
+        if _has(text_lower, ['5-pin', 'din', 'connector', 'opto-isolator']):
             return 'midi_hardware'
-        if any(w in text_lower for w in ['specification', 'spec', '44 pages']):
+        if _has(text_lower, ['specification', 'spec', '44 pages']):
             return 'midi_specification'
-    
+
     elif source == 'quick_tips':
-        if 'cable' in text_lower:
+        if _has(text_lower, ['cable', 'cables']):
             return 'cables'
-        if any(w in text_lower for w in ['thru', 'routing', 'merge', 'filter']):
+        if _has(text_lower, ['thru', 'routing', 'merge', 'filter']):
             return 'routing'
-        if any(w in text_lower for w in ['troubleshoot', 'error', 'problem', 'fix']):
+        if _has(text_lower, ['troubleshoot', 'error', 'problem', 'fix']):
             return 'troubleshooting'
-        if any(w in text_lower for w in ['clock', 'timing', 'ppqn', 'drift']):
+        if _has(text_lower, ['clock', 'timing', 'ppqn', 'drift']):
             return 'timing'
-    
+
     elif source == 'features':
-        if any(w in text_lower for w in ['network midi', 'network-midi']):
-            return 'network_midi'
-        if any(w in text_lower for w in ['link-local', '169.254', '169.254.x.x']):
+        if _has(text_lower, ['link-local', '169.254', '169.254.x.x']):
             return 'link_local'
-        if any(w in text_lower for w in ['wifi', 'ap', 'access point']):
+        if _has(text_lower, ['midi 2.0', 'midi2', 'ump', '32-bit', '14-bit',
+                             'midi-ci', 'per-note']):
+            return 'midi_2_0'
+        if _has(text_lower, ['make demo', 'any computer', 'runs on any',
+                             'without a raspberry pi', 'without needing a raspberry pi']):
+            return 'local_run'
+        if _has(text_lower, ['rack view', '19-inch rack', 'rack layout']):
+            return 'rack_view'
+        if _has(text_lower, ['mirror', 'mirroring', 'two-hub', 'dual-hub',
+                             'rtp-midi', 'redundancy']):
+            return 'mirroring'
+        if _has(text_lower, ['network midi', 'network-midi']):
+            return 'network_midi'
+        if _has(text_lower, ['wifi', 'ap', 'access point']):
             return 'wifi'
-        if any(w in text_lower for w in ['fix', 'bug', 'issue', 'problem']):
+        if _has(text_lower, ['fix', 'bug', 'issue', 'problem']):
             return 'bug_fix'
-    
+
     return 'general'
