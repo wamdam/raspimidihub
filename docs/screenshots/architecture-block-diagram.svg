@@ -104,7 +104,7 @@
     <rect class="box web" x="700" y="200" width="260" height="100"/>
     <text x="830" y="225" text-anchor="middle" class="h">HTTP / SSE server</text>
     <text x="830" y="245" text-anchor="middle" class="sub">Python stdlib asyncio HTTP</text>
-    <text x="830" y="263" text-anchor="middle" class="sub">REST API  --  api.py</text>
+    <text x="830" y="263" text-anchor="middle" class="sub">REST API  --  api/ (per-domain)</text>
     <text x="830" y="281" text-anchor="middle" class="sub">SSE per-view subscriptions</text>
 
     <line x1="830" y1="160" x2="830" y2="198" stroke="#b04a2a" marker-end="url(#arrow)" class="stroke-dash"/>

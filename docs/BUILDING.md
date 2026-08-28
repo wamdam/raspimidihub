@@ -146,7 +146,7 @@ raspimidihub/
 │   ├── __init__.py          # Version
 │   ├── __main__.py          # Entry point
 │   ├── alsa_seq.py          # ALSA sequencer ctypes bindings
-│   ├── api.py               # REST API routes
+│   ├── api/                 # REST API routes (one module per domain)
 │   ├── config.py            # Configuration persistence
 │   ├── device_id.py         # Stable USB device identification
 │   ├── led.py               # Pi LED control

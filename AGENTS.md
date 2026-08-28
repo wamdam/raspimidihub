@@ -8,7 +8,7 @@ which agent or tool you are.
 
 A running RaspiMIDIHub serves its own live API reference. To learn what
 endpoints exist, **fetch the manifest from the device** rather than
-reading `src/raspimidihub/api.py`:
+reading the REST route modules under `src/raspimidihub/api/`:
 
 - `http://<hub>/api/routes.json` — every route as JSON: `method`, `path`,
   `match` (exact vs prefix), `summary`, and (for handlers that read one)
@@ -29,7 +29,8 @@ alternative body shapes, don't mark required-vs-optional, say nothing
 about the *response* shape, and are empty for handlers that delegate.
 When they're not enough — or you need the response — open the route's
 `source` `file:line` directly instead of grepping. Don't re-derive the
-endpoint list by reading `api.py`; that's what the manifest is for.
+endpoint list by reading the `api/` route modules; that's what the
+manifest is for.
 
 **Keeping it in sync (applies to every future coding session).** The
 manifest is built by `WebServer.api_manifest()` in
