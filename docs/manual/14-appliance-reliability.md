@@ -21,6 +21,12 @@ deb -- run a millisecond remount-rw / write / `sync` / remount-ro
 cycle; between operations both filesystems are ro, so a power yank
 cannot hit a half-written file. Root stays read-only throughout.
 
+Settings → **Sys Info** shows the root filesystem's live state —
+`readonly` in steady state, `read/write` only while a write
+operation is in flight. A `read/write` that persists while idle
+means a remount-ro failed and the protection is lost; the hub logs
+the failure, and the `ro` command below restores the state.
+
 For maintenance windows that need root writes:
 
 ```bash

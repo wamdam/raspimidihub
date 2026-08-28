@@ -917,6 +917,10 @@ function SettingsSysInfo({ showToast, isUpgrading }) {
                         <div class="value" style=${c.pct >= 85 ? 'color:var(--danger,#e94560)' : ''}>${c.pct}%</div>
                     </div>`)}
                     <div class="stat"><div class="label">RAM</div><div class="value">${sys.ram.available_mb || '?'} / ${sys.ram.total_mb || '?'} MB</div></div>
+                    ${sys.fs_mode != null && html`<div class="stat" title="State of the hub's root filesystem. The appliance keeps it readonly and remounts it read/write only for the brief window of a write operation (save, backup, update). 'read/write' while idle means the read-only remount failed and the protection is lost.">
+                        <div class="label">Filesystem</div>
+                        <div class="value" style=${sys.fs_mode === 'read/write' ? 'color:var(--warn,#ff9800)' : ''}>${sys.fs_mode}</div>
+                    </div>`}
                     ${sys.alsa_ports && html`<div class="stat" title="ALSA sequencer ports held by the hub's client. Every filtered or mapped connection uses two; the kernel caps a client at ${sys.alsa_ports.max}. At the ceiling, new filters can no longer be created.">
                         <div class="label">ALSA ports</div>
                         <div class="value" style=${sys.alsa_ports.used >= sys.alsa_ports.max * 0.8 ? 'color:var(--danger,#e94560)' : ''}>${sys.alsa_ports.used} / ${sys.alsa_ports.max}</div>
@@ -1558,7 +1562,7 @@ function SettingsNetworkMidi({ showToast }) {
 // --- Hub + dispatcher -----------------------------------------------
 
 const SECTIONS = [
-    { key: 'sys-info',    title: 'Sys Info',                hint: 'Hostname, CPU, RAM, latency, Reload, Reboot' },
+    { key: 'sys-info',    title: 'Sys Info',                hint: 'Hostname, Filesystem, CPU, RAM, latency, Reload, Reboot' },
     { key: 'network',     title: 'Network',                 hint: 'WiFi mode, AP password, USB tether, Ethernet' },
     { key: 'midi',        title: 'MIDI',                    hint: 'Default routing for new devices' },
     { key: 'display',     title: 'Display',                 hint: 'MIDI activity bar, sounds, scroll-assist, density' },

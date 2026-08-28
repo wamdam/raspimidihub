@@ -31,11 +31,11 @@ The JSON shape:
   "routes": [
     {"method": "GET", "path": "/api/system", "match": "exact",
      "summary": "Hub status, stats, versions.",
-     "source": "raspimidihub/api/system.py:30"},
+     "source": "api/system.py:46"},
     {"method": "PATCH", "path": "/api/connections/", "match": "prefix",
      "summary": "Update a connection's channel / message-type filter.",
      "params": {"body": ["channel_mask", "msg_types"], "path_param": true},
-     "source": "raspimidihub/api/connections.py:242"}
+     "source": "api/connections.py:242"}
   ],
   "sse_events": [
     {"event": "midi-activity", "summary": "A MIDI message passed through a monitored port."}

@@ -15,6 +15,22 @@ from ._ctx import ApiContext
 log = logging.getLogger(__name__)
 
 
+def parse_root_fs_mode(mounts_text: str) -> str | None:
+    """Root-filesystem state from `/proc/mounts` content.
+
+    Returns ``"read/write"`` or ``"readonly"``; ``None`` when there is
+    no ``/`` mount entry. Pure in its input so tests can feed synthetic
+    mount tables. The match is on the exact mountpoint ``/`` (field 2),
+    so a ``/root`` or ``/boot`` entry never counts; the mode is the
+    ``rw``/``ro`` option token, not a substring of the options string.
+    """
+    for line in mounts_text.splitlines():
+        parts = line.split()
+        if len(parts) >= 4 and parts[1] == "/":
+            return "read/write" if "rw" in parts[3].split(",") else "readonly"
+    return None
+
+
 def register_system(ctx: ApiContext) -> None:
     """Register the system-level routes."""
     server = ctx.server
@@ -80,6 +96,17 @@ def register_system(ctx: ApiContext) -> None:
         except Exception:
             pass
 
+        # Root-fs state (the rosetup hardening, manual ch. 14): steady
+        # state is readonly; writers remount rw only for the brief
+        # window of a save/backup/update. Surfacing it live makes a
+        # failed remount-ro visible in the UI instead of only in
+        # `mount` output.
+        fs_mode = None
+        try:
+            fs_mode = parse_root_fs_mode(Path("/proc/mounts").read_text())
+        except Exception:
+            pass
+
         # ALSA port budget of the hub's own seq client. The kernel caps
         # a client at 254 ports and every filtered/mapped connection
         # holds two, so an approaching ceiling must be VISIBLE — at the
@@ -130,7 +157,7 @@ def register_system(ctx: ApiContext) -> None:
             "hostname": hostname, "ap_ssid": ap_ssid, "version": __version__,
             "build_token": server._build_token,
             "ip_addresses": ips, "cpu_temp_c": temp, "ram": ram,
-            "uptime_seconds": uptime, "load1": load1,
+            "uptime_seconds": uptime, "load1": load1, "fs_mode": fs_mode,
             "cpu_percent": server._cpu_percent,
             "cpu_cores": cpu_cores,
             "sse_per_sec": server._sse_per_sec,

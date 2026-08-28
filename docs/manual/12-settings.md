@@ -7,7 +7,7 @@ last sub-page across tab switches.
 
 | Sub-page | What lives there |
 |---|---|
-| **Sys Info** | Live system stats (version, CPU, RAM, latency, IPs), **Reload App**, **Reboot Pi**, **Factory Reset** |
+| **Sys Info** | Live system stats (version, filesystem, CPU, RAM, latency, IPs), **Reload App**, **Reboot Pi**, **Factory Reset** |
 | **Network** | WiFi card with mode picker + home / AP credentials, USB-tether status, Ethernet config |
 | **MIDI** | Default routing for newly-plugged-in devices (all-to-all / disconnected — **disconnected by default**) |
 | **Display** | Per-device browser preferences — activity bar, knob/wheel tick sounds, scroll-assist FABs, layout density |

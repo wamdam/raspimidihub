@@ -6,6 +6,8 @@ hashes. Tags: Added, Improved, Fix, Changed, Removed.
 
 Unreleased
 
+- Added: Settings → Sys Info now shows the root filesystem's live state (`readonly` / `read/write`) — the root is remounted read/write only for the brief window of a write operation, so a `read/write` that persists while idle makes a failed read-only remount visible at a glance (highlighted amber)
+
 
 2026-08-28 — Version 6.0.0a5
 
