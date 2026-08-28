@@ -123,12 +123,14 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
     register_updates(ctx)
     register_config_routes(ctx)
     register_network(ctx)
-    if wifi is None:
-        # Legacy behaviour preserved verbatim from the monolith: the
-        # plugins routes sat AFTER the wifi block's `if wifi is None:
-        # return` guard, so register_api() without a WifiManager never
-        # registered them. The appliance always has a WifiManager, so
-        # this path is latent — kept exactly as it was.
-        return
+    # register_wifi() is a no-op without a WifiManager; the plugin
+    # routes are registered unconditionally — in the old monolith they
+    # sat after the wifi block's `if wifi is None: return` and would
+    # have been skipped on a WiFi-less call (off-appliance / dev
+    # mode). The appliance and `make demo` always pass a live
+    # (possibly inert) WifiManager, so that path was unreachable — but
+    # plugins have nothing to do with WiFi, so they no longer couple
+    # to it: a no-WiFi registration gets the full plugin API and
+    # simply has no /api/wifi routes.
     register_wifi(ctx)
     register_plugins(ctx)
