@@ -6,6 +6,13 @@ hashes. Tags: Added, Improved, Fix, Changed, Removed.
 
 Unreleased
 
+
+2026-08-28 — Version 6.0.0a7
+
+One fix, for anyone performing on the Euclidean or Arpeggiator play
+surfaces: a saved set no longer resets to the factory defaults after
+a reboot or Load.
+
 - Fix: **Euclidean / Arpeggiator settings reset to defaults after a reboot or Load.** When the active pattern slot wasn't the first one, restoring a saved config replayed the parameters in save order — the slot selection landed before the 8-slot pattern bank, so switching to it loaded the still-factory-default bank and wrote the whole play surface (Root / Scale, Steps, Pulses, the step grid, …) back to its out-of-the-box values (C major, 4 pulses). The restore now writes the saved values in full before triggering any parameter side effects, so the surface comes back exactly as it was saved; the 8 slots themselves were always stored correctly, which is why tapping the slot back brought the settings up again
 
 
