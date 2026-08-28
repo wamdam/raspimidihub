@@ -7,6 +7,18 @@ hashes. Tags: Added, Improved, Fix, Changed, Removed.
 Unreleased
 
 
+2026-08-28 — Version 6.0.0a5
+
+Maintenance release — no user-visible behaviour changes. The REST API
+layer moved out of one 2500-line function into per-domain modules, the
+event-loop plumbing uses Python 3.12's explicit running-loop API, and
+failed update installs now leave a reason in the hub log.
+
+- Improved (internal): the REST API layer is split into per-domain modules; every endpoint, its summary, and the live /docs + /api/routes.json reference are unchanged
+- Improved (internal): the event-loop plumbing uses the explicit running-loop API (get_running_loop) instead of the deprecated implicit form
+- Improved: a failed update install — a bad or missing release .deb, or the read-only root-filesystem remount failing — now logs the reason (return code + output tail) instead of failing silently
+
+
 2026-08-10 — Version 6.0.0a4
 
 One fix, for anyone who performs with the Controller's drop buttons. A

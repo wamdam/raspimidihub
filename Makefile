@@ -3,7 +3,7 @@ PACKAGE = raspimidihub
 # 5.0.0rc1) — NOT a hyphen. The running 4.8.0+ OTA updater parses deb
 # filenames with a regex that only accepts this suffix form; a hyphen
 # (5.0.0-alpha1) makes the downloaded deb invisible to it.
-VERSION = 6.0.0a4
+VERSION = 6.0.0a5
 # Debian Version field: a pre-release suffix MUST be tilde-separated so
 # dpkg/apt sort it BELOW the final release (5.0.0~a1 << 5.0.0). A bare
 # suffix (5.0.0a1) or hyphen sorts the pre-release *above* the final
@@ -32,7 +32,7 @@ all: deb deb-rosetup
 
 deb: $(DEB_FILE)
 
-$(DEB_FILE): src/raspimidihub/*.py src/raspimidihub/plugin_host/*.py src/raspimidihub/runtime/*.py src/raspimidihub/static/*.* $(wildcard src/raspimidihub/static/*/*.*) plugins/*/*.py plugins/*/*.svg systemd/raspimidihub.service systemd/raspimidihub-hostapd.service udev/90-raspimidihub.rules debian/postinst debian/postrm debian/copyright CHANGELOG.txt
+$(DEB_FILE): src/raspimidihub/*.py src/raspimidihub/api/*.py src/raspimidihub/plugin_host/*.py src/raspimidihub/runtime/*.py src/raspimidihub/static/*.* $(wildcard src/raspimidihub/static/*/*.*) plugins/*/*.py plugins/*/*.svg systemd/raspimidihub.service systemd/raspimidihub-hostapd.service udev/90-raspimidihub.rules debian/postinst debian/postrm debian/copyright CHANGELOG.txt
 	@# Belt-and-braces: fail the build if Makefile VERSION and the
 	@# Python __version__ have drifted. The Python value is what the
 	@# header badge in the UI shows, and 3.0.0a2 shipped with it stuck
@@ -54,7 +54,7 @@ $(DEB_FILE): src/raspimidihub/*.py src/raspimidihub/plugin_host/*.py src/raspimi
 	@mkdir -p $(BUILD_DIR)/usr/local/bin
 	@mkdir -p $(BUILD_DIR)/usr/share/doc/$(PACKAGE)
 	cp src/raspimidihub/*.py $(BUILD_DIR)/usr/lib/python3/dist-packages/raspimidihub/
-	@for sub in plugin_host runtime; do \
+	@for sub in api plugin_host runtime; do \
 		if [ -d src/raspimidihub/$$sub ]; then \
 			mkdir -p $(BUILD_DIR)/usr/lib/python3/dist-packages/raspimidihub/$$sub; \
 			cp src/raspimidihub/$$sub/*.py $(BUILD_DIR)/usr/lib/python3/dist-packages/raspimidihub/$$sub/; \
