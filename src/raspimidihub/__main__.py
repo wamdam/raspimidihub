@@ -312,7 +312,7 @@ async def async_main() -> None:
         plugin_host.discover_plugins()
 
         # Wire plugin display outputs to SSE (called from plugin threads)
-        _loop = asyncio.get_event_loop()
+        _loop = asyncio.get_running_loop()
         def _on_plugin_display(instance_id, name, value):
             _loop.call_soon_threadsafe(
                 asyncio.ensure_future,
@@ -379,7 +379,7 @@ async def async_main() -> None:
         if os.geteuid() == 0:
             try:
                 from .wifi import ensure_eth0_nm_link_local
-                await asyncio.get_event_loop().run_in_executor(
+                await asyncio.get_running_loop().run_in_executor(
                     None, ensure_eth0_nm_link_local)
             except Exception:
                 log.warning("eth0 link-local NM setup skipped", exc_info=True)

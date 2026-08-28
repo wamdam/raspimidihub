@@ -466,7 +466,7 @@ class UpdateFetcher:
                   *, version_label: str = "") -> Any:
         """Execute `work` while ensuring internet access. Returns whatever
         `work` returns. Raises NoInternetError if no path to GitHub."""
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         log.info("UpdateFetcher.run start (label=%s, current wifi mode=%s, "
                  "wifi_mode_pref=%s)",
                  version_label or "-", self.wifi.mode,
@@ -547,7 +547,7 @@ class UpdateFetcher:
 
     async def _transient_wifi_path(self, work, ssid: str, password: str,
                                     version_label: str):
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         log.info("Switching to client mode (SSID=%s)", ssid)
         write_status({"step": "switching-to-client", "version": version_label,
                       "ssid": ssid})
@@ -608,7 +608,7 @@ class UpdateFetcher:
 
     async def _switch_to_ap(self) -> None:
         wifi_cfg = self.config.wifi
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         try:
             await loop.run_in_executor(
                 None, self.wifi.start_ap,
@@ -659,7 +659,7 @@ async def download_newer_releases(current_version: str,
         await fetcher.run(lambda: download_newer_releases(
             __version__, include_prereleases=cfg["include_prereleases"]))
     """
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     log.info("download_newer_releases: current=%s prereleases=%s, fetching list...",
              current_version, include_prereleases)
     write_status({"step": "fetching-release-list"})

@@ -276,7 +276,7 @@ class ExportedSession:
     async def start(self, device) -> None:
         """Bind sockets, create+subscribe ALSA ports, register mDNS.
         `device` is the engine's MidiDevice for the exported client."""
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         alsa = self._manager.alsa
         self.tx_port = alsa.create_port(f"tx:{self.stable_id}", writable=True)
         self.rx_port = alsa.create_port(f"rx:{self.stable_id}", readable=True)
@@ -570,7 +570,7 @@ class MirroredSession:
     async def start(self) -> None:
         """Bind a local port pair, run the two-phase invitation, then
         surface the remote device as a local ALSA client."""
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         self.state = "connecting"
         _, self._ctrl_transport, self._data_transport = \
             await _bind_port_pair(loop, self.on_control, self.on_data)
@@ -596,7 +596,7 @@ class MirroredSession:
 
     async def _invite(self, transport, remote) -> None:
         """Send IN and await the OK on one port (control, then data)."""
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         for _attempt in range(self.HANDSHAKE_RETRIES):
             self._ok_future = loop.create_future()
             transport.sendto(
@@ -631,7 +631,7 @@ class MirroredSession:
         self._ctrl_transport = self._data_transport = None
         if self._alsa:
             try:
-                asyncio.get_event_loop().remove_reader(self._alsa.fileno())
+                asyncio.get_running_loop().remove_reader(self._alsa.fileno())
             except (OSError, ValueError, RuntimeError):
                 pass
             self._manager.unregister_mirror_device(self.stable_id)
@@ -889,7 +889,7 @@ class NetworkMidiManager:
 
         from .alsa_seq import AlsaSeq
 
-        self._loop = asyncio.get_event_loop()
+        self._loop = asyncio.get_running_loop()
         self._aiozc = AsyncZeroconf(ip_version=IPVersion.V4Only)
         self._alsa = AlsaSeq("NetworkMIDI", default_ports=False)
         self._loop.add_reader(self._alsa.fileno(), self._on_alsa_readable)
@@ -934,7 +934,7 @@ class NetworkMidiManager:
         self._exports.clear()
         if self._alsa:
             try:
-                asyncio.get_event_loop().remove_reader(self._alsa.fileno())
+                asyncio.get_running_loop().remove_reader(self._alsa.fileno())
             except (OSError, ValueError):
                 pass
             self._alsa.close()
@@ -1491,7 +1491,7 @@ class NetworkMidiManager:
             await asyncio.sleep(0.5)
             await self._server.send_sse("network-midi-changed", {})
         try:
-            self._notify_task = asyncio.get_event_loop().create_task(_send())
+            self._notify_task = asyncio.get_running_loop().create_task(_send())
         except RuntimeError:
             pass  # no loop (tests constructing the manager standalone)
 

@@ -154,7 +154,7 @@ class LedController:
         # a Pi); under heavy MIDI input the per-blink writes were ~5%
         # of the asyncio loop's CPU budget. Off-load each write to the
         # default thread executor so the loop just pays the dispatch.
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         try:
             await loop.run_in_executor(None, self._write, "none", "0")
             await asyncio.sleep(0.03)
@@ -165,7 +165,7 @@ class LedController:
 
     async def _clock_pulse_cycle(self) -> None:
         """Longer, gentler off-on for clock beat — looks like breathing."""
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         try:
             await loop.run_in_executor(None, self._write, "none", "0")
             await asyncio.sleep(0.08)

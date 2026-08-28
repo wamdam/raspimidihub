@@ -744,7 +744,7 @@ no-hosts
         `start_client` raising — the latter happens when an underlying
         subprocess (nmcli, ip, ...) times out unexpectedly. The function
         name promises a fallback; honour it on every error path."""
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         try:
             success = await loop.run_in_executor(
                 None, self.start_client, ssid, password)

@@ -927,7 +927,7 @@ class MidiEngine:
             raise RuntimeError("Engine not started")
 
         self._running = True
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         fd = self._seq.fileno()
         readable = asyncio.Event()
         loop.add_reader(fd, readable.set)

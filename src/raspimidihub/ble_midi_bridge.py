@@ -470,7 +470,7 @@ class _BleDevice:
         # this, our ALSA seq client stays around indefinitely and the
         # device shows as still online.
         self._dev_props = dev_props
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
 
         def _on_dev_props(iface, changed, invalidated):
             if iface != "org.bluez.Device1":
@@ -610,7 +610,7 @@ class _BleDevice:
                 # closure as a default arg to dodge B023 — without it,
                 # the lambda would resolve `fd` lazily on each call
                 # and break if the outer loop reassigned it.
-                loop = asyncio.get_event_loop()
+                loop = asyncio.get_running_loop()
                 ready = await loop.run_in_executor(
                     None, lambda f=fd: select.select([f], [], [], 0.05))
                 if not ready[0]:

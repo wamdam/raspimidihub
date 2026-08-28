@@ -151,7 +151,7 @@ async def wifi_watchdog(wifi, config, server) -> None:
             if fail_count >= WIFI_FAIL_THRESHOLD:
                 log.warning("WiFi connection lost, falling back to AP mode")
                 wifi_cfg = config.wifi
-                loop = asyncio.get_event_loop()
+                loop = asyncio.get_running_loop()
                 await loop.run_in_executor(
                     None, wifi.start_ap,
                     wifi_cfg.get("ap_ssid", ""),

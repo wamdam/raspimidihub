@@ -82,7 +82,7 @@ class BluetoothMidi:
         if self._scanning:
             return []
         self._scanning = True
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         try:
             return await loop.run_in_executor(None, self._scan_sync, timeout)
         finally:
@@ -141,7 +141,7 @@ class BluetoothMidi:
 
     async def pair(self, address: str) -> bool:
         """Pair, trust, and connect a BLE-MIDI device."""
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         ok = await loop.run_in_executor(None, self._pair_sync, address)
         if ok and self.ble_bridge:
             name = self._get_device_name(address)
@@ -189,7 +189,7 @@ class BluetoothMidi:
         if self.ble_bridge:
             name = self._get_device_name(address)
             return await self.ble_bridge.start_bridge(address, name)
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, self._connect_sync, address)
 
     def _connect_sync(self, address: str) -> bool:
@@ -206,7 +206,7 @@ class BluetoothMidi:
         """Disconnect a device (keeps pairing)."""
         if self.ble_bridge:
             await self.ble_bridge.stop_bridge(address)
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
 
         def _do():
             try:
@@ -221,7 +221,7 @@ class BluetoothMidi:
         """Remove pairing for a device."""
         if self.ble_bridge:
             await self.ble_bridge.stop_bridge(address)
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
 
         def _do():
             try:
@@ -237,7 +237,7 @@ class BluetoothMidi:
 
     async def get_paired_devices(self) -> list[dict]:
         """List paired BLE-MIDI devices with connection state."""
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, self._get_paired_sync)
 
     async def restore_connected_bridges(self) -> None:
@@ -259,7 +259,7 @@ class BluetoothMidi:
         """
         if not self.ble_bridge:
             return
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         try:
             paired = await loop.run_in_executor(
                 None, self._list_paired_midi_sync)
