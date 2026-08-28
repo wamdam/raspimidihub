@@ -151,9 +151,17 @@ unchanged.
 ## Python dependencies
 
 The user-level rule from `~/.claude/CLAUDE.md` -- add new Python
-packages to `requirements.txt` (this project uses
-`pyproject.toml` `optional-dependencies`) and install into the
-local `.venv`, never globally -- applies here unchanged.
+packages to the project's dependency declaration and install them
+into the local `.venv`, never globally -- applies here unchanged.
+Note the project-specific shape of that rule: there is **no
+`pyproject.toml` and no top-level `requirements.txt`** in this repo.
+Runtime Python/OS packages are declared in `debian/control`
+(`Depends:` for hard requirements such as `python3-zeroconf`,
+`Recommends:` for optional features such as `python3-dbus-next`).
+A new third-party import must land there so the deb (and hence the
+appliance image) pulls it — `scripts/install.sh` just installs the
+deb, it carries no separate package list. For local development,
+`pip install` into the repo's `.venv`, never globally.
 
 ## Config persistence, autosave & backups (design decisions)
 
