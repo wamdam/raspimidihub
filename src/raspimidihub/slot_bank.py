@@ -91,10 +91,17 @@ def record_edit(plugin, snapshot_names: list[str],
     update. Writes the new value into the active slot's snapshot so
     the bank stays in sync with live state. No-op for params outside
     the snapshot set, and a no-op while a slot is mid-load (the load
-    path sets `_loading_slot` to suppress feedback edits)."""
+    path sets `_loading_slot` to suppress feedback edits). Also a
+    no-op while the host is restoring a saved config
+    (`_restoring_params`): the replay is not a user edit, the bank
+    already carries the saved values, and the replay order can leave
+    `active_slot` at its pre-restore value mid-pass — re-recording
+    would stamp the restored live values onto the wrong slot."""
     if name not in snapshot_names:
         return
     if getattr(plugin, "_loading_slot", False):
+        return
+    if getattr(plugin, "_restoring_params", False):
         return
     pv = plugin._param_values
     slots = pv.get("pattern_slots")

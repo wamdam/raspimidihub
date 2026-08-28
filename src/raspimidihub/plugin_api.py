@@ -787,6 +787,13 @@ class PluginBase:
         # Empty for ordinary plugins; ControllerBase populates it in
         # on_start from its own LayoutGrid + drop-state names.
         self.transient_params: set[str] = set()
+        # True only while the host is replaying a saved config
+        # (restore_instances) onto this instance. Not a user edit:
+        # param-side side effects that would re-record live values
+        # into a pattern bank (slot_bank.record_edit) must no-op for
+        # the duration — the bank already carries the saved values,
+        # and the replay order can differ from the save order.
+        self._restoring_params = False
         # Injected by host:
         self._send_note_on = None
         self._send_note_off = None

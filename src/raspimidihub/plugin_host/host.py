@@ -902,9 +902,44 @@ class PluginHost:
                         "ch": binding.get("ch"),
                         "cc": binding.get("cc"),
                     }
-                # Apply saved params
-                for pname, pvalue in saved_params.items():
-                    self.set_param(instance.id, pname, pvalue)
+                # Apply saved params in TWO passes.
+                #
+                # Pass 1 writes every value straight into _param_values
+                # without firing on_param_change; pass 2 then fires
+                # on_param_change per param in the original order.
+                #
+                # The old single interleaved pass broke plugins whose
+                # on_param_change has cross-param side effects. The
+                # slot bank's plugins (Arpeggiator / Euclidean) are the
+                # canonical case: `pattern_slots` lands LATER in the
+                # params dict than `active_slot` (it is only appended
+                # by init_slot_bank in on_start, after the declared
+                # defaults), so the restore loop applied
+                # `active_slot=N` first — and its on_param_change calls
+                # load_slot(N) against the still factory-default bank
+                # (the saved pattern_slots had not been applied yet).
+                # Every snapshotted live param (root / scale / steps /
+                # pulses / steps_grid / ...) got clobbered back to
+                # defaults on every boot and Load; the saved bank then
+                # landed harmlessly into _param_values with nothing
+                # left to re-sync. Writing all values first makes the
+                # side effects see the fully restored state.
+                #
+                # record_edit is suppressed for the duration
+                # (_restoring_params): the bank already carries the
+                # saved values, and re-recording the restored live
+                # params would stamp them onto whichever slot is
+                # active mid-pass (corrupting the user's slot 0 when
+                # the saved active slot isn't 0).
+                param_items = list(saved_params.items())
+                for pname, pvalue in param_items:
+                    instance.plugin._param_values[pname] = pvalue
+                instance.plugin._restoring_params = True
+                try:
+                    for pname, pvalue in param_items:
+                        self.set_param(instance.id, pname, pvalue)
+                finally:
+                    instance.plugin._restoring_params = False
             except Exception as e:
                 log.warning("Failed to restore plugin %s (%s): %s", name, plugin_type, e)
 
