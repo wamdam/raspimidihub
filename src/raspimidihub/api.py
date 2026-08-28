@@ -1670,18 +1670,26 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
             return Response.error(
                 "Update flow already running", 409)
 
+        def _run_install_script():
+            # The install script is blocking; run it in the executor so
+            # the orchestrator's status pump keeps moving. It normally
+            # reports via the status JSON ("installing" / "done" /
+            # "error-install"), but its early failures (a bad or missing
+            # deb path) exit non-zero to stderr *before* writing any
+            # status — so capture returncode + stderr here as the only
+            # trace of that path.
+            r = subprocess.run(
+                [str(INSTALL_DEB_SCRIPT), match["deb_path"]],
+                capture_output=True, text=True)
+            if r.returncode != 0:
+                log.error("install script exited %d for %s: %s",
+                          r.returncode, version,
+                          (r.stderr or r.stdout or "").strip())
+            return r.returncode
+
         async def install_work():
-            # The install script is blocking; run it in the executor
-            # so the orchestrator's status pump keeps moving. The
-            # script itself updates the status JSON ("installing" /
-            # "done" / "error-install"), so we just need to await it.
-            loop = asyncio.get_event_loop()
-            await loop.run_in_executor(
-                None,
-                lambda: subprocess.run(
-                    [str(INSTALL_DEB_SCRIPT), match["deb_path"]],
-                    capture_output=True),
-            )
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(None, _run_install_script)
 
         fetcher = UpdateFetcher(wifi, config)
 
@@ -1725,14 +1733,22 @@ def register_api(server: WebServer, engine: MidiEngine, config: Config,
         if in_flight_check[0] and not in_flight_check[0].done():
             return Response.error("Update flow already running", 409)
 
+        def _run_reinstall_script():
+            # Same contract as _run_install_script above: the script
+            # self-reports via the status JSON; log the early-failure
+            # stderr that would otherwise be swallowed.
+            r = subprocess.run(
+                [str(INSTALL_DEB_SCRIPT), match["deb_path"], "--reinstall"],
+                capture_output=True, text=True)
+            if r.returncode != 0:
+                log.error("reinstall script exited %d: %s",
+                          r.returncode,
+                          (r.stderr or r.stdout or "").strip())
+            return r.returncode
+
         async def reinstall_work():
-            loop = asyncio.get_event_loop()
-            await loop.run_in_executor(
-                None,
-                lambda: subprocess.run(
-                    [str(INSTALL_DEB_SCRIPT), match["deb_path"], "--reinstall"],
-                    capture_output=True),
-            )
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(None, _run_reinstall_script)
 
         fetcher = UpdateFetcher(wifi, config)
 

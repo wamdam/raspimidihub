@@ -248,13 +248,25 @@ def _rw_rootfs():
     """Remount / read-write for the duration of the with-block, then
     back to ro. Required because UPDATES_DIR lives on the rosetup'd
     rootfs which is mounted ro under normal operation."""
-    subprocess.run(["mount", "-o", "remount,rw", "/"],
-                   check=False, capture_output=True, timeout=5)
+    r = subprocess.run(["mount", "-o", "remount,rw", "/"],
+                       check=False, capture_output=True, text=True,
+                       timeout=5)
+    if r.returncode != 0:
+        log.error("remount rw / failed (rc=%d): %s", r.returncode,
+                  (r.stderr or "").strip())
+        # Continue on purpose: the write inside the with-block then fails
+        # with a visible OSError instead of failing silently in here.
     try:
         yield
     finally:
-        subprocess.run(["mount", "-o", "remount,ro", "/"],
-                       check=False, capture_output=True, timeout=5)
+        r = subprocess.run(["mount", "-o", "remount,ro", "/"],
+                           check=False, capture_output=True, text=True,
+                           timeout=5)
+        if r.returncode != 0:
+            # The root fs is left read-write — the appliance's read-only
+            # guarantee is gone until the next boot; make it loud.
+            log.error("remount ro / FAILED (rc=%d): %s — root fs left "
+                      "read-write", r.returncode, (r.stderr or "").strip())
 
 
 # Accept an optional pre-release tag after the patch number, in either
