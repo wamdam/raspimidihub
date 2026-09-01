@@ -1634,6 +1634,19 @@ class MidiEngine:
             })
         return out
 
+    def alsa_buffer_info(self) -> dict:
+        """Kernel input-FIFO health of the main seq client.
+
+        ``fifo_overflows`` counts input-FIFO overflow episodes (each
+        one: the kernel DROPPED queued events and cleared the pending
+        queue — the asyncio loop was too slow to drain). A count that
+        rises during a performance is the signature of lost
+        note-ons/note-offs → missing or stuck notes. ``input_pool`` /
+        ``input_free`` show the configured FIFO size and live free
+        space; ``event_lost`` is the kernel's legacy counter.
+        """
+        return self._seq.client_buffer_info()
+
     def _schedule_rescan(self) -> None:
         """Debounce rescans to allow multi-port devices to finish enumeration."""
         if self._debounce_task and not self._debounce_task.done():

@@ -25,6 +25,7 @@ from .runtime.loops import (
     watchdog_ping,
     wifi_watchdog,
 )
+from .runtime.stall_sensor import StallSensor
 from .web import WebServer
 from .wifi import WifiManager
 
@@ -217,8 +218,12 @@ async def async_main() -> None:
             led.midi_blink()
         key = f"{ev.source.client}:{ev.source.port}"
         now = _time.monotonic()
-        if now - _last_activity.get(key, 0) < _ACTIVITY_THROTTLE:
-            return
+        # Debug: POST /api/debug/midi-activity {unthrottled: true} lifts
+        # the per-port cap so the MIDI monitor shows every event (whole
+        # chords, fast note-off bursts) instead of one line per 100 ms.
+        if not getattr(server, "_midi_activity_unthrottled", False):
+            if now - _last_activity.get(key, 0) < _ACTIVITY_THROTTLE:
+                return
         _last_activity[key] = now
 
         ev_name = _EVENT_NAMES[ev.type]
@@ -443,9 +448,21 @@ async def async_main() -> None:
         # MIDI rate meter — snapshot and broadcast every second
         asyncio.ensure_future(rate_meter(engine, server))
 
+        # Stall forensics: a watchdog thread samples every thread's
+        # frame/wchan/CPU so any loop lag above the threshold gets a
+        # fingerprint (which frame the loop was frozen in, which thread
+        # was burning the GIL, or whether the OS delayed the loop) —
+        # warn-logged + retrievable via GET /api/debug/stalls. Runs on
+        # the loop thread here so get_native_id() is the loop's tid.
+        import threading as _threading
+        stall_sensor = StallSensor(loop_tid=_threading.get_native_id())
+        stall_sensor.start()
+        server.stall_sensor = stall_sensor
+
         # asyncio loop-lag probe — single best signal for "server
         # keeping up with itself", visible as Loop lag in Settings.
-        asyncio.ensure_future(loop_lag_meter(server))
+        # Lags above the stall sensor's threshold also get fingerprinted.
+        asyncio.ensure_future(loop_lag_meter(server, stall_sensor))
 
         # Keep the isolated loop core free of stray (library) threads.
         asyncio.ensure_future(cpu_isolation_guard())

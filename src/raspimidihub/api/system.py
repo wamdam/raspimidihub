@@ -54,22 +54,32 @@ def register_system(ctx: ApiContext) -> None:
         # RaspiMIDIHub-<MAC suffix> default.
         ap_ssid = config.wifi.get("ap_ssid") or default_ap_ssid()
 
-        # IP addresses
-        ips = []
-        try:
+        # IP addresses — the `ip` subprocesses run on a worker thread:
+        # fork/exec/waitpid on the loop blocked the MIDI loop 10-150 ms
+        # per interface under load (visible in the loop_lag tail).
+        def _iface_ips() -> list:
+            out = []
             for iface in os.listdir("/sys/class/net"):
                 if iface == "lo":
                     continue
-                result = subprocess.run(
-                    ["ip", "-4", "addr", "show", iface],
-                    capture_output=True, text=True, timeout=2
-                )
-                for line in result.stdout.splitlines():
-                    line = line.strip()
-                    if line.startswith("inet "):
-                        ips.append({"interface": iface, "address": line.split()[1].split("/")[0]})
+                try:
+                    result = subprocess.run(
+                        ["ip", "-4", "addr", "show", iface],
+                        capture_output=True, text=True, timeout=2
+                    )
+                    for line in result.stdout.splitlines():
+                        line = line.strip()
+                        if line.startswith("inet "):
+                            out.append({"interface": iface, "address": line.split()[1].split("/")[0]})
+                except Exception:
+                    continue
+            return out
+
+        try:
+            ips = await asyncio.get_running_loop().run_in_executor(
+                None, _iface_ips)
         except Exception:
-            pass
+            ips = []
 
         # CPU temp, RAM, uptime — read from /proc and /sys
         temp = ram = uptime = None
@@ -241,7 +251,29 @@ def register_system(ctx: ApiContext) -> None:
         return Response.json({
             "cc": engine.cc_dest_snapshot(),
             "active_notes": engine.active_notes_snapshot(),
+            # Kernel input-FIFO health of the main seq client.
+            # `fifo_overflows` counts overflow episodes (kernel dropped
+            # queued events + wiped the pending queue — the loop was
+            # too slow to drain); a rising count during a performance
+            # is the signature of lost note-ons/note-offs.
+            "alsa": engine.alsa_buffer_info(),
         })
+
+    @server.route("POST", "/api/debug/midi-activity",
+                  summary="Toggle the unthrottled midi-activity SSE stream (debug: lifts the 10 events/sec per-port cap so the MIDI monitor shows every event, e.g. a whole chord).")
+    async def api_debug_midi_activity(req: Request) -> Response:
+        data = req.json or {}
+        enabled = bool(data.get("unthrottled", False))
+        server._midi_activity_unthrottled = enabled
+        return Response.json({"status": "ok", "unthrottled": enabled})
+
+    @server.route("GET", "/api/debug/stalls",
+                  summary="Recent event-loop stall episodes with fingerprints: for each lag above the threshold, the loop thread's frozen frame + kernel wait channel, the thread that burned the most CPU during the window (the GIL hog), and per-thread frames — the forensics behind the loop_lag percentiles.")
+    async def api_debug_stalls(req: Request) -> Response:
+        sensor = getattr(server, "stall_sensor", None)
+        if sensor is None:
+            return Response.json({"threshold_ms": None, "episodes": []})
+        return Response.json(sensor.episodes())
 
     # POST /api/sse/subscribe — set this connection's subscription set.
     # Body: {conn_id, events: [str], instances: [instance_id],

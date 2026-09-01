@@ -4,7 +4,21 @@ User-visible changes. Short tagged one-liners, no code or commit
 hashes. Tags: Added, Improved, Fix, Changed, Removed.
 
 
-Unreleased
+2026-09-01 — Version 6.0.0a8
+
+Root-cause fix + diagnostics for the stubborn stuck/missing-note
+class: the kernel's per-client MIDI event FIFO (200 events by
+default) silently drops queued events when the event loop is too slow
+to drain — and then wipes the whole pending queue. The hub now runs
+every client at the kernel ceiling and counts every overflow episode.
+
+- Fix (internal): the hub's ALSA clients (main client + every plugin client) run their kernel input FIFO at the 2000-event ceiling instead of the 200-event default — a 1.2 s loop stall at busy-play rates overflows the default FIFO, in which the kernel drops events AND clears the pending queue on the next read (a dropped note-off = a stuck note at the destination; a dropped note-on = a missing note). Verified on the Pi: the same 1.2 s stall at 250 ev/s drops 200 note-ons on the 200-event FIFO and zero on the 2000-event one
+- Added (internal): overflow visibility — every -ENOSPC input-FIFO overflow episode is counted and logged (notes may be missing or stuck), and `GET /api/observatory` now carries an `alsa` field: the FIFO's configured size, live free space, and the overflow count; a rising count during a performance is the signature of kernel-dropped MIDI events
+- Added: `POST /api/debug/midi-activity` (`{"unthrottled": true|false}`) lifts the MIDI monitor's 10 events/sec per-port cap so the monitor shows every event (whole chords, fast note-off bursts) — debugging aid, off after reboot
+- Added (internal): event-loop stall forensics — a watchdog thread fingerprints every loop lag above 100 ms (the loop's frozen frame + kernel wait channel, and the thread that burned the GIL during the window) so the remaining ~1 s loop stalls can be attributed to their cause; `GET /api/debug/stalls` returns the newest episodes, each is also warn-logged to journald
+- Fix (internal): the `ip` subprocesses of `GET /api/system` run on a worker thread instead of forking on the loop (fork/exec/wait on the loop thread occupied it 10-150 ms per interface under load; the syscalls release the GIL, so a worker thread genuinely frees the loop here)
+- Fix: config export / backup download started nothing on iOS — the PWA service worker re-served the download navigation via respondWith(), which breaks Content-Disposition: attachment handling in mobile Safari; /api/ requests now bypass the worker entirely
+- Changed: the Sys Info RAM stat is now labeled "(free / total)" so its two MB values read unambiguously
 
 
 2026-08-28 — Version 6.0.0a7

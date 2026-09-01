@@ -112,6 +112,12 @@ Tapping a row or column header opens device-level actions:
   fractional values (`vel=100.53`, `cc74=63.99`) and 2.0-only
   messages (atomic RPN/NRPN, Per-Note CC, Per-Note Bend) as typed
   rows; MIDI 1.0 devices show whole numbers as before.
+  The feed is throttled to 10 events/sec per device, so a fast
+  chord shows as a single line — that is a display cap, not a
+  routing limit. To watch every event while debugging (whole
+  chords, fast note-off bursts) send
+  `POST /api/debug/midi-activity` with `{"unthrottled": true}`
+  (see appendix E); it is off again after the next reboot.
   Capable devices add a **MIDI 2.0 card** (endpoint name, product
   ID, function blocks) and a **Use MIDI 2.0** toggle — off forces
   MIDI 1.0, the escape hatch for misbehaving devices, persisting

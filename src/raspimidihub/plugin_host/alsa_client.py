@@ -39,13 +39,19 @@ class PluginAlsaClient:
 
     def __init__(self, client_name: str):
         from ..alsa_seq import (
+            CLIENT_INPUT_POOL_SIZE,
+            SndSeqClientPoolPtr,
             SndSeqPtr,
             check,
             probe_ump_support,
             snd_seq_client_id,
+            snd_seq_client_pool_free,
+            snd_seq_client_pool_malloc,
+            snd_seq_client_pool_set_input_pool,
             snd_seq_create_simple_port,
             snd_seq_open,
             snd_seq_set_client_name,
+            snd_seq_set_client_pool,
         )
         self._alsa = sys.modules["raspimidihub.alsa_seq"]
 
@@ -56,6 +62,20 @@ class PluginAlsaClient:
         ), "plugin: open seq")
         snd_seq_set_client_name(self._handle, client_name.encode())
         self._client_id = snd_seq_client_id(self._handle)
+        # Same overflow protection as the main engine client (see
+        # alsa_seq.CLIENT_INPUT_POOL_SIZE): the kernel silently drops
+        # queued events when this client's input FIFO overflows while
+        # the plugin thread is stalled on the GIL — a dropped note-off
+        # is a stuck note at everything subscribed to our OUT port.
+        if snd_seq_set_client_pool is not None \
+                and snd_seq_client_pool_malloc is not None:
+            pool = SndSeqClientPoolPtr()
+            if snd_seq_client_pool_malloc(ctypes.byref(pool)) == 0:
+                try:
+                    snd_seq_client_pool_set_input_pool(pool, CLIENT_INPUT_POOL_SIZE)
+                    snd_seq_set_client_pool(self._handle, pool)
+                finally:
+                    snd_seq_client_pool_free(pool)
 
         # MIDI 2.0 inbound (FSD-08): on capable systems the client runs
         # at midi_version=2 so bound CC automation receives the full

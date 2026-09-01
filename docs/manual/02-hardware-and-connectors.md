@@ -9,7 +9,7 @@ RaspiMIDIHub runs on stock Raspberry Pi hardware that you provide.
 +:============+:=================+:=====:+:=============================================+
 | Pi Zero 2 W | 1 (OTG + hub)    | 3--4  | Single USB bus; entry-level                  |
 +-------------+------------------+-------+----------------------------------------------+
-| Pi 3B+      | 4                | 4     | Shared USB / Ethernet bus; budget option     |
+| Pi 3B+      | 4                | 4     | USB/Ethernet shared; **may drop notes**      |
 +-------------+------------------+-------+----------------------------------------------+
 | Pi 4B       | 4 (2 × USB 3.0)  | 8+    | **Recommended**                              |
 +-------------+------------------+-------+----------------------------------------------+
@@ -20,6 +20,22 @@ The Pi 4B suits most users; choose a Pi 5 for plugin-heavy rigs or
 BLE-MIDI in the critical path. The Pi 1, Pi 2, and original Pi Zero
 are **not** supported: the read-only filesystem and isolated-core
 reservation require a multi-core ARMv8 system.
+
+**Pi 3B+ -- possible stuck notes under load.** The 3B+ has a single
+USB 2.0 controller on one bus shared with the USB Ethernet adapter;
+under load the host can be briefly late polling a MIDI keyboard's
+endpoint. Keyboards buffer note-offs in a small on-device FIFO, and
+when the host polls late that FIFO overflows: the note-off is lost
+*before it ever reaches the hub*, and the destination synth keeps
+the note sounding (a stuck note). This was measured on a 3B+ with
+two different keyboards, in the hub's minimal (filter-less) routing
+path, and did **not** reproduce on a Pi 4B with the identical rig.
+If you run the hub on a 3B+ and hear stuck notes, the first things
+to try: fewer USB devices in the chain (each full-speed device
+steals polling time), a powered hub, and -- if that is not
+enough -- move to a Pi 4B or later. The hub cannot recover a
+note-off that never arrives; the red **Panic!** button (chapter 3)
+clears the resulting stuck notes on the destinations.
 
 ## Storage
 

@@ -59,11 +59,13 @@ async def pending_param_flusher(plugin_host) -> None:
             plugin_host.flush_pending_displays()
 
 
-async def loop_lag_meter(server) -> None:
+async def loop_lag_meter(server, sensor=None) -> None:
     """Schedule a wake-up 100 ms out and measure how late the asyncio
     loop actually serviced it. A healthy loop wakes 0-3 ms late;
     pinned-loop wakes show 50-500 ms. Reports the windowed max via
-    server.record_latency('loop_lag', ms)."""
+    server.record_latency('loop_lag', ms). Lags above the stall sensor's
+    threshold also get a fingerprint (loop frame + wchan + GIL hog) —
+    see runtime/stall_sensor.py."""
     interval = 0.1
     expected = time.monotonic() + interval
     while True:
@@ -74,6 +76,8 @@ async def loop_lag_meter(server) -> None:
             server.record_latency("loop_lag", lag_ms)
             from .. import perf_stats
             perf_stats.record("loop_lag", lag_ms)
+            if sensor is not None and lag_ms >= sensor.threshold_ms:
+                sensor.report_requested(lag_ms)
         expected = now + interval
 
 

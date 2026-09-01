@@ -916,7 +916,7 @@ function SettingsSysInfo({ showToast, isUpgrading }) {
                         <div class="label">CPU${c.core}${c.role !== 'system' ? ' · ' + c.role : ''}</div>
                         <div class="value" style=${c.pct >= 85 ? 'color:var(--danger,#e94560)' : ''}>${c.pct}%</div>
                     </div>`)}
-                    <div class="stat"><div class="label">RAM</div><div class="value">${sys.ram.available_mb || '?'} / ${sys.ram.total_mb || '?'} MB</div></div>
+                    <div class="stat"><div class="label">RAM (free / total)</div><div class="value">${sys.ram.available_mb || '?'} / ${sys.ram.total_mb || '?'} MB</div></div>
                     ${sys.fs_mode != null && html`<div class="stat" title="State of the hub's root filesystem. The appliance keeps it readonly and remounts it read/write only for the brief window of a write operation (save, backup, update). 'read/write' while idle means the read-only remount failed and the protection is lost.">
                         <div class="label">Filesystem</div>
                         <div class="value" style=${sys.fs_mode === 'read/write' ? 'color:var(--warn,#ff9800)' : ''}>${sys.fs_mode}</div>

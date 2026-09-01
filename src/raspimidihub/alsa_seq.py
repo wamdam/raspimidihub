@@ -101,6 +101,16 @@ class SndSeqPortSubscribe(Structure):
 SndSeqPortSubscribePtr = POINTER(SndSeqPortSubscribe)
 
 
+# --- snd_seq_client_pool_t (opaque, heap-allocated) ---
+# The kernel's per-client event-pool record. Only the alsa-lib accessor
+# functions may read/write it — the layout is internal, so we treat it
+# as an opaque pointer and never touch its fields ourselves.
+class SndSeqClientPool(Structure):
+    pass
+
+SndSeqClientPoolPtr = POINTER(SndSeqClientPool)
+
+
 # --- snd_seq_real_time_t (used for queue-scheduled events) ---
 
 class SndSeqRealTime(Structure):
@@ -124,6 +134,23 @@ SND_SEQ_TIME_STAMP_REAL = 0x01      # bit 0 = real-time (vs tick)
 SND_SEQ_TIME_MODE_ABS = 0x00        # bit 1 cleared = absolute (vs relative)
 SND_SEQ_REMOVE_OUTPUT = 0x02
 SND_SEQ_REMOVE_TAG_MATCH = 0x200
+
+# Per-client ALSA seq INPUT FIFO size, in EVENTS. The kernel queues events
+# addressed to a user client in a per-client input FIFO (seq_clientmgr.c)
+# and silently DROPS new ones when it is full — i.e. when the reading side
+# (the asyncio loop) was too busy to drain in time. A single dropped
+# note-off is a stuck note at the destination. Worse: on the next read()
+# the kernel returns -ENOSPC and CLEARS the whole pending queue, so even
+# events that arrived are lost. The kernel default is
+# SNDRV_SEQ_DEFAULT_CLIENT_EVENTS = 200 events (~1–3 s of busy playing);
+# the hard ceiling is SNDRV_SEQ_MAX_CLIENT_EVENTS = 2000. We use the
+# ceiling — 10x the default, ~2 s of headroom at 1000 ev/s, far past the
+# measured worst loop stall (~1.2 s).
+CLIENT_INPUT_POOL_SIZE = 2000
+
+# errno ENOSPC: the input-FIFO overflow report from read() (see above).
+# alsa-lib propagates it verbatim from snd_seq_event_input().
+ENOSPC = 28
 
 # Variable-length payload bit. Set in ev.flags for SYSEX events whose
 # payload lives in data.ext.{len, ptr}. Without it the kernel reads
@@ -311,6 +338,36 @@ def _optional_func(name, restype, *argtypes):
 # accessors appeared in alsa-lib 1.2.10 and gate the whole UMP API.
 snd_seq_get_client_info = _func("snd_seq_get_client_info", c_int, SndSeqPtr, SndSeqClientInfoPtr)
 snd_seq_set_client_info = _func("snd_seq_set_client_info", c_int, SndSeqPtr, SndSeqClientInfoPtr)
+# Client event-pool API (alsa-lib >= 1.1.3): the ONLY way to resize the
+# kernel's per-client input FIFO (the ring that overflows and silently
+# drops events — see CLIENT_INPUT_POOL_SIZE). NOTE: the older
+# snd_seq_set_input_buffer_size() resizes a different thing — alsa-lib's
+# userspace read staging buffer — and has NO effect on the kernel FIFO.
+# Sizes are in events (cells), matching the kernel's pool units. Zero
+# fields in the pool record mean "leave unchanged" (verified against the
+# 6.12 SET_CLIENT_POOL ioctl handler). Optional so an ancient alsa-lib
+# degrades to the kernel default instead of crashing at import.
+snd_seq_client_pool_malloc = _optional_func(
+    "snd_seq_client_pool_malloc", c_int, POINTER(SndSeqClientPoolPtr))
+snd_seq_client_pool_free = _optional_func(
+    "snd_seq_client_pool_free", None, SndSeqClientPoolPtr)
+snd_seq_client_pool_set_input_pool = _optional_func(
+    "snd_seq_client_pool_set_input_pool", None, SndSeqClientPoolPtr, c_uint)
+snd_seq_client_pool_get_input_pool = _optional_func(
+    "snd_seq_client_pool_get_input_pool", c_uint, SndSeqClientPoolPtr)
+snd_seq_client_pool_get_input_free = _optional_func(
+    "snd_seq_client_pool_get_input_free", c_uint, SndSeqClientPoolPtr)
+snd_seq_get_client_pool = _optional_func(
+    "snd_seq_get_client_pool", c_int, SndSeqPtr, SndSeqClientPoolPtr)
+snd_seq_set_client_pool = _optional_func(
+    "snd_seq_set_client_pool", c_int, SndSeqPtr, SndSeqClientPoolPtr)
+# Official getter for the kernel's per-client event_lost counter. On
+# recent kernels (6.x) this only counts FAILED BOUNCE deliveries, not
+# the FIFO drops themselves — the drop signal for those is the -ENOSPC
+# read error (read_event counts it as fifo_overflows). Kept for older
+# kernels and the observatory.
+snd_seq_client_info_get_event_lost = _optional_func(
+    "snd_seq_client_info_get_event_lost", c_int, SndSeqClientInfoPtr)
 snd_seq_client_info_get_midi_version = _optional_func(
     "snd_seq_client_info_get_midi_version", c_int, SndSeqClientInfoPtr)
 snd_seq_client_info_set_midi_version = _optional_func(
@@ -691,6 +748,34 @@ class AlsaSeq:
               "Failed to open ALSA sequencer")
         snd_seq_set_client_name(self._handle, client_name.encode())
         self._client_id = snd_seq_client_id(self._handle)
+        # Count input-FIFO overflow episodes (-ENOSPC from read; the
+        # kernel drops queued events and clears the pending queue —
+        # see read_event). read_event() is the only place this moves.
+        self._fifo_overflows = 0
+        # Protect against silent event loss: the kernel queues inbound
+        # events in a per-client input FIFO whose default size is
+        # SNDRV_SEQ_DEFAULT_CLIENT_EVENTS = 200 events; on overflow it
+        # DROPS events and, on the next read, wipes the pending queue
+        # (-ENOSPC). A dropped note-off is a stuck note at the
+        # destination. Resize the FIFO to the kernel ceiling
+        # (SNDRV_SEQ_MAX_CLIENT_EVENTS) so the measured worst loop
+        # stall (~1.2 s) cannot overflow it at keyboard event rates.
+        if snd_seq_set_client_pool is not None \
+                and snd_seq_client_pool_malloc is not None:
+            pool = SndSeqClientPoolPtr()
+            if snd_seq_client_pool_malloc(byref(pool)) == 0:
+                try:
+                    snd_seq_client_pool_set_input_pool(pool, CLIENT_INPUT_POOL_SIZE)
+                    ret = snd_seq_set_client_pool(self._handle, pool)
+                    if ret < 0:
+                        import logging
+                        logging.getLogger(__name__).warning(
+                            "snd_seq_set_client_pool failed (%d) — "
+                            "input FIFO stays at the kernel default "
+                            "(200 events); overflow drops likely under "
+                            "loop stalls", ret)
+                finally:
+                    snd_seq_client_pool_free(pool)
 
         self._midi_version = 0
         if midi_version and probe_ump_support().capable \
@@ -752,6 +837,55 @@ class AlsaSeq:
         snd_seq_poll_descriptors(self._handle, buf, count, 1)
         fd = struct.unpack_from("i", buf, 0)[0]
         return fd
+
+    def client_buffer_info(self) -> dict:
+        """Kernel-side view of this client's input FIFO health.
+
+        Returns ``{"input_pool": <events>, "input_free": <events>,
+        "event_lost": <int>, "fifo_overflows": <int>}``:
+
+        * ``input_pool`` / ``input_free`` — the FIFO's configured size
+          and live free space (GET_CLIENT_POOL; -1 if the alsa-lib
+          accessor is unavailable).
+        * ``fifo_overflows`` — input-FIFO overflow episodes observed by
+          this process (each one: the kernel dropped queued events and
+          cleared the pending queue — the silent missing/stuck-note
+          path; see read_event).
+        * ``event_lost`` — the kernel's legacy counter; on recent
+          kernels it only counts failed bounce deliveries, so
+          ``fifo_overflows`` is the meaningful drop signal.
+        """
+        input_pool = -1
+        input_free = -1
+        pool = SndSeqClientPoolPtr()
+        if snd_seq_client_pool_malloc is not None \
+                and snd_seq_client_pool_malloc(byref(pool)) == 0:
+            try:
+                if snd_seq_get_client_pool is not None \
+                        and snd_seq_get_client_pool(self._handle, pool) == 0:
+                    if snd_seq_client_pool_get_input_pool is not None:
+                        input_pool = snd_seq_client_pool_get_input_pool(pool)
+                    if snd_seq_client_pool_get_input_free is not None:
+                        input_free = snd_seq_client_pool_get_input_free(pool)
+            finally:
+                snd_seq_client_pool_free(pool)
+
+        event_lost = 0
+        info = SndSeqClientInfoPtr()
+        if snd_seq_client_info_get_event_lost is not None:
+            check(snd_seq_client_info_malloc(byref(info)), "malloc client_info")
+            try:
+                if snd_seq_get_client_info(self._handle, info) >= 0:
+                    event_lost = snd_seq_client_info_get_event_lost(info)
+            finally:
+                snd_seq_client_info_free(info)
+
+        return {
+            "input_pool": input_pool,
+            "input_free": input_free,
+            "event_lost": event_lost,
+            "fifo_overflows": self._fifo_overflows,
+        }
 
     def scan_devices(self, include_user_clients: set[int] | None = None) -> list[MidiDevice]:
         """Enumerate all MIDI clients and ports, filtering system/self.
@@ -960,8 +1094,15 @@ class AlsaSeq:
         check(snd_seq_delete_simple_port(self._handle, port_id),
               f"Failed to delete port {port_id}")
 
-    def send_event(self, ev: SndSeqEvent, dest_client: int, dest_port: int) -> None:
-        """Send a MIDI event directly to a specific destination port."""
+    def send_event(self, ev: SndSeqEvent, dest_client: int, dest_port: int) -> bool:
+        """Send a MIDI event directly to a specific destination port.
+
+        Returns True when the kernel accepted the event, False on
+        failure (e.g. -EAGAIN: the destination client's input FIFO is
+        full and the event was NOT delivered — the destination reader
+        is too slow). Callers that can tolerate drops may ignore the
+        return value; the warning log stays for visibility.
+        """
         ev.source.client = self._client_id
         ev.source.port = self._output_port
         ev.dest.client = dest_client
@@ -976,6 +1117,8 @@ class AlsaSeq:
                 "send_event to %d:%d failed: %s", dest_client, dest_port,
                 err.decode() if err else f"error {ret}"
             )
+            return False
+        return True
 
     def send_event_coalesced(self, ev: SndSeqEvent, dest_client: int, dest_port: int) -> None:
         """Send a MIDI event with CC coalescing.
@@ -1018,24 +1161,26 @@ class AlsaSeq:
         self._cc_flush_timer.start()
 
     def send_note_on(self, dest_client: int, dest_port: int,
-                     channel: int, note: int, velocity: int = 100) -> None:
-        """Send a MIDI Note On event."""
+                     channel: int, note: int, velocity: int = 100) -> bool:
+        """Send a MIDI Note On event. Returns False if the kernel
+        rejected it (destination FIFO full — see send_event)."""
         ev = SndSeqEvent()
         ev.type = MidiEventType.NOTEON
         ev.data.note.channel = channel
         ev.data.note.note = note
         ev.data.note.velocity = velocity
-        self.send_event(ev, dest_client, dest_port)
+        return self.send_event(ev, dest_client, dest_port)
 
     def send_note_off(self, dest_client: int, dest_port: int,
-                      channel: int, note: int) -> None:
-        """Send a MIDI Note Off event."""
+                      channel: int, note: int) -> bool:
+        """Send a MIDI Note Off event. Returns False if the kernel
+        rejected it (destination FIFO full — see send_event)."""
         ev = SndSeqEvent()
         ev.type = MidiEventType.NOTEOFF
         ev.data.note.channel = channel
         ev.data.note.note = note
         ev.data.note.velocity = 0
-        self.send_event(ev, dest_client, dest_port)
+        return self.send_event(ev, dest_client, dest_port)
 
     def send_cc(self, dest_client: int, dest_port: int,
                 channel: int, cc: int, value: int) -> None:
@@ -1048,12 +1193,32 @@ class AlsaSeq:
         self.send_event(ev, dest_client, dest_port)
 
     def read_event(self) -> SndSeqEvent | None:
-        """Read one event (non-blocking). Returns None if no event available."""
+        """Read one event (non-blocking). Returns None if no event available.
+
+        -ENOSPC is special: the input FIFO overflowed — the kernel
+        dropped queued events AND cleared the entire pending queue.
+        That is the silent note-loss path (missing/stuck notes); count
+        it (fifo_overflows) and log it so it can never vanish again.
+        """
         ev = SndSeqEventPtr()
         ret = snd_seq_event_input(self._handle, byref(ev))
         if ret < 0:
-            return None  # EAGAIN or error
+            if ret == -ENOSPC:
+                self._fifo_overflows += 1
+                import logging
+                logging.getLogger(__name__).warning(
+                    "ALSA input FIFO overflow (ENOSPC) on client %d — "
+                    "kernel dropped queued events and cleared the "
+                    "pending queue; notes may be missing or stuck "
+                    "(episode %d)", self._client_id, self._fifo_overflows)
+            return None  # EAGAIN, ENOSPC (counted) or other error
         return ev.contents
+
+    @property
+    def fifo_overflows(self) -> int:
+        """Input-FIFO overflow episodes since the client was created
+        (each one dropped events — see read_event)."""
+        return self._fifo_overflows
 
     @property
     def midi_version(self) -> int:

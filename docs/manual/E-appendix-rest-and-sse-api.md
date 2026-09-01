@@ -75,6 +75,35 @@ The full event vocabulary (names + meaning) is on `/docs` and under
 `plugin-display` — are per-instance: delivered only to clients
 subscribed to that plugin instance's id.
 
+Two diagnostics worth knowing:
+
+- **`midi-activity` is throttled to 10 events/sec per source port** —
+  the MIDI monitor therefore shows at most one line per 100 ms per
+  device, so a fast chord appears as a single event. That is a
+  display cap, not a routing limit: the hub still routes every event.
+  `POST /api/debug/midi-activity` with `{"unthrottled": true}` lifts
+  the cap (debugging aid; `{"unthrottled": false}` restores it).
+- **`GET /api/observatory` carries an `alsa` field**: the kernel
+  input-FIFO health of the hub's main MIDI client. `fifo_overflows`
+  counts overflow episodes — the kernel queues inbound events in a
+  per-client FIFO (200 events by default; the hub runs it at the
+  2000-event ceiling) and, when it overflows because the event loop
+  was too busy to drain, *drops* queued events and wipes the pending
+  queue. A rising `fifo_overflows` during a performance is the
+  signature of lost note-ons/note-offs (missing or stuck notes at
+  the destination). `input_pool` / `input_free` show the configured
+  FIFO size and live free space; `event_lost` is the kernel's legacy
+  counter.
+- **`GET /api/debug/stalls` — event-loop stall forensics.** A watchdog
+  thread fingerprints every loop lag above 100 ms: which frame the
+  loop thread was frozen in, its kernel wait channel (`ep_poll` =
+  idle in epoll, the wake itself was delayed; `do_futex` = waiting on
+  the GIL or a lock), and which other thread burned the most CPU
+  during the window (the "GIL hog" — a worker-thread encode starves
+  the loop of the GIL even though it never ran on the loop). The
+  newest 10 episodes are returned; each is also warn-logged to
+  journald (`loop stall … ms`).
+
 ## Quick example
 
 ```bash
